@@ -23,13 +23,13 @@ Vorbild ist [Hydrantenjäger](https://hydrantenjaeger.de), insbesondere die einf
 
 Absolute Einfachheit ist das oberste Ziel. Die App übernimmt Erkennung und Zuordnung. Nur notwendige offene Fragen werden gestellt; vorhandene Einträge müssen nicht erst vervollständigt werden. Im eindeutigen Fall reicht nach dem Foto ein Tippen zum Speichern. Details stehen im [Produktkonzept](docs/konzept.md).
 
-## Technische Empfehlung zur Diskussion
+## Technische Richtung
 
-PWA mit kleinem Serverdienst; Code auf GitHub, gemeinsames Hosting von Oberfläche und API auf Cloudflare Workers mit Static Assets. Die KI liefert Bildbeobachtungen, feste Regeln prüfen die Zuordnung, und erst die Benutzerbestätigung löst die konkrete OSM-Änderung aus. Anbieterwahl und Hosting sind noch nicht beschlossen. Begründung, Alternativen und praktische Prüfschritte stehen im [Architekturentwurf](docs/architektur.md).
+PWA mit kleinem Serverdienst; Code auf GitHub, gemeinsames Hosting von Oberfläche und API auf Cloudflare Workers mit Static Assets. Cloudflare ist als Richtung gewählt, Implementierung und Deployment haben noch nicht begonnen. Die KI liefert Bildbeobachtungen, feste Regeln prüfen die Zuordnung, und erst eine kurze Benutzerbestätigung löst die konkrete OSM-Änderung aus. Gemini, OpenAI und Claude werden vor der Auswahl eines produktiven Anbieters mit denselben geeigneten Testbildern verglichen. Begründung, Alternativen und Prüfschritte stehen im [Architekturentwurf](docs/architektur.md).
 
 ## Sprachen und Gamification
 
-Die erste Version soll Deutsch, Englisch, Polnisch, Japanisch, Französisch und Spanisch unterstützen. Die vorgeschlagene Gamification läuft als stiller Gemeinschaftsfortschritt im Hintergrund; im normalen Ablauf gibt es keine Punkteanzeige, Level oder Rangliste. Ein Meilenstein kann optional als datensparsame Karte geteilt werden. Details und Grenzen: [Gamification-Konzept](docs/gamification.md).
+Die erste Version soll Deutsch, Englisch, Polnisch, Japanisch, Französisch und Spanisch unterstützen. Im Pilot bleibt Gamification vollständig unsichtbar; intern werden nur erfolgreiche Vor-Ort-Prüfungen gezählt. Teilen und öffentliche Fortschrittsanzeigen kommen frühestens nach dem Pilot als separate Entscheidung infrage. Details und Grenzen: [Gamification-Konzept](docs/gamification.md).
 
 ## Erste Erkenntnisse
 

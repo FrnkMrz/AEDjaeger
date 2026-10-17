@@ -6,7 +6,7 @@ Stand: 17.10.2026. Ergänzung zum [Architekturentwurf](architektur.md). Die Phas
 
 Der Projektinitiator beschreibt gewünschtes Verhalten, bewertet vorzeigbare Ergebnisse und entscheidet über Konten, Ausgaben und Veröffentlichung. Der programmierende AI-Agent übernimmt Code, Tests, Konfiguration, Dokumentation und Fehlerbehebung. Er muss dafür Zugriff auf das Repository und eine Ausführungsumgebung haben; ein Chat, der nur Code ausgibt, erledigt diese Arbeit nicht vollständig.
 
-ChatGPT/Codex kann bei vorhandenem Repository- und Werkzeugzugriff diese Arbeit ausführen. Gemini kann Bildauswertung und eine zweite fachliche Einschätzung unterstützen. Chrome dient zum Prüfen des Browserablaufs. Die Bildauswertung der fertigen App benötigt separat eingerichteten API-Zugang. Vorhandene Chat-Abos werden nicht als gesichertes API-Guthaben eingeplant. Für den Start reicht ein produktiver KI-Anbieter.
+ChatGPT/Codex kann bei vorhandenem Repository- und Werkzeugzugriff diese Arbeit ausführen. Chrome dient zum Prüfen des Browserablaufs. Die Bildauswertung der fertigen App benötigt separat eingerichteten API-Zugang. Vorhandene Chat-Abos werden nicht als API-Guthaben eingeplant. In Phase 1 werden Gemini, OpenAI und Claude kontrolliert anhand desselben Testsatzes verglichen; für den Produktbetrieb reicht anschließend ein aktiver KI-Anbieter. Der Initiator berichtet von ungefähr 20 US-Dollar API-Guthaben oder Budget je Anbieter. Kontostände und Abrechnung vor dem Test prüfen, Kostenlimits setzen und keine Nutzerfotos ohne gesonderte Freigabe für Vergleichstests wiederverwenden.
 
 Nicht mehrere Agenten unkoordiniert dieselben Dateien ändern lassen. Eine zweite Prüfung kann nützlich sein, muss aber einen klaren Auftrag und denselben Referenzstand bekommen. Besonders kritisch sind Anmeldung, Kostenlimits, Zuordnung und OSM-Schreibvorgänge.
 
@@ -18,11 +18,11 @@ Der Agent verwaltet die sechs Sprachdateien mit stabilen Schlüsseln und einer a
 
 ## Gamification sauber klein halten
 
-Das [AED-Signalnetz](gamification.md) ist ein eigenes, optionales Konzept. Die Phasen 1 bis 3 enthalten keinen sichtbaren Punktestand und keine personenbezogene Rangliste. Testweise darf nur ein lokaler Zähler laufen. Zählen kann in einem begrenzten Pilot frühestens nach einer bestätigten Beobachtung einsetzen. Öffentliche oder teilbare regionale Fortschritte erfordern grobe Zusammenfassung, Mindestgruppen, einen gezielten Schutz vor Ein-Personen-Orten und freiwilliges Teilen. Zählfehler oder ausgeschaltete Gamification dürfen niemals Fotoablauf, OSM-Upload oder Wiederherstellung blockieren.
+Das [AED-Signalnetz](gamification.md) bleibt für Nutzende im Pilot vollständig unsichtbar. Im Pilot werden erfolgreiche Vor-Ort-Prüfungen intern erst nach bestätigtem OSM-Vorgang gezählt. Es gibt keine Punkteanzeige, öffentliche Fortschritte oder Teilfunktion. Eine spätere sichtbare Funktion benötigt eine eigene Entscheidung und Datenschutzprüfung. Zählfehler oder ausgeschaltete Gamification dürfen niemals Fotoablauf, OSM-Upload oder Wiederherstellung blockieren.
 
 ## Phase 1: Die riskante Annahme überprüfen
 
-**Ergebnis:** Eine kleine lokale Auswertung mit echten Fotos und bestehenden OSM-Daten. Noch keine produktiven Änderungen.
+**Ergebnis:** Eine kleine lokale Auswertung mit rechtmäßig nutzbaren Fotos und bestehenden OSM-Daten. Noch keine produktiven Änderungen.
 
 Mit zunächst etwa 30–50 eigenen oder rechtmäßig nutzbaren Bildern anfangen. Positive Fälle: verschiedene Geräte, durch Glas sichtbare Geräte, Außenwand und Innenraum. Negative oder unklare Fälle: Wegweiser, geschlossener Kasten, leere Halterung, Poster, Bildschirmfoto, Feuerlöscher, mehrere Geräte, Reflexionen, Dunkelheit und Unschärfe.
 
@@ -30,11 +30,11 @@ Zu jedem Bild unabhängig festhalten, was tatsächlich sichtbar und lesbar ist. 
 
 Messen: falsche Gerätebestätigung, unberechtigte Zuordnung, erforderliche Rückfragen, korrekt übernommene Felder, Wartezeit und Kosten. Eine selbst gemeldete KI-Sicherheit von „99 %“ zählt nicht als gemessene Zuverlässigkeit. In der kleinen Testmenge darf kein klar negativer Fall als sichere Bestätigung durchgehen; selbst null beobachtete Fehler sind noch kein Beweis allgemeiner Fehlerfreiheit.
 
-Danach den Datensatz gezielt um beobachtete Fehlerfälle erweitern. Anbieter und Modell anhand der Ergebnisse auswählen. Keine erfundenen Messergebnisse oder synthetischen Fotos als alleinigen Nachweis verwenden.
+Dieselben Bilder und Prompts für Gemini, OpenAI und Claude verwenden, sofern Datenschutzbedingungen und Kostenlimits aller drei Tests das erlauben. Nutzerfotos aus dem späteren Betrieb nicht automatisch an mehrere Dienste senden. Danach den Datensatz gezielt um beobachtete Fehlerfälle erweitern und einen Anbieter sowie ein Modell anhand der Ergebnisse auswählen. Keine erfundenen Messergebnisse oder synthetischen Fotos als alleinigen Nachweis verwenden.
 
 ## Phase 2: Bedienbarer Ablauf mit simulierten Diensten
 
-**Ergebnis:** Eine Vorschau auf dem Handy: Foto, Prüfung, Ergebnis, Bestätigung. Beide Hauptfälle funktionieren mit festen Testdaten.
+**Ergebnis:** Eine Vorschau auf dem Handy: Foto, Prüfung, Ergebnis, kurze Bestätigung. Beide Hauptfälle funktionieren mit festen Testdaten.
 
 Der Agent implementiert explizite Zustände: bereit, Aufnahme, Analyse, Klärung nötig, Vorschlag bereit, Senden, Ergebnis unklar, gespeichert, wiederholbarer Fehler. Ungültige Übergänge sind nicht erlaubt. Ein Reset während eines unklaren Uploads darf die Wiederherstellung nicht verlieren.
 
@@ -52,7 +52,7 @@ Abnahme: API-Schlüssel sind nicht im Browserbundle, Browsercache oder Repositor
 
 **Ergebnis:** Neuanlage und Existenzbestätigung funktionieren gegen die separate OSM-Entwicklungsinstanz.
 
-Der Agent richtet dafür eigene Testkonten und OAuth-Konfigurationen soweit mit den verfügbaren Zugängen möglich ein. Reale Zugangsschritte oder erforderliche Kontobestätigungen übernimmt der Inhaber. Staging darf auch durch eine falsch gesetzte Frontendvariable nicht unbemerkt produktiv schreiben.
+Der Agent richtet dafür eigene Testkonten und OAuth-Konfigurationen soweit mit den verfügbaren Zugängen möglich ein. Reale Zugangsschritte oder erforderliche Kontobestätigungen übernimmt der Inhaber. Vor dem bestätigten OSM-Schreibvorgang gibt es genau eine kurze, verständliche Bestätigung. Staging darf auch durch eine falsch gesetzte Frontendvariable nicht unbemerkt produktiv schreiben.
 
 Pflichtfälle:
 
@@ -117,4 +117,4 @@ Abschalter für Analyse und OSM-Schreiben, ein dokumentierter Rückweg zur letzt
 
 ## Was der Projektinitiator bereitstellen muss
 
-Kein Quellcode. Benötigt werden später Entscheidungen über Hosting, Domain und Budget sowie Kontozugänge über geeignete sichere Wege. Die vorhandenen Abos allein ersetzen weder einen eingerichteten KI-API-Zugang noch Hosting-Zugänge. Für die Produktprüfung braucht es einige reale Fotos und eine kurze Erprobung am Handy; die technische Vorbereitung und Auswertung übernimmt der Agent.
+Kein Quellcode. Hosting-Richtung Cloudflare und Bestätigungsablauf für OSM sind entschieden. Später benötigt werden Domain, sichere Kontozugänge, Prüfung der verfügbaren API-Guthaben und ausgewählte, rechtmäßig nutzbare Testfotos. Vorhandene Chat-Abos allein ersetzen keinen eingerichteten KI-API-Zugang. Eine kurze Erprobung am Handy ist für Kamera, Standort und Browserberechtigungen nötig; technische Vorbereitung und Auswertung übernimmt der Agent.

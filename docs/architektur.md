@@ -1,6 +1,6 @@
 # Architektur und Bedienung für AEDjäger
 
-Stand: **17.10.2026**. Dies ist ein begründeter Umsetzungsvorschlag, noch keine beschlossene Hosting- oder Anbieterwahl. Es wurde keine Infrastruktur bestellt und kein Anwendungscode implementiert. Die Produktvorgabe bleibt: **Foto → vorhandenen AED bestätigen oder neuen eintragen → fertig.**
+Stand: **17.10.2026**. Cloudflare ist als Hosting-Richtung gewählt; Implementierung und Deployment haben noch nicht begonnen. Der KI-Anbieter bleibt bis zum Vergleich offen. Die Produktvorgabe bleibt: **Foto → vorhandenen AED bestätigen oder neuen eintragen → kurz bestätigen → fertig.**
 
 ## 1. Empfehlung
 
@@ -101,7 +101,7 @@ Die KI liefert sprachunabhängige Beobachtungen und rohe, klar gekennzeichnete B
 
 Das [AED-Signalnetz](gamification.md) ist das vorgeschlagene Gemeinschaftskonzept. Im normalen Ablauf gibt es keine Level-, Punkte- oder Ranglistenansicht. Eine Gemeinschaftskarte kann nach gemeinsam erreichten, ausreichend anonym aggregierten Vor-Ort-Prüfungen freiwillig geteilt werden. Sie ist kein Bestandteil des ersten funktionierenden Uploads.
 
-Die niedrigste Risikovariante beginnt mit einem lokalen Testzähler. Für einen Pilot werden erfolgreiche Beobachtungen erst nach OSM-Bestätigung grob aggregiert. Keine Rohfotos, exakten Bewegungsprofile oder Nutzer-Ranglisten speichern; ein Standort darf aus der Anzeige nicht einer Person zugeordnet werden. Neuanlage und Existenzprüfung zählen gleichwertig; Wiederholungen am selben Tag werden nicht mehrfach belohnt. Meilensteine ändern weder Erkennungs- und Sicherheitsregeln noch erlaubte OSM-Patches.
+Im Pilot bleibt Gamification für Nutzende vollständig unsichtbar. Intern werden erfolgreiche Vor-Ort-Beobachtungen erst nach OSM-Bestätigung gezählt; es gibt keine öffentliche Anzeige und keine Teilfunktion. Keine Rohfotos, exakten Bewegungsprofile oder Nutzer-Ranglisten für diesen Zweck speichern. Neuanlage und Existenzprüfung zählen gleichwertig; Wiederholungen desselben Standorts am selben Tag werden nicht mehrfach gezählt. Teilen und öffentliche Fortschrittsanzeigen werden frühestens nach dem Pilot separat bewertet. Gamification ändert weder Erkennungs- und Sicherheitsregeln noch erlaubte OSM-Patches.
 
 ## 5. Technischer Aufbau
 
@@ -157,13 +157,13 @@ Das ist ein vorgeschlagener Vertrag, keine bereits getestete API-Antwort. Zu den
 
 Text im Foto und bestehende OSM-Beschreibungen sind fremde Daten. Anweisungen wie „ignoriere die Regeln“ müssen als Bildinhalt behandelt werden. Die KI erhält weder OSM-Token noch API-Schlüssel, freien Webzugriff oder die Möglichkeit, weitere URLs aufzurufen. Auch valide JSON-Antworten können sachlich falsch sein; das Schema ersetzt keine fachliche Prüfung.
 
-Gemini und OpenAI bieten Bildauswertung an, Gemini außerdem strukturierte Ausgaben. Das belegt noch keine ausreichende AED-Erkennung. Quellen: [Gemini Bilder](https://ai.google.dev/gemini-api/docs/image-understanding), [Gemini strukturierte Ausgaben](https://ai.google.dev/gemini-api/docs/structured-output), [OpenAI Bildverständnis](https://developers.openai.com/api/docs/guides/images-vision).
+Gemini, OpenAI und Anthropic bieten Bildauswertung an; Gemini stellt außerdem strukturierte Ausgaben bereit. Das belegt noch keine ausreichende AED-Erkennung. Quellen: [Gemini Bilder](https://ai.google.dev/gemini-api/docs/image-understanding), [Gemini strukturierte Ausgaben](https://ai.google.dev/gemini-api/docs/structured-output), [OpenAI Bildverständnis](https://developers.openai.com/api/docs/guides/images-vision), [Claude Vision](https://docs.anthropic.com/en/docs/build-with-claude/vision).
 
 ### Anbieterwahl
 
-Für den ersten Vergleich bietet sich Gemini an, weil es dem Projektinitiator bereits vertraut ist. Ein OpenAI-Vision-Modell ist ein sinnvoller Vergleichskandidat. **Den Gewinner wählen wir anhand eigener Fotos, Fehlzuordnungen, Wartezeiten und tatsächlich gemessenem Verbrauch.** Ein konkretes Modell wird erst bei Implementierung anhand der dann verfügbaren stabilen Versionen festgelegt.
+Gemini, OpenAI und Claude werden mit demselben geeigneten Testsatz, demselben Extraktionsauftrag und denselben Bewertungsregeln verglichen. Der Projektinitiator berichtet von ungefähr 20 US-Dollar API-Guthaben oder Budget je Anbieter und bereits erprobten API-Tokens bei OpenAI und Claude; Kontostände, Abrechnung und nutzbare Modelle müssen vor dem Test geprüft werden. **Den Gewinner wählen wir anhand von Fehlzuordnungen, korrekten Feldern, Wartezeiten und tatsächlich gemessenem Verbrauch.** Ein konkretes Modell wird erst bei Implementierung anhand der dann verfügbaren stabilen Versionen festgelegt.
 
-Zunächst ein aktiver Anbieter, eine kleine austauschbare Schnittstelle und kein automatischer Versand jedes Fotos an beide Dienste. Ein späterer Anbieterwechsel verlangt eine erneute Auswertung der Tests und gegebenenfalls angepasste Nutzerinformationen.
+Die Tests verwenden nur eigens dafür aufgenommene oder rechtmäßig nutzbare, nicht sensible Bilder. Nutzerfotos aus dem späteren Betrieb werden nicht automatisch an mehrere Anbieter geschickt oder für einen Anbietervergleich wiederverwendet. Nach dem Vergleich wird ein aktiver Anbieter über eine kleine austauschbare Schnittstelle eingesetzt. Ein späterer Wechsel verlangt eine erneute Auswertung der Tests und gegebenenfalls angepasste Nutzerinformationen.
 
 Die im Chrome-Browser integrierte Prompt API ist derzeit keine Basis für diese mobile App: Die offizielle Dokumentation führt Android und iOS als nicht unterstützt auf. Chrome bleibt ein Entwicklungs- und Testwerkzeug. [Chrome Prompt API, geprüft am 17.10.2026](https://developer.chrome.com/docs/ai/prompt-api)
 

@@ -1,40 +1,35 @@
 # Entscheidungen und nächste Schritte
 
-Stand: 17.10.2026. Die Fotoaufnahme und maximale Einfachheit sind jetzt die festgelegte Richtung; die frühere Frage „Karte oder Kamera als Einstieg?“ ist entschieden.
+Stand: 17.10.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto → prüfen → vorhandenen AED kurz bestätigen oder neuen AED eintragen.**
 
 ## Festgelegt
 
-- Vor dem AED ein Foto aufnehmen; die KI prüft das Gerät und übernimmt erkennbare Angaben.
-- Vorhandene AEDs in OpenStreetMap automatisch anhand der Umgebung und verfügbarer Hinweise abgleichen.
-- Kein passender Eintrag: neuen AED vorbereiten und eintragen.
-- Passender Eintrag: nur bestätigen, dass das Gerät noch vorhanden ist.
-- Nur notwendige offene Fragen stellen. Kein vollständiges Formular im normalen Ablauf.
-- Vorbild bleibt Hydrantenjäger. Sprache ist zunächst Deutsch.
-- Wir sammeln und konkretisieren das Konzept; Anwendungscode ist noch nicht implementiert.
+- Die App ist als mobile PWA mit gemeinsam gehosteter Oberfläche und API auf Cloudflare vorgesehen. Implementierung und Deployment haben noch nicht begonnen.
+- Vor dem AED wird ein Foto aufgenommen. Die KI prüft, ob ein AED zu sehen ist, und liest nur klar erkennbare Angaben aus.
+- Der Standort wird mit bestehenden OpenStreetMap-Einträgen abgeglichen. Ein passender Treffer wird als „noch vorhanden“ bestätigt; ohne Treffer wird ein neuer Eintrag vorbereitet.
+- Im eindeutigen Fall genügt eine kurze Bestätigung für den OSM-Schreibvorgang.
+- Die erste Version soll Deutsch, Englisch, Polnisch, Japanisch, Französisch und Spanisch unterstützen.
+- Im Pilot wird Gamification nur intern gezählt: erfolgreiche Vor-Ort-Prüfungen nach bestätigtem OSM-Vorgang. Es gibt keine sichtbare Anzeige und keine Teilfunktion. Teilen wird frühestens nach dem Pilot neu bewertet.
+- Vorbild bleibt Hydrantenjäger. „AEDjäger“ ist ein Arbeitsname.
+- Das Repository sammelt Recherche und Umsetzungskonzept; Anwendungscode ist noch nicht implementiert.
 
-## Als Nächstes praktisch prüfen
+## Nächste praktische Prüfungen
 
-1. Wenige reale Fotos zusammenstellen: sichtbares Gerät, Beschriftung, geschlossener Kasten, Wegweiser, unscharfes Bild.
-2. Erkennung und Auslesen sichtbarer Angaben testen; dabei Fehlentscheidungen und nötige Rückfragen festhalten.
-3. Den Abgleich mit echten OSM-Standorten als Vorschau erproben, einschließlich mehrerer Geräte in einem Gebäude.
-4. Einen durchgehenden Ablauf „Foto → Ergebnis → Speichern“ prototypisch zeigen.
+1. Einen kleinen, rechtmäßig nutzbaren Bildtestsatz für Gemini, OpenAI und Claude zusammenstellen: sichtbares Gerät, Beschriftung, Kasten, Wegweiser, leere Halterung, mehrere Geräte und schwierige Bilder.
+2. Alle Anbieter mit identischem Testsatz und Auftrag vergleichen: falsche Erkennung, korrekte Felder, nötige Rückfragen, Wartezeit und gemessene Kosten. Keine Nutzerfotos automatisch an mehrere Anbieter weiterreichen.
+3. Den OSM-Abgleich mit echten Standorten als Vorschau erproben, einschließlich mehrerer Geräte in einem Gebäude und ungenauem GPS.
+4. Einen durchgehenden Ablauf „Foto → Ergebnis → kurze Bestätigung“ auf einem Mobilgerät vorführen.
 
 ## Noch zu entscheiden
 
-- Welcher KI-Dienst liefert ausreichend gute Ergebnisse bei kurzer Wartezeit und passenden Kosten?
-- Welche minimale technische Ergänzung zu Hydrantenjäger braucht die KI-Anfrage, einschließlich geschütztem API-Schlüssel und Fotoverarbeitung?
-- Hosting und API-Anbieter anhand des [Architekturentwurfs](architektur.md) festlegen.
-- Welche Angaben fehlen in echten Erfassungen so häufig, dass eine kurze Rückfrage erforderlich ist?
-- PWA und Wiederverwendung der bestehenden Bausteine im Detail; endgültiger Name, Domain und Lizenz.
+- Welcher der drei KI-Anbieter besteht den Bildtest mit ausreichender Zuverlässigkeit, Datenschutzbedingungen, Wartezeit und Kosten? Der Initiator berichtet von ungefähr 20 US-Dollar API-Guthaben oder Budget je Anbieter sowie bereits erprobten API-Tokens bei OpenAI und Claude. Guthaben, Abrechnung und nutzbare Modelle vor dem Vergleich prüfen.
+- Welche minimalen Pflichtangaben sind bei Neuanlagen tatsächlich nötig, und wann ist eine Standortkorrektur erforderlich?
+- Welche Domain wird verwendet, und wie werden Cloudflare-Konto, API-Schlüssel und Kostenlimits sicher eingerichtet?
+- Welcher endgültige App-Name und welche Lizenz passen zum Projekt?
+- Nach dem Pilot: Ist eine sichtbare oder teilbare Fortschrittskarte den Aufwand und die Datenschutzprüfung wert?
 
-„AEDjäger“ bleibt der Arbeitsname. Das [Repository](https://github.com/FrnkMrz/AEDjaeger) ist zunächst privat. Öffentliche Bildspeicherung ist für die KI-Auswertung nicht als Produktfunktion vorgesehen; Übermittlung und Aufbewahrung beim gewählten Dienst sind noch festzulegen.
+Für die Anbieterbewertung wird ein aktiver Dienst für den Produktbetrieb ausgewählt. Vor dem Versand echter Fotos müssen die Verarbeitung und Aufbewahrung beim ausgewählten Dienst geprüft und verständlich erklärt werden. Öffentliche Bildspeicherung ist keine Produktfunktion.
 
-## Durch weitere Recherche geklärt
+## Bereits recherchiert
 
-Für „noch vorhanden“ ist `check_date` laut OSM-Dokumentation geeignet. Die Anwendung bestätigt damit keine Gerätewartung und verändert keine anderen Eigenschaften. Für die Umsetzung liegt jetzt ein [Plan mit überprüfbaren Etappen](umsetzungsplan.md) vor.
-
-## Neue Anforderungen
-
-- UI-Sprachen ab erster Version: Deutsch, Englisch, Polnisch, Japanisch, Französisch und Spanisch.
-- Gamification bleibt im normalen Ablauf unsichtbar und belohnt weder tägliche Nutzung noch reine Neuanlagen.
-- Arbeitsname für eine mögliche gemeinschaftliche, freiwillig teilbare Fortschrittskarte: „AED-Signalnetz“.
+Für „noch vorhanden“ ist `check_date` laut OSM-Dokumentation geeignet. Die Anwendung bestätigt damit keine Gerätewartung und verändert keine anderen Eigenschaften. Für die technische Arbeit liegt ein [Plan mit überprüfbaren Etappen](umsetzungsplan.md) vor. Das [Repository](https://github.com/FrnkMrz/AEDjaeger) ist zunächst privat.
