@@ -18,7 +18,10 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))),
+    // This origin can host unrelated apps, so only remove caches that belong to AEDjaeger.
+    caches.keys().then((keys) => Promise.all(
+      keys.filter((key) => key.startsWith("aedjaeger-shell-") && key !== CACHE_NAME).map((key) => caches.delete(key)),
+    )),
   );
   self.clients.claim();
 });

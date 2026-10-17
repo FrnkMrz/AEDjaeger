@@ -33,6 +33,10 @@ function getPhotoUrl(current: FlowState): string | undefined {
   return "photoUrl" in current ? current.photoUrl : undefined;
 }
 
+function hasUnresolvedSave(current: FlowState): boolean {
+  return current.kind === "sending" || current.kind === "checking-status" || current.kind === "unclear-error";
+}
+
 function statusContent(): string {
   const photoUrl = getPhotoUrl(state);
   const photoMarkup = photoUrl ? `<img class="photo-preview" src="${escapeHtml(photoUrl)}" alt="${t("photoAlt")}" />` : "";
@@ -75,7 +79,7 @@ function render(restoreFlowFocus = false): void {
   document.title = `${t("appName")} · ${t("tagline")}`;
   app!.innerHTML = `
     <div class="page-shell">
-      <header class="topbar"><a class="brand" href="/" aria-label="${t("appName")}" ${state.kind === "unclear-error" ? 'aria-disabled="true"' : ""}><span class="brand-mark">${icon("check")}</span><span>${t("appName")}</span></a><div class="topbar-actions"><button class="info-link" id="open-info" type="button"><span class="info-mark" aria-hidden="true">i</span><span>${t("aboutButton")}</span></button><label class="language-picker"><span class="sr-only">${t("language")}</span><select id="language" aria-label="${t("language")}">${supportedLanguages.map((code) => `<option value="${code}" ${language === code ? "selected" : ""}>${languageNames[code]}</option>`).join("")}</select><span class="language-globe" aria-hidden="true">◎</span></label></div></header>
+      <header class="topbar"><a class="brand" href="/" aria-label="${t("appName")}" ${hasUnresolvedSave(state) ? 'aria-disabled="true"' : ""}><span class="brand-mark">${icon("check")}</span><span>${t("appName")}</span></a><div class="topbar-actions"><button class="info-link" id="open-info" type="button"><span class="info-mark" aria-hidden="true">i</span><span>${t("aboutButton")}</span></button><label class="language-picker"><span class="sr-only">${t("language")}</span><select id="language" aria-label="${t("language")}">${supportedLanguages.map((code) => `<option value="${code}" ${language === code ? "selected" : ""}>${languageNames[code]}</option>`).join("")}</select><span class="language-globe" aria-hidden="true">◎</span></label></div></header>
       <main>
         <section class="hero ${isReady ? "" : "hero-compact"}"><div class="hero-kicker"><span></span>${t("eyebrow")}</div><h1>${isReady ? t("title") : state.kind === "analyzing" || state.kind === "sending" ? t("checking") : t("tagline")}</h1>${isReady ? `<p>${t("intro")}</p>` : ""}</section>
         <section class="capture-card" aria-live="polite" aria-atomic="false">
@@ -105,11 +109,12 @@ function render(restoreFlowFocus = false): void {
     document.querySelector<HTMLDialogElement>("#info-dialog")?.showModal();
   });
   document.querySelector<HTMLAnchorElement>(".brand")?.addEventListener("click", (event) => {
-    if (state.kind !== "unclear-error") return;
+    if (!hasUnresolvedSave(state)) return;
 
     // A reload here would erase the only copy of an unresolved draft in this in-memory prototype.
     event.preventDefault();
-    app!.querySelector<HTMLButtonElement>('[data-action="recover"]')?.focus();
+    if (state.kind === "unclear-error") app!.querySelector<HTMLButtonElement>('[data-action="recover"]')?.focus();
+    else focusCurrentState();
   });
   document.querySelector<HTMLSelectElement>("#language")?.addEventListener("change", (event) => {
     language = (event.currentTarget as HTMLSelectElement).value as Language;
