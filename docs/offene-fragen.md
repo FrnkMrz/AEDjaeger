@@ -23,8 +23,12 @@ Stand: 17.10.2026. Die Fotoaufnahme und maximale Einfachheit sind jetzt die fest
 
 - Welcher KI-Dienst liefert ausreichend gute Ergebnisse bei kurzer Wartezeit und passenden Kosten?
 - Welche minimale technische Ergänzung zu Hydrantenjäger braucht die KI-Anfrage, einschließlich geschütztem API-Schlüssel und Fotoverarbeitung?
-- Wie wird ausschließlich „noch vorhanden“ mit Datum in OSM abgebildet, ohne eine Prüfung aller vorhandenen Angaben vorzutäuschen?
+- Hosting und API-Anbieter anhand des [Architekturentwurfs](architektur.md) festlegen.
 - Welche Angaben fehlen in echten Erfassungen so häufig, dass eine kurze Rückfrage erforderlich ist?
 - PWA und Wiederverwendung der bestehenden Bausteine im Detail; endgültiger Name, Domain und Lizenz.
 
 „AEDjäger“ bleibt der Arbeitsname. Das [Repository](https://github.com/FrnkMrz/AEDjaeger) ist zunächst privat. Öffentliche Bildspeicherung ist für die KI-Auswertung nicht als Produktfunktion vorgesehen; Übermittlung und Aufbewahrung beim gewählten Dienst sind noch festzulegen.
+
+## Durch weitere Recherche geklärt
+
+Für „noch vorhanden“ ist `check_date` laut OSM-Dokumentation geeignet. Die Anwendung bestätigt damit keine Gerätewartung und verändert keine anderen Eigenschaften. Für die Umsetzung liegt jetzt ein [Plan mit überprüfbaren Etappen](umsetzungsplan.md) vor.

@@ -18,7 +18,7 @@ OSM-Anmeldung und Erklärung der Fotoübermittlung gehören in die einmalige Ein
 
 ## Bereits vorhanden
 
-Der normale Weg bestätigt nur, dass der fotografierte AED noch vorhanden ist. Keine Pflicht zur Vervollständigung aller OSM-Felder. Bestehende Position, Öffnungszeiten und sonstige Angaben bleiben unverändert. Die Bestätigung wird mit dem Beobachtungsdatum gespeichert; die genaue OSM-Abbildung des reinen Existenznachweises wird vor Umsetzung festgelegt.
+Der normale Weg bestätigt nur, dass der fotografierte AED noch vorhanden ist. Keine Pflicht zur Vervollständigung aller OSM-Felder. Bestehende Position, Öffnungszeiten und sonstige Angaben bleiben unverändert. Die Bestätigung wird mit dem Beobachtungsdatum als `check_date` gespeichert. Die recherchierte Grundlage und die Regeln für ältere Aufnahmen stehen im [Architekturentwurf](architektur.md#6-bestehenden-aed-bestätigen).
 
 Ein heutiges Foto bestätigt nicht automatisch die bisherigen Zugangszeiten oder die Funktionsfähigkeit des Geräts. Erkennt die App einen echten Widerspruch, stellt sie dazu genau eine kurze Frage, statt Daten still zu überschreiben.
 

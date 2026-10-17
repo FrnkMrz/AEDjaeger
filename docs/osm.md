@@ -14,10 +14,12 @@ Diese Tabelle ist kein Pflichtformular. Die Fotoauswertung und vorhandene OSM-Da
 | Wann ist er zugänglich? | `opening_hours=*` | `24/7` nur bei bestätigter durchgehender Zugänglichkeit. |
 | Drinnen oder draußen? | `indoor=yes/no` | Nur bei eindeutiger Bildinformation oder gezielter Antwort. |
 | Stockwerk | `level=*`, gegebenenfalls `level:ref=*` | Optional; Zählebene und Beschriftung unterscheiden. |
-| Eintrag vor Ort geprüft am | `check_date=YYYY-MM-DD` | Nicht pauschal für ein Foto setzen, das nur die Existenz belegt. Die Abbildung des reinen Existenznachweises ist noch festzulegen. |
+| Vor Ort noch vorhanden am | `check_date=YYYY-MM-DD` | Nach tatsächlicher Sichtung und Benutzerbestätigung; Beobachtungsdatum verwenden. |
 | Betreiber | `operator=*` | Optional. |
 
 Ein unbekannter Wert bleibt bei Neuanlage ohne Tag. Bei Bearbeitungen darf „nicht beantwortet“ bestehende Angaben nicht löschen. „Unbekannt“ ist keine pauschale Aufforderung, `unknown` nach OSM zu schreiben.
+
+Die [Dokumentation zu `check_date`](https://wiki.openstreetmap.org/wiki/Key:check_date) erlaubt ausdrücklich die Dokumentation der überprüften Existenz. Unsere frühere Forderung nach einem noch zu bestimmenden gesonderten Tag war daher zu streng. Spezifische Prüfdatums-Tags anderer Eigenschaften bleiben unverändert.
 
 ## Eigene Regeln für eine verlässliche Erfassung
 

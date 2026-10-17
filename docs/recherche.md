@@ -55,3 +55,9 @@ Das Abstract beschreibt wiederholte Suchübungen, Smartphone-Sensorik und Blueto
 ## Recherchegrenzen
 
 Keine Überprüfung von App-Store-Verfügbarkeit, keine vollständige Codeprüfung der Vergleichsprojekte, keine Aussagen über medizinische Wirksamkeit unserer geplanten App. Quellen beschreiben den jeweils verfügbaren Stand; Funktionen und Links können sich ändern.
+
+## 5. Architektur-Recherche vom 17.10.2026
+
+Der [Architekturentwurf](architektur.md) ergänzt überprüfte Primärquellen zu GitHub Pages, Cloudflare Workers, KI-Bildauswertung, Kostenbegrenzung, PWA-Grenzen und sicheren OSM-Uploads. Dort stehen die jeweiligen Belege direkt bei den Aussagen. Der [Umsetzungsplan](umsetzungsplan.md) übersetzt die Empfehlung in praktische Aufträge für einen AI-Agenten.
+
+Neu geklärt wurde die OSM-Abbildung von Existenzbestätigungen über [check_date](https://wiki.openstreetmap.org/wiki/Key:check_date). Eine Modellbewertung mit eigenen Fotos steht noch aus; es wurden keine Genauigkeits- oder Laufzeitmessungen durchgeführt.
