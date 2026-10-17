@@ -15,6 +15,7 @@ Die zusätzliche Serverseite hat einen konkreten Zweck: KI-Zugang schützen, Kos
 | Nur GitHub Pages | Für eine öffentliche App mit geheimem KI-Schlüssel unzureichend | Pages liefert statische Dateien; ein im Browser eingebauter Schlüssel wäre auslesbar. |
 | GitHub Pages plus separater API-Dienst | Technisch möglich | Vertrautes Frontend-Hosting, aber zwei Deployments und gegebenenfalls zusätzliche Origin-, Cookie- und CORS-Konfiguration. |
 | Cloudflare Workers mit Static Assets und D1 | **Empfehlung für dieses Projekt** | Oberfläche und API unter derselben Domain, ein zusammenhängendes Deployment, verwalteter Betrieb. Dafür ein zusätzliches Betreiberkonto und Bindung an dessen Dienste. |
+| Eigener Server in einer VM mit Cloudflare Tunnel | Für Tests und frühe Phasen möglich | Kein Hosting-Preis, aber Betrieb, Updates und Absicherung liegen beim Betreiber. Feste Adresse (benannter Tunnel mit Domain) für das OSM-Login nötig; Details in den [offenen Fragen](offene-fragen.md#hosting-optionen-stand-der-diskussion). |
 | Verwaltetes Node-Backend oder eigener Server | Mögliche Alternative | Mehr Betriebsaufwand; für die ersten Funktionen kein erkennbarer Vorteil. Ein EU-Hosting-Anbieter wäre zu prüfen, falls verbindliche Datenresidenz ein Ziel wird. |
 | Native Android-/iOS-App | Spätere Option | Mehr Plattform- und Veröffentlichungsarbeit; löst weder KI-Fehler noch ungenaues Indoor-GPS. Erst bei nachgewiesenen PWA-Grenzen neu entscheiden. |
 
