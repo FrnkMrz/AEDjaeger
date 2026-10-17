@@ -1,45 +1,30 @@
-# Offene Fragen und nächste Schritte
+# Entscheidungen und nächste Schritte
 
-Stand: 17.10.2026. Diese Liste ist ein Gesprächsspeicher; sie muss nicht vor weiterer Recherche vollständig beantwortet werden.
+Stand: 17.10.2026. Die Fotoaufnahme und maximale Einfachheit sind jetzt die festgelegte Richtung; die frühere Frage „Karte oder Kamera als Einstieg?“ ist entschieden.
 
-## Festgehalten
+## Festgelegt
 
-- Gewünscht ist eine sehr einfache mobile App zum Eintragen von AEDs in OpenStreetMap.
-- Vorbild ist Hydrantenjäger.
-- Zunächst werden Informationen, Links und Gedanken gesammelt.
-- Die Zusammenarbeit und Dokumentation beginnen auf Deutsch.
-- Es gibt ein eigenes Repository: [FrnkMrz/AEDjaeger](https://github.com/FrnkMrz/AEDjaeger).
+- Vor dem AED ein Foto aufnehmen; die KI prüft das Gerät und übernimmt erkennbare Angaben.
+- Vorhandene AEDs in OpenStreetMap automatisch anhand der Umgebung und verfügbarer Hinweise abgleichen.
+- Kein passender Eintrag: neuen AED vorbereiten und eintragen.
+- Passender Eintrag: nur bestätigen, dass das Gerät noch vorhanden ist.
+- Nur notwendige offene Fragen stellen. Kein vollständiges Formular im normalen Ablauf.
+- Vorbild bleibt Hydrantenjäger. Sprache ist zunächst Deutsch.
+- Wir sammeln und konkretisieren das Konzept; Anwendungscode ist noch nicht implementiert.
 
-## Vorläufige Arbeitsannahmen
+## Als Nächstes praktisch prüfen
 
-- „AEDjäger“ als Arbeitsname, passend zum Projektordner.
-- Repository zunächst privat.
-- PWA als naheliegender Kandidat, noch keine Plattformentscheidung.
-- Direkte OSM-Bearbeitung mit persönlicher Anmeldung als vorgeschlagener Hauptweg.
+1. Wenige reale Fotos zusammenstellen: sichtbares Gerät, Beschriftung, geschlossener Kasten, Wegweiser, unscharfes Bild.
+2. Erkennung und Auslesen sichtbarer Angaben testen; dabei Fehlentscheidungen und nötige Rückfragen festhalten.
+3. Den Abgleich mit echten OSM-Standorten als Vorschau erproben, einschließlich mehrerer Geräte in einem Gebäude.
+4. Einen durchgehenden Ablauf „Foto → Ergebnis → Speichern“ prototypisch zeigen.
 
-## Produktfragen
+## Noch zu entscheiden
 
-- Richtet sich die App vor allem an OSM-Erfahrene oder Menschen ohne OSM-Vorkenntnisse?
-- Wie stark soll sie optisch und spielerisch Hydrantenjäger ähneln?
-- Ist ein Foto optional, der Einstieg oder eine Voraussetzung?
-- Welche Angaben sollen zum Speichern verpflichtend sein?
-- Gehört das erneute Prüfen vorhandener AEDs schon in die erste Version?
-- Werden Offline-Entwürfe im ersten Einsatzgebiet benötigt?
-- Braucht es später einen Hinweisweg für Menschen ohne OSM-Konto?
+- Welcher KI-Dienst liefert ausreichend gute Ergebnisse bei kurzer Wartezeit und passenden Kosten?
+- Welche minimale technische Ergänzung zu Hydrantenjäger braucht die KI-Anfrage, einschließlich geschütztem API-Schlüssel und Fotoverarbeitung?
+- Wie wird ausschließlich „noch vorhanden“ mit Datum in OSM abgebildet, ohne eine Prüfung aller vorhandenen Angaben vorzutäuschen?
+- Welche Angaben fehlen in echten Erfassungen so häufig, dass eine kurze Rückfrage erforderlich ist?
+- PWA und Wiederverwendung der bestehenden Bausteine im Detail; endgültiger Name, Domain und Lizenz.
 
-## Technische und organisatorische Fragen
-
-- Eigenständige Kopie geeigneter Bausteine oder gemeinsamer Kern mit Hydrantenjäger?
-- Welche Login- und Kartenkonfiguration braucht eine eigene Domain?
-- Wie behandeln wir verlegte, entfernte oder vorübergehend nicht zugängliche Geräte?
-- Falls Bilder veröffentlicht werden: wo, mit welcher Lizenz und mit welchem Löschweg?
-- Soll das Repository später öffentlich werden, und welche Projektlizenz passt?
-- Welcher endgültige Name ist geeignet? „AEDHunter“ wird bereits von dem verlinkten Forschungsprojekt verwendet.
-
-## Sinnvolle nächste Schritte
-
-1. Den bestehenden AED-Ablauf in Hydrantenjäger auf einem Handy durchgehen.
-2. OpenAEDMap und MapComplete mit demselben Beispielszenario vergleichen, ohne Testdaten in die produktive OSM-Datenbank einzutragen.
-3. Drei einfache Ansichten skizzieren: Umgebung, Erfassung, Bestätigung.
-4. An wenigen realen Standorten prüfen, welche Fragen für zuverlässige Einträge gebraucht werden.
-5. Erst danach den ersten umzusetzenden Funktionsumfang und die Code-Wiederverwendung festlegen.
+„AEDjäger“ bleibt der Arbeitsname. Das [Repository](https://github.com/FrnkMrz/AEDjaeger) ist zunächst privat. Öffentliche Bildspeicherung ist für die KI-Auswertung nicht als Produktfunktion vorgesehen; Übermittlung und Aufbewahrung beim gewählten Dienst sind noch festzulegen.

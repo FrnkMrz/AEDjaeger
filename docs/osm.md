@@ -2,7 +2,9 @@
 
 Stand: 17.10.2026. Fachliche Grundlage: [deutsche Tagging-Seite](https://wiki.openstreetmap.org/wiki/DE:Tag:emergency=defibrillator) und [englische Tagging-Seite](https://wiki.openstreetmap.org/wiki/Tag:emergency=defibrillator). Die UI-Zuordnung ist unser Entwurf.
 
-## Vorgeschlagene Formularfelder
+## Mögliche Datenfelder im Hintergrund
+
+Diese Tabelle ist kein Pflichtformular. Die Fotoauswertung und vorhandene OSM-Daten liefern Angaben, soweit sie belastbar sind. Bei einem schon erfassten Gerät wird im Normalfall nur dessen Vorhandensein bestätigt; siehe [Produktkonzept](konzept.md).
 
 | Frage / Information | OSM-Tag | Behandlung im Entwurf |
 | --- | --- | --- |
@@ -10,9 +12,9 @@ Stand: 17.10.2026. Fachliche Grundlage: [deutsche Tagging-Seite](https://wiki.op
 | Wo genau befindet sich der AED? | `defibrillator:location=*` | Kurzer Freitext mit Eingang, Raum oder Orientierungspunkt. |
 | Wer hat Zugang? | `access=*` | Auswahl erläutern, etwa `yes`, `customers` oder `private`; Details vor Umsetzung abgleichen. |
 | Wann ist er zugänglich? | `opening_hours=*` | `24/7` nur bei bestätigter durchgehender Zugänglichkeit. |
-| Drinnen oder draußen? | `indoor=yes/no` | Explizite Auswahl. |
+| Drinnen oder draußen? | `indoor=yes/no` | Nur bei eindeutiger Bildinformation oder gezielter Antwort. |
 | Stockwerk | `level=*`, gegebenenfalls `level:ref=*` | Optional; Zählebene und Beschriftung unterscheiden. |
-| Vor Ort gesehen am | `check_date=YYYY-MM-DD` | Nur bei tatsächlicher Sichtprüfung bestätigen lassen. |
+| Eintrag vor Ort geprüft am | `check_date=YYYY-MM-DD` | Nicht pauschal für ein Foto setzen, das nur die Existenz belegt. Die Abbildung des reinen Existenznachweises ist noch festzulegen. |
 | Betreiber | `operator=*` | Optional. |
 
 Ein unbekannter Wert bleibt bei Neuanlage ohne Tag. Bei Bearbeitungen darf „nicht beantwortet“ bestehende Angaben nicht löschen. „Unbekannt“ ist keine pauschale Aufforderung, `unknown` nach OSM zu schreiben.
@@ -44,4 +46,4 @@ Die Abfrage umfasst bewusst auch Ways und Relations, damit auffällige bestehend
 
 OSM-Objektversion vor Änderungen laden und Konflikte behandeln. Nach einem Upload-Timeout zunächst den tatsächlichen Serverzustand klären, bevor dieselbe Neuanlage wiederholt wird. Eigene erfolgreiche Änderungen sofort in der App darstellen, da abgeleitete Datenquellen verzögert sein können.
 
-Fotos werden nicht als Bilddateien in OSM hochgeladen. Ein öffentlicher Bildlink wäre eine getrennte Funktion mit eigenem Hosting. Für den ersten Entwurf erscheint die lokale Fotoverarbeitung aus Hydrantenjäger ausreichend.
+Fotos werden nicht als Bilddateien in OSM hochgeladen. Ein öffentlicher Bildlink wäre eine getrennte Funktion mit eigenem Hosting. Die geplante KI-Anfrage nutzt das Foto ausdrücklich als Eingabe. Bildübermittlung, Dienst und Aufbewahrung müssen dafür festgelegt werden; die bisherige rein lokale Fotoverarbeitung aus Hydrantenjäger deckt diesen neuen Schritt nicht ab. Eine öffentliche Fotogalerie wird dafür nicht benötigt.

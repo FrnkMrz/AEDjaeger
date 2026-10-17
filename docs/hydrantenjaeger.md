@@ -19,9 +19,11 @@ Die App nutzt Vanilla JavaScript, Vite, Leaflet, Tailwind CSS und PWA-Unterstüt
 | Anmeldung und OSM-Upload | Vorhandenen Ablauf gezielt auf Wiederverwendung prüfen. |
 | Karte und Positionskorrektur | Auf einen Objekttyp reduzieren; Innenräume stärker berücksichtigen. |
 | AED-Formular | Standortbeschreibung und leicht verständliche Zugangsfragen priorisieren. |
-| Fotoverarbeitung | Als optionale lokale Hilfe prüfen. |
+| Fotoverarbeitung | Kameraablauf wiederverwenden und um KI-Auswertung als zentralen Schritt ergänzen. |
 | PWA-Updates und Fehlerzustände | Bewährte Bedienmuster übernehmen. |
 | Fortschritt / Gamification | Eigene, zum Thema passende Darstellung diskutieren. |
+
+Der neue Hauptablauf ist im [Produktkonzept](konzept.md) festgelegt: Foto aufnehmen, KI-Auswertung und OSM-Abgleich, dann Neuanlage oder Existenzbestätigung. Dafür ist eine zusätzliche KI-Anbindung erforderlich. Die vorhandene lokale Bildverarbeitung allein erfüllt dieses Ziel nicht.
 
 ## Was nicht ungeprüft übernommen werden sollte
 

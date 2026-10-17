@@ -1,48 +1,53 @@
-# Erste Produktidee
+# Produktkonzept: Foto machen, AED eintragen oder bestätigen
 
-Stand: 17.10.2026. Die folgenden Punkte sind **Vorschläge zur Diskussion**, keine bereits beschlossene Spezifikation.
+Stand: 17.10.2026. Die Produktrichtung wurde vom Projektinitiator konkretisiert. Umsetzung und KI-Anbieter sind noch offen.
 
-## Ziel
+## Oberstes Ziel: absolute Einfachheit
 
-„Ich stehe vor einem AED und möchte ihn mit wenigen verständlichen Schritten korrekt in OpenStreetMap eintragen.“
+Ich stehe vor einem AED, mache ein Foto und die App erledigt die Zuordnung zu OpenStreetMap. Sie trägt ein neues Gerät ein oder bestätigt, dass ein vorhandenes noch da ist. Nur wirklich notwendige offene Fragen gehen an mich zurück.
 
-Die Oberfläche soll auf dem Handy mit einer Hand bedienbar sein, große Schaltflächen haben und ohne Kenntnis von OSM-Tags auskommen. Bestehende Einträge zu ergänzen ist ebenso wertvoll wie neue Geräte einzutragen.
+Das Foto ist der Einstieg und die Grundlage für die KI-Erkennung. Der normale Ablauf benötigt weder eine Kartensuche noch ein vollständiges Formular.
 
-## Vorschlag für den ersten Ablauf
+## Der normale Ablauf
 
-1. **Karte öffnen:** Eigene Position und vorhandene AEDs in der Nähe anzeigen.
-2. **AED auswählen oder hinzufügen:** Bei einem vorhandenen Punkt direkt dessen Angaben verbessern. Vor einem neuen Eintrag auf nahe Geräte hinweisen.
-3. **Standort festlegen:** Position auf der Karte bestätigen oder korrigieren. GPS liefert einen Ausgangspunkt; bei Innenräumen sind Gebäudeseite, Eingang und Stockwerk besonders wichtig.
-4. **Wenige Fragen beantworten:** „Wo genau?“, „Drinnen oder draußen?“, „Wer kommt heran?“ und „Wann zugänglich?“ Bei unbekannten Angaben ausdrücklich „Weiß ich nicht“ anbieten.
-5. **Prüfen und speichern:** Verständliche Zusammenfassung zeigen, bei Bedarf mit dem eigenen OSM-Konto anmelden und den Eintrag senden. Erfolg erst nach bestätigtem Upload anzeigen.
+1. **Foto machen.** Die App ermittelt die Position und fragt vorhandene AEDs in der Umgebung ab. Eine KI-Anfrage prüft das Foto auf einen AED und liest erkennbare Angaben aus.
+2. **Automatisch zuordnen.** Die App gleicht Position, vorhandene OSM-Daten und Bildinformationen ab. Sie entscheidet, ob ein vorhandener Eintrag passt oder ein neues Gerät einzutragen ist.
+3. **Kurz bestätigen, fertig.** Bei einem passenden Eintrag: „Schon eingetragen. Noch vorhanden bestätigen.“ Bei einem neuen Gerät: „Neuen AED eintragen.“ Ein Tippen speichert die jeweils angekündigte Änderung.
 
-Eine kleine Standortbeschreibung wie „Erdgeschoss, rechts neben der Information“ kann hilfreicher sein als viele technische Gerätedetails. Das Formular soll bekannte Angaben fördern, ohne unbekannte Werte zu erfinden.
+OSM-Anmeldung und Erklärung der Fotoübermittlung gehören in die einmalige Einrichtung. Nach dieser Einrichtung ist das Ziel für den eindeutigen Fall: **Foto aufnehmen → Ergebnis bestätigen → fertig.**
 
-## Kleiner erster Funktionsumfang
+## Bereits vorhanden
 
-- Vorhandene AEDs sehen, neu erfassen und bearbeiten.
-- Position bestätigen; Standortbeschreibung, Zugang und Zugangszeiten erfassen.
-- Vor dem Anlegen mögliche Dubletten zeigen. Nähe allein beweist keine Dublette: In einem Gebäude können mehrere Geräte existieren.
-- Eingaben bei Netzfehlern erhalten; erneutes Senden kontrolliert ermöglichen.
-- OSM-Anmeldung und Upload mit verständlicher Rückmeldung.
-- Deutsch als erste Sprache; spätere Übersetzbarkeit berücksichtigen.
+Der normale Weg bestätigt nur, dass der fotografierte AED noch vorhanden ist. Keine Pflicht zur Vervollständigung aller OSM-Felder. Bestehende Position, Öffnungszeiten und sonstige Angaben bleiben unverändert. Die Bestätigung wird mit dem Beobachtungsdatum gespeichert; die genaue OSM-Abbildung des reinen Existenznachweises wird vor Umsetzung festgelegt.
 
-**Arbeitsvorschlag:** Mobile, installierbare Web-App (PWA) wie Hydrantenjäger. Ob daraus tatsächlich eine PWA oder native App wird, bleibt offen.
+Ein heutiges Foto bestätigt nicht automatisch die bisherigen Zugangszeiten oder die Funktionsfähigkeit des Geräts. Erkennt die App einen echten Widerspruch, stellt sie dazu genau eine kurze Frage, statt Daten still zu überschreiben.
 
-## Vereinfachungen gegenüber Hydrantenjäger
+## Noch nicht eingetragen
 
-Nur ein Objekttyp; dadurch entfällt die Typauswahl. Keine Hydrantendetails und keine Feuerwehr-Dienstgrade. Ein Foto könnte optional als lokale Gedächtnisstütze dienen. Ob der Einstieg über Kamera oder Karte erfolgt, sollte anhand weniger realer Erfassungen entschieden werden.
+Die App bereitet den neuen Eintrag aus Position und Foto vor. Die KI soll erkennen, ob das Gerät sichtbar ist, und klar lesbare Angaben übernehmen, beispielsweise Hersteller, Modell oder eine Beschriftung zum Standort. Diese Erkennungsleistung muss an echten Fotos erprobt werden.
 
-## Ideen für später
+Fehlen entscheidende Angaben, fragt die App gezielt nach, zum Beispiel „Wo im Gebäude?“ oder bei unsicherer Position „Wo hängt der AED?“. Eine kleine Karte erscheint nur, wenn die Lage geklärt werden muss oder der Benutzer sie korrigieren möchte. Optionale Angaben dürfen fehlen; es gibt keinen Fragenkatalog zum vollständigen Ausfüllen.
 
-- Vorhandene Einträge vor Ort erneut prüfen und fehlende Details ergänzen.
-- Eigene Beiträge und persönlichen Fortschritt zeigen.
-- Kleine Sammelaktionen im Ort oder Verein.
-- Offline-Entwürfe mit späterer Dubletten- und Versionsprüfung vor dem Upload.
-- Fotos veröffentlichen, sobald Speicherort, Einwilligung und Lizenz geklärt sind.
+## Nur bei Unklarheit nachfragen
 
-Bei spielerischen Elementen vollständige und hilfreiche Beiträge belohnen. Ein reiner Zähler für Neuanlagen könnte zu unnötigen Dubletten motivieren. Standortbesuche dürfen nicht mit einer technischen Wartung des Geräts gleichgesetzt werden.
+| Situation | Reaktion der App |
+| --- | --- |
+| Ein bestehender AED passt eindeutig | Vorhandensein mit einem Tippen bestätigen. |
+| Erfolgreiche Umgebungssuche, kein passender Eintrag | Neuanlage vorbereiten; nur entscheidende Lücken klären. |
+| Mehrere plausible Einträge | Kurze Auswahl: „Welcher ist es?“ mit unterscheidbaren Standortangaben. |
+| Nur ein Wegweiser oder ein geschlossener, nicht einsehbarer Kasten erkennbar | Nachfragen, ob das Gerät tatsächlich vorhanden ist; kein automatischer Existenznachweis. |
+| Bild unscharf oder Erkennung unsicher | „Bitte noch ein Foto“ statt geratenen Daten. |
+| OSM-Abfrage fehlgeschlagen | Erneut versuchen; ein Fehler bedeutet nicht, dass noch kein Eintrag existiert. |
+| Upload fehlgeschlagen oder Ergebnis unklar | Aufnahme erhalten, Serverzustand prüfen und Doppelanlage vermeiden. |
 
-## Vorläufige Abgrenzung
+Nähe allein reicht nicht zur Zuordnung: In einem Gebäude können mehrere AEDs stehen. Das Foto liefert sichtbare Hinweise, GPS die ungefähre Lage und OSM die vorhandenen Einträge. Die App führt diese Informationen zusammen; ein verlässlicher Abgleich setzt kein bereits vorhandenes Vergleichsfoto in OSM voraus.
 
-Der erste Entwurf konzentriert sich auf das Kartieren. Notfallnavigation, medizinische Anleitung, Gerätewartung, externe Registerimporte und öffentliche Ranglisten sind eigene Themen für spätere Entscheidungen.
+## Umfang des ersten Prototyps
+
+Fotoaufnahme, KI-Auswertung, Suche in der Umgebung, Zuordnung und die beiden Speicherwege „neu eintragen“ und „noch vorhanden“. Rückfragen erscheinen ausschließlich dort, wo der konkrete Vorgang sie benötigt.
+
+Karte, Tags und technische Details bleiben im Hintergrund. Punkte, Ranglisten, öffentliche Fotogalerien und zusätzliche Erfassungsfunktionen stehen hinter dem einfachen Hauptablauf zurück. Eine PWA wie Hydrantenjäger bleibt ein technischer Kandidat.
+
+## Nächster praktischer Schritt
+
+Mit wenigen echten Fotos den gesamten Ablauf erproben: neues Gerät, bereits eingetragenes Gerät, mehrere Geräte am selben Ort, Hinweisschild und undeutliches Foto. Dabei zunächst nur Änderungsvorschläge erzeugen. Entscheidend ist, ob die App zuverlässig zuordnet und wie oft sie eine Rückfrage braucht.

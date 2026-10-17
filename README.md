@@ -9,10 +9,16 @@ Vorbild ist [Hydrantenjäger](https://hydrantenjaeger.de), insbesondere die einf
 ## Einstieg
 
 - [Recherche und kommentierte Linksammlung](docs/recherche.md)
-- [Erste Produktidee und kleiner Funktionsumfang](docs/konzept.md)
+- [Produktkonzept: Foto, KI und OSM-Abgleich](docs/konzept.md)
 - [OSM-Datenmodell und technische Grundlagen](docs/osm.md)
 - [Anknüpfung an Hydrantenjäger](docs/hydrantenjaeger.md)
 - [Offene Fragen und nächste Schritte](docs/offene-fragen.md)
+
+## Festgelegte Produktrichtung
+
+**Foto machen → KI erkennt den AED und liest sichtbare Angaben → Abgleich mit OpenStreetMap → neu eintragen oder „noch vorhanden“ bestätigen.**
+
+Absolute Einfachheit ist das oberste Ziel. Die App übernimmt Erkennung und Zuordnung. Nur notwendige offene Fragen werden gestellt; vorhandene Einträge müssen nicht erst vervollständigt werden. Im eindeutigen Fall reicht nach dem Foto ein Tippen zum Speichern. Details stehen im [Produktkonzept](docs/konzept.md).
 
 ## Erste Erkenntnisse
 
