@@ -10,6 +10,16 @@ ChatGPT/Codex kann bei vorhandenem Repository- und Werkzeugzugriff diese Arbeit 
 
 Nicht mehrere Agenten unkoordiniert dieselben Dateien ändern lassen. Eine zweite Prüfung kann nützlich sein, muss aber einen klaren Auftrag und denselben Referenzstand bekommen. Besonders kritisch sind Anmeldung, Kostenlimits, Zuordnung und OSM-Schreibvorgänge.
 
+## Sprachen im Entwicklungsauftrag
+
+Deutsch, Englisch, Polnisch, Japanisch, Französisch und Spanisch gehören zur ersten Version. UI-Texte nicht auf Sichtbarkeit hin vervollständigen: Kamerazugriff verweigert, OSM-Login abgelaufen, Verbindung unterbrochen, Ergebnis unklar und Wiederherstellung müssen in allen sechs Sprachen funktionieren. Jede Sprache benötigt echte Tests im schmalen Mobilbildschirm. Kein automatisches Übersetzen in der Laufzeit.
+
+Der Agent verwaltet die sechs Sprachdateien mit stabilen Schlüsseln und einer automatischen Vollständigkeitsprüfung. Der deutsche Ausgangstext wird gemeinsam geprüft, bevor derselbe Text in fünf weiteren Dateien verbreitet wird. Für Japanisch insbesondere Schriftgröße und Zeilenumbruch, für Polnisch und Französisch Sonderzeichen sowie Textlänge kontrollieren. Auch spätere Gamification-Kurztexte erhalten von Beginn an Übersetzungen, selbst wenn die entsprechende Funktion im Pilot noch verborgen bleibt.
+
+## Gamification sauber klein halten
+
+Das [AED-Signalnetz](gamification.md) ist ein eigenes, optionales Konzept. Die Phasen 1 bis 3 enthalten keinen sichtbaren Punktestand und keine personenbezogene Rangliste. Testweise darf nur ein lokaler Zähler laufen. Zählen kann in einem begrenzten Pilot frühestens nach einer bestätigten Beobachtung einsetzen. Öffentliche oder teilbare regionale Fortschritte erfordern grobe Zusammenfassung, Mindestgruppen, einen gezielten Schutz vor Ein-Personen-Orten und freiwilliges Teilen. Zählfehler oder ausgeschaltete Gamification dürfen niemals Fotoablauf, OSM-Upload oder Wiederherstellung blockieren.
+
 ## Phase 1: Die riskante Annahme überprüfen
 
 **Ergebnis:** Eine kleine lokale Auswertung mit echten Fotos und bestehenden OSM-Daten. Noch keine produktiven Änderungen.

@@ -32,3 +32,9 @@ Stand: 17.10.2026. Die Fotoaufnahme und maximale Einfachheit sind jetzt die fest
 ## Durch weitere Recherche geklärt
 
 Für „noch vorhanden“ ist `check_date` laut OSM-Dokumentation geeignet. Die Anwendung bestätigt damit keine Gerätewartung und verändert keine anderen Eigenschaften. Für die Umsetzung liegt jetzt ein [Plan mit überprüfbaren Etappen](umsetzungsplan.md) vor.
+
+## Neue Anforderungen
+
+- UI-Sprachen ab erster Version: Deutsch, Englisch, Polnisch, Japanisch, Französisch und Spanisch.
+- Gamification bleibt im normalen Ablauf unsichtbar und belohnt weder tägliche Nutzung noch reine Neuanlagen.
+- Arbeitsname für eine mögliche gemeinschaftliche, freiwillig teilbare Fortschrittskarte: „AED-Signalnetz“.

@@ -12,6 +12,7 @@ Vorbild ist [Hydrantenjäger](https://hydrantenjaeger.de), insbesondere die einf
 - [Produktkonzept: Foto, KI und OSM-Abgleich](docs/konzept.md)
 - [Architektur, Bedienung, Hosting und Schwachstellen](docs/architektur.md)
 - [Umsetzungsplan für den programmierenden AI-Agenten](docs/umsetzungsplan.md)
+- [Gamification-Konzept: das AED-Signalnetz](docs/gamification.md)
 - [OSM-Datenmodell und technische Grundlagen](docs/osm.md)
 - [Anknüpfung an Hydrantenjäger](docs/hydrantenjaeger.md)
 - [Offene Fragen und nächste Schritte](docs/offene-fragen.md)
@@ -25,6 +26,10 @@ Absolute Einfachheit ist das oberste Ziel. Die App übernimmt Erkennung und Zuor
 ## Technische Empfehlung zur Diskussion
 
 PWA mit kleinem Serverdienst; Code auf GitHub, gemeinsames Hosting von Oberfläche und API auf Cloudflare Workers mit Static Assets. Die KI liefert Bildbeobachtungen, feste Regeln prüfen die Zuordnung, und erst die Benutzerbestätigung löst die konkrete OSM-Änderung aus. Anbieterwahl und Hosting sind noch nicht beschlossen. Begründung, Alternativen und praktische Prüfschritte stehen im [Architekturentwurf](docs/architektur.md).
+
+## Sprachen und Gamification
+
+Die erste Version soll Deutsch, Englisch, Polnisch, Japanisch, Französisch und Spanisch unterstützen. Die vorgeschlagene Gamification läuft als stiller Gemeinschaftsfortschritt im Hintergrund; im normalen Ablauf gibt es keine Punkteanzeige, Level oder Rangliste. Ein Meilenstein kann optional als datensparsame Karte geteilt werden. Details und Grenzen: [Gamification-Konzept](docs/gamification.md).
 
 ## Erste Erkenntnisse
 

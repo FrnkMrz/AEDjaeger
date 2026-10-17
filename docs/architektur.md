@@ -89,7 +89,21 @@ Nach bestätigtem OSM-Erfolg: „Gespeichert“ und „Nächsten AED fotografier
 - Lesbar bei großer Schrift, mit Screenreader und ohne Farberkennung; keine ausschließlich durch Ziehen bedienbare Karte.
 - Die Installation auf dem Startbildschirm ist optional. Derselbe Ablauf funktioniert zunächst auch im Browser.
 
-## 3. Technischer Aufbau
+## 3. Sprachen von Anfang an
+
+Die erste Version soll vollständig auf Deutsch, Englisch, Polnisch, Japanisch, Französisch und Spanisch nutzbar sein. Die Oberfläche nutzt die Sprache des Geräts als Startwert und bietet eine gut erreichbare manuelle Auswahl. Die Wahl bleibt gespeichert.
+
+Alle Ansichten, Fehlerzustände, Login-Rückkehr, Fotoerklärung, Datenschutztexte, Rückfragen und Statusmeldungen müssen lokalisiert werden. Nicht sichtbare Hilfetexte für Screenreader und Browser-Metadaten wie `lang` gehören ebenso dazu. Datum, Zahl, Zeit und gegebenenfalls Adressformat richten sich nach Locale. Layouts werden mit langen deutschen und spanischen Texten sowie polnischen und französischen Sonderzeichen, japanischen Zeichen und dynamischer Schriftgröße geprüft.
+
+Die KI liefert sprachunabhängige Beobachtungen und rohe, klar gekennzeichnete Beschriftung. Sie soll keine UI-Texte übersetzen. AED-Tags und OSM-Werte werden fachlich unverändert gespeichert; eine Beschreibung wird nicht unbemerkt in mehrere Sprach-Tags kopiert. Für Glossar, kurze Rückfragen und Feldnamen gibt es im Repository eine feste deutsche Referenz und geprüfte Übersetzungen. Agentengenerierte Übersetzungen allein gelten nicht als überprüft.
+
+## 4. Gamification im Hintergrund
+
+Das [AED-Signalnetz](gamification.md) ist das vorgeschlagene Gemeinschaftskonzept. Im normalen Ablauf gibt es keine Level-, Punkte- oder Ranglistenansicht. Eine Gemeinschaftskarte kann nach gemeinsam erreichten, ausreichend anonym aggregierten Vor-Ort-Prüfungen freiwillig geteilt werden. Sie ist kein Bestandteil des ersten funktionierenden Uploads.
+
+Die niedrigste Risikovariante beginnt mit einem lokalen Testzähler. Für einen Pilot werden erfolgreiche Beobachtungen erst nach OSM-Bestätigung grob aggregiert. Keine Rohfotos, exakten Bewegungsprofile oder Nutzer-Ranglisten speichern; ein Standort darf aus der Anzeige nicht einer Person zugeordnet werden. Neuanlage und Existenzprüfung zählen gleichwertig; Wiederholungen am selben Tag werden nicht mehrfach belohnt. Meilensteine ändern weder Erkennungs- und Sicherheitsregeln noch erlaubte OSM-Patches.
+
+## 5. Technischer Aufbau
 
 ```mermaid
 flowchart TD
@@ -121,7 +135,7 @@ React ist hier ein Vorschlag für überschaubare Zustandsverwaltung, kein notwen
 
 Hydrantenjäger liefert geprüfte Ausgangspunkte für Kamera, OSM-XML, OAuth, Standortkorrektur und PWA-Updates. Geeignete Bausteine gezielt übernehmen und Herkunft festhalten. Die gesamte App zu kopieren würde auch unnötige Hydrantenlogik und bestehende Annahmen zur Positionierung übernehmen.
 
-## 4. KI-Aufgabe eng begrenzen
+## 6. KI-Aufgabe eng begrenzen
 
 Die KI erhält das verkleinerte, korrekt gedrehte Foto und eine feste Extraktionsanweisung. Sie liefert strukturierte Beobachtungen, etwa:
 
@@ -153,7 +167,7 @@ Zunächst ein aktiver Anbieter, eine kleine austauschbare Schnittstelle und kein
 
 Die im Chrome-Browser integrierte Prompt API ist derzeit keine Basis für diese mobile App: Die offizielle Dokumentation führt Android und iOS als nicht unterstützt auf. Chrome bleibt ein Entwicklungs- und Testwerkzeug. [Chrome Prompt API, geprüft am 17.10.2026](https://developer.chrome.com/docs/ai/prompt-api)
 
-## 5. Der schwierigste Teil: den richtigen AED zuordnen
+## 7. Der schwierigste Teil: den richtigen AED zuordnen
 
 ### Informationen zusammenführen
 
@@ -176,7 +190,7 @@ Overpass ist für die Kandidatensuche geeignet, kann gegenüber OSM verzögert s
 
 Vollständige Vermeidung zeitgleicher Neuanlagen durch verschiedene externe OSM-Editoren ist dadurch nicht garantiert. Innerhalb unserer App können Wiederholungen und konkurrierende Vorgänge erkannt werden; auffällige Dubletten müssen im Pilotbetrieb trotzdem kontrolliert werden.
 
-## 6. Bestehenden AED bestätigen
+## 8. Bestehenden AED bestätigen
 
 **Korrektur zur früheren Sammlung:** Die aktuelle OSM-Dokumentation beschreibt `check_date=YYYY-MM-DD` ausdrücklich auch für die zuletzt überprüfte Existenz eines Objekts. Für „noch vorhanden“ empfehlen wir deshalb diesen Tag. Andere Angaben bleiben unverändert; Änderungen an Zugangszeiten brauchen eine eigene Beobachtung. [OSM: check_date](https://wiki.openstreetmap.org/wiki/Key:check_date)
 
@@ -184,7 +198,7 @@ Bei derselben Bestätigung am gleichen Tag ist kein erneuter identischer Upload 
 
 Ein sichtbares Gerät oder eine bewusste Vor-Ort-Bestätigung ist erforderlich. Ein geschlossener und nicht einsehbarer Kasten allein genügt nicht. Die App spricht stets von „vorhanden“, nicht von „gewartet“, „funktionsfähig“ oder „jederzeit zugänglich“.
 
-## 7. Zuverlässig nach OSM schreiben
+## 9. Zuverlässig nach OSM schreiben
 
 Der Server erzeugt nach der Analyse einen zeitlich begrenzten Änderungsvorschlag, gebunden an Benutzer, Aufnahme und die gelesene OSM-Version. Der Browser bestätigt genau diesen Vorschlag. Der Server akzeptiert keine beliebigen OSM-XML-Inhalte oder frei gewählten URLs vom Client.
 
@@ -207,7 +221,7 @@ OSM nutzt Objektversionen zur Konfliktkontrolle. Ein kompletter Changeset ist ni
 
 Diese Vorsicht kann selten einen Vorgang zur manuellen Klärung offen lassen. Das ist besser als ein fälschlich angezeigter Erfolg oder eine doppelte Anlage. Im Pilotbetrieb braucht der Betreiber eine einfache Übersicht unklarer Vorgänge; kein riesiges Verwaltungsportal.
 
-## 8. Anmeldung, Kosten und Fotoverarbeitung
+## 10. Anmeldung, Kosten und Fotoverarbeitung
 
 ### OSM-Konto
 
@@ -235,7 +249,7 @@ Der KI-Anbieter bekommt das Bild, möglichst ohne exakte GPS-Koordinaten oder OS
 
 OSM-Bearbeitungen sind öffentliche Beiträge. Das ist beim ersten Verbinden des Kontos verständlich zu erklären. Private Fotos gehören nicht in ein öffentliches Test-Repository; echte Testbilder benötigen geklärte Nutzungsrechte und sollen möglichst keine Personen zeigen.
 
-## 9. PWA-Grenzen bewusst berücksichtigen
+## 11. PWA-Grenzen bewusst berücksichtigen
 
 Kamera und Standort sind auf HTTPS angewiesen und unterliegen Browserberechtigungen. Eine verweigerte Berechtigung braucht einen verständlichen Ersatzweg. Kameraauswahl, Bilddrehung, HEIC, Wechsel zu OSM und Rückkehr in eine installierte PWA müssen auf echten Geräten geprüft werden. [Kamera-API](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia)
 
@@ -245,7 +259,7 @@ Der Service Worker speichert die App-Oberfläche, aber keine OAuth-Antworten, Si
 
 OSM-Kartenkacheln nicht pauschal für Offline-Gebiete herunterladen. Anbieterregeln und sichtbare Quellenangabe berücksichtigen; vor öffentlicher Nutzung einen passenden Kachelanbieter und dessen Kapazität festlegen. [OSM-Kachelregeln](https://operations.osmfoundation.org/policies/tiles/)
 
-## 10. Fehlerrisiken und Gegenmaßnahmen
+## 12. Fehlerrisiken und Gegenmaßnahmen
 
 | Schwachpunkt | Vorbeugung | Nachweis im Prototyp |
 | --- | --- | --- |
@@ -264,7 +278,7 @@ OSM-Kartenkacheln nicht pauschal für Offline-Gebiete herunterladen. Anbieterreg
 
 Die OSM-Regeln zu automatisierten Änderungen gelten insbesondere für systematische Änderungen ohne Betrachtung jedes Einzelfalls. Unser Entwurf zeigt den konkreten Standort und die geplante Änderung vor der Benutzerfreigabe. Vor einer breiten Einführung den tatsächlichen Ablauf dokumentieren und mit erfahrenen OSM-AED-Mappern prüfen; ein Bestätigungsknopf allein ist keine pauschale Ausnahme von Community-Regeln. [Automated Edits code of conduct](https://wiki.openstreetmap.org/wiki/Automated_Edits_code_of_conduct)
 
-## 11. Was vor einem öffentlichen Start noch belegt werden muss
+## 13. Was vor einem öffentlichen Start noch belegt werden muss
 
 Keine Anbieterbeschreibung beweist, dass die Erkennung in unserer Situation zuverlässig genug ist. Ebenso wenig ist die Zuordnung nur durch eine gute Demo abgesichert. Zuerst müssen Bildauswertung, räumliche Zuordnung, Login-Rückkehr und Verhalten bei Netzverlust als durchgehender Ablauf funktionieren.
 
