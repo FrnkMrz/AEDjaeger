@@ -15,16 +15,16 @@ Stand: 17.10.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto
 
 ## Nächste praktische Prüfungen
 
-1. Einen kleinen, rechtmäßig nutzbaren Bildtestsatz für Gemini, OpenAI und Claude zusammenstellen: sichtbares Gerät, Beschriftung, Kasten, Wegweiser, leere Halterung, mehrere Geräte und schwierige Bilder.
-2. Alle Anbieter mit identischem Testsatz und Auftrag vergleichen: falsche Erkennung, korrekte Felder, nötige Rückfragen, Wartezeit und gemessene Kosten. Keine Nutzerfotos automatisch an mehrere Anbieter weiterreichen.
+1. Einen kleinen, rechtmäßig nutzbaren Bildtestsatz für Gemini, OpenAI und Claude zusammenstellen: sichtbares Gerät, Beschriftung, Kasten, Wegweiser, leere Halterung, mehrere Geräte und schwierige Bilder. Für Chat-Apps und API-Free-Tarife keine privaten oder sensiblen Fotos verwenden.
+2. Zuerst die vorhandenen Chat-Abos als manuellen qualitativen Vorfilter verwenden; danach Gemini Developer API Free für den tatsächlichen API-Ablauf prüfen. Kostenpflichtige OpenAI- oder Claude-API-Aufrufe nur bei bestätigtem Guthaben und gesetztem Ausgabenlimit.
 3. Den OSM-Abgleich mit echten Standorten als Vorschau erproben, einschließlich mehrerer Geräte in einem Gebäude und ungenauem GPS.
 4. Einen durchgehenden Ablauf „Foto → Ergebnis → kurze Bestätigung“ auf einem Mobilgerät vorführen.
 
 ## Noch zu entscheiden
 
-- Welcher der drei KI-Anbieter besteht den Bildtest mit ausreichender Zuverlässigkeit, Datenschutzbedingungen, Wartezeit und Kosten? Der Initiator berichtet von ungefähr 20 US-Dollar API-Guthaben oder Budget je Anbieter sowie bereits erprobten API-Tokens bei OpenAI und Claude. Guthaben, Abrechnung und nutzbare Modelle vor dem Vergleich prüfen.
+- Welcher API-Anbieter besteht den Bildtest mit ausreichender Zuverlässigkeit, Datenschutzbedingungen, Wartezeit und Kosten? Chat-Abos erlauben manuelle Tests, sind aber kein API-Zugang. Vor API-Tests kostenlose Quoten, vorhandenes Guthaben und Abrechnung prüfen.
 - Welche minimalen Pflichtangaben sind bei Neuanlagen tatsächlich nötig, und wann ist eine Standortkorrektur erforderlich?
-- Welche Domain wird verwendet, und wie werden Cloudflare-Konto, API-Schlüssel und Kostenlimits sicher eingerichtet?
+- Reicht Cloudflare Free für den Pilot? Workers Paid (mindestens 5 USD pro Monat) erst aktivieren, falls Free-Grenzen oder ein konkreter Betriebsbedarf es erforderlich machen. Eigene Domain ebenfalls erst dann wählen, wenn sie gebraucht wird.
 - Welcher endgültige App-Name und welche Lizenz passen zum Projekt?
 - Nach dem Pilot: Ist eine sichtbare oder teilbare Fortschrittskarte den Aufwand und die Datenschutzprüfung wert?
 

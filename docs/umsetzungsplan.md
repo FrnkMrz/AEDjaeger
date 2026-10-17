@@ -6,7 +6,7 @@ Stand: 17.10.2026. Ergänzung zum [Architekturentwurf](architektur.md). Die Phas
 
 Der Projektinitiator beschreibt gewünschtes Verhalten, bewertet vorzeigbare Ergebnisse und entscheidet über Konten, Ausgaben und Veröffentlichung. Der programmierende AI-Agent übernimmt Code, Tests, Konfiguration, Dokumentation und Fehlerbehebung. Er muss dafür Zugriff auf das Repository und eine Ausführungsumgebung haben; ein Chat, der nur Code ausgibt, erledigt diese Arbeit nicht vollständig.
 
-ChatGPT/Codex kann bei vorhandenem Repository- und Werkzeugzugriff diese Arbeit ausführen. Chrome dient zum Prüfen des Browserablaufs. Die Bildauswertung der fertigen App benötigt separat eingerichteten API-Zugang. Vorhandene Chat-Abos werden nicht als API-Guthaben eingeplant. In Phase 1 werden Gemini, OpenAI und Claude kontrolliert anhand desselben Testsatzes verglichen; für den Produktbetrieb reicht anschließend ein aktiver KI-Anbieter. Der Initiator berichtet von ungefähr 20 US-Dollar API-Guthaben oder Budget je Anbieter. Kontostände und Abrechnung vor dem Test prüfen, Kostenlimits setzen und keine Nutzerfotos ohne gesonderte Freigabe für Vergleichstests wiederverwenden.
+ChatGPT/Codex kann bei vorhandenem Repository- und Werkzeugzugriff diese Arbeit ausführen. Chrome dient zum Prüfen des Browserablaufs. Die Bildauswertung der fertigen App benötigt separat eingerichteten API-Zugang. Chat-Abos können für manuelle Bildtests und die Entwicklung genutzt werden, ersetzen aber keine App-API. Phase 1 beginnt mit manuellem Vergleich in den vorhandenen Gemini- und ChatGPT-Apps; Claude kommt nur hinzu, wenn dafür ohne Zusatzkosten ein Zugang verfügbar ist. Anschließend wird der tatsächliche API-Ablauf zuerst mit Gemini Developer API Free geprüft. Kostenpflichtige Anbieter-APIs nur bei bestätigtem Guthaben oder mit einem ausdrücklich begrenzten Testbudget verwenden. Für den Produktbetrieb reicht anschließend ein aktiver KI-Anbieter.
 
 Nicht mehrere Agenten unkoordiniert dieselben Dateien ändern lassen. Eine zweite Prüfung kann nützlich sein, muss aber einen klaren Auftrag und denselben Referenzstand bekommen. Besonders kritisch sind Anmeldung, Kostenlimits, Zuordnung und OSM-Schreibvorgänge.
 
@@ -30,7 +30,7 @@ Zu jedem Bild unabhängig festhalten, was tatsächlich sichtbar und lesbar ist. 
 
 Messen: falsche Gerätebestätigung, unberechtigte Zuordnung, erforderliche Rückfragen, korrekt übernommene Felder, Wartezeit und Kosten. Eine selbst gemeldete KI-Sicherheit von „99 %“ zählt nicht als gemessene Zuverlässigkeit. In der kleinen Testmenge darf kein klar negativer Fall als sichere Bestätigung durchgehen; selbst null beobachtete Fehler sind noch kein Beweis allgemeiner Fehlerfreiheit.
 
-Dieselben Bilder und Prompts für Gemini, OpenAI und Claude verwenden, sofern Datenschutzbedingungen und Kostenlimits aller drei Tests das erlauben. Nutzerfotos aus dem späteren Betrieb nicht automatisch an mehrere Dienste senden. Danach den Datensatz gezielt um beobachtete Fehlerfälle erweitern und einen Anbieter sowie ein Modell anhand der Ergebnisse auswählen. Keine erfundenen Messergebnisse oder synthetischen Fotos als alleinigen Nachweis verwenden.
+Zuerst denselben Testsatz und Prompt manuell in den vorhandenen Chat-Apps ausprobieren und Antworten qualitativ vergleichen. Diese Prüfung ist kein API-Benchmark. Danach API-Verfügbarkeit mit Gemini Developer API Free untersuchen; weitere kostenpflichtige APIs nur mit bestätigtem Guthaben oder festem Ausgabenlimit aufrufen. Für den Gemini-Free-Tarif nur eigens aufgenommene oder rechtmäßig nutzbare, nicht sensible Bilder ohne erkennbare Personen einsetzen, da Google Free-Tier-Inhalte zur Produktverbesserung verwenden kann. Nutzerfotos aus dem späteren Betrieb nicht automatisch an mehrere Dienste senden. Danach den Datensatz gezielt um beobachtete Fehlerfälle erweitern und einen Anbieter sowie ein Modell anhand der tatsächlichen API-Ergebnisse auswählen. Keine erfundenen Messergebnisse oder synthetischen Fotos als alleinigen Nachweis verwenden.
 
 ## Phase 2: Bedienbarer Ablauf mit simulierten Diensten
 
@@ -109,7 +109,7 @@ evals/              rechtmäßig nutzbare Bildfälle und Bewertungsregeln
 
 ## Betrieb so klein wie möglich halten
 
-GitHub Actions prüft Änderungen; ein zusammenhängendes Release veröffentlicht UI und API. Vor öffentlichem Start eine feste Domain wählen: Ein späterer Domainwechsel beeinflusst Installation, Sitzungen und lokal gespeicherte Entwürfe.
+GitHub Actions prüft Änderungen; ein zusammenhängendes Release veröffentlicht UI und API. Für Prototyp und kleinen Pilot zuerst Cloudflare Workers Free und die bereitgestellte `workers.dev`-Adresse verwenden. Workers Paid (mindestens 5 USD pro Monat) und eine eigene Domain sind spätere Optionen, falls ein konkreter Bedarf entsteht. Vor größerem öffentlichen Start die Domain festlegen, da ein späterer Wechsel Installation, Sitzungen und lokal gespeicherte Entwürfe beeinflusst.
 
 Nur wenige Betriebswerte erfassen: Analysezeiten, Fehlerarten, Budgetverbrauch, unklare Uploads und App-/Modellversion. Keine Bewegungsprofile und keine dauerhaft gespeicherten Fotos. Ein Fehlerhinweis kann eine Vorgangsnummer enthalten, damit der Agent den technischen Status prüfen kann, ohne das Bild erneut zu veröffentlichen.
 
