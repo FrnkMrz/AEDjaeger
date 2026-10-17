@@ -130,6 +130,17 @@ test("a damaged image is rejected before the AED flow can start", async ({ page 
 });
 
 test("the installed app shell and hashed assets remain fetchable after going offline", async ({ page, context }) => {
+  // Insert a conflicting home page before AEDjaeger's first install to catch accidental global cache lookups.
+  await page.addInitScript(async () => {
+    const cache = await caches.open("aaa-other-feature-cache");
+    const home = new Request(new URL("/", location.origin));
+    if (!(await cache.match(home))) {
+      await cache.put(home, new Response("<!doctype html><title>Other feature cache</title><p>Other app</p>", {
+        headers: { "Content-Type": "text/html" },
+      }));
+      await cache.put("/foreign-only.txt", new Response("foreign cache entry"));
+    }
+  });
   await page.goto("/");
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
   const workerScript = await page.evaluate(async () => (await navigator.serviceWorker.getRegistration())?.active?.scriptURL ?? "");
@@ -151,6 +162,19 @@ test("the installed app shell and hashed assets remain fetchable after going off
     return { path, ok: response.ok, size: (await response.text()).length };
   })), ["/", ...cachedAppAssets.filter((path) => path.endsWith(".js") || path.endsWith(".css"))]);
   expect(offlineResponses.every((response) => response.ok && response.size > 0)).toBe(true);
+
+  const offlineNavigation = await page.reload();
+  expect(await offlineNavigation?.text()).toContain('id="app"');
+  expect(await offlineNavigation?.text()).not.toContain("Other app");
+  const foreignOnlyResponse = await page.evaluate(async () => {
+    try {
+      const response = await fetch("/foreign-only.txt");
+      return { status: response.status, text: await response.text() };
+    } catch {
+      return { status: 0, text: "" };
+    }
+  });
+  expect(foreignOnlyResponse).toEqual({ status: 0, text: "" });
 });
 
 test("service worker activation removes obsolete AEDjaeger shell caches", async ({ page }) => {
@@ -185,4 +209,5 @@ test("the demo disclosure text keeps readable contrast", async ({ page }) => {
 
   const summary = page.locator(".demo-panel summary");
   await expect.poll(() => summary.evaluate((element) => getComputedStyle(element).color)).toBe("rgb(98, 109, 102)");
+  await expect.poll(() => page.locator(".demo-badge").evaluate((element) => getComputedStyle(element).color)).toBe("rgb(98, 109, 102)");
 });

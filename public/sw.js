@@ -34,19 +34,21 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
 
   if (request.mode === "navigate") {
-    event.respondWith(fetch(request).catch(() => caches.match("/", { ignoreVary: true })));
+    event.respondWith(
+      fetch(request).catch(() => caches.open(CACHE_NAME).then((cache) => cache.match("/", { ignoreVary: true }))),
+    );
     return;
   }
 
   event.respondWith(
     // Static build assets are public and identical for all visitors, so an irrelevant Vary header
-    // from the preview host must not prevent the offline cache from serving the exact asset URL.
-    caches.match(request, { ignoreVary: true }).then((cached) => cached || fetch(request).then((response) => {
+    // from the preview host must not prevent this app's own cache from serving the exact asset URL.
+    caches.open(CACHE_NAME).then((cache) => cache.match(request, { ignoreVary: true }).then((cached) => cached || fetch(request).then((response) => {
       if (response.ok && response.type === "basic") {
         const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        event.waitUntil(cache.put(request, copy));
       }
       return response;
-    })),
+    }))),
   );
 });

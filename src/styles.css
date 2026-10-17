@@ -83,7 +83,7 @@ h1 { margin-bottom: 12px; font: 800 clamp(30px, 8vw, 43px)/1.14 "Noto Sans", sys
 @keyframes spin { to { transform: rotate(360deg); } }
 footer { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 28px 0 max(22px, env(safe-area-inset-bottom)); color: #626d66; font-size: 12px; }
 .footer-symbol { color: #75a184; font-size: 16px; }
-.demo-badge { margin-left: 3px; border: 1px solid #dce4dc; border-radius: 5px; padding: 2px 5px; color: #728078; font-size: 9px; font-weight: 700; letter-spacing: .06em; }
+.demo-badge { margin-left: 3px; border: 1px solid #dce4dc; border-radius: 5px; padding: 2px 5px; color: #626d66; font-size: 9px; font-weight: 700; letter-spacing: .06em; }
 .info-dialog { width: min(540px, calc(100% - 28px)); max-width: none; max-height: min(86dvh, 780px); overflow: hidden; border: 1px solid #e0e8df; border-radius: 24px; padding: 0; color: var(--ink); background: #fff; box-shadow: 0 24px 80px #14251b35; }
 .info-dialog::backdrop { background: #13231bcc; backdrop-filter: blur(3px); }
 .info-dialog-content { max-height: min(86dvh, 780px); overflow-y: auto; overscroll-behavior: contain; padding: 24px; }
