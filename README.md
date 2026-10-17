@@ -1,4 +1,4 @@
-# AEDjäger
+# AEDjaeger
 
 Sammlung von Informationen, Links und Ideen für eine sehr einfache mobile App, mit der Menschen Defibrillatoren (AEDs) in OpenStreetMap erfassen und bestehende Einträge verbessern können.
 
