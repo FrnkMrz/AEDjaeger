@@ -46,6 +46,8 @@ Das Repository befindet sich noch in der Recherche- und Konzeptphase. Lies vor I
 ## GitHub-Workflow, PRs und Versionen
 
 - Jede Änderung am Repository wird auf einem eigenen Arbeitsbranch vorbereitet und als Pull Request gegen `main` eingereicht. Arbeite nicht direkt auf `main` und pushe keine Änderungen direkt dorthin.
+- Die GitHub-Regel für `main` verlangt mindestens eine genehmigende Review und die Freigabe der in `.github/CODEOWNERS` eingetragenen Code Owners. Der Code Owner dieses Repositories ist `@FrnkMrz`; fremde PRs benötigen daher dessen Freigabe.
+- GitHub zählt keine Selbstfreigabe des PR-Autors. Für eigene PRs kann ausschließlich der Repository-Admin die Review-Regel über den auf PRs beschränkten Bypass umgehen; direkte Pushes auf `main` bleiben durch die PR-Pflicht untersagt.
 - Eröffne einen PR erst, wenn die Änderung vollständig, nachvollziehbar und geprüft ist. Schreibe die Beschreibung auf Deutsch und nutze diese Abschnitte:
   1. **Kurzbeschreibung**: Ziel und Ergebnis in wenigen Sätzen.
   2. **Voraussetzungen und Entscheidungen**: relevante Produktentscheidungen, Abhängigkeiten, Zugangsdaten oder notwendige Vorbereitung; Geheimnisse selbst niemals einfügen.
