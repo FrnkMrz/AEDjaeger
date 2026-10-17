@@ -7,9 +7,11 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build && node scripts/check-precache.mjs",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
     "vitest": "^5.0.5"

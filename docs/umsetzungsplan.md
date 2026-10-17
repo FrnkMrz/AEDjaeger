@@ -7,7 +7,7 @@ Stand: 17.10.2026. Ergänzung zum [Architekturentwurf](architektur.md). Die Phas
 | Schritt | Ergebnis | Status |
 | --- | --- | --- |
 | A. Bedienprototyp | Mobil nutzbarer Fotoablauf mit simulierten Treffern, Rückfragen und Fehlern; sechs Sprachen | Begonnen |
-| B. Vor-Ort-Prüfung | Kamera, Lesbarkeit und Sprachwechsel auf echten Mobilgeräten | Offen |
+| B. Vor-Ort-Prüfung | Schmale Browseransicht, Info-Texte in sechs Sprachen, Auswahlablauf und Offline-Cache automatisiert geprüft; Kamera, Lesbarkeit und Berechtigungen auf echten Mobilgeräten | Teilweise: Browserprüfung ergänzt, Gerätetest offen |
 | C. Erkennungsvorprüfung | Rechtmäßig nutzbare Testbilder und manueller qualitativer Modellvergleich | Offen |
 | D. API-Vorschau | Cloudflare-Worker, geschützte KI-Anfrage, validierte Bildbeobachtung und erfolgreiche Umgebungssuche; noch kein OSM-Schreiben | Offen |
 | E. OSM-Testumgebung | Vorschau und bestätigte Schreibvorgänge ausschließlich gegen OSM-Entwicklungsinstanz | Offen |
@@ -87,6 +87,8 @@ Die OSM-Entwicklungsinstanz hat eine eigene Datenbank und eigene Konten; sie ist
 Jetzt echte Android-Geräte mit Chrome und echte iPhones im Browser sowie als installierte PWA prüfen. Playwright-WebKit ist hilfreich, ersetzt aber nicht iPhone-Kamera, GPS, Betriebssystemdialoge und App-Wechsel. Ein AI-Agent kann simulierte Tests ausführen; reale Vor-Ort-Beobachtung und Hardwaregrenzen müssen durch jemanden vor Ort überprüft werden.
 
 Als vorläufige Produktziele für eindeutige Fälle: genau ein Bestätigungsschritt nach dem Foto und auf brauchbarem Mobilfunk typischerweise unter zehn Sekunden bis zum Vorschlag. Das sind Zielwerte, keine garantierten Leistungsangaben. Median, langsame Fälle und Rückfragequote getrennt berichten. Geschwindigkeit nicht durch riskantere Zuordnungen erkaufen.
+
+Vor dem Pilot ist zusätzlich die reale PWA auf mindestens einem Android-Handy und einem iPhone durchzugehen: Kameraaufnahme, verweigerte und später erteilte Berechtigungen, Wechsel zurück zur App, Standortfreigabe, Schrift-/Zeilenumbrüche und Wiederaufnahme nach Verbindungsabbruch. Die automatisierte Playwright-Prüfung deckt wiederholbare Browserabläufe und schmale Ansichten ab, nicht Hardware oder Betriebssystemdialoge.
 
 Vor öffentlicher Freigabe: reale Kosten je Erfassung, Fehlerquote, Loginprobleme und Datenqualität bewerten. Das Projekt in der OSM-Community nachvollziehbar vorstellen; keine automatischen Forenbeiträge ohne ausdrücklichen Auftrag.
 

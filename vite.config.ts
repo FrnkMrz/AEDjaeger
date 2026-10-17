@@ -1,6 +1,8 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  // Playwright tests run in a real browser through their own configuration, not inside Vitest.
+  test: { exclude: ["tests/e2e/**"] },
   // Workers/Static Assets can serve this plain Vite build; no paid service is needed here.
   build: { outDir: "dist", emptyOutDir: true },
   server: { host: "0.0.0.0" },

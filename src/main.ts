@@ -15,6 +15,7 @@ let scenario: DemoScenario = "existing";
 let state: FlowState = { kind: "ready" };
 let analysisTimer: number | undefined;
 let saveTimer: number | undefined;
+let photoSelectionVersion = 0;
 
 function readLanguage(): Language {
   const saved = localStorage.getItem("aedjaeger-language");
@@ -68,7 +69,7 @@ function icon(kind: "camera" | "search" | "check"): string {
   return `<svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[kind]}</svg>`;
 }
 
-function render(): void {
+function render(restoreFlowFocus = false): void {
   const isReady = state.kind === "ready";
   document.documentElement.lang = language;
   document.title = `${t("appName")} · ${t("tagline")}`;
@@ -114,20 +115,62 @@ function render(): void {
   document.querySelector<HTMLInputElement>("#camera-input")?.addEventListener("change", onPhotoSelected);
   document.querySelector<HTMLInputElement>("#file-input")?.addEventListener("change", onPhotoSelected);
   document.querySelectorAll<HTMLElement>("[data-action]").forEach((button) => button.addEventListener("click", () => handleAction(button.dataset.action)));
+
+  if (restoreFlowFocus) focusCurrentState();
 }
 
-function onPhotoSelected(event: Event): void {
+function focusCurrentState(): void {
+  const focusTargets: Record<FlowState["kind"], string> = {
+    ready: "#camera-input",
+    photo: '[data-action="analyze"]',
+    analyzing: ".loading-row",
+    clarification: ".result-message h2",
+    proposal: '[data-action="confirm"]',
+    sending: ".loading-row",
+    "checking-status": ".loading-row",
+    saved: '[data-action="reset"]',
+    "unclear-error": ".result-message h2",
+    "retryable-error": ".result-message h2",
+  };
+  const target = app!.querySelector<HTMLElement>(focusTargets[state.kind]);
+  if (!target) return;
+
+  // Newly rendered headings and status messages are not normally tabbable; temporary focus lets
+  // keyboard and screen-reader users continue at the result instead of falling back to the page.
+  if (target.matches("h2, .loading-row")) target.tabIndex = -1;
+  target.focus();
+}
+
+async function onPhotoSelected(event: Event): Promise<void> {
   const input = event.currentTarget as HTMLInputElement;
   const file = input.files?.[0];
   if (!file) return;
+  const selectionVersion = ++photoSelectionVersion;
   if (!file.type.startsWith("image/")) {
     window.alert(t("cameraError"));
     return;
   }
+
+  // A MIME type is only a browser hint. Decode the actual bytes before offering an AED workflow.
+  const photoUrl = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.src = photoUrl;
+    await image.decode();
+  } catch {
+    URL.revokeObjectURL(photoUrl);
+    if (selectionVersion === photoSelectionVersion) window.alert(t("cameraError"));
+    return;
+  }
+  if (selectionVersion !== photoSelectionVersion) {
+    URL.revokeObjectURL(photoUrl);
+    return;
+  }
+
   clearTimers();
   releasePhoto();
-  state = { kind: "photo", photoUrl: URL.createObjectURL(file) };
-  render();
+  state = { kind: "photo", photoUrl };
+  render(true);
 }
 
 function handleAction(action: string | undefined): void {
@@ -141,7 +184,7 @@ function handleAction(action: string | undefined): void {
     clearTimers();
     analysisTimer = window.setTimeout(() => {
       state = analysisResult(scenario, photoUrl);
-      render();
+      render(true);
     }, 700);
   } else if (action === "confirm" && state.kind === "proposal") {
     const { photoUrl, proposal, candidateId } = state;
@@ -149,7 +192,7 @@ function handleAction(action: string | undefined): void {
     clearTimers();
     saveTimer = window.setTimeout(() => {
       state = confirmationResult(scenario, photoUrl, proposal, candidateId);
-      render();
+      render(true);
     }, 650);
   } else if ((action === "candidate-main-entrance" || action === "candidate-sports-hall") && state.kind === "clarification") {
     const candidateId: CandidateId = action === "candidate-main-entrance" ? "main-entrance" : "sports-hall";
@@ -160,14 +203,14 @@ function handleAction(action: string | undefined): void {
     clearTimers();
     saveTimer = window.setTimeout(() => {
       state = recoveryResult(uncertainState);
-      render();
+      render(true);
     }, 650);
   } else if (action === "reset") {
     clearTimers();
     releasePhoto();
     state = { kind: "ready" };
   }
-  render();
+  render(true);
 }
 
 function clearTimers(): void {
@@ -183,5 +226,13 @@ function releasePhoto(): void {
 
 render();
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => undefined));
+  window.addEventListener("load", () => {
+    // The emitted JS and CSS filenames are content-hashed. Putting both in the worker URL makes
+    // the browser install a fresh worker whenever a deployed app bundle changes.
+    const scriptRevision = new URL(import.meta.url).pathname.split("/").pop() ?? "app";
+    const styleRevision = document.querySelector<HTMLLinkElement>('link[rel="stylesheet"]')?.getAttribute("href") ?? "";
+    const workerUrl = new URL("/sw.js", window.location.origin);
+    workerUrl.searchParams.set("revision", `${scriptRevision}:${styleRevision}`);
+    navigator.serviceWorker.register(workerUrl).catch(() => undefined);
+  });
 }

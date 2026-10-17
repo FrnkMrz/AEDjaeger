@@ -62,7 +62,7 @@ h1 { margin-bottom: 12px; font: 800 clamp(30px, 8vw, 43px)/1.14 "Noto Sans", sys
 .button-icon { width: 20px; height: 20px; flex: none; }
 .camera-label { overflow: hidden; }
 .camera-label input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
-.supporting-copy { margin: 2px 4px 0; color: #78827c; font-size: 12px; line-height: 1.55; text-align: center; }
+.supporting-copy { margin: 2px 4px 0; color: #626d66; font-size: 12px; line-height: 1.55; text-align: center; }
 .demo-panel { margin: 0 22px 21px; border-top: 1px solid #edf0ec; padding-top: 14px; color: #738078; font-size: 12px; }
 .demo-panel summary { width: fit-content; margin: 0 auto; cursor: pointer; }
 .demo-panel label { display: block; margin: 12px 0 6px; color: #57645d; }
