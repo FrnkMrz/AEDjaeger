@@ -4,7 +4,9 @@ Alle relevanten Änderungen an AEDjäger werden hier nachvollziehbar festgehalte
 
 ## [Unreleased]
 
-Noch keine Änderungen.
+### Security
+
+- Erzwingt für Änderungen an `main` Pull Requests und Reviews; `@FrnkMrz` ist als Code Owner für alle Dateien hinterlegt.
 
 ## [0.1.0] - 2026-10-17
 
