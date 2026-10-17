@@ -53,7 +53,7 @@ h1 { margin-bottom: 12px; font: 800 clamp(30px, 8vw, 43px)/1.14 "Noto Sans", sys
 .capture-actions { display: grid; gap: 11px; padding: 0 24px 22px; text-align: center; }
 .button { position: relative; min-height: 52px; display: flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid transparent; border-radius: 14px; padding: 12px 18px; font-size: 15px; font-weight: 700; line-height: 1.3; text-align: center; text-decoration: none; cursor: pointer; transition: background .15s ease, transform .15s ease; }
 .button:active { transform: scale(.99); }
-.button:focus-visible, .info-link:focus-visible, .dialog-close:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid #9fc7aa; outline-offset: 2px; }
+.button:focus-visible, .info-link:focus-visible, .dialog-close:focus-visible, select:focus-visible, summary:focus-visible, .brand:focus-visible { outline: 3px solid #176b4b; outline-offset: 2px; }
 .camera-label:focus-within { outline: 3px solid #176b4b; outline-offset: 2px; }
 .button-primary { color: #fff; background: var(--green); }
 .button-primary:hover { background: var(--green-dark); }

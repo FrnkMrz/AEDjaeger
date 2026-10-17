@@ -1,4 +1,7 @@
-const CACHE_NAME = "aedjaeger-shell-v1";
+// Each build registers a distinct worker URL. A matching cache name lets the new install stage
+// its full shell first, then activation removes prior revisions and their obsolete hashed bundles.
+const BUILD_REVISION = new URL(self.location.href).searchParams.get("revision") || "development";
+const CACHE_NAME = `aedjaeger-shell-${BUILD_REVISION}`;
 const APP_SHELL = ["/", "/manifest.webmanifest", "/aed-icon.svg"];
 
 self.addEventListener("install", (event) => {

@@ -22,6 +22,28 @@ test("the information roadmap fits a narrow phone screen in all six languages", 
   }
 });
 
+test("changing the UI language keeps keyboard focus on the language selector", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#language").focus();
+  await page.locator("#language").selectOption("fr");
+
+  await expect(page.locator("#language")).toBeFocused();
+  await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+});
+
+test("keyboard focus indicators use a high-contrast color throughout the controls", async ({ page }) => {
+  await page.goto("/");
+  await page.getByText("Vorschau testen", { exact: true }).focus();
+  await page.getByText("Vorschau testen", { exact: true }).press("Enter");
+
+  const controls = ["#language", "#open-info", "#scenario", ".brand"];
+  for (const selector of controls) {
+    const control = page.locator(selector);
+    await control.focus();
+    await expect.poll(() => control.evaluate((element) => getComputedStyle(element).outlineColor)).toBe("rgb(23, 107, 75)");
+  }
+});
+
 test("a mobile photo can select a nearby AED and reach the preview confirmation", async ({ page }) => {
   await page.goto("/");
   await page.getByText("Vorschau testen", { exact: true }).click();
@@ -55,6 +77,25 @@ test("an unclear save results the draft stays available for status recovery", as
   await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
 });
 
+test("the brand link cannot discard a draft while save status is unclear", async ({ page }) => {
+  await page.goto("/");
+  await page.getByText("Vorschau testen", { exact: true }).click();
+  await page.locator("#scenario").selectOption("upload-unclear");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Foto und Umgebung prüfen" }).click();
+  await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
+  await expect(page.getByRole("heading", { name: "Ergebnis noch unklar" })).toBeVisible();
+
+  const currentUrl = page.url();
+  const brand = page.locator(".brand");
+  await expect(brand).toHaveAttribute("aria-disabled", "true");
+  await brand.dispatchEvent("click");
+
+  await expect(page).toHaveURL(currentUrl);
+  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Vorgangsstatus prüfen" })).toBeFocused();
+});
+
 test("a damaged image is rejected before the AED flow can start", async ({ page }) => {
   await page.goto("/");
   const dialogPromise = page.waitForEvent("dialog");
@@ -72,7 +113,9 @@ test("the installed app shell and hashed assets remain fetchable after going off
   expect(workerScript).toContain("revision=");
 
   const cachedAppAssets = await page.evaluate(async () => {
-    const cache = await caches.open("aedjaeger-shell-v1");
+    const cacheName = (await caches.keys()).find((key) => key.startsWith("aedjaeger-shell-"));
+    if (!cacheName) throw new Error("The versioned AEDjaeger shell cache was not created.");
+    const cache = await caches.open(cacheName);
     return (await cache.keys()).map((request) => new URL(request.url).pathname);
   });
   expect(cachedAppAssets.some((path) => path.endsWith(".js"))).toBe(true);
@@ -85,4 +128,26 @@ test("the installed app shell and hashed assets remain fetchable after going off
     return { path, ok: response.ok, size: (await response.text()).length };
   })), ["/", ...cachedAppAssets.filter((path) => path.endsWith(".js") || path.endsWith(".css"))]);
   expect(offlineResponses.every((response) => response.ok && response.size > 0)).toBe(true);
+});
+
+test("service worker activation removes obsolete AEDjaeger shell caches", async ({ page }) => {
+  await page.goto("/");
+  await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
+  const oldCacheName = "aedjaeger-shell-obsolete-test";
+  await page.evaluate(async (name) => {
+    await caches.open(name);
+    const registration = await navigator.serviceWorker.getRegistration();
+    const currentScript = registration?.active?.scriptURL;
+    if (!registration || !currentScript) throw new Error("The current service worker is not active.");
+    await registration.unregister();
+    const nextScript = new URL(currentScript);
+    nextScript.searchParams.set("revision", "test-upgrade");
+    await navigator.serviceWorker.register(nextScript);
+  }, oldCacheName);
+
+  await page.waitForFunction(async () => {
+    const registration = await navigator.serviceWorker.getRegistration();
+    return Boolean(registration?.active?.scriptURL.includes("test-upgrade"));
+  });
+  await expect.poll(() => page.evaluate((name) => caches.has(name), oldCacheName)).toBe(false);
 });
