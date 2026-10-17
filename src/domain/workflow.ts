@@ -13,20 +13,23 @@ export type FlowState =
   | { kind: "retryable-error"; photoUrl: string; reason: "search" };
 
 // A failed surrounding-area search must never be interpreted as proof that no AED exists.
-export function analysisResult(scenario: DemoScenario): Extract<FlowState, { kind: "proposal" | "clarification" | "retryable-error" }> {
+export function analysisResult(
+  scenario: DemoScenario,
+  photoUrl: string,
+): Extract<FlowState, { kind: "proposal" | "clarification" | "retryable-error" }> {
   switch (scenario) {
     case "existing":
-      return { kind: "proposal", photoUrl: "", proposal: "existing" };
+      return { kind: "proposal", photoUrl, proposal: "existing" };
     case "new":
-      return { kind: "proposal", photoUrl: "", proposal: "new" };
+      return { kind: "proposal", photoUrl, proposal: "new" };
     case "multiple":
-      return { kind: "clarification", photoUrl: "", reason: "multiple" };
+      return { kind: "clarification", photoUrl, reason: "multiple" };
     case "unclear":
-      return { kind: "clarification", photoUrl: "", reason: "sign-only" };
+      return { kind: "clarification", photoUrl, reason: "sign-only" };
     case "search-error":
-      return { kind: "retryable-error", photoUrl: "", reason: "search" };
+      return { kind: "retryable-error", photoUrl, reason: "search" };
     case "upload-unclear":
-      return { kind: "proposal", photoUrl: "", proposal: "existing" };
+      return { kind: "proposal", photoUrl, proposal: "existing" };
   }
 }
 

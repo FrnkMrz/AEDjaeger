@@ -121,8 +121,7 @@ function handleAction(action: string | undefined): void {
     state = { kind: "analyzing", photoUrl };
     clearTimers();
     analysisTimer = window.setTimeout(() => {
-      const result = analysisResult(scenario);
-      state = { ...result, photoUrl } as FlowState;
+      state = analysisResult(scenario, photoUrl);
       render();
     }, 700);
   } else if (action === "confirm" && state.kind === "proposal") {

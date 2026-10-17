@@ -13,6 +13,10 @@ Alle relevanten Änderungen an AEDjäger werden hier nachvollziehbar festgehalte
 - Bedienbarer, lokaler PWA-Prototyp für Fotoaufnahme und simulierte AED-Prüfung in sechs Sprachen.
 - Sichere Demo-Fälle für bestehende und neue AEDs, Mehrfachtreffer, unklare Fotos, Suchfehler und unklare Speicherantworten.
 
+### Fixed
+
+- Erhält das ausgewählte Foto in jedem Analyse- und Klärungszustand der Vorschau.
+
 ## [0.1.0] - 2026-10-17
 
 ### Added
