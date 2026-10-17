@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analysisResult, confirmationResult } from "../src/domain/workflow";
+import { analysisResult, chooseCandidate, confirmationResult, recoveryResult } from "../src/domain/workflow";
 
 describe("simulated AED workflow", () => {
   const photoUrl = "blob:test-photo";
@@ -9,8 +9,18 @@ describe("simulated AED workflow", () => {
     expect(analysisResult("search-error", photoUrl)).toEqual({ kind: "retryable-error", photoUrl, reason: "search" });
   });
 
-  it("asks for clarification for multiple candidates and sign-only photos", () => {
-    expect(analysisResult("multiple", photoUrl)).toEqual({ kind: "clarification", photoUrl, reason: "multiple" });
+  it("lets the person select a nearby candidate before confirming it", () => {
+    const clarification = analysisResult("multiple", photoUrl);
+    expect(clarification).toEqual({ kind: "clarification", photoUrl, reason: "multiple" });
+    expect(chooseCandidate(clarification, "sports-hall")).toEqual({
+      kind: "proposal", photoUrl, proposal: "existing", candidateId: "sports-hall",
+    });
+    expect(chooseCandidate(analysisResult("unclear", photoUrl), "sports-hall")).toEqual(
+      analysisResult("unclear", photoUrl),
+    );
+  });
+
+  it("asks for clarification for sign-only photos", () => {
     expect(analysisResult("unclear", photoUrl)).toEqual({ kind: "clarification", photoUrl, reason: "sign-only" });
   });
 
@@ -20,7 +30,10 @@ describe("simulated AED workflow", () => {
   });
 
   it("keeps an uncertain save separate from a confirmed result", () => {
-    expect(confirmationResult("upload-unclear", photoUrl, "existing")).toEqual({ kind: "unclear-error", photoUrl });
+    const uncertain = confirmationResult("upload-unclear", photoUrl, "existing", "main-entrance");
+    expect(uncertain).toEqual({ kind: "unclear-error", photoUrl, proposal: "existing", candidateId: "main-entrance" });
+    if (uncertain.kind !== "unclear-error") throw new Error("Expected an uncertain save result.");
+    expect(recoveryResult(uncertain)).toEqual({ kind: "saved", photoUrl, proposal: "existing", candidateId: "main-entrance" });
     expect(confirmationResult("existing", photoUrl, "existing")).toEqual({ kind: "saved", photoUrl, proposal: "existing" });
   });
 });

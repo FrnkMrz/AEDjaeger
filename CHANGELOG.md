@@ -16,6 +16,10 @@ Alle relevanten Änderungen an AEDjäger werden hier nachvollziehbar festgehalte
 ### Fixed
 
 - Erhält das ausgewählte Foto in jedem Analyse- und Klärungszustand der Vorschau.
+- Nimmt gebündelte JavaScript- und CSS-Dateien in den Offline-Cache auf.
+- Lässt bei mehreren nahen Treffern eine Auswahl zu und erhält den konkreten AED im weiteren Ablauf.
+- Bietet bei unklarer Speicherantwort eine Statusprüfung, statt den Vorgang samt Foto zu verwerfen.
+- Macht den Tastaturfokus an den Foto-Auswahlfeldern sichtbar.
 
 ## [0.1.0] - 2026-10-17
 

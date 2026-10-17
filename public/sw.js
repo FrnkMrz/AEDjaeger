@@ -2,7 +2,14 @@ const CACHE_NAME = "aedjaeger-shell-v1";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/aed-icon.svg"];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
+  event.waitUntil(
+    fetch("/precache-manifest.json", { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) throw new Error("The app asset manifest could not be loaded.");
+        return response.json();
+      })
+      .then((assets) => caches.open(CACHE_NAME).then((cache) => cache.addAll([...APP_SHELL, ...assets]))),
+  );
   self.skipWaiting();
 });
 
