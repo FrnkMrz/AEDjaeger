@@ -4,7 +4,7 @@ Sammlung von Informationen, Links und Ideen für eine sehr einfache mobile App, 
 
 **Stand:** 17. Oktober 2026 · **Phase:** Bedienbarer Prototyp · **Sprache:** Deutsch
 
-Vorbild ist [Hydrantenjäger](https://hydrantenjaeger.de), insbesondere die einfache Bedienung unterwegs. Die App startet als lokaler, simulierter Prototyp. „AEDjäger“ ist ein Arbeitsname.
+Vorbild ist [Hydrantenjäger](https://hydrantenjaeger.de), insbesondere die einfache Bedienung unterwegs. Die App startet als lokaler, simulierter Prototyp. Der Produktname lautet in allen Sprachen **AEDjaeger**.
 
 ## Einstieg
 

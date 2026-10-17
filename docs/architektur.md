@@ -1,4 +1,4 @@
-# Architektur und Bedienung für AEDjäger
+# Architektur und Bedienung für AEDjaeger
 
 Stand: **17.10.2026**. Cloudflare ist als Hosting-Richtung gewählt. Ein lokaler, simulierter Bedienprototyp wird mit Vite und TypeScript ohne React umgesetzt; produktive Dienste und Deployment haben noch nicht begonnen. Der KI-Anbieter bleibt bis zum Vergleich offen. Die Produktvorgabe bleibt: **Foto → vorhandenen AED bestätigen oder neuen eintragen → kurz bestätigen → fertig.**
 
@@ -33,7 +33,7 @@ Ein privates GitHub-Repository allein macht eine veröffentlichte Website nicht 
 Heller Hintergrund, dunkle Schrift, grüner Hauptknopf, große Bedienelemente im unteren Bereich. Eine gut lesbare Textmeldung begleitet jedes Symbol; Grün bezeichnet keine garantierte medizinische Einsatzbereitschaft. Kein Dashboard und keine Karte als Startseite.
 
 ```text
-AEDjäger                         Hilfe
+AEDjaeger                         Hilfe
 
 Einen AED entdeckt?
 Fotografiere das Gerät.

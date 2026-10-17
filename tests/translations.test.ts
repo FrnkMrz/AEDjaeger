@@ -6,6 +6,12 @@ describe("first-version UI languages", () => {
     expect(Object.keys(translations).sort()).toEqual(["de", "en", "es", "fr", "ja", "pl"]);
   });
 
+  it("uses the exact same umlaut-free product name in every language", () => {
+    for (const language of Object.keys(translations) as Array<keyof typeof translations>) {
+      expect(translations[language].appName).toBe("AEDjaeger");
+    }
+  });
+
   it("keeps every visible flow message translated", () => {
     const keys = Object.keys(translations.de) as Array<keyof typeof translations.de>;
     for (const language of Object.keys(translations) as Array<keyof typeof translations>) {

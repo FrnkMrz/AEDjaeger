@@ -12,7 +12,7 @@ Recherchestand und Abrufdatum aller folgenden Quellen: **17.10.2026**. Erste Aus
 
 Die Autoren beschreiben eine standortbasierte, spielerische Anwendung zum Üben des Auffindens von AEDs. Smartphone-Sensorik und wiederholte Erkundungen dienen der Untersuchung des Suchverhaltens. Die Projektseite berichtet von verbessertem Zutrauen und höherer Bereitschaft zum Auffinden der Geräte.
 
-**Einordnung für AEDjäger:** Anregung für Motivation und Ortskenntnis. Die eingesehenen Quellen belegen keine direkte OSM-Erfassungsfunktion. Trainingswirkung und Qualität von Karteneinträgen sind unterschiedliche Fragen.
+**Einordnung für AEDjaeger:** Anregung für Motivation und Ortskenntnis. Die eingesehenen Quellen belegen keine direkte OSM-Erfassungsfunktion. Trainingswirkung und Qualität von Karteneinträgen sind unterschiedliche Fragen.
 
 **Zugriffsgrenze:** Die ACM-Seite war über das Recherchewerkzeug nicht abrufbar. Der Volltext des Beitrags von 2025 wurde nicht ausgewertet. Die Zusammenfassung stützt sich auf die Autorenseite; bibliografische Angaben wurden zusätzlich abgeglichen.
 
@@ -34,7 +34,7 @@ Das Abstract beschreibt wiederholte Suchübungen, Smartphone-Sensorik und Blueto
 | [Defikarte.ch](https://defikarte.ch/) | Schweizer Angebot zum Finden und Erfassen von Defibrillatoren; siehe [Beschreibung von AED.ch](https://www.aed.ch/news-blog/dokumente/2022/Defikarte-App.php?lang=FR). | Deutschsprachige regionale Ansprache und Erfassung ansehen; die ergänzende Beschreibung stammt von 2022. |
 | [Defi-League](https://defi-league.de/) | Die Projektseite bewirbt das Melden von Defibrillatoren mit Belohnungen. | Naheliegender Vergleich für Motivation; Ablauf, Datenübergabe und Regeln noch näher prüfen. |
 
-**Eigene Schlussfolgerung:** Der Mehrwert von AEDjäger müsste in besonders einfacher Erfassung und guter Datenpflege liegen. Eine weitere reine Standortkarte allein wäre wenig unterscheidbar. Vor der Umsetzung zwei oder drei bestehende Erfassungsabläufe am Handy durchspielen.
+**Eigene Schlussfolgerung:** Der Mehrwert von AEDjaeger müsste in besonders einfacher Erfassung und guter Datenpflege liegen. Eine weitere reine Standortkarte allein wäre wenig unterscheidbar. Vor der Umsetzung zwei oder drei bestehende Erfassungsabläufe am Handy durchspielen.
 
 ## 3. OSM und praktische Mapping-Projekte
 
