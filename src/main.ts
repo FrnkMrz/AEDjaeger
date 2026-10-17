@@ -227,12 +227,9 @@ function releasePhoto(): void {
 render();
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", () => {
-    // The emitted JS and CSS filenames are content-hashed. Putting both in the worker URL makes
-    // the browser install a fresh worker whenever a deployed app bundle changes.
-    const scriptRevision = new URL(import.meta.url).pathname.split("/").pop() ?? "app";
-    const styleRevision = document.querySelector<HTMLLinkElement>('link[rel="stylesheet"]')?.getAttribute("href") ?? "";
+    // Every build gets a new worker URL, including deployments that only change the HTML, manifest or icon.
     const workerUrl = new URL("/sw.js", window.location.origin);
-    workerUrl.searchParams.set("revision", `${scriptRevision}:${styleRevision}`);
+    workerUrl.searchParams.set("revision", __AEDJAEGER_BUILD_REVISION__);
     navigator.serviceWorker.register(workerUrl).catch(() => undefined);
   });
 }

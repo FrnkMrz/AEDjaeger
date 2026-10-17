@@ -1,6 +1,10 @@
 import { defineConfig } from "vitest/config";
 
+// A build id covers shell files that do not have content-hashed filenames, such as the manifest and icon.
+const buildRevision = Date.now().toString(36);
+
 export default defineConfig({
+  define: { __AEDJAEGER_BUILD_REVISION__: JSON.stringify(buildRevision) },
   // Playwright tests run in a real browser through their own configuration, not inside Vitest.
   test: { exclude: ["tests/e2e/**"] },
   // Workers/Static Assets can serve this plain Vite build; no paid service is needed here.
