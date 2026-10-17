@@ -14,7 +14,7 @@ test("the information roadmap fits a narrow phone screen in all six languages", 
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("heading", { level: 2 })).toContainText("AEDjaeger");
     await expect(dialog.getByRole("heading", { level: 3 }).last()).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `horizontal page overflow in ${language}`).toBeLessThanOrEqual(320);
     expect(await dialog.locator(".info-dialog-content").evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
 
     await page.keyboard.press("Escape");

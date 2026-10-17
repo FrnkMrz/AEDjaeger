@@ -110,8 +110,11 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
 @media (max-width: 420px) {
   .page-shell { width: min(100% - 28px, 520px); }
   .topbar { height: 66px; }
-  .topbar-actions { gap: 5px; }
+  .brand { gap: 7px; font-size: 17px; }
+  .brand-mark { width: 27px; height: 27px; }
+  .topbar-actions { flex: none; gap: 3px; }
   .info-link { min-height: 38px; gap: 5px; padding: 6px 8px; font-size: 12px; }
+  .language-picker select { max-width: 96px; padding-right: 21px; padding-left: 6px; font-size: 12px; }
   .hero { padding-top: 38px; }
   .capture-content { padding: 22px 18px 6px; }
   .capture-actions { padding: 0 18px 19px; }
