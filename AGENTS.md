@@ -42,3 +42,21 @@ Das Repository befindet sich noch in der Recherche- und Konzeptphase. Lies vor I
 - Tests müssen insbesondere falsche AED-Erkennung, mehrere nahe Treffer, ungenaues GPS, fehlgeschlagene Suche, OAuth-Rückkehr, doppelte Bestätigung, Versionskonflikt, Netzabbruch und verweigerte Berechtigungen abdecken.
 - Ergänze oder ändere Tests, wenn fachliches Verhalten oder Sicherheitsgrenzen verändert werden. Keine Tests, die echte Kosten verursachen oder produktives OSM verändern.
 - Berichte nach jeder Etappe knapp, was geändert wurde, welche Prüfungen liefen und was offen oder nicht getestet ist. Halte verbleibende Entscheidungen in `docs/offene-fragen.md` aktuell.
+
+## GitHub-Workflow, PRs und Versionen
+
+- Jede Änderung am Repository wird auf einem eigenen Arbeitsbranch vorbereitet und als Pull Request gegen `main` eingereicht. Arbeite nicht direkt auf `main` und pushe keine Änderungen direkt dorthin.
+- Die GitHub-Regel für `main` verlangt mindestens eine genehmigende Review und die Freigabe der in `.github/CODEOWNERS` eingetragenen Code Owners. Der Code Owner dieses Repositories ist `@FrnkMrz`; fremde PRs benötigen daher dessen Freigabe.
+- GitHub zählt keine Selbstfreigabe des PR-Autors. Für eigene PRs kann ausschließlich der Repository-Admin die Review-Regel über den auf PRs beschränkten Bypass umgehen; direkte Pushes auf `main` bleiben durch die PR-Pflicht untersagt.
+- Eröffne einen PR erst, wenn die Änderung vollständig, nachvollziehbar und geprüft ist. Schreibe die Beschreibung auf Deutsch und nutze diese Abschnitte:
+  1. **Kurzbeschreibung**: Ziel und Ergebnis in wenigen Sätzen.
+  2. **Voraussetzungen und Entscheidungen**: relevante Produktentscheidungen, Abhängigkeiten, Zugangsdaten oder notwendige Vorbereitung; Geheimnisse selbst niemals einfügen.
+  3. **Umsetzung**: genaue Änderungen und betroffene Abläufe oder Dateien.
+  4. **Prüfung**: ausgeführte Befehle und tatsächliche Ergebnisse; nicht ausgeführte Tests ausdrücklich nennen.
+  5. **Risiken und offene Punkte**: verbleibende Grenzen, Migrationen, manuelle Geräteprüfungen oder Nutzerentscheidungen.
+  6. **Changelog**: Eintrag aus `CHANGELOG.md` nennen.
+- Bei UI-Änderungen füge eine Vorschau oder Screenshots hinzu, wenn die Umgebung das erlaubt. Ordne jeden PR einer sinnvollen Versionsstufe zu, aber vergebe Release-Tags nicht für ungeprüfte PR-Branches.
+- Pflege `CHANGELOG.md` bei jeder nutzer- oder betreiberrelevanten Änderung unter `Unreleased`, gruppiert nach `Added`, `Changed`, `Fixed`, `Security` oder `Removed`. Rein interne Änderungen ohne erkennbare Wirkung können ausgelassen werden.
+- Die erste Projektversion ist **0.1.0**; der GitHub-Release-Tag lautet **`v0.1.0`**. Erstelle den Tag erst auf dem passenden, gemergten `main`-Commit und verlinke die Changelog-Fassung.
+- Verwende danach Versionen im Format `MAJOR.MINOR.PATCH`: Fehlerkorrekturen und kleine Dokumentationskorrekturen erhöhen PATCH, neue rückwärtskompatible Funktionen erhöhen MINOR, und `1.0.0` markiert den vom Nutzer freigegebenen stabilen Start. Vor `1.0.0` werden größere Änderungen über MINOR-Versionen abgebildet. Release-Tags haben stets das Präfix `v` und zeigen auf einen gemergten `main`-Commit.
+- Erstelle keine GitHub-Releases oder Tags und merge keinen PR ohne den passenden, ausdrücklichen Nutzerauftrag. Bereite Changelog und PR-Informationen vollständig vor, damit die Prüfung leicht ist.
