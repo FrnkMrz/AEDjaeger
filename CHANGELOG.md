@@ -8,6 +8,11 @@ Alle relevanten Änderungen an AEDjäger werden hier nachvollziehbar festgehalte
 
 - Erzwingt für Änderungen an `main` Pull Requests und Reviews; `@FrnkMrz` ist als Code Owner für alle Dateien hinterlegt.
 
+### Added
+
+- Bedienbarer, lokaler PWA-Prototyp für Fotoaufnahme und simulierte AED-Prüfung in sechs Sprachen.
+- Sichere Demo-Fälle für bestehende und neue AEDs, Mehrfachtreffer, unklare Fotos, Suchfehler und unklare Speicherantworten.
+
 ## [0.1.0] - 2026-10-17
 
 ### Added

@@ -1,24 +1,24 @@
 # Entscheidungen und nächste Schritte
 
-Stand: 17.10.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto → prüfen → vorhandenen AED kurz bestätigen oder neuen AED eintragen.**
+Stand: 17.10.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto → prüfen → vorhandenen AED kurz bestätigen oder neuen AED eintragen.** Der lokale Bedienprototyp ist begonnen; er enthält noch keine echte KI-, Standort-, Server- oder OSM-Anbindung.
 
 ## Festgelegt
 
-- Die App ist als mobile PWA mit gemeinsam gehosteter Oberfläche und API auf Cloudflare vorgesehen. Implementierung und Deployment haben noch nicht begonnen.
+- Die App ist als mobile PWA mit gemeinsam gehosteter Oberfläche und API auf Cloudflare vorgesehen. Ein lokaler PWA-Prototyp ist begonnen; ein Cloudflare-Deployment gibt es noch nicht.
 - Vor dem AED wird ein Foto aufgenommen. Die KI prüft, ob ein AED zu sehen ist, und liest nur klar erkennbare Angaben aus.
 - Der Standort wird mit bestehenden OpenStreetMap-Einträgen abgeglichen. Ein passender Treffer wird als „noch vorhanden“ bestätigt; ohne Treffer wird ein neuer Eintrag vorbereitet.
 - Im eindeutigen Fall genügt eine kurze Bestätigung für den OSM-Schreibvorgang.
 - Die erste Version soll Deutsch, Englisch, Polnisch, Japanisch, Französisch und Spanisch unterstützen.
 - Im Pilot wird Gamification nur intern gezählt: erfolgreiche Vor-Ort-Prüfungen nach bestätigtem OSM-Vorgang. Es gibt keine sichtbare Anzeige und keine Teilfunktion. Teilen wird frühestens nach dem Pilot neu bewertet.
 - Vorbild bleibt Hydrantenjäger. „AEDjäger“ ist ein Arbeitsname.
-- Das Repository sammelt Recherche und Umsetzungskonzept; Anwendungscode ist noch nicht implementiert.
+- Der erste Prototyp nutzt Vite und TypeScript ohne React. Die Auswahl hält den mobilen Ablauf klein und benötigt kein React-spezifisches Zustandssystem. Die produktive Zielarchitektur bleibt Cloudflare Workers mit Static Assets.
 
 ## Nächste praktische Prüfungen
 
-1. Einen kleinen, rechtmäßig nutzbaren Bildtestsatz für Gemini, OpenAI und Claude zusammenstellen: sichtbares Gerät, Beschriftung, Kasten, Wegweiser, leere Halterung, mehrere Geräte und schwierige Bilder. Für Chat-Apps und API-Free-Tarife keine privaten oder sensiblen Fotos verwenden.
-2. Zuerst die vorhandenen Chat-Abos als manuellen qualitativen Vorfilter verwenden; danach Gemini Developer API Free für den tatsächlichen API-Ablauf prüfen. Kostenpflichtige OpenAI- oder Claude-API-Aufrufe nur bei bestätigtem Guthaben und gesetztem Ausgabenlimit.
-3. Den OSM-Abgleich mit echten Standorten als Vorschau erproben, einschließlich mehrerer Geräte in einem Gebäude und ungenauem GPS.
-4. Einen durchgehenden Ablauf „Foto → Ergebnis → kurze Bestätigung“ auf einem Mobilgerät vorführen.
+1. Den lokalen Fotoablauf auf Android und iPhone prüfen, einschließlich Kamera-Auswahl, Sprachwechsel und schmaler Darstellung.
+2. Einen kleinen, rechtmäßig nutzbaren Bildtestsatz für Gemini, OpenAI und Claude zusammenstellen: sichtbares Gerät, Beschriftung, Kasten, Wegweiser, leere Halterung, mehrere Geräte und schwierige Bilder. Für Chat-Apps und API-Free-Tarife keine privaten oder sensiblen Fotos verwenden.
+3. Zuerst die vorhandenen Chat-Abos als manuellen qualitativen Vorfilter verwenden; danach Gemini Developer API Free für den tatsächlichen API-Ablauf prüfen. Kostenpflichtige OpenAI- oder Claude-API-Aufrufe nur bei bestätigtem Guthaben und gesetztem Ausgabenlimit.
+4. Den OSM-Abgleich mit echten Standorten als Vorschau erproben, einschließlich mehrerer Geräte in einem Gebäude und ungenauem GPS.
 
 ## Noch zu entscheiden
 
@@ -28,8 +28,8 @@ Stand: 17.10.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto
 - Welcher endgültige App-Name und welche Lizenz passen zum Projekt?
 - Nach dem Pilot: Ist eine sichtbare oder teilbare Fortschrittskarte den Aufwand und die Datenschutzprüfung wert?
 
-Für die Anbieterbewertung wird ein aktiver Dienst für den Produktbetrieb ausgewählt. Vor dem Versand echter Fotos müssen die Verarbeitung und Aufbewahrung beim ausgewählten Dienst geprüft und verständlich erklärt werden. Öffentliche Bildspeicherung ist keine Produktfunktion.
+Für die Anbieterbewertung wird ein aktiver Dienst für den Produktbetrieb ausgewählt. Vor dem Versand echter Fotos müssen die Verarbeitung und Aufbewahrung beim ausgewählten Dienst geprüft und verständlich erklärt werden. Öffentliche Bildspeicherung ist keine Produktfunktion. Der erste Prototyp überträgt keine Fotos an externe Dienste.
 
 ## Bereits recherchiert
 
-Für „noch vorhanden“ ist `check_date` laut OSM-Dokumentation geeignet. Die Anwendung bestätigt damit keine Gerätewartung und verändert keine anderen Eigenschaften. Für die technische Arbeit liegt ein [Plan mit überprüfbaren Etappen](umsetzungsplan.md) vor. Das [Repository](https://github.com/FrnkMrz/AEDjaeger) ist zunächst privat.
+Für „noch vorhanden“ ist `check_date` laut OSM-Dokumentation geeignet. Die Anwendung bestätigt damit keine Gerätewartung und verändert keine anderen Eigenschaften. Für die technische Arbeit liegt ein [Plan mit überprüfbaren Etappen](umsetzungsplan.md) vor. Das [Repository](https://github.com/FrnkMrz/AEDjaeger) ist öffentlich; Lizenz und endgültiger App-Name sind noch offen.

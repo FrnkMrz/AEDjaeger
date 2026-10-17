@@ -1,6 +1,19 @@
 # Umsetzung durch einen AI-Agenten
 
-Stand: 17.10.2026. Ergänzung zum [Architekturentwurf](architektur.md). Die Phasen sind Vorschläge für spätere Arbeitsaufträge, keine bereits gestartete Implementierung.
+Stand: 17.10.2026. Ergänzung zum [Architekturentwurf](architektur.md). Die Phasen ordnen die Umsetzung in überprüfbare Etappen. Phase 2 ist als lokaler UI-Prototyp begonnen; es gibt noch keine echte KI-, Standort-, Konto- oder OSM-Anbindung.
+
+## Reihenfolge und aktueller Stand
+
+| Schritt | Ergebnis | Status |
+| --- | --- | --- |
+| A. Bedienprototyp | Mobil nutzbarer Fotoablauf mit simulierten Treffern, Rückfragen und Fehlern; sechs Sprachen | Begonnen |
+| B. Vor-Ort-Prüfung | Kamera, Lesbarkeit und Sprachwechsel auf echten Mobilgeräten | Offen |
+| C. Erkennungsvorprüfung | Rechtmäßig nutzbare Testbilder und manueller qualitativer Modellvergleich | Offen |
+| D. API-Vorschau | Cloudflare-Worker, geschützte KI-Anfrage, validierte Bildbeobachtung und erfolgreiche Umgebungssuche; noch kein OSM-Schreiben | Offen |
+| E. OSM-Testumgebung | Vorschau und bestätigte Schreibvorgänge ausschließlich gegen OSM-Entwicklungsinstanz | Offen |
+| F. Kleiner Pilot | Begrenzter Betrieb, Kosten- und Qualitätsauswertung, reale Geräteprüfung | Offen |
+
+Im ersten Code-Schritt ist Vite mit TypeScript ohne React gewählt. Der lokale Prototyp benötigt keine UI-Bibliothek; der App-Zustand bleibt in einem kleinen Fachmodul, damit spätere Worker-, KI- und OSM-Adapter getrennt ergänzt werden können. Produktive Dienste werden erst nach Abschluss und Prüfung der vorherigen Schritte angeschlossen.
 
 ## Rollen und Werkzeuge
 
@@ -79,7 +92,7 @@ Vor öffentlicher Freigabe: reale Kosten je Erfassung, Fehlerquote, Loginproblem
 
 ## Arbeitsregeln für den programmierenden Agenten
 
-Diese Regeln sind ein Vorschlag für die spätere `AGENTS.md`; die Datei wird erst zusammen mit der gewählten Implementierung eingerichtet.
+Die verbindlichen Arbeitsregeln für Agenten stehen in der Repository-Root-Datei [`AGENTS.md`](../AGENTS.md). Die folgenden Punkte erklären ergänzend, woran die Implementierung gemessen wird.
 
 1. Ein kleiner, vorführbarer Funktionsschritt pro Änderung. Kein Gesamtsystem auf einmal generieren.
 2. TypeScript streng prüfen; Eingaben an Servergrenzen auch zur Laufzeit validieren.

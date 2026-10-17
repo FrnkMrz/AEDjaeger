@@ -2,9 +2,9 @@
 
 Sammlung von Informationen, Links und Ideen für eine sehr einfache mobile App, mit der Menschen Defibrillatoren (AEDs) in OpenStreetMap erfassen und bestehende Einträge verbessern können.
 
-**Stand:** 17. Oktober 2026 · **Phase:** Recherche und Konzept · **Sprache:** Deutsch
+**Stand:** 17. Oktober 2026 · **Phase:** Bedienbarer Prototyp · **Sprache:** Deutsch
 
-Vorbild ist [Hydrantenjäger](https://hydrantenjaeger.de), insbesondere die einfache Bedienung unterwegs. Dieses Repository enthält zunächst Dokumentation; eine App ist noch nicht implementiert. „AEDjäger“ ist ein Arbeitsname.
+Vorbild ist [Hydrantenjäger](https://hydrantenjaeger.de), insbesondere die einfache Bedienung unterwegs. Die App startet als lokaler, simulierter Prototyp. „AEDjäger“ ist ein Arbeitsname.
 
 ## Einstieg
 
@@ -25,7 +25,7 @@ Absolute Einfachheit ist das oberste Ziel. Die App übernimmt Erkennung und Zuor
 
 ## Technische Richtung
 
-PWA mit kleinem Serverdienst; Code auf GitHub, gemeinsames Hosting von Oberfläche und API auf Cloudflare Workers mit Static Assets. Cloudflare ist als Richtung gewählt, Implementierung und Deployment haben noch nicht begonnen. Die KI liefert Bildbeobachtungen, feste Regeln prüfen die Zuordnung, und erst eine kurze Benutzerbestätigung löst die konkrete OSM-Änderung aus. Gemini, OpenAI und Claude werden vor der Auswahl eines produktiven Anbieters mit denselben geeigneten Testbildern verglichen. Begründung, Alternativen und Prüfschritte stehen im [Architekturentwurf](docs/architektur.md).
+PWA mit kleinem Serverdienst; Code auf GitHub, gemeinsames Hosting von Oberfläche und API auf Cloudflare Workers mit Static Assets. Der erste lokale Prototyp nutzt Vite und TypeScript ohne React und simuliert Foto-Prüfung und Trefferfälle; er ruft weder KI noch OSM auf. Begründung, Alternativen und Prüfschritte stehen im [Architekturentwurf](docs/architektur.md).
 
 ## Sprachen und Gamification
 
@@ -39,4 +39,8 @@ Hydrantenjäger besitzt bereits einen AED-Erfassungsablauf. Das ist ein konkrete
 
 Neue Quellen mit URL, Abrufdatum, kurzer Einordnung und offenen Fragen ergänzen. Belegte Funktionen, eigene Vorschläge und noch ungeprüfte Annahmen unterscheiden. Entscheidungen erst dann als beschlossen kennzeichnen, wenn sie tatsächlich getroffen wurden.
 
-Das Repository wurde zunächst privat angelegt. Veröffentlichung, Lizenz, endgültiger Name und technische Umsetzung sind noch offen.
+Das Repository ist öffentlich. Lizenz und endgültiger App-Name sind noch offen.
+
+## Lokaler Prototyp
+
+Voraussetzung: Node.js und npm. Mit `npm install`, `npm run dev`, `npm test` und `npm run build` lässt sich der Prototyp lokal starten, prüfen und bauen. Unter „Vorschau testen“ können bestehende und neue AEDs, Mehrfachtreffer sowie unklare oder fehlgeschlagene Suchen simuliert werden. Alle Speicheraktionen sind ausdrücklich nur Vorschau; es wird nichts an OpenStreetMap gesendet.
