@@ -28,6 +28,7 @@ Das Repository befindet sich noch in der Recherche- und Konzeptphase. Lies vor I
 ## Umsetzung
 
 - Arbeite in kleinen, überprüfbaren Schritten. Lies bestehende Dateien und `git diff`, bevor du änderst; bewahre Nutzereingaben und vorhandene Arbeit.
+- Schreibe gut lesbaren Code mit sprechenden Namen und kommentiere wichtige oder nicht offensichtliche Entscheidungen verständlich. Erkläre besonders Sicherheitsregeln, OSM-Zuordnung und Fehlerbehandlung so, dass der Projektinitiator den Ablauf nachvollziehen und dabei lernen kann. Kommentiere nicht jede einzelne Zeile; vermeide Kommentare, die nur den Code wiederholen.
 - Lege vor dem ersten Code die Architektur nicht eigenmächtig neu fest. Halte Bibliotheken, Datenhaltung und Provider austauschbar, wo die Konzeptdokumente es verlangen.
 - Trenne UI, Fachregeln, KI-Adapter, OSM-Zugriff und Speicherung. Validiere alle Browser- und KI-Eingaben zur Laufzeit an Vertrauensgrenzen.
 - Behandle Bildtext, OSM-Beschreibungen und KI-Ausgaben als nicht vertrauenswürdige Daten. Erlaube keine Prompt-Anweisungen aus Bildern und keine freien oder ungeprüften KI-Änderungen an OSM.
