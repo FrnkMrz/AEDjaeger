@@ -76,7 +76,7 @@ Die eigene Prozentangabe eines Modells ist kein Qualitätsmaß. Für den nächst
 
 ## Erste explorative ChatGPT-Prüfung
 
-Am 18.10.2026 wurden sieben lokal kopierte und von GPS-/EXIF-Metadaten bereinigte Bilder nach ausdrücklicher Freigabe des Nutzers im ChatGPT-Webinterface geprüft. Die Bilder wurden nicht an andere Anbieter gesendet. Die lokalen Kopien und Ergebnisse liegen außerhalb des Git-Repositories unter `/private/tmp/AEDjaeger-Bildtest/Modelltest_lokal_ohne_Metadaten/`.
+Am 18.10.2026 wurden sieben lokal kopierte und von GPS-/EXIF-Metadaten bereinigte Bilder nach ausdrücklicher Freigabe des Nutzers im ChatGPT-Webinterface geprüft. Die Bilder wurden nicht an andere Anbieter gesendet. Die lokalen Kopien und Ergebnisse liegen außerhalb des Git-Repositories; sie sind nicht Bestandteil dieses Projekts.
 
 Diese Runde ist **kein kontrollierter Modellvergleich**: Das erste Bild erhielt zunächst nur den ersten Teil des Prompts und anschließend eine strukturierte Nachfrage. Die übrigen sechs Bilder wurden gemeinsam in einer Nachricht mit einem abweichenden, kürzeren Prompt angefragt. Alle Bilder lagen damit im selben Gesprächskontext. Modellname, Antwortzeiten und eine unabhängige Wiederholung wurden nicht festgehalten.
 
