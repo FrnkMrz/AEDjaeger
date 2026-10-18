@@ -9,7 +9,8 @@ export interface LocationEstimate extends Coordinate {
 
 export interface OSMCandidate {
   id: string;
-  // Ways and relations may be represented by an approximate center, not the AED itself.
+  // Node coordinates are exact map points; way/relation centers can be far from the AED.
+  coordinateQuality: "exact" | "approximate-center";
   position: Coordinate;
 }
 
@@ -79,6 +80,7 @@ function isValidInput(
   for (const candidate of search.candidates) {
     if (!isRecord(candidate) || typeof candidate.id !== "string" || candidate.id.trim() === "") return false;
     if (candidate.id !== candidate.id.trim() || !isValidCoordinate(candidate.position)) return false;
+    if (!["exact", "approximate-center"].includes(candidate.coordinateQuality as string)) return false;
     if (candidateIds.has(candidate.id)) return false;
     candidateIds.add(candidate.id);
   }
@@ -135,7 +137,10 @@ export function assessCandidates(
       ...candidate,
       distanceMeters: distanceMeters(location, candidate.position),
     }))
-    .filter((candidate) => candidate.distanceMeters <= requiredCoverageMeters)
+    // Keep approximate centers even when their calculated distance is large: the
+    // underlying way or relation may still overlap the searched area. Manual review
+    // prevents that approximate coordinate from hiding a possible existing AED.
+    .filter((candidate) => candidate.coordinateQuality === "approximate-center" || candidate.distanceMeters <= requiredCoverageMeters)
     .sort((left, right) => {
       if (left.distanceMeters !== right.distanceMeters) return left.distanceMeters - right.distanceMeters;
       return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
