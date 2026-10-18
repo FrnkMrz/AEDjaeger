@@ -14,7 +14,7 @@ Die App nutzt Vanilla JavaScript, Vite, Leaflet, Tailwind CSS und PWA-Unterstüt
 
 ## Was sich als Ausgangspunkt anbietet
 
-| Baustein | Idee für AEDjäger |
+| Baustein | Idee für AEDjaeger |
 | --- | --- |
 | Anmeldung und OSM-Upload | Vorhandenen Ablauf gezielt auf Wiederverwendung prüfen. |
 | Karte und Positionskorrektur | Auf einen Objekttyp reduzieren; Innenräume stärker berücksichtigen. |

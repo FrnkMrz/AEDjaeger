@@ -1,4 +1,4 @@
-# AEDjäger – Arbeitsregeln für Coding-Agenten
+# AEDjaeger – Arbeitsregeln für Coding-Agenten
 
 ## Produktziel
 
@@ -12,7 +12,7 @@ Das Repository befindet sich noch in der Recherche- und Konzeptphase. Lies vor I
 - Die erste Version unterstützt Deutsch, Englisch, Polnisch, Japanisch, Französisch und Spanisch. Keine sichtbaren, unübersetzten Platzhaltertexte in diesen Sprachen ausliefern.
 - Im Pilot bleibt Gamification für Nutzende unsichtbar. Intern dürfen nur erfolgreiche Vor-Ort-Prüfungen nach bestätigtem OSM-Vorgang gezählt werden. Keine Punkteanzeige, Rangliste, öffentliche Fortschrittskarte oder Teilen-Funktion ohne neue Produktentscheidung.
 - Ein App-API-Zugang wird getrennt von Chat-Abos behandelt. Die ChatGPT- und Gemini-Abos des Nutzers sind kein API-Schlüssel oder API-Guthaben für die laufende App.
-- Die Anwendung heißt vorläufig „AEDjäger“. Name, Domain und Lizenz bleiben offen, bis der Nutzer sie festlegt.
+- Die Anwendung heißt in allen Sprachen „AEDjaeger“. Der Name wird ohne Umlaute geschrieben; Domain und Lizenz bleiben offen.
 
 ## Sicherheit und Daten
 

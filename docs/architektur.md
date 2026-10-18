@@ -1,6 +1,6 @@
-# Architektur und Bedienung für AEDjäger
+# Architektur und Bedienung für AEDjaeger
 
-Stand: **17.10.2026**. Cloudflare ist als Hosting-Richtung gewählt; Implementierung und Deployment haben noch nicht begonnen. Der KI-Anbieter bleibt bis zum Vergleich offen. Die Produktvorgabe bleibt: **Foto → vorhandenen AED bestätigen oder neuen eintragen → kurz bestätigen → fertig.**
+Stand: **17.10.2026**. Cloudflare ist als Hosting-Richtung gewählt. Ein lokaler, simulierter Bedienprototyp wird mit Vite und TypeScript ohne React umgesetzt; produktive Dienste und Deployment haben noch nicht begonnen. Der KI-Anbieter bleibt bis zum Vergleich offen. Die Produktvorgabe bleibt: **Foto → vorhandenen AED bestätigen oder neuen eintragen → kurz bestätigen → fertig.**
 
 ## 1. Empfehlung
 
@@ -33,7 +33,7 @@ Ein privates GitHub-Repository allein macht eine veröffentlichte Website nicht 
 Heller Hintergrund, dunkle Schrift, grüner Hauptknopf, große Bedienelemente im unteren Bereich. Eine gut lesbare Textmeldung begleitet jedes Symbol; Grün bezeichnet keine garantierte medizinische Einsatzbereitschaft. Kein Dashboard und keine Karte als Startseite.
 
 ```text
-AEDjäger                         Hilfe
+AEDjaeger                         Hilfe
 
 Einen AED entdeckt?
 Fotografiere das Gerät.
@@ -126,7 +126,7 @@ flowchart TD
 
 | Teil | Vorschlag | Zweck |
 | --- | --- | --- |
-| Oberfläche | TypeScript, Vite, React, einfache CSS-Regeln | Wenige klar getrennte Ansichten; typisierte Zustände erleichtern Prüfung von Agentenänderungen. |
+| Oberfläche | TypeScript, Vite, einfache CSS-Regeln | Der lokale Prototyp nutzt kein React: Für den schmalen Ablauf reicht ein kleines Zustandsmodul, und zusätzliche Laufzeitbibliotheken entfallen. |
 | PWA | Manifest und Service Worker mit kontrollierten Updates | Installierbarkeit, schneller Start und Wiederaufnahme offener Vorgänge. |
 | Karte | Leaflet erst laden, wenn benötigt | Bekannter Baustein aus Hydrantenjäger; kein Kartenaufwand auf dem Startbildschirm. |
 | Server | TypeScript in Cloudflare Workers | KI-Anbindung, Anmeldung, Prüfung und OSM-Schreibzugriffe. |
@@ -135,7 +135,7 @@ flowchart TD
 | Lokale Entwürfe | IndexedDB | Foto und Aufnahmezustand nach Login, Neuladen oder Netzverlust fortsetzen. |
 | Prüfung | Vitest und Playwright; reale Mobilgeräte ergänzen | Fachlogik, API-Fehlerfälle und vollständige Benutzerabläufe absichern. |
 
-React ist hier ein Vorschlag für überschaubare Zustandsverwaltung, kein notwendiges PWA-Merkmal. Falls die Wiederverwendung der bestehenden Oberfläche nach einer Codeprüfung deutlich weniger Aufwand verursacht, ist Vite mit TypeScript ohne React ebenfalls vertretbar. Vor dem ersten Implementierungsauftrag genau eine Variante festlegen; danach keine spontanen Frameworkwechsel.
+Die erste Implementierungsentscheidung ist Vite mit TypeScript ohne React. Sollte der Ablauf später deutlich mehr interaktive Ansichten benötigen, kann React separat begründet geprüft werden; ein spontaner Frameworkwechsel ist nicht Teil des Prototyps.
 
 Hydrantenjäger liefert geprüfte Ausgangspunkte für Kamera, OSM-XML, OAuth, Standortkorrektur und PWA-Updates. Geeignete Bausteine gezielt übernehmen und Herkunft festhalten. Die gesamte App zu kopieren würde auch unnötige Hydrantenlogik und bestehende Annahmen zur Positionierung übernehmen.
 

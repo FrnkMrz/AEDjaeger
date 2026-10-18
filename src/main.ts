@@ -1,0 +1,249 @@
+import "./styles.css";
+import { analysisResult, chooseCandidate, confirmationResult, recoveryResult, type CandidateId, type DemoScenario, type FlowState } from "./domain/workflow";
+import { translate, translations, type Language, type TranslationKey } from "./i18n/translations";
+
+const app = document.querySelector<HTMLDivElement>("#app");
+if (!app) throw new Error("App root element was not found.");
+
+const languageNames: Record<Language, string> = { de: "Deutsch", en: "English", pl: "Polski", ja: "日本語", fr: "Français", es: "Español" };
+const scenarioKeys: Record<DemoScenario, TranslationKey> = {
+  existing: "existingScenario", new: "newScenario", multiple: "multipleScenario", unclear: "unclearScenario", "search-error": "searchErrorScenario", "upload-unclear": "uploadErrorScenario",
+};
+const supportedLanguages = Object.keys(translations) as Language[];
+let language = readLanguage();
+let scenario: DemoScenario = "existing";
+let state: FlowState = { kind: "ready" };
+let analysisTimer: number | undefined;
+let saveTimer: number | undefined;
+let photoSelectionVersion = 0;
+
+function readLanguage(): Language {
+  const saved = localStorage.getItem("aedjaeger-language");
+  if (saved && supportedLanguages.includes(saved as Language)) return saved as Language;
+  const deviceLanguage = navigator.language.slice(0, 2) as Language;
+  return supportedLanguages.includes(deviceLanguage) ? deviceLanguage : "de";
+}
+
+function t(key: TranslationKey): string { return translate(language, key); }
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
+}
+
+function getPhotoUrl(current: FlowState): string | undefined {
+  return "photoUrl" in current ? current.photoUrl : undefined;
+}
+
+function hasUnresolvedSave(current: FlowState): boolean {
+  return current.kind === "sending" || current.kind === "checking-status" || current.kind === "unclear-error";
+}
+
+function statusContent(): string {
+  const photoUrl = getPhotoUrl(state);
+  const photoMarkup = photoUrl ? `<img class="photo-preview" src="${escapeHtml(photoUrl)}" alt="${t("photoAlt")}" />` : "";
+  switch (state.kind) {
+    case "ready":
+      return `<div class="empty-illustration" aria-hidden="true"><span class="device-card"><span class="device-heart">♥</span><span class="device-zap">ϟ</span></span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>`;
+    case "photo":
+      return `${photoMarkup}<p class="supporting-copy">${t("privacy")}</p><button class="button button-primary" data-action="analyze">${icon("search")}<span>${t("analyze")}</span></button><button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
+    case "analyzing":
+      return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${t("checking")}</span></div>`;
+    case "clarification":
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${t(state.reason === "multiple" ? "multipleTitle" : "signTitle")}</h2><p>${t(state.reason === "multiple" ? "multipleBody" : "signBody")}</p></div></div>${state.reason === "multiple" ? `<button class="button button-secondary" data-action="candidate-main-entrance">${t("candidateMainEntrance")}</button><button class="button button-secondary" data-action="candidate-sports-hall">${t("candidateSportsHall")}</button>` : ""}<button class="button button-quiet" data-action="retake">${t("clarifyAgain")}</button>`;
+    case "proposal":
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-good" aria-hidden="true">✓</span><div><p class="eyebrow">${t(state.candidateId === "main-entrance" ? "candidateMainEntrance" : state.candidateId === "sports-hall" ? "candidateSportsHall" : state.proposal === "existing" ? "existingDetail" : "newDetail")}</p><h2>${t(state.proposal === "existing" ? "existingTitle" : "newTitle")}</h2><p>${t(state.proposal === "existing" ? "existingBody" : "newBody")}</p></div></div><button class="button button-primary" data-action="confirm">${icon("check")}<span>${t(state.proposal === "existing" ? "confirmExisting" : "confirmNew")}</span></button><button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
+    case "sending":
+      return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${t("sending")}</span></div>`;
+    case "checking-status":
+      return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${t("checkingStatus")}</span></div>`;
+    case "saved":
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-good" aria-hidden="true">✓</span><div><h2>${t("savedTitle")}</h2><p>${t(state.proposal === "existing" ? "savedExisting" : "savedNew")}</p></div></div><p class="simulation-note">${t("savedBody")}</p><button class="button button-primary" data-action="reset">${t("startOver")}</button>`;
+    case "unclear-error":
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${t("unclearTitle")}</h2><p>${t("unclearBody")}</p></div></div><button class="button button-secondary" data-action="recover">${t("checkStatus")}</button>`;
+    case "retryable-error":
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${t("retryTitle")}</h2><p>${t("retryBody")}</p></div></div><button class="button button-secondary" data-action="analyze">${t("retry")}</button><button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
+  }
+}
+
+function icon(kind: "camera" | "search" | "check"): string {
+  const paths = {
+    camera: '<path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+    search: '<circle cx="10.8" cy="10.8" r="6.2"/><path d="m15.5 15.5 4 4"/>',
+    check: '<path d="m5 12 4.3 4.3L19 6.8"/>',
+  };
+  return `<svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[kind]}</svg>`;
+}
+
+function render(restoreFlowFocus = false): void {
+  const isReady = state.kind === "ready";
+  document.documentElement.lang = language;
+  document.title = `${t("appName")} · ${t("tagline")}`;
+  app!.innerHTML = `
+    <div class="page-shell">
+      <header class="topbar"><a class="brand" href="/" aria-label="${t("appName")}" ${hasUnresolvedSave(state) ? 'aria-disabled="true"' : ""}><span class="brand-mark">${icon("check")}</span><span>${t("appName")}</span></a><div class="topbar-actions"><button class="info-link" id="open-info" type="button"><span class="info-mark" aria-hidden="true">i</span><span>${t("aboutButton")}</span></button><label class="language-picker"><span class="sr-only">${t("language")}</span><select id="language" aria-label="${t("language")}">${supportedLanguages.map((code) => `<option value="${code}" ${language === code ? "selected" : ""}>${languageNames[code]}</option>`).join("")}</select><span class="language-globe" aria-hidden="true">◎</span></label></div></header>
+      <main>
+        <section class="hero ${isReady ? "" : "hero-compact"}"><div class="hero-kicker"><span></span>${t("eyebrow")}</div><h1>${isReady ? t("title") : state.kind === "analyzing" || state.kind === "sending" ? t("checking") : t("tagline")}</h1>${isReady ? `<p>${t("intro")}</p>` : ""}</section>
+        <section class="capture-card" aria-live="polite" aria-atomic="false">
+          <div class="capture-content">${isReady ? `<div class="empty-illustration" aria-hidden="true"><span class="device-card"><span class="device-heart">♥</span><span class="device-zap">ϟ</span></span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>` : statusContent()}</div>
+          ${isReady ? `<div class="capture-actions"><label class="button button-primary camera-label">${icon("camera")}<span>${t("camera")}</span><input id="camera-input" type="file" accept="image/*" capture="environment" /></label><label class="button button-secondary camera-label">${t("choosePhoto")}<input id="file-input" type="file" accept="image/*" /></label><p class="supporting-copy">${t("privacy")}</p></div>` : ""}
+          ${isReady ? `<details class="demo-panel"><summary>${t("demo")}</summary><label for="scenario">${t("scenario")}</label><select id="scenario">${(Object.keys(scenarioKeys) as DemoScenario[]).map((key) => `<option value="${key}" ${scenario === key ? "selected" : ""}>${t(scenarioKeys[key])}</option>`).join("")}</select></details>` : ""}
+        </section>
+      </main>
+      <footer><span class="footer-symbol" aria-hidden="true">✳</span><span>${t("sourceNote")}</span><span class="demo-badge">DEMO</span></footer>
+      <dialog class="info-dialog" id="info-dialog" aria-labelledby="info-title" aria-describedby="info-intro">
+        <div class="info-dialog-content">
+          <div class="info-dialog-header"><div><p class="eyebrow">${t("appName")}</p><h2 id="info-title">${t("aboutTitle")}</h2></div><form method="dialog"><button class="dialog-close" aria-label="${t("closeInfo")}">×</button></form></div>
+          <p class="info-intro" id="info-intro">${t("aboutIntro")}</p>
+          <section class="info-section"><h3>${t("demoInfoTitle")}</h3><p>${t("demoInfoBody")}</p><h3>${t("demoLimitsTitle")}</h3><p>${t("demoLimitsBody")}</p></section>
+          <section class="info-section roadmap-section"><h3>${t("roadmapTitle")}</h3><p>${t("roadmapIntro")}</p><ol class="roadmap-list">
+            <li class="roadmap-item roadmap-current"><span class="roadmap-status">${t("roadmapNow")}</span><h4>${t("roadmapDemoTitle")}</h4><p>${t("roadmapDemoBody")}</p></li>
+            <li class="roadmap-item roadmap-next"><span class="roadmap-status">${t("roadmapNext")}</span><h4>${t("roadmapMobileTitle")}</h4><p>${t("roadmapMobileBody")}</p></li>
+            <li class="roadmap-item"><span class="roadmap-status">${t("roadmapLater")}</span><h4>${t("roadmapImagesTitle")}</h4><p>${t("roadmapImagesBody")}</p></li>
+            <li class="roadmap-item"><span class="roadmap-status">${t("roadmapLater")}</span><h4>${t("roadmapApiTitle")}</h4><p>${t("roadmapApiBody")}</p></li>
+            <li class="roadmap-item"><span class="roadmap-status">${t("roadmapLater")}</span><h4>${t("roadmapOsmTitle")}</h4><p>${t("roadmapOsmBody")}</p></li>
+          </ol></section>
+        </div>
+      </dialog>
+    </div>`;
+
+  document.querySelector<HTMLButtonElement>("#open-info")?.addEventListener("click", () => {
+    document.querySelector<HTMLDialogElement>("#info-dialog")?.showModal();
+  });
+  document.querySelector<HTMLAnchorElement>(".brand")?.addEventListener("click", (event) => {
+    if (!hasUnresolvedSave(state)) return;
+
+    // A reload here would erase the only copy of an unresolved draft in this in-memory prototype.
+    event.preventDefault();
+    if (state.kind === "unclear-error") app!.querySelector<HTMLButtonElement>('[data-action="recover"]')?.focus();
+    else focusCurrentState();
+  });
+  document.querySelector<HTMLSelectElement>("#language")?.addEventListener("change", (event) => {
+    language = (event.currentTarget as HTMLSelectElement).value as Language;
+    localStorage.setItem("aedjaeger-language", language);
+    render();
+    // Rendering replaces the select node, so return keyboard focus to its translated replacement.
+    app!.querySelector<HTMLSelectElement>("#language")?.focus();
+  });
+  document.querySelector<HTMLSelectElement>("#scenario")?.addEventListener("change", (event) => {
+    scenario = (event.currentTarget as HTMLSelectElement).value as DemoScenario;
+  });
+  document.querySelector<HTMLInputElement>("#camera-input")?.addEventListener("change", onPhotoSelected);
+  document.querySelector<HTMLInputElement>("#file-input")?.addEventListener("change", onPhotoSelected);
+  document.querySelectorAll<HTMLElement>("[data-action]").forEach((button) => button.addEventListener("click", () => handleAction(button.dataset.action)));
+
+  if (restoreFlowFocus) focusCurrentState();
+}
+
+function focusCurrentState(): void {
+  const focusTargets: Record<FlowState["kind"], string> = {
+    ready: "#camera-input",
+    photo: '[data-action="analyze"]',
+    analyzing: ".loading-row",
+    clarification: ".result-message h2",
+    proposal: '[data-action="confirm"]',
+    sending: ".loading-row",
+    "checking-status": ".loading-row",
+    saved: '[data-action="reset"]',
+    "unclear-error": ".result-message h2",
+    "retryable-error": ".result-message h2",
+  };
+  const target = app!.querySelector<HTMLElement>(focusTargets[state.kind]);
+  if (!target) return;
+
+  // Newly rendered headings and status messages are not normally tabbable; temporary focus lets
+  // keyboard and screen-reader users continue at the result instead of falling back to the page.
+  if (target.matches("h2, .loading-row")) target.tabIndex = -1;
+  target.focus();
+}
+
+async function onPhotoSelected(event: Event): Promise<void> {
+  const input = event.currentTarget as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
+  const selectionVersion = ++photoSelectionVersion;
+  if (!file.type.startsWith("image/")) {
+    window.alert(t("cameraError"));
+    return;
+  }
+
+  // A MIME type is only a browser hint. Decode the actual bytes before offering an AED workflow.
+  const photoUrl = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.src = photoUrl;
+    await image.decode();
+  } catch {
+    URL.revokeObjectURL(photoUrl);
+    if (selectionVersion === photoSelectionVersion) window.alert(t("cameraError"));
+    return;
+  }
+  if (selectionVersion !== photoSelectionVersion) {
+    URL.revokeObjectURL(photoUrl);
+    return;
+  }
+
+  clearTimers();
+  releasePhoto();
+  state = { kind: "photo", photoUrl };
+  render(true);
+}
+
+function handleAction(action: string | undefined): void {
+  if (action === "retake") {
+    releasePhoto();
+    state = { kind: "ready" };
+  } else if (action === "analyze") {
+    const photoUrl = getPhotoUrl(state);
+    if (!photoUrl || !(state.kind === "photo" || state.kind === "retryable-error")) return;
+    state = { kind: "analyzing", photoUrl };
+    clearTimers();
+    analysisTimer = window.setTimeout(() => {
+      state = analysisResult(scenario, photoUrl);
+      render(true);
+    }, 700);
+  } else if (action === "confirm" && state.kind === "proposal") {
+    const { photoUrl, proposal, candidateId } = state;
+    state = { kind: "sending", photoUrl, proposal, candidateId };
+    clearTimers();
+    saveTimer = window.setTimeout(() => {
+      state = confirmationResult(scenario, photoUrl, proposal, candidateId);
+      render(true);
+    }, 650);
+  } else if ((action === "candidate-main-entrance" || action === "candidate-sports-hall") && state.kind === "clarification") {
+    const candidateId: CandidateId = action === "candidate-main-entrance" ? "main-entrance" : "sports-hall";
+    state = chooseCandidate(state, candidateId);
+  } else if (action === "recover" && state.kind === "unclear-error") {
+    const uncertainState = state;
+    state = { kind: "checking-status", photoUrl: uncertainState.photoUrl, proposal: uncertainState.proposal, candidateId: uncertainState.candidateId };
+    clearTimers();
+    saveTimer = window.setTimeout(() => {
+      state = recoveryResult(uncertainState);
+      render(true);
+    }, 650);
+  } else if (action === "reset") {
+    clearTimers();
+    releasePhoto();
+    state = { kind: "ready" };
+  }
+  render(true);
+}
+
+function clearTimers(): void {
+  if (analysisTimer) window.clearTimeout(analysisTimer);
+  if (saveTimer) window.clearTimeout(saveTimer);
+  analysisTimer = undefined;
+  saveTimer = undefined;
+}
+function releasePhoto(): void {
+  const photoUrl = getPhotoUrl(state);
+  if (photoUrl?.startsWith("blob:")) URL.revokeObjectURL(photoUrl);
+}
+
+render();
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => {
+    // Every build gets a new worker URL, including deployments that only change the HTML, manifest or icon.
+    const workerUrl = new URL("/sw.js", window.location.origin);
+    workerUrl.searchParams.set("revision", __AEDJAEGER_BUILD_REVISION__);
+    navigator.serviceWorker.register(workerUrl).catch(() => undefined);
+  });
+}
