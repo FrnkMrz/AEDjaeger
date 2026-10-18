@@ -79,7 +79,7 @@ export function buildOverpassQuery(request: OverpassSearchRequest): string {
   return [
     `[out:json][timeout:${timeoutSeconds}];`,
     `nwr["emergency"="defibrillator"](around:${request.radiusMeters},${latitude},${longitude});`,
-    "out center tags;",
+    "out body center;",
   ].join("\n");
 }
 
