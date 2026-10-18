@@ -174,10 +174,9 @@ export function normalizeOverpassResponse(
     if (candidate) {
       candidates.push(candidate);
     } else {
-      // Ignore structurally valid non-AED elements, but do not mistake broken
-      // candidate-like data for a complete search.
-      const tags = isRecord(element) ? readTags(element.tags) : null;
-      if (!tags || tags.emergency === "defibrillator") hasMalformedElement = true;
+      // The generated query can only return AEDs. Any other element means this
+      // payload does not faithfully represent the requested search, so fail closed.
+      hasMalformedElement = true;
     }
   }
 
