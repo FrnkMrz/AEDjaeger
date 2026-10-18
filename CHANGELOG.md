@@ -25,6 +25,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Fixed
 
+- Schließt den Markdown-Promptblock im Bildtest korrekt und repariert den Linkanker zur Ergebnisüberschrift.
 - Dokumentiert die erfolgreiche Handyprüfung von Kamera- und Bibliotheksauswahl samt noch offenen Geräteprüfungen.
 - Erhöht den Kontrast des Einführungstextes auf dem Startbildschirm.
 - Erhält das ausgewählte Foto in jedem Analyse- und Klärungszustand der Vorschau.
