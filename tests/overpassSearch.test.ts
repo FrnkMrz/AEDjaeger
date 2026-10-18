@@ -92,12 +92,12 @@ describe("normalizeOverpassResponse", () => {
       .toMatchObject({ status: "failed", candidates: [], reason: "invalid-request" });
   });
 
-  it("ignores valid non-AED elements returned by an unexpected server response", () => {
+  it("marks unexpected non-AED elements as an incomplete response", () => {
     const result = normalizeOverpassResponse({
       elements: [{ type: "node", id: 1, lat: 52, lon: 13, tags: { amenity: "bench" } }],
     }, 125);
 
-    expect(result).toMatchObject({ status: "complete", candidates: [] });
+    expect(result).toMatchObject({ status: "partial", candidates: [], reason: "invalid-response" });
   });
 
   it("does not accept malformed coordinates or non-string tag values as candidates", () => {
