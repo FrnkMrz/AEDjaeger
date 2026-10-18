@@ -13,7 +13,7 @@ const request: OverpassSearchRequest = {
 describe("buildOverpassQuery", () => {
   it("searches nodes, ways, and relations and asks for centers and tags", () => {
     expect(buildOverpassQuery(request)).toBe(
-      '[out:json][timeout:25];\nnwr["emergency"="defibrillator"](around:125,52.52,13.405);\nout center tags;',
+      '[out:json][timeout:25];\nnwr["emergency"="defibrillator"](around:125,52.52,13.405);\nout body center;',
     );
   });
 
