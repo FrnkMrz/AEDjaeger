@@ -34,7 +34,7 @@ main { flex: 1; }
 .hero-kicker span { width: 7px; height: 7px; border-radius: 50%; background: #62a87e; box-shadow: 0 0 0 4px #e2efe6; }
 h1, h2, p { margin-top: 0; }
 h1 { margin-bottom: 12px; font: 800 clamp(30px, 8vw, 43px)/1.14 "Noto Sans", system-ui, sans-serif; letter-spacing: -.055em; }
-.hero p { max-width: 410px; margin: 0 auto; color: var(--muted); font-size: 16px; line-height: 1.6; }
+.hero p { max-width: 410px; margin: 0 auto; color: #626d66; font-size: 16px; line-height: 1.6; }
 .hero-compact { padding: 20px 0 22px; }
 .hero-compact .hero-kicker { display: none; }
 .hero-compact h1 { font-size: 24px; }

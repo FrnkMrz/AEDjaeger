@@ -211,3 +211,10 @@ test("the demo disclosure text keeps readable contrast", async ({ page }) => {
   await expect.poll(() => summary.evaluate((element) => getComputedStyle(element).color)).toBe("rgb(98, 109, 102)");
   await expect.poll(() => page.locator(".demo-badge").evaluate((element) => getComputedStyle(element).color)).toBe("rgb(98, 109, 102)");
 });
+
+test("the ready screen introduction keeps readable contrast", async ({ page }) => {
+  await page.goto("/");
+
+  const introduction = page.locator(".hero p");
+  await expect.poll(() => introduction.evaluate((element) => getComputedStyle(element).color)).toBe("rgb(98, 109, 102)");
+});

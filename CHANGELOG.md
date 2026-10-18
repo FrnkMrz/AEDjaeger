@@ -23,6 +23,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Fixed
 
+- Erhöht den Kontrast des Einführungstextes auf dem Startbildschirm.
 - Erhält das ausgewählte Foto in jedem Analyse- und Klärungszustand der Vorschau.
 - Nimmt gebündelte JavaScript- und CSS-Dateien in den Offline-Cache auf.
 - Lässt bei mehreren nahen Treffern eine Auswahl zu und erhält den konkreten AED im weiteren Ablauf.
