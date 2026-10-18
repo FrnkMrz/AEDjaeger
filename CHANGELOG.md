@@ -6,8 +6,6 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Changed
 
-### Changed
-
 - Vereinheitlicht den App-Namen in allen Sprachen auf `AEDjaeger` ohne Umlaute.
 - Dokumentiert den festgelegten Produktnamen und die von Vitest unterstützten Node.js-Versionen in README und Paketmetadaten.
 
