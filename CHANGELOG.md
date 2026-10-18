@@ -6,6 +6,10 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Changed
 
+- Trennt im manuellen Bildtest sichtbare AED-Geräte, AED-Gehäuse, Wegweiser, andere Gegenstände und unklare Bilder in einem gemeinsamen Prompt-Schema.
+
+### Changed
+
 - Vereinheitlicht den App-Namen in allen Sprachen auf `AEDjaeger` ohne Umlaute.
 - Dokumentiert den festgelegten Produktnamen und die von Vitest unterstützten Node.js-Versionen in README und Paketmetadaten.
 
