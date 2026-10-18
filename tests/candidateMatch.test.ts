@@ -30,11 +30,11 @@ describe("OSM candidate assessment", () => {
     const search: SearchResult = {
       status: "complete",
       coverageRadiusMeters: 110,
-      candidates: [{ id: "node/1", position: location }],
+      candidates: [{ id: "node/1", coordinateQuality: "exact", position: location }],
     };
     expect(assessCandidates(location, search, policy)).toEqual({
       kind: "candidate-review",
-      candidates: [{ id: "node/1", position: location, distanceMeters: 0 }],
+      candidates: [{ id: "node/1", coordinateQuality: "exact", position: location, distanceMeters: 0 }],
     });
   });
 
@@ -43,9 +43,9 @@ describe("OSM candidate assessment", () => {
       status: "complete",
       coverageRadiusMeters: 110,
       candidates: [
-        { id: "node/b", position: location },
-        { id: "node/c", position: { latitude: 52.5008, longitude: 13.4 } },
-        { id: "node/a", position: location },
+        { id: "node/b", coordinateQuality: "exact", position: location },
+        { id: "node/c", coordinateQuality: "exact", position: { latitude: 52.5008, longitude: 13.4 } },
+        { id: "node/a", coordinateQuality: "exact", position: location },
       ],
     };
     const result = assessCandidates(location, search, policy);
@@ -58,23 +58,39 @@ describe("OSM candidate assessment", () => {
     const search: SearchResult = {
       status: "complete",
       coverageRadiusMeters: 110,
-      candidates: [{ id: "node/far", position: { latitude: 52.502, longitude: 13.4 } }],
+      candidates: [{ id: "node/far", coordinateQuality: "exact", position: { latitude: 52.502, longitude: 13.4 } }],
     };
     expect(assessCandidates(location, search, policy)).toEqual({ kind: "new-entry-eligible" });
   });
 
-  it("rejects invalid coordinates and duplicate candidate IDs", () => {
+  it("keeps approximate way or relation centers for manual review even outside the radius", () => {
+    const search: SearchResult = {
+      status: "complete",
+      coverageRadiusMeters: 110,
+      candidates: [{
+        id: "way/1",
+        coordinateQuality: "approximate-center",
+        position: { latitude: 52.502, longitude: 13.4 },
+      }],
+    };
+    const result = assessCandidates(location, search, policy);
+    expect(result.kind).toBe("candidate-review");
+    if (result.kind !== "candidate-review") throw new Error("Expected manual review for the approximate center.");
+    expect(result.candidates[0]?.id).toBe("way/1");
+  });
+
+  it("rejects invalid coordinates, duplicate candidate IDs, and missing coordinate quality", () => {
     expect(assessCandidates({ ...location, latitude: 91 }, completeEmptySearch, policy)).toEqual({ kind: "invalid-input" });
     expect(assessCandidates(location, {
       ...completeEmptySearch,
       candidates: [
-        { id: "node/1", position: location },
-        { id: "node/1", position: location },
+        { id: "node/1", coordinateQuality: "exact", position: location },
+        { id: "node/1", coordinateQuality: "exact", position: location },
       ],
     }, policy)).toEqual({ kind: "invalid-input" });
     expect(assessCandidates(location, {
       ...completeEmptySearch,
-      candidates: [{ id: "node/broken" } as never],
+      candidates: [{ id: "node/broken", position: location } as never],
     }, policy)).toEqual({ kind: "invalid-input" });
   });
 });
