@@ -74,6 +74,26 @@ Die eigene Prozentangabe eines Modells ist kein Qualitätsmaß. Für den nächst
 | --- | --- | --- | --- | --- | --- | --- |
 | AED-001 | Vor dem Test eintragen | Richtig / falsch / unklar | Ja / teilweise / nein | Nein / ja | JSON / Dauer | Beobachtung |
 
+## Erste explorative ChatGPT-Prüfung
+
+Am 18.10.2026 wurden sieben lokal kopierte und von GPS-/EXIF-Metadaten bereinigte Bilder nach ausdrücklicher Freigabe des Nutzers im ChatGPT-Webinterface geprüft. Die Bilder wurden nicht an andere Anbieter gesendet. Die lokalen Kopien und Ergebnisse liegen außerhalb des Git-Repositories unter `/private/tmp/AEDjaeger-Bildtest/Modelltest_lokal_ohne_Metadaten/`.
+
+Diese Runde ist **kein kontrollierter Modellvergleich**: Das erste Bild erhielt zunächst nur den ersten Teil des Prompts und anschließend eine strukturierte Nachfrage. Die übrigen sechs Bilder wurden gemeinsam in einer Nachricht mit einem abweichenden, kürzeren Prompt angefragt. Alle Bilder lagen damit im selben Gesprächskontext. Modellname, Antwortzeiten und eine unabhängige Wiederholung wurden nicht festgehalten.
+
+| Bild-ID | ChatGPT-Befund | Beobachtung |
+| --- | --- | --- |
+| AED-001 | `unclear`, Anzahl `null` | AED-Gehäuse und AED-Beschriftung erkannt; Modell konnte den Inhalt hinter dem dunklen Fenster nicht bestätigen. |
+| AED-002 | `unclear`, Anzahl `null` | AED-Gehäuse und HLW/AED-Hinweis erkannt; Gerät hinter dunklem Fenster nicht eindeutig. |
+| AED-003 | `unclear`, Anzahl `null` | „Defibrillator“ gelesen; Reflexionen verdeckten den Inhalt teilweise. |
+| AED-004 | `yes`, Anzahl `1` | Defibrillator im Sichtfenster sowie „HeartSave AS“ und „AUTO“ erkannt. |
+| AED-005 | `unclear`, Anzahl `null` | Rundes AED-Gehäuse erkannt; Inhalt nicht identifiziert. |
+| AED-006 | `unclear`, Anzahl `null` | Rundes AED-Gehäuse erkannt; Gerät hinter der Abdeckung nicht bestätigt. |
+| AED-007 | `no`, Anzahl `0` | Wegweiser ohne sichtbares Gerät korrekt als negativ bewertet. |
+
+Die bisherigen Sollangaben nennen ein AED-Gehäuse teilweise bereits „sichtbares AED-Gerät“. Das vermischt zwei unterschiedliche Beobachtungen und erlaubt deshalb keine faire Bewertung der `unclear`-Ergebnisse. Die nächste Prompt- und Schemafassung soll mindestens zwischen `defibrillator_visible`, `aed_cabinet_only`, `sign_only`, `other` und `unclear` unterscheiden. Ein geschlossenes Gehäuse belegt weder, dass sich ein Gerät darin befindet, noch dessen Betriebsbereitschaft.
+
+Für eine aussagekräftige Wiederholung werden Prompt und Sollbeobachtung vorab vereinheitlicht und jedes Bild in einer eigenen Unterhaltung bewertet. Zusätzliche Fälle wie leeres Gehäuse, mehrere Geräte, Poster ohne Gerät und ähnliche medizinische Gegenstände fehlen weiterhin. Die sieben Bilder sind eine kleine qualitative Probe und begründen keine Anbieterauswahl.
+
 ## Ergebnis und nächste Freigabe
 
 Die Resultate zeigen nur, welches Modell den gewählten Bildsatz in der jeweiligen Chat-App vorsichtiger und genauer beschreibt. Erst danach wird entschieden, ob ein separater, begrenzter API-Test sinnvoll ist. Vor einem API-Aufruf werden kostenloses Kontingent, Abrechnungslimits und aktuelle Datenschutzbedingungen geprüft. Keine Nutzerfotos automatisch an mehrere Anbieter senden, keine API-Keys in die App einbauen und aus dieser Vorprüfung keine Schreibfreigabe für OSM ableiten.

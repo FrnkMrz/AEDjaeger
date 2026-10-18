@@ -16,9 +16,10 @@ Stand: 18.10.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto
 ## Nächste praktische Prüfungen
 
 1. Den lokalen Fotoablauf auf Android und iPhone prüfen, einschließlich Berechtigungen, Sprachwechsel und schmaler Darstellung. Am 18.10.2026 meldete der Nutzer, dass Fotoaufnahme und Auswahl aus der Bibliothek über die private WLAN-/VPN-Vorschau funktionieren; Gerät und Browser sind nicht dokumentiert. Die HTTP-Vorschau prüft weder Installation noch Offlinebetrieb der PWA.
-2. Einen kleinen, rechtmäßig nutzbaren Bildtestsatz gemäß [Bildtest-Ablauf](bildtest.md) zusammenstellen: sichtbares Gerät, Beschriftung, Kasten, Wegweiser, leere Halterung, mehrere Geräte und schwierige Bilder. Die heute im Prototyp ausgewählten Fotos nicht ohne ausdrückliche Freigabe für Modelltests wiederverwenden.
-3. Zuerst die vorhandenen Chat-Abos als manuellen qualitativen Vorfilter nach demselben Bewertungsbogen verwenden; danach Gemini Developer API Free für den tatsächlichen API-Ablauf prüfen. Kostenpflichtige OpenAI- oder Claude-API-Aufrufe nur bei bestätigtem Guthaben und gesetztem Ausgabenlimit.
-4. Den OSM-Abgleich mit echten Standorten als Vorschau erproben, einschließlich mehrerer Geräte in einem Gebäude und ungenauem GPS.
+2. Die [erste explorative ChatGPT-Prüfung](bildtest.md#erste-explorative-chatgpt-pruefung) auswerten und die Bildklassen trennen: Gerät sichtbar, nur AED-Gehäuse, nur Wegweiser, anderer Gegenstand oder unklar. Die sieben bereinigten lokalen Kopien wurden am 18.10.2026 mit ausdrücklicher Freigabe ausschließlich an ChatGPT gesendet. Für andere Anbieter oder weitere Bilder ist eine gesonderte Freigabe erforderlich.
+3. Einen erweiterten, rechtmäßig nutzbaren und vorab annotierten Bildtestsatz vervollständigen: leere Halterung, mehrere Geräte, Poster ohne Gerät, ähnliche medizinische Gegenstände und schwierige Bilder. Danach Prompt und Schema vereinheitlichen und jedes Bild in einer eigenen Unterhaltung bewerten. Der erste Durchgang ist wegen unterschiedlicher Prompts und gemeinsamem Gesprächskontext kein kontrollierter Vergleich.
+4. Erst nach der standardisierten manuellen Vorprüfung Gemini Developer API Free für den tatsächlichen API-Ablauf prüfen. Kostenpflichtige OpenAI- oder Claude-API-Aufrufe nur bei bestätigtem Guthaben und gesetztem Ausgabenlimit.
+5. Den OSM-Abgleich mit echten Standorten als Vorschau erproben, einschließlich mehrerer Geräte in einem Gebäude und ungenauem GPS.
 
 ## Noch zu entscheiden
 
