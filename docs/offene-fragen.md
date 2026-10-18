@@ -1,6 +1,6 @@
 # Entscheidungen und nächste Schritte
 
-Stand: 17.10.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto → prüfen → vorhandenen AED kurz bestätigen oder neuen AED eintragen.** Der lokale Bedienprototyp ist begonnen; er enthält noch keine echte KI-, Standort-, Server- oder OSM-Anbindung.
+Stand: 18.10.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto → prüfen → vorhandenen AED kurz bestätigen oder neuen AED eintragen.** Der lokale Bedienprototyp ist begonnen; er enthält noch keine echte KI-, Standort-, Server- oder OSM-Anbindung.
 
 ## Festgelegt
 
@@ -15,9 +15,9 @@ Stand: 17.10.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto
 
 ## Nächste praktische Prüfungen
 
-1. Den lokalen Fotoablauf auf Android und iPhone prüfen, einschließlich Kamera-Auswahl, Sprachwechsel und schmaler Darstellung.
-2. Einen kleinen, rechtmäßig nutzbaren Bildtestsatz für Gemini, OpenAI und Claude zusammenstellen: sichtbares Gerät, Beschriftung, Kasten, Wegweiser, leere Halterung, mehrere Geräte und schwierige Bilder. Für Chat-Apps und API-Free-Tarife keine privaten oder sensiblen Fotos verwenden.
-3. Zuerst die vorhandenen Chat-Abos als manuellen qualitativen Vorfilter verwenden; danach Gemini Developer API Free für den tatsächlichen API-Ablauf prüfen. Kostenpflichtige OpenAI- oder Claude-API-Aufrufe nur bei bestätigtem Guthaben und gesetztem Ausgabenlimit.
+1. Den lokalen Fotoablauf auf Android und iPhone prüfen, einschließlich Berechtigungen, Sprachwechsel und schmaler Darstellung. Am 18.10.2026 meldete der Nutzer, dass Fotoaufnahme und Auswahl aus der Bibliothek über die private WLAN-/VPN-Vorschau funktionieren; Gerät und Browser sind nicht dokumentiert. Die HTTP-Vorschau prüft weder Installation noch Offlinebetrieb der PWA.
+2. Einen kleinen, rechtmäßig nutzbaren Bildtestsatz gemäß [Bildtest-Ablauf](bildtest.md) zusammenstellen: sichtbares Gerät, Beschriftung, Kasten, Wegweiser, leere Halterung, mehrere Geräte und schwierige Bilder. Die heute im Prototyp ausgewählten Fotos nicht ohne ausdrückliche Freigabe für Modelltests wiederverwenden.
+3. Zuerst die vorhandenen Chat-Abos als manuellen qualitativen Vorfilter nach demselben Bewertungsbogen verwenden; danach Gemini Developer API Free für den tatsächlichen API-Ablauf prüfen. Kostenpflichtige OpenAI- oder Claude-API-Aufrufe nur bei bestätigtem Guthaben und gesetztem Ausgabenlimit.
 4. Den OSM-Abgleich mit echten Standorten als Vorschau erproben, einschließlich mehrerer Geräte in einem Gebäude und ungenauem GPS.
 
 ## Noch zu entscheiden

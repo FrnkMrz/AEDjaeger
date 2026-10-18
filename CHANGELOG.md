@@ -15,6 +15,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Added
 
+- Ablauf und Bewertungsbogen für einen einheitlichen, manuellen KI-Bildvergleich ergänzt.
 - Bedienbarer, lokaler PWA-Prototyp für Fotoaufnahme und simulierte AED-Prüfung in sechs Sprachen.
 - Sichere Demo-Fälle für bestehende und neue AEDs, Mehrfachtreffer, unklare Fotos, Suchfehler und unklare Speicherantworten.
 - Mehrsprachiges Infofenster mit Erläuterung der Demo und den nächsten Prototyp-Etappen.
@@ -23,6 +24,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Fixed
 
+- Dokumentiert die erfolgreiche Handyprüfung von Kamera- und Bibliotheksauswahl samt noch offenen Geräteprüfungen.
 - Erhöht den Kontrast des Einführungstextes auf dem Startbildschirm.
 - Erhält das ausgewählte Foto in jedem Analyse- und Klärungszustand der Vorschau.
 - Nimmt gebündelte JavaScript- und CSS-Dateien in den Offline-Cache auf.

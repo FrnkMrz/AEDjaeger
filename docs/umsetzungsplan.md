@@ -7,8 +7,8 @@ Stand: 17.10.2026. Ergänzung zum [Architekturentwurf](architektur.md). Die Phas
 | Schritt | Ergebnis | Status |
 | --- | --- | --- |
 | A. Bedienprototyp | Mobil nutzbarer Fotoablauf mit simulierten Treffern, Rückfragen und Fehlern; sechs Sprachen | Begonnen |
-| B. Vor-Ort-Prüfung | Schmale Browseransicht, Info-Texte in sechs Sprachen, Auswahlablauf und Offline-Cache automatisiert geprüft; Kamera, Lesbarkeit und Berechtigungen auf echten Mobilgeräten | Teilweise: Browserprüfung ergänzt, Gerätetest offen |
-| C. Erkennungsvorprüfung | Rechtmäßig nutzbare Testbilder und manueller qualitativer Modellvergleich | Offen |
+| B. Vor-Ort-Prüfung | Schmale Browseransicht, Info-Texte in sechs Sprachen, Auswahlablauf und Offline-Cache automatisiert geprüft; Kamera, Lesbarkeit und Berechtigungen auf echten Mobilgeräten | Teilweise: Nutzer hat über privaten WLAN-/VPN-Zugang Fotoaufnahme und Fotoauswahl in einem nicht näher dokumentierten mobilen Browser erfolgreich geprüft; Android/iPhone, Berechtigungen, PWA-Installation und Offlinebetrieb bleiben offen |
+| C. Erkennungsvorprüfung | Rechtmäßig nutzbare Testbilder und manueller qualitativer Modellvergleich | Vorbereitung dokumentiert; Bildsatz und Modellvergleich offen |
 | D. API-Vorschau | Cloudflare-Worker, geschützte KI-Anfrage, validierte Bildbeobachtung und erfolgreiche Umgebungssuche; noch kein OSM-Schreiben | Offen |
 | E. OSM-Testumgebung | Vorschau und bestätigte Schreibvorgänge ausschließlich gegen OSM-Entwicklungsinstanz | Offen |
 | F. Kleiner Pilot | Begrenzter Betrieb, Kosten- und Qualitätsauswertung, reale Geräteprüfung | Offen |
@@ -36,6 +36,8 @@ Das [AED-Signalnetz](gamification.md) bleibt für Nutzende im Pilot vollständig
 ## Phase 1: Die riskante Annahme überprüfen
 
 **Ergebnis:** Eine kleine lokale Auswertung mit rechtmäßig nutzbaren Fotos und bestehenden OSM-Daten. Noch keine produktiven Änderungen.
+
+Der manuelle Bildvergleich hat jetzt einen [eigenen Ablauf mit einheitlichem Prompt und Bewertungsbogen](bildtest.md). Das erfolgreiche Auswählen eines Fotos im Handy-Prototyp ist noch kein KI-Test: Im Prototyp wird kein Foto an ein Modell gesendet.
 
 Mit zunächst etwa 30–50 eigenen oder rechtmäßig nutzbaren Bildern anfangen. Positive Fälle: verschiedene Geräte, durch Glas sichtbare Geräte, Außenwand und Innenraum. Negative oder unklare Fälle: Wegweiser, geschlossener Kasten, leere Halterung, Poster, Bildschirmfoto, Feuerlöscher, mehrere Geräte, Reflexionen, Dunkelheit und Unschärfe.
 
