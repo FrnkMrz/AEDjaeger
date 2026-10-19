@@ -25,6 +25,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Mehrsprachiges Infofenster mit Erläuterung der Demo und den nächsten Prototyp-Etappen.
 - Automatisierte Playwright-Prüfung für schmale Mobilansichten, sechs Info-Übersetzungen, Mehrfachtreffer, Wiederherstellung nach unklarem Ergebnis und Offline-Cache; in CI integriert.
 - Prüft beschädigte Bilddateien und den Tastaturfokus in den wichtigsten Bestätigungs- und Wiederherstellungsschritten.
+- Ergänzt eine validierte Overpass-Abfrage und normalisiert AED-Treffer; Ways und Relations bleiben als Näherungspositionen erkennbar, unvollständige Antworten gelten nicht als abgeschlossene Suche.
 
 ### Fixed
 
