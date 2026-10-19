@@ -4,7 +4,8 @@ import { analysisResult, chooseCandidate, confirmationResult, recoveryResult } f
 describe("simulated AED workflow", () => {
   const photoUrl = "blob:test-photo";
 
-  it("offers a new entry only after a successful empty search", () => {
+  it("maps complete, matching, and incomplete demo searches through the candidate assessment", () => {
+    expect(analysisResult("existing", photoUrl)).toEqual({ kind: "proposal", photoUrl, proposal: "existing" });
     expect(analysisResult("new", photoUrl)).toEqual({ kind: "proposal", photoUrl, proposal: "new" });
     expect(analysisResult("search-error", photoUrl)).toEqual({ kind: "retryable-error", photoUrl, reason: "search" });
   });
