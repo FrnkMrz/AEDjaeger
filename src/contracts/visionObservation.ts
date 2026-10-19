@@ -18,6 +18,7 @@ export const IMAGE_ISSUES = ["blurry", "dark", "glare", "occluded", "cropped"] a
 
 export interface VisionObservation {
   scene: (typeof VISION_SCENES)[number];
+  // Count visually identifiable AED devices, not signs or cabinets.
   device_count: number;
   readable_text: string[];
   manufacturer: string | null;
@@ -45,6 +46,26 @@ const EXPECTED_KEYS = [
   "location_clues",
   "image_issues",
 ];
+
+/**
+ * The scene and visible-device count must agree for clear classes. "unclear"
+ * leaves the count unconstrained because the image itself is ambiguous.
+ */
+function isConsistentSceneCount(scene: VisionObservation["scene"], count: number): boolean {
+  switch (scene) {
+    case "device_visible":
+      return count === 1;
+    case "multiple_devices":
+      return count >= 2;
+    case "enclosure_visible":
+    case "sign_only":
+    case "empty_holder":
+    case "other_object":
+      return count === 0;
+    case "unclear":
+      return true;
+  }
+}
 
 /** Accept only bounded plain text; callers must still render it as untrusted text. */
 function isBoundedText(value: unknown, maximumLength: number): value is string {
@@ -86,6 +107,7 @@ export function parseVisionObservation(input: unknown): VisionObservationParseRe
     || !Number.isInteger(record.device_count)
     || record.device_count < 0
     || record.device_count > MAX_DEVICE_COUNT
+    || !isConsistentSceneCount(record.scene, record.device_count)
     || !isTextList(record.readable_text, MAX_READABLE_TEXT_ITEMS, MAX_TEXT_LENGTH)
     || !(record.manufacturer === null || isBoundedText(record.manufacturer, MAX_LABEL_LENGTH))
     || !(record.model === null || isBoundedText(record.model, MAX_LABEL_LENGTH))
