@@ -1,6 +1,6 @@
 # Umsetzung durch einen AI-Agenten
 
-Stand: 17.10.2026. Ergänzung zum [Architekturentwurf](architektur.md). Die Phasen ordnen die Umsetzung in überprüfbare Etappen. Phase 2 ist als lokaler UI-Prototyp begonnen; es gibt noch keine echte KI-, Standort-, Konto- oder OSM-Anbindung.
+Stand: 19.10.2026. Ergänzung zum [Architekturentwurf](architektur.md). Die Phasen ordnen die Umsetzung in überprüfbare Etappen. GPT-6 Luna ist als erstes Bildmodell gewählt und mit drei Testfotos explorativ geprüft. Der lokale UI-Prototyp hat noch keine echte KI-, Standort-, Konto- oder OSM-Anbindung.
 
 ## Reihenfolge und aktueller Stand
 
@@ -8,8 +8,8 @@ Stand: 17.10.2026. Ergänzung zum [Architekturentwurf](architektur.md). Die Phas
 | --- | --- | --- |
 | A. Bedienprototyp | Mobil nutzbarer Fotoablauf mit simulierten Treffern, Rückfragen und Fehlern; sechs Sprachen | Begonnen |
 | B. Vor-Ort-Prüfung | Schmale Browseransicht, Info-Texte in sechs Sprachen, Auswahlablauf und Offline-Cache automatisiert geprüft; Kamera, Lesbarkeit und Berechtigungen auf echten Mobilgeräten | Teilweise: Nutzer hat über privaten WLAN-/VPN-Zugang Fotoaufnahme und Fotoauswahl in einem nicht näher dokumentierten mobilen Browser erfolgreich geprüft; Android/iPhone, Berechtigungen, PWA-Installation und Offlinebetrieb bleiben offen |
-| C. Erkennungsvorprüfung | Rechtmäßig nutzbare Testbilder und manueller qualitativer Modellvergleich | Erster explorativer ChatGPT-Durchgang mit sieben bereinigten Bildern abgeschlossen; noch kein kontrollierter Vergleich, da Prompts und Gesprächskontext variierten. Ergebnisse und nötige Trennung von Gerät, Gehäuse und Wegweiser stehen in [Bildtest](bildtest.md). |
-| D. API-Vorschau | Cloudflare-Worker, geschützte KI-Anfrage, validierte Bildbeobachtung und erfolgreiche Umgebungssuche; noch kein OSM-Schreiben | Offen |
+| C. Erkennungsvorprüfung | Rechtmäßig nutzbare Testbilder und qualitative Modellprüfung | Explorative ChatGPT-Prüfung mit sieben Bildern und OpenAI-API-Test mit drei positiven Bildern abgeschlossen; beides ist kein kontrollierter Genauigkeitsnachweis. Ergebnisse und Grenzen stehen in [Bildtest](bildtest.md). |
+| D. API-Vorschau | Cloudflare-Worker, geschützte Anfrage an GPT-6 Luna, validierte Bildbeobachtung und erfolgreiche Umgebungssuche; noch kein OSM-Schreiben | Teilweise vorbereitet: serverseitiger GPT-6-Luna-Adapter mit Bild- und Antwortvalidierung ist isoliert getestet; Worker-Route, Anmeldung, Kostenlimit und Suche fehlen |
 | E. OSM-Testumgebung | Vorschau und bestätigte Schreibvorgänge ausschließlich gegen OSM-Entwicklungsinstanz | Offen |
 | F. Kleiner Pilot | Begrenzter Betrieb, Kosten- und Qualitätsauswertung, reale Geräteprüfung | Offen |
 
@@ -19,7 +19,7 @@ Im ersten Code-Schritt ist Vite mit TypeScript ohne React gewählt. Der lokale P
 
 Der Projektinitiator beschreibt gewünschtes Verhalten, bewertet vorzeigbare Ergebnisse und entscheidet über Konten, Ausgaben und Veröffentlichung. Der programmierende AI-Agent übernimmt Code, Tests, Konfiguration, Dokumentation und Fehlerbehebung. Er muss dafür Zugriff auf das Repository und eine Ausführungsumgebung haben; ein Chat, der nur Code ausgibt, erledigt diese Arbeit nicht vollständig.
 
-ChatGPT/Codex kann bei vorhandenem Repository- und Werkzeugzugriff diese Arbeit ausführen. Chrome dient zum Prüfen des Browserablaufs. Die Bildauswertung der fertigen App benötigt separat eingerichteten API-Zugang. Chat-Abos können für manuelle Bildtests und die Entwicklung genutzt werden, ersetzen aber keine App-API. Phase 1 beginnt mit manuellem Vergleich in den vorhandenen Gemini- und ChatGPT-Apps; Claude kommt nur hinzu, wenn dafür ohne Zusatzkosten ein Zugang verfügbar ist. Anschließend wird der tatsächliche API-Ablauf zuerst mit Gemini Developer API Free geprüft. Kostenpflichtige Anbieter-APIs nur bei bestätigtem Guthaben oder mit einem ausdrücklich begrenzten Testbudget verwenden. Für den Produktbetrieb reicht anschließend ein aktiver KI-Anbieter.
+ChatGPT/Codex kann bei vorhandenem Repository- und Werkzeugzugriff diese Arbeit ausführen. Chrome dient zum Prüfen des Browserablaufs. Die Bildauswertung der fertigen App benötigt einen separat eingerichteten API-Zugang. Chat-Abos ersetzen keine App-API. Der erste API-Test mit dem gewählten GPT-6 Luna ist erfolgreich authentifiziert und hat drei positive Bilder erkannt; er belegt noch keine ausreichende Qualität für einen Pilot. Für den Produktbetrieb ist nur dieser eine Anbieter vorgesehen; höhere OpenAI-Modelle sind ausgeschlossen.
 
 Nicht mehrere Agenten unkoordiniert dieselben Dateien ändern lassen. Eine zweite Prüfung kann nützlich sein, muss aber einen klaren Auftrag und denselben Referenzstand bekommen. Besonders kritisch sind Anmeldung, Kostenlimits, Zuordnung und OSM-Schreibvorgänge.
 
@@ -45,7 +45,7 @@ Zu jedem Bild unabhängig festhalten, was tatsächlich sichtbar und lesbar ist. 
 
 Messen: falsche Gerätebestätigung, unberechtigte Zuordnung, erforderliche Rückfragen, korrekt übernommene Felder, Wartezeit und Kosten. Eine selbst gemeldete KI-Sicherheit von „99 %“ zählt nicht als gemessene Zuverlässigkeit. In der kleinen Testmenge darf kein klar negativer Fall als sichere Bestätigung durchgehen; selbst null beobachtete Fehler sind noch kein Beweis allgemeiner Fehlerfreiheit.
 
-Zuerst denselben Testsatz und Prompt manuell in den vorhandenen Chat-Apps ausprobieren und Antworten qualitativ vergleichen. Die erste ChatGPT-Runde ist wegen abweichender Prompts und gemeinsamem Gesprächskontext nur explorativ; sie zeigt vor allem, dass die Sollklassen „AED-Gehäuse“ und „Defibrillator sichtbar“ getrennt annotiert werden müssen. Diese Prüfung ist kein API-Benchmark. Danach API-Verfügbarkeit mit Gemini Developer API Free untersuchen; weitere kostenpflichtige APIs nur mit bestätigtem Guthaben oder festem Ausgabenlimit aufrufen. Für den Gemini-Free-Tarif nur eigens aufgenommene oder rechtmäßig nutzbare, nicht sensible Bilder ohne erkennbare Personen einsetzen, da Google Free-Tier-Inhalte zur Produktverbesserung verwenden kann. Nutzerfotos aus dem späteren Betrieb nicht automatisch an mehrere Dienste senden. Danach den Datensatz gezielt um beobachtete Fehlerfälle erweitern und einen Anbieter sowie ein Modell anhand der tatsächlichen API-Ergebnisse auswählen. Keine erfundenen Messergebnisse oder synthetischen Fotos als alleinigen Nachweis verwenden.
+Die erste ChatGPT-Runde ist wegen abweichender Prompts und gemeinsamem Gesprächskontext nur explorativ; sie zeigt vor allem, dass die Sollklassen „AED-Gehäuse“ und „Defibrillator sichtbar“ getrennt annotiert werden müssen. Der anschließende API-Test mit GPT-6 Luna verwendete drei positive Testbilder in einer Anfrage und erkannte alle drei als AED. Das ist kein API-Benchmark: negative Fälle, unsichere Bilder, Wiederholungen und unabhängige Sollannotation fehlen. Als nächstes den Datensatz gezielt um diese Fälle erweitern, bevor Zuverlässigkeitsaussagen oder ein Pilot erfolgen. Weitere Fotos nur nach gesonderter Freigabe an einen Anbieter senden. Höhere OpenAI-Modelle nicht verwenden.
 
 ## Phase 2: Bedienbarer Ablauf mit simulierten Diensten
 
@@ -59,7 +59,7 @@ Abnahme: Auf einem einfachen Fall ist nach dem Foto nur eine Speicherbestätigun
 
 **Ergebnis:** Der gesamte Ablauf verwendet echte Fotos und aktuelle Kandidaten, endet aber in einer Änderungsvorschau.
 
-Serverdienst, Anmeldung für Pilotnutzer, KI-Adapter, Schema-Prüfung, Kandidatensuche, minimale Datenhaltung und Kostenlimits werden integriert. Staging hat eine eigene Adresse, Schlüssel und Datenbank. Produktive OSM-Schreibrechte sind technisch deaktiviert.
+Der isolierte Adapter unter `server/vision/openai.ts` ist ein getesteter Baustein, aber noch nicht mit der Oberfläche verbunden. In dieser Phase folgen Worker-Route, Anmeldung für Pilotnutzer, Kandidatensuche, minimale Datenhaltung und atomare Kostenlimits. OpenAI-Schlüssel liegen ausschließlich als Worker-Secret vor. Staging hat eine eigene Adresse und Datenbank; produktive OSM-Schreibrechte bleiben technisch deaktiviert.
 
 Abnahme: API-Schlüssel sind nicht im Browserbundle, Browsercache oder Repository. Nicht angemeldete Aufrufe werden abgewiesen. Gleichzeitige Anfragen überschreiten nicht das reservierte Budget. Ein fehlgeschlagener Suchaufruf erzeugt keinen Neuanlagevorschlag. Foto- und Token-Inhalte erscheinen nicht in Logs.
 

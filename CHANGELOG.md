@@ -17,6 +17,8 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Added
 
+- Dokumentiert GPT-6 Luna als festgelegtes Bildmodell für den ersten API-Prototyp und hält den explorativen API-Test mit drei positiven Fotos samt Grenzen fest.
+- Ergänzt einen isolierten, serverseitigen GPT-6-Luna-Adapter mit Bildsignatur- und Größenprüfung sowie Laufzeitvalidierung strukturierter Beobachtungen.
 - Dokumentiert die explorative ChatGPT-Bildprüfung mit sieben bereinigten Bildern, ihre methodischen Grenzen und die nötige Trennung von sichtbarem Gerät, AED-Gehäuse und Wegweiser.
 - Ablauf und Bewertungsbogen für einen einheitlichen, manuellen KI-Bildvergleich ergänzt.
 - Bedienbarer, lokaler PWA-Prototyp für Fotoaufnahme und simulierte AED-Prüfung in sechs Sprachen.
