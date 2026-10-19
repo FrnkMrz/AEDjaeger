@@ -75,9 +75,17 @@ function isBoundedText(value: unknown, maximumLength: number): value is string {
     && !/[\u0000-\u001f\u007f]/u.test(value);
 }
 
+function isDenseArray(value: unknown[]): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    if (!(index in value)) return false;
+  }
+  return true;
+}
+
 function isTextList(value: unknown, maxItems: number, maxItemLength: number): value is string[] {
   return Array.isArray(value)
     && value.length <= maxItems
+    && isDenseArray(value)
     && value.every((item) => isBoundedText(item, maxItemLength));
 }
 
@@ -114,6 +122,7 @@ export function parseVisionObservation(input: unknown): VisionObservationParseRe
     || !isTextList(record.location_clues, MAX_LOCATION_CLUES, MAX_TEXT_LENGTH)
     || !Array.isArray(record.image_issues)
     || record.image_issues.length > MAX_IMAGE_ISSUES
+    || !isDenseArray(record.image_issues)
     || !record.image_issues.every((issue) => isOneOf(issue, IMAGE_ISSUES))
   ) {
     return { ok: false, reason: "invalid-shape" };
