@@ -79,6 +79,23 @@ describe("parseVisionObservation", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("rejects sparse text and issue arrays", () => {
+    const sparse = new Array(1);
+
+    expect(parseVisionObservation({ ...validObservation, readable_text: sparse })).toEqual({
+      ok: false,
+      reason: "invalid-shape",
+    });
+    expect(parseVisionObservation({ ...validObservation, location_clues: sparse })).toEqual({
+      ok: false,
+      reason: "invalid-shape",
+    });
+    expect(parseVisionObservation({ ...validObservation, image_issues: sparse })).toEqual({
+      ok: false,
+      reason: "invalid-shape",
+    });
+  });
+
   it("allows null for model details that cannot be read", () => {
     const result = parseVisionObservation({ ...validObservation, manufacturer: null, model: null });
     expect(result.ok).toBe(true);
