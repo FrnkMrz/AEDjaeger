@@ -127,6 +127,11 @@ export async function analyzeAedPhoto(
     throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte keine lesbare Antwort.");
   }
 
+  // A syntactically valid JSON fragment is not usable if generation was interrupted.
+  if (!isRecord(providerResponse) || providerResponse.status !== "completed") {
+    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse wurde nicht vollständig abgeschlossen.");
+  }
+
   const outputText = extractOutputText(providerResponse);
 
   if (!outputText) {

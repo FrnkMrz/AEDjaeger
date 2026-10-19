@@ -18,8 +18,9 @@ function providerResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
-function outputResponse(value: unknown): Response {
+function outputResponse(value: unknown, status = "completed"): Response {
   return providerResponse({
+    status,
     output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(value) }] }],
   });
 }
@@ -64,7 +65,7 @@ describe("server-side GPT-6 Luna vision adapter", () => {
     );
   });
 
-  it.each([null, { output: {} }, { output: [{ type: "message", content: {} }] }])(
+  it.each([null, { status: "completed", output: {} }, { status: "completed", output: [{ type: "message", content: {} }] }])(
     "normalizes malformed successful provider responses (%s)",
     async (providerBody) => {
       const fetcher = vi.fn<typeof fetch>().mockResolvedValue(providerResponse(providerBody));
@@ -74,6 +75,15 @@ describe("server-side GPT-6 Luna vision adapter", () => {
       });
     },
   );
+
+  it("rejects incomplete provider responses even when their text matches the schema", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(outputResponse(validObservation, "incomplete"));
+
+    await expect(analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", fetcher)).rejects.toMatchObject({
+      code: "invalid_provider_response",
+      message: "Die Bildanalyse wurde nicht vollständig abgeschlossen.",
+    });
+  });
 
   it("rejects contradictory subject and device-count observations", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
