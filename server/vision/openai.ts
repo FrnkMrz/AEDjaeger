@@ -3,6 +3,7 @@ import { IMAGE_ISSUES, parseVisionObservation, VISION_SCENES, type VisionObserva
 export const OPENAI_VISION_MODEL = "gpt-6-luna";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_OUTPUT_TOKENS = 2_000;
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 
 export type SupportedImageType = (typeof ALLOWED_IMAGE_TYPES)[number];
@@ -40,10 +41,11 @@ const observationSchema = {
       enum: VISION_SCENES,
     },
     device_count: { type: "integer", minimum: 0, maximum: 10 },
-    readable_text: { type: "array", maxItems: 12, items: { type: "string", maxLength: 160 } },
-    manufacturer: { anyOf: [{ type: "string", maxLength: 80 }, { type: "null" }] },
-    model: { anyOf: [{ type: "string", maxLength: 80 }, { type: "null" }] },
-    location_clues: { type: "array", maxItems: 8, items: { type: "string", maxLength: 160 } },
+    // Short excerpts keep structured output bounded across all supported writing systems.
+    readable_text: { type: "array", maxItems: 4, items: { type: "string", maxLength: 60 } },
+    manufacturer: { anyOf: [{ type: "string", maxLength: 60 }, { type: "null" }] },
+    model: { anyOf: [{ type: "string", maxLength: 60 }, { type: "null" }] },
+    location_clues: { type: "array", maxItems: 3, items: { type: "string", maxLength: 40 } },
     image_issues: { type: "array", maxItems: 5, items: { type: "string", enum: IMAGE_ISSUES } },
   },
 } as const;
@@ -76,7 +78,7 @@ export async function analyzeAedPhoto(
       body: JSON.stringify({
         model: OPENAI_VISION_MODEL,
         store: false,
-        max_output_tokens: 500,
+        max_output_tokens: MAX_OUTPUT_TOKENS,
         reasoning: { effort: "none" },
         input: [
           {
@@ -89,7 +91,8 @@ export async function analyzeAedPhoto(
               "enclosure_visible (AED-Gehäuse, Gerät nicht sichtbar), sign_only (nur ein AED-Hinweis), " +
               "empty_holder (leere Halterung), multiple_devices (mehrere Geräte), other_object (anderer Gegenstand) " +
               "oder unclear. Zähle nur sichtbare Geräte; trenne Hersteller und Modell nur bei klarer Beschriftung. " +
-              "Fasse Lagehinweise knapp zusammen und markiere Bildprobleme.",
+              "Nenne höchstens vier kurze Textfragmente, Hersteller und Modell jeweils knapp sowie höchstens drei " +
+              "kurze Lagehinweise. Fasse nichts zu langen Sätzen zusammen und markiere Bildprobleme.",
           },
           {
             role: "user",

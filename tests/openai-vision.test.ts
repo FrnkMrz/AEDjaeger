@@ -40,8 +40,13 @@ describe("server-side GPT-6 Luna vision adapter", () => {
     expect(body.model).toBe("gpt-6-luna");
     expect(body.model).toBe(OPENAI_VISION_MODEL);
     expect(body.store).toBe(false);
+    expect(body.max_output_tokens).toBe(2_000);
     expect(body.text.format.type).toBe("json_schema");
     expect(body.text.format.schema.properties.scene.enum).toContain("multiple_devices");
+    expect(body.text.format.schema.properties.readable_text.maxItems).toBe(4);
+    expect(body.text.format.schema.properties.readable_text.items.maxLength).toBe(60);
+    expect(body.text.format.schema.properties.location_clues.maxItems).toBe(3);
+    expect(body.text.format.schema.properties.location_clues.items.maxLength).toBe(40);
     expect(body.input[1].content[1].type).toBe("input_image");
   });
 
