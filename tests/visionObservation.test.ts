@@ -60,6 +60,25 @@ describe("parseVisionObservation", () => {
     });
   });
 
+  it.each([
+    { scene: "device_visible", device_count: 0 },
+    { scene: "multiple_devices", device_count: 1 },
+    { scene: "sign_only", device_count: 1 },
+    { scene: "enclosure_visible", device_count: 1 },
+    { scene: "empty_holder", device_count: 1 },
+    { scene: "other_object", device_count: 1 },
+  ])("rejects a device count that contradicts a clear scene: %j", (override) => {
+    expect(parseVisionObservation({ ...validObservation, ...override })).toEqual({
+      ok: false,
+      reason: "invalid-shape",
+    });
+  });
+
+  it("leaves device count unconstrained when the scene itself is unclear", () => {
+    const result = parseVisionObservation({ ...validObservation, scene: "unclear", device_count: 2 });
+    expect(result.ok).toBe(true);
+  });
+
   it("allows null for model details that cannot be read", () => {
     const result = parseVisionObservation({ ...validObservation, manufacturer: null, model: null });
     expect(result.ok).toBe(true);
