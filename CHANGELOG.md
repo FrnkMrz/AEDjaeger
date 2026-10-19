@@ -35,7 +35,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Fixed
 
-- Begrenzt strukturierte KI-Textbeobachtungen, verwirft unvollständige Antworten und normalisiert unerwartete Provider-Strukturen zu einem kontrollierten Fehlerzustand.
+- Begrenzt strukturierte KI-Textbeobachtungen, schließt leere Textwerte aus, verwirft unvollständige Antworten und normalisiert unerwartete Provider-Strukturen zu einem kontrollierten Fehlerzustand.
 - Schließt den Markdown-Promptblock im Bildtest korrekt und repariert den Linkanker zur Ergebnisüberschrift.
 - Dokumentiert die erfolgreiche Handyprüfung von Kamera- und Bibliotheksauswahl samt noch offenen Geräteprüfungen.
 - Erhöht den Kontrast des Einführungstextes auf dem Startbildschirm.

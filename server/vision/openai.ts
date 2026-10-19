@@ -42,10 +42,18 @@ const observationSchema = {
     },
     device_count: { type: "integer", minimum: 0, maximum: 10 },
     // Short excerpts keep structured output bounded across all supported writing systems.
-    readable_text: { type: "array", maxItems: 4, items: { type: "string", maxLength: 60 } },
-    manufacturer: { anyOf: [{ type: "string", maxLength: 60 }, { type: "null" }] },
-    model: { anyOf: [{ type: "string", maxLength: 60 }, { type: "null" }] },
-    location_clues: { type: "array", maxItems: 3, items: { type: "string", maxLength: 40 } },
+    readable_text: {
+      type: "array",
+      maxItems: 4,
+      items: { type: "string", minLength: 1, maxLength: 60 },
+    },
+    manufacturer: { anyOf: [{ type: "string", minLength: 1, maxLength: 60 }, { type: "null" }] },
+    model: { anyOf: [{ type: "string", minLength: 1, maxLength: 60 }, { type: "null" }] },
+    location_clues: {
+      type: "array",
+      maxItems: 3,
+      items: { type: "string", minLength: 1, maxLength: 40 },
+    },
     image_issues: { type: "array", maxItems: 5, items: { type: "string", enum: IMAGE_ISSUES } },
   },
 } as const;
@@ -91,8 +99,9 @@ export async function analyzeAedPhoto(
               "enclosure_visible (AED-Gehäuse, Gerät nicht sichtbar), sign_only (nur ein AED-Hinweis), " +
               "empty_holder (leere Halterung), multiple_devices (mehrere Geräte), other_object (anderer Gegenstand) " +
               "oder unclear. Zähle nur sichtbare Geräte; trenne Hersteller und Modell nur bei klarer Beschriftung. " +
-              "Nenne höchstens vier kurze Textfragmente, Hersteller und Modell jeweils knapp sowie höchstens drei " +
-              "kurze Lagehinweise. Fasse nichts zu langen Sätzen zusammen und markiere Bildprobleme.",
+              "Nenne höchstens vier kurze, nicht leere Textfragmente, Hersteller und Modell knapp sowie höchstens drei " +
+              "kurze Lagehinweise. Verwende für Hersteller und Modell null, wenn keine lesbare Angabe sichtbar ist; " +
+              "gib dafür niemals einen leeren Text zurück. Fasse nichts zu langen Sätzen zusammen und markiere Bildprobleme.",
           },
           {
             role: "user",
