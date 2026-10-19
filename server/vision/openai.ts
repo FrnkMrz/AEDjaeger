@@ -22,13 +22,6 @@ export type AedPhotoInput = {
   contentType: string;
 };
 
-type OpenAIResponse = {
-  output?: Array<{
-    type?: string;
-    content?: Array<{ type?: string; text?: string }>;
-  }>;
-};
-
 const observationSchema = {
   type: "object",
   additionalProperties: false,
@@ -127,17 +120,14 @@ export async function analyzeAedPhoto(
     throw new VisionAnalysisError("provider_error", "Die Bildanalyse ist vorübergehend fehlgeschlagen.");
   }
 
-  let providerResponse: OpenAIResponse;
+  let providerResponse: unknown;
   try {
-    providerResponse = (await response.json()) as OpenAIResponse;
+    providerResponse = await response.json();
   } catch {
     throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte keine lesbare Antwort.");
   }
 
-  const outputText = providerResponse.output
-    ?.filter((item) => item.type === "message")
-    .flatMap((item) => item.content ?? [])
-    .find((part) => part.type === "output_text")?.text;
+  const outputText = extractOutputText(providerResponse);
 
   if (!outputText) {
     throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte keine Beobachtung.");
@@ -192,4 +182,24 @@ function toBase64(bytes: Uint8Array): string {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
   }
   return btoa(binary);
+}
+
+/** Narrow the untrusted provider response before traversing nested output fields. */
+function extractOutputText(response: unknown): string | undefined {
+  if (!isRecord(response) || !Array.isArray(response.output)) return undefined;
+
+  for (const item of response.output) {
+    if (!isRecord(item) || item.type !== "message" || !Array.isArray(item.content)) continue;
+    for (const part of item.content) {
+      if (isRecord(part) && part.type === "output_text" && typeof part.text === "string") {
+        return part.text;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

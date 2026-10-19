@@ -35,6 +35,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Fixed
 
+- Normalisiert erfolgreich beantwortete, aber unerwartet geformte KI-Provider-Antworten zu einem kontrollierten Fehlerzustand.
 - Schließt den Markdown-Promptblock im Bildtest korrekt und repariert den Linkanker zur Ergebnisüberschrift.
 - Dokumentiert die erfolgreiche Handyprüfung von Kamera- und Bibliotheksauswahl samt noch offenen Geräteprüfungen.
 - Erhöht den Kontrast des Einführungstextes auf dem Startbildschirm.
