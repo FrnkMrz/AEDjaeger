@@ -1,6 +1,6 @@
 # Architektur und Bedienung für AEDjaeger
 
-Stand: **19.10.2026**. Cloudflare ist als Hosting-Richtung gewählt. Ein lokaler, simulierter Bedienprototyp wird mit Vite und TypeScript ohne React umgesetzt; produktive Dienste und Deployment haben noch nicht begonnen. GPT-6 Luna ist als erstes Bildmodell festgelegt; die App-Anbindung steht noch aus. Die Produktvorgabe bleibt: **Foto → vorhandenen AED bestätigen oder neuen eintragen → kurz bestätigen → fertig.**
+Stand: **20.10.2026**. Cloudflare ist als Hosting-Richtung gewählt. Ein lokaler, simulierter Bedienprototyp wird mit Vite und TypeScript ohne React umgesetzt; produktive Dienste und Deployment haben noch nicht begonnen. Der Worker enthält jetzt OSM-Loginrouten mit geschützter Sitzung, die noch nicht an die Oberfläche oder eine Cloudflare-Datenbank gebunden sind. GPT-6 Luna ist als erstes Bildmodell festgelegt; die App-Anbindung steht noch aus. Die Produktvorgabe bleibt: **Foto → vorhandenen AED bestätigen oder neuen eintragen → kurz bestätigen → fertig.**
 
 ## 1. Empfehlung
 

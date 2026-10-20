@@ -13,15 +13,18 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Security
 
+- Prüft OSM-OIDC-Metadaten gegen feste OpenStreetMap-Endpunkte und akzeptiert ausschließlich signierte RS256-ID-Tokens mit passendem Issuer, Client, Ablaufdatum und einmaliger Nonce; Providerabrufe sind begrenzt und folgen keinen Weiterleitungen.
+- Bindet OSM-Anmeldetransaktionen über HttpOnly-/SameSite-Cookies an den startenden Browser und begrenzt Sitzungen serverseitig auf zwölf Stunden; OAuth-Tokens und Nutzerprofile gelangen nicht in Browserantworten oder Logs.
 - Reserviert das Analysebudget in einem einzelnen bedingten Datenbank-Schreibvorgang und behandelt wiederholte Anfrage-IDs ohne zweite Reservierung.
 - Erzwingt für Änderungen an `main` Pull Requests und Reviews; `@FrnkMrz` ist als Code Owner für alle Dateien hinterlegt.
 
 ### Added
 
-- Ergänzt isolierte OSM-OAuth-PKCE-Bausteine mit festem Autorisierungsendpunkt, Login-only-Scope `openid` sowie Prüfungen für sichere Rücksprungadressen und Callback-`state`; vollständige OIDC-Anmeldung und Sitzungen bleiben ausstehend.
+- Ergänzt OSM-Loginrouten für PKCE-Codeaustausch, OIDC-ID-Tokenprüfung, Sitzungsabfrage und Abmeldung. Der Login nutzt nur `openid`, legt keinen OSM-Zugriffstoken ab und ist noch nicht mit der App-Oberfläche oder einer Cloudflare-D1-Bindung verbunden.
+- Ergänzt eine D1-Sitzungstabelle mit Ablaufzeit; Browser-Sitzungstokens werden nur als Hash gespeichert.
 - Ergänzt kurzlebige OSM-OAuth-Transaktionen in D1: State und Browserbindung werden gehasht, PKCE-Verifier und OIDC-Nonce mit AES-GCM an die Vorgangskennung gebunden verschlüsselt und der gültige Vorgang atomar einmalig verbraucht; verlassene abgelaufene Zeilen werden später aufgeräumt.
 - Ergänzt die erste D1-Migration und eine atomare, vor dem KI-Aufruf auszuführende Reservierung für Nutzer- und Tageslimits; konkrete Grenzwerte bleiben Betreiberkonfiguration.
-- Cloudflare-Worker-Grundgerüst mit statischer PWA-Auslieferung, SPA-Fallback und einem nicht-cachebaren Health-Endpunkt; Analyse- und OSM-Routen sind noch nicht freigeschaltet.
+- Cloudflare-Worker-Grundgerüst mit statischer PWA-Auslieferung, SPA-Fallback und einem nicht-cachebaren Health-Endpunkt; Analyse- und OSM-Schreibrouten sind noch nicht freigeschaltet.
 - Ergänzt ein laufzeitgeprüftes, anbieterspezifisches Schema für strukturierte KI-Bildbeobachtungen; unbekannte Felder und übergroße Werte werden verworfen.
 
 - Führt die Demo-Suchszenarien durch dieselbe Antwortprüfung und Kandidatenbewertung wie den vorgesehenen Overpass-Ablauf.

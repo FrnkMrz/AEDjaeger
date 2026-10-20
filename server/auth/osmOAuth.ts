@@ -92,6 +92,24 @@ function randomBase64Url(cryptoApi: Crypto): string {
   return toBase64Url(bytes);
 }
 
+/** Erzeugt ein gleich starkes, nicht erratbares Cookie-Geheimnis. */
+export function createOAuthSecret(cryptoApi: Crypto = crypto): string {
+  return randomBase64Url(cryptoApi);
+}
+
+/** Importiert genau 32 zufällige Bytes aus einem Worker-Secret als AES-GCM-Schlüssel. */
+export async function importOAuthEncryptionKey(secret: string, cryptoApi: Crypto = crypto): Promise<CryptoKey> {
+  if (typeof secret !== "string" || !/^[A-Za-z0-9_-]{43}$/u.test(secret)) {
+    throw new Error("Der OSM-Anmeldeschlüssel ist nicht korrekt konfiguriert.");
+  }
+
+  const binary = atob(secret.replaceAll("-", "+").replaceAll("_", "/") + "=");
+  const raw = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  if (raw.length !== 32) throw new Error("Der OSM-Anmeldeschlüssel ist nicht korrekt konfiguriert.");
+
+  return cryptoApi.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
 function toBase64Url(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
