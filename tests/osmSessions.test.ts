@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { D1Database, D1Result, D1Statement } from "../server/storage/d1";
-import { createOSMSession, deleteOSMSession, findOSMSession, OSM_SESSION_LIFETIME_MS } from "../server/storage/osmSessions";
+import { createOSMSession, deleteOSMSession, findOSMSession, OSM_SESSION_LIFETIME_MS, rotateOSMSession } from "../server/storage/osmSessions";
 
 function createSessionDatabase() {
   const rows = new Map<string, { osm_subject: string; created_at: number; expires_at: number }>();
@@ -56,6 +56,20 @@ describe("OSM session storage", () => {
     await deleteOSMSession(database, token);
     expect(rows.size).toBe(0);
     await expect(findOSMSession(database, token, 1_800_000_000_001)).resolves.toBeNull();
+  });
+
+  it("revokes the previous browser session before storing its replacement", async () => {
+    const { database, rows } = createSessionDatabase();
+    const oldToken = "c".repeat(43);
+    const newToken = "d".repeat(43);
+    const now = 1_800_000_000_000;
+    await createOSMSession(database, oldToken, "old-osm-user", now - 1);
+
+    await rotateOSMSession(database, oldToken, newToken, "new-osm-user", now);
+
+    expect(rows.size).toBe(1);
+    await expect(findOSMSession(database, oldToken, now)).resolves.toBeNull();
+    await expect(findOSMSession(database, newToken, now)).resolves.toEqual({ subject: "new-osm-user" });
   });
 
   it("rejects malformed tokens and subjects before database access", async () => {

@@ -2,7 +2,7 @@ import { buildOSMAuthorizationUrl, createOAuthSecret, createPkceTransaction, imp
 import { exchangeOSMCodeForIdentity } from "./auth/osmOidc";
 import type { D1Database } from "./storage/d1";
 import { consumeOSMOAuthTransaction, storeOSMOAuthTransaction } from "./storage/osmOAuthTransactions";
-import { createOSMSession, deleteOSMSession, findOSMSession } from "./storage/osmSessions";
+import { deleteOSMSession, findOSMSession, rotateOSMSession } from "./storage/osmSessions";
 
 type StaticAssets = { fetch(request: Request): Promise<Response> };
 type WorkerEnvironment = {
@@ -101,7 +101,14 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment):
       redirectUri: configuration.redirectUri,
     });
     const sessionToken = createOAuthSecret();
-    await createOSMSession(environment.DB, sessionToken, identity.subject, Date.now());
+    // Die alte Sitzung wird widerrufen, bevor der neue Sitzungstoken ausgegeben wird.
+    await rotateOSMSession(
+      environment.DB,
+      readCookie(request.headers.get("Cookie"), SESSION_COOKIE),
+      sessionToken,
+      identity.subject,
+      Date.now(),
+    );
     const headers = new Headers({
       Location: "/",
       "Cache-Control": "no-store",

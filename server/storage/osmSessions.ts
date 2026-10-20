@@ -65,6 +65,20 @@ export async function deleteOSMSession(
   }
 }
 
+/** Widerruft eine vorhandene Sitzung, bevor ein neues Cookie ausgegeben wird. */
+export async function rotateOSMSession(
+  database: D1Database,
+  previousToken: string | null,
+  nextToken: string,
+  osmSubject: string,
+  now: number,
+  cryptoApi: Crypto = crypto,
+): Promise<void> {
+  if (previousToken === nextToken) throw new Error("Ungültige OSM-Sitzungsrotation.");
+  if (previousToken) await deleteOSMSession(database, previousToken, cryptoApi);
+  await createOSMSession(database, nextToken, osmSubject, now, cryptoApi);
+}
+
 function isSecret(value: unknown): value is string {
   return typeof value === "string" && /^[A-Za-z0-9_-]{43}$/u.test(value);
 }
