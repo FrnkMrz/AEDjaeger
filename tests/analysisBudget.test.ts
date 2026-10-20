@@ -4,6 +4,8 @@ import { reserveAnalysisBudget, type D1Database, type D1Result, type D1Statement
 function createDatabase(options: {
   changes?: number;
   duplicate?: { id: string } | null;
+  firstError?: Error;
+  runError?: Error;
   success?: boolean;
 } = {}) {
   const calls: Array<{ query: string; values: unknown[] }> = [];
@@ -17,6 +19,7 @@ function createDatabase(options: {
         },
         async run<T>() {
           calls.push({ query, values });
+          if (options.runError) throw options.runError;
           return {
             success: options.success ?? true,
             meta: { changes: options.changes ?? 1 },
@@ -24,6 +27,7 @@ function createDatabase(options: {
         },
         async first<T>() {
           calls.push({ query, values });
+          if (options.firstError) throw options.firstError;
           return (options.duplicate ?? null) as T | null;
         },
       };
@@ -95,11 +99,21 @@ describe("analysis budget reservation", () => {
     await expect(reserveAnalysisBudget(database, validRequest)).rejects.toThrow("nicht sicher reserviert");
   });
 
+  it("hides rejected D1 promise details from both reservation and duplicate lookup", async () => {
+    const runErrorDatabase = createDatabase({ runError: new Error("secret SQL details") });
+    const lookupErrorDatabase = createDatabase({ changes: 0, firstError: new Error("secret lookup details") });
+
+    await expect(reserveAnalysisBudget(runErrorDatabase.database, validRequest)).rejects.toThrow("nicht sicher reserviert");
+    await expect(reserveAnalysisBudget(lookupErrorDatabase.database, validRequest)).rejects.toThrow("nicht sicher reserviert");
+  });
+
   it.each([
     { ...validRequest, costMicros: 0 },
     { ...validRequest, userLimitMicros: Number.MAX_SAFE_INTEGER + 1 },
     { ...validRequest, utcDay: "2026-02-31" },
     { ...validRequest, requestId: "" },
+    { ...validRequest, userId: { length: 1 } as unknown as string },
+    null as unknown as typeof validRequest,
   ])("rejects invalid budget input before database access", async (request) => {
     const { database, calls } = createDatabase();
 

@@ -20,7 +20,9 @@ export type AnalysisBudgetRequest = {
   userId: string;
   requestId: string;
   utcDay: string;
+  /** Trusted server-side worst-case cost estimate, in USD millionths. */
   costMicros: number;
+  /** Limits come from operator-controlled server configuration, never the browser. */
   userLimitMicros: number;
   globalLimitMicros: number;
   createdAt: number;
@@ -44,42 +46,48 @@ export async function reserveAnalysisBudget(
 ): Promise<AnalysisBudgetResult> {
   validateRequest(request);
 
-  const result = await database
-    .prepare(
-      `INSERT INTO analysis_budget_reservations
-        (id, user_id, request_id, utc_day, cost_micros, status, created_at)
-       SELECT ?, ?, ?, ?, ?, 'reserved', ?
-       WHERE ? <= ?
-         AND COALESCE((
-           SELECT SUM(cost_micros)
-           FROM analysis_budget_reservations
-           WHERE utc_day = ? AND status != 'released'
-         ), 0) <= ? - ?
-         AND COALESCE((
-           SELECT SUM(cost_micros)
-           FROM analysis_budget_reservations
-           WHERE user_id = ? AND utc_day = ? AND status != 'released'
-         ), 0) <= ? - ?
-       ON CONFLICT (user_id, request_id) DO NOTHING`,
-    )
-    .bind(
-      request.reservationId,
-      request.userId,
-      request.requestId,
-      request.utcDay,
-      request.costMicros,
-      request.createdAt,
-      request.costMicros,
-      request.globalLimitMicros,
-      request.utcDay,
-      request.globalLimitMicros,
-      request.costMicros,
-      request.userId,
-      request.utcDay,
-      request.userLimitMicros,
-      request.costMicros,
-    )
-    .run();
+  let result: D1Result<unknown>;
+  try {
+    result = await database
+      .prepare(
+        `INSERT INTO analysis_budget_reservations
+          (id, user_id, request_id, utc_day, cost_micros, status, created_at)
+         SELECT ?, ?, ?, ?, ?, 'reserved', ?
+         WHERE ? <= ?
+           AND COALESCE((
+             SELECT SUM(cost_micros)
+             FROM analysis_budget_reservations
+             WHERE utc_day = ? AND status != 'released'
+           ), 0) <= ? - ?
+           AND COALESCE((
+             SELECT SUM(cost_micros)
+             FROM analysis_budget_reservations
+             WHERE user_id = ? AND utc_day = ? AND status != 'released'
+           ), 0) <= ? - ?
+         ON CONFLICT (user_id, request_id) DO NOTHING`,
+      )
+      .bind(
+        request.reservationId,
+        request.userId,
+        request.requestId,
+        request.utcDay,
+        request.costMicros,
+        request.createdAt,
+        request.costMicros,
+        request.globalLimitMicros,
+        request.utcDay,
+        request.globalLimitMicros,
+        request.costMicros,
+        request.userId,
+        request.utcDay,
+        request.userLimitMicros,
+        request.costMicros,
+      )
+      .run();
+  } catch {
+    // D1 can reject the promise (for example on a constraint error), bypassing `success`.
+    throw new Error("Die Analyse konnte nicht sicher reserviert werden.");
+  }
 
   if (!result.success) {
     // Do not include SQL parameters or database diagnostics in user-facing errors.
@@ -88,21 +96,34 @@ export async function reserveAnalysisBudget(
 
   if ((result.meta?.changes ?? 0) === 1) return { reserved: true };
 
-  const duplicate = await database
-    .prepare(
-      `SELECT id
-       FROM analysis_budget_reservations
-       WHERE user_id = ? AND request_id = ?`,
-    )
-    .bind(request.userId, request.requestId)
-    .first<{ id: string }>();
+  let duplicate: { id: string } | null;
+  try {
+    duplicate = await database
+      .prepare(
+        `SELECT id
+         FROM analysis_budget_reservations
+         WHERE user_id = ? AND request_id = ?`,
+      )
+      .bind(request.userId, request.requestId)
+      .first<{ id: string }>();
+  } catch {
+    throw new Error("Die Analyse konnte nicht sicher reserviert werden.");
+  }
 
   return duplicate ? { reserved: false, reason: "duplicate" } : { reserved: false, reason: "budget_exceeded" };
 }
 
 function validateRequest(request: AnalysisBudgetRequest): void {
+  if (typeof request !== "object" || request === null || Array.isArray(request)) {
+    throw new Error("Ungültige Analyse-Reservierung.");
+  }
+
   if (!isShortIdentifier(request.reservationId) || !isShortIdentifier(request.userId) || !isShortIdentifier(request.requestId)) {
     throw new Error("Ungültige Kennung für die Analyse-Reservierung.");
+  }
+
+  if (typeof request.utcDay !== "string") {
+    throw new Error("Ungültiger UTC-Tag für die Analyse-Reservierung.");
   }
 
   const parsedDay = Date.parse(`${request.utcDay}T00:00:00Z`);
@@ -125,6 +146,6 @@ function validateRequest(request: AnalysisBudgetRequest): void {
   }
 }
 
-function isShortIdentifier(value: string): boolean {
-  return value.length > 0 && value.length <= 128;
+function isShortIdentifier(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 128;
 }
