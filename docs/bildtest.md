@@ -1,6 +1,6 @@
 # Manueller KI-Bildvergleich
 
-Stand: 18.10.2026. Dieser Ablauf bereitet die Erkennungsvorprüfung aus dem [Umsetzungsplan](umsetzungsplan.md) vor. Er vergleicht sichtbare Bildbeobachtungen in Chat-Apps; er ist kein API-, Kosten- oder Zuverlässigkeitsnachweis für den späteren Produktbetrieb.
+Stand: 19.10.2026. Dieser Ablauf bereitet die Erkennungsvorprüfung aus dem [Umsetzungsplan](umsetzungsplan.md) vor. Er vergleicht sichtbare Bildbeobachtungen; explorative API-Aufrufe sind kein Zuverlässigkeitsnachweis für den späteren Produktbetrieb.
 
 ## Vor dem ersten Bild
 
@@ -107,6 +107,16 @@ Die bisherigen Sollangaben nennen ein AED-Gehäuse teilweise bereits „sichtbar
 
 Für eine aussagekräftige Wiederholung werden Prompt und Sollbeobachtung vorab vereinheitlicht und jedes Bild in einer eigenen Unterhaltung bewertet. Zusätzliche Fälle wie leeres Gehäuse, mehrere Geräte, Poster ohne Gerät und ähnliche medizinische Gegenstände fehlen weiterhin. Die sieben Bilder sind eine kleine qualitative Probe und begründen keine Anbieterauswahl.
 
+## Explorative OpenAI-API-Prüfung
+
+Am 19.10.2026 wurden drei eigens aufgenommene Spaziergangsfotos nach ausdrücklicher Freigabe des Nutzers einmalig an die OpenAI API gesendet. Die JPEGs waren von EXIF-Daten bereinigt und 1.152 × 2.048 Pixel groß. Verwendet wurde `gpt-6-luna` mit einem JSON-orientierten Auftrag zur getrennten Bildbeobachtung. Alle drei Bilder wurden als AED erkannt und mit hoher modellseitiger Sicherheit eingestuft. Als sichtbaren Text meldete das Modell „AED+“ samt Hinweis auf HLW/AED, „HeartSave AS; AUTO“ sowie „LIFEPAK“.
+
+Die Anfrage lief für alle drei Fotos gemeinsam. Daher können die Bilder einander im Gesprächskontext beeinflusst haben. Die modellseitige Einstufung „high“ ist keine gemessene Wahrscheinlichkeit. Die drei Fälle sind sämtlich positiv; Wegweiser ohne Gerät, leere Kästen, ähnliche Gegenstände, unklare Bilder und Wiederholungen wurden nicht geprüft. Das Ergebnis belegt nur, dass der API-Zugang mit diesem kleinen Bildsatz funktioniert hat, nicht die Zuverlässigkeit der Erkennung im Feldeinsatz.
+
+OpenAI meldete 8.447 Eingabe- und 371 Ausgabetokens. Bei den am Testtag veröffentlichten GPT-6-Luna-Standardpreisen entspricht das ungefähr 0,001 US-Dollar; die tatsächliche Abrechnung ist maßgeblich. Der Schlüsselwert und die Fotos sind nicht im Repository abgelegt. [OpenAI-Modell- und Preisübersicht](https://developers.openai.com/api/docs/models), [Preise](https://developers.openai.com/api/docs/pricing).
+
+Der Nutzer hat GPT-6 Luna als erstes Modell für AEDjaeger festgelegt und ausgeschlossen, ein höheres OpenAI-Modell zu verwenden. Das ist eine Produktentscheidung, kein Nachweis einer geprüften Genauigkeit. Für aussagekräftige Qualitätstests braucht es einen vorab annotierten Satz mit positiven, negativen und unklaren Fällen sowie eine Prüfung jedes Bildes einzeln.
+
 ## Ergebnis und nächste Freigabe
 
-Die Resultate zeigen nur, welches Modell den gewählten Bildsatz in der jeweiligen Chat-App vorsichtiger und genauer beschreibt. Erst danach wird entschieden, ob ein separater, begrenzter API-Test sinnvoll ist. Vor einem API-Aufruf werden kostenloses Kontingent, Abrechnungslimits und aktuelle Datenschutzbedingungen geprüft. Keine Nutzerfotos automatisch an mehrere Anbieter senden, keine API-Keys in die App einbauen und aus dieser Vorprüfung keine Schreibfreigabe für OSM ableiten.
+Die bisherigen Resultate sind explorative Einzelprüfungen und kein kontrollierter Modellvergleich. GPT-6 Luna ist für die erste API-Integration ausgewählt; vor einem Pilot sind Datenschutzbedingungen sowie Kosten- und Anfragelimits umzusetzen. Keine Nutzerfotos automatisch an mehrere Anbieter senden, keine API-Schlüssel in die App einbauen und aus einer Bildklassifikation keine Schreibfreigabe für OSM ableiten.
