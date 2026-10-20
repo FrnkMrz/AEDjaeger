@@ -17,6 +17,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Added
 
+- Cloudflare-Worker-Grundgerüst mit statischer PWA-Auslieferung, SPA-Fallback und einem nicht-cachebaren Health-Endpunkt; Analyse- und OSM-Routen sind noch nicht freigeschaltet.
 - Ergänzt ein laufzeitgeprüftes, anbieterspezifisches Schema für strukturierte KI-Bildbeobachtungen; unbekannte Felder und übergroße Werte werden verworfen.
 
 - Führt die Demo-Suchszenarien durch dieselbe Antwortprüfung und Kandidatenbewertung wie den vorgesehenen Overpass-Ablauf.
