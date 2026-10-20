@@ -13,10 +13,12 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Security
 
+- Reserviert das Analysebudget in einem einzelnen bedingten Datenbank-Schreibvorgang und behandelt wiederholte Anfrage-IDs ohne zweite Reservierung.
 - Erzwingt für Änderungen an `main` Pull Requests und Reviews; `@FrnkMrz` ist als Code Owner für alle Dateien hinterlegt.
 
 ### Added
 
+- Ergänzt die erste D1-Migration und eine atomare, vor dem KI-Aufruf auszuführende Reservierung für Nutzer- und Tageslimits; konkrete Grenzwerte bleiben Betreiberkonfiguration.
 - Cloudflare-Worker-Grundgerüst mit statischer PWA-Auslieferung, SPA-Fallback und einem nicht-cachebaren Health-Endpunkt; Analyse- und OSM-Routen sind noch nicht freigeschaltet.
 - Ergänzt ein laufzeitgeprüftes, anbieterspezifisches Schema für strukturierte KI-Bildbeobachtungen; unbekannte Felder und übergroße Werte werden verworfen.
 
