@@ -45,14 +45,14 @@ const observationSchema = {
     readable_text: {
       type: "array",
       maxItems: 4,
-      items: { type: "string", minLength: 1, maxLength: 60 },
+      items: { type: "string", minLength: 1, maxLength: 60, pattern: "\\S" },
     },
-    manufacturer: { anyOf: [{ type: "string", minLength: 1, maxLength: 60 }, { type: "null" }] },
-    model: { anyOf: [{ type: "string", minLength: 1, maxLength: 60 }, { type: "null" }] },
+    manufacturer: { anyOf: [{ type: "string", minLength: 1, maxLength: 60, pattern: "\\S" }, { type: "null" }] },
+    model: { anyOf: [{ type: "string", minLength: 1, maxLength: 60, pattern: "\\S" }, { type: "null" }] },
     location_clues: {
       type: "array",
       maxItems: 3,
-      items: { type: "string", minLength: 1, maxLength: 40 },
+      items: { type: "string", minLength: 1, maxLength: 40, pattern: "\\S" },
     },
     image_issues: { type: "array", maxItems: 5, items: { type: "string", enum: IMAGE_ISSUES } },
   },

@@ -45,11 +45,15 @@ describe("server-side GPT-6 Luna vision adapter", () => {
     expect(body.text.format.schema.properties.scene.enum).toContain("multiple_devices");
     expect(body.text.format.schema.properties.readable_text.maxItems).toBe(4);
     expect(body.text.format.schema.properties.readable_text.items.minLength).toBe(1);
+    expect(body.text.format.schema.properties.readable_text.items.pattern).toBe("\\S");
     expect(body.text.format.schema.properties.readable_text.items.maxLength).toBe(60);
     expect(body.text.format.schema.properties.manufacturer.anyOf[0].minLength).toBe(1);
+    expect(body.text.format.schema.properties.manufacturer.anyOf[0].pattern).toBe("\\S");
     expect(body.text.format.schema.properties.model.anyOf[0].minLength).toBe(1);
+    expect(body.text.format.schema.properties.model.anyOf[0].pattern).toBe("\\S");
     expect(body.text.format.schema.properties.location_clues.maxItems).toBe(3);
     expect(body.text.format.schema.properties.location_clues.items.maxLength).toBe(40);
+    expect(body.text.format.schema.properties.location_clues.items.pattern).toBe("\\S");
     expect(body.input[1].content[1].type).toBe("input_image");
   });
 
@@ -71,6 +75,16 @@ describe("server-side GPT-6 Luna vision adapter", () => {
     await expect(analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", fetcher)).rejects.toBeInstanceOf(
       VisionAnalysisError,
     );
+  });
+
+  it("rejects whitespace-only observations at the runtime boundary", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      outputResponse({ ...validObservation, manufacturer: "   " }),
+    );
+
+    await expect(analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", fetcher)).rejects.toMatchObject({
+      code: "invalid_provider_response",
+    });
   });
 
   it.each([null, { status: "completed", output: {} }, { status: "completed", output: [{ type: "message", content: {} }] }])(
