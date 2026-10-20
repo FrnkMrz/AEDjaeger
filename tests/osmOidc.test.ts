@@ -89,7 +89,10 @@ describe("OSM OpenID Connect verification", () => {
 
   it("rejects a token after its signature is changed", async () => {
     const { fetcher, token } = await signedFixture();
-    const altered = token.slice(0, -1) + (token.endsWith("A") ? "B" : "A");
+    const [header, claims, signature] = token.split(".");
+    // Das erste Signaturzeichen liegt sicher in den Nutzbits; das letzte Base64-Zeichen kann Padding-Bits enthalten.
+    const changedSignature = `${signature.startsWith("A") ? "B" : "A"}${signature.slice(1)}`;
+    const altered = `${header}.${claims}.${changedSignature}`;
     const changedFetcher = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       const response = await fetcher(input, init);
       if (String(input) === "https://www.openstreetmap.org/oauth2/token") {
