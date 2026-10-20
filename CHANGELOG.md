@@ -18,6 +18,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Added
 
+- Ergänzt isolierte OSM-OAuth-PKCE-Bausteine mit festem Autorisierungsendpunkt, Login-only-Scope `openid` sowie Prüfungen für sichere Rücksprungadressen und Callback-`state`; vollständige OIDC-Anmeldung und Sitzungen bleiben ausstehend.
 - Ergänzt die erste D1-Migration und eine atomare, vor dem KI-Aufruf auszuführende Reservierung für Nutzer- und Tageslimits; konkrete Grenzwerte bleiben Betreiberkonfiguration.
 - Cloudflare-Worker-Grundgerüst mit statischer PWA-Auslieferung, SPA-Fallback und einem nicht-cachebaren Health-Endpunkt; Analyse- und OSM-Routen sind noch nicht freigeschaltet.
 - Ergänzt ein laufzeitgeprüftes, anbieterspezifisches Schema für strukturierte KI-Bildbeobachtungen; unbekannte Felder und übergroße Werte werden verworfen.
