@@ -36,6 +36,16 @@ describe("Cloudflare Worker shell", () => {
     expect(env.ASSETS.fetch).not.toHaveBeenCalled();
   });
 
+  it("routes protected image analysis through the Worker and rejects non-POST requests", async () => {
+    const env = environment();
+    const response = await worker.fetch(new Request("https://aedjaeger.test/api/vision/analyze"), env);
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get("Allow")).toBe("POST");
+    expect(await response.json()).toEqual({ error: "method_not_allowed" });
+    expect(env.ASSETS.fetch).not.toHaveBeenCalled();
+  });
+
   it("does not start OSM login when the Worker has no server-side configuration", async () => {
     const env = environment();
     const response = await worker.fetch(new Request("https://aedjaeger.test/api/auth/osm/start"), env);
