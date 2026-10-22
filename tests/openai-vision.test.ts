@@ -12,7 +12,39 @@ const validObservation: VisionObservation = {
   image_issues: [],
 };
 
-const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
+// A tiny but structurally complete JPEG container keeps provider tests offline.
+const jpeg = new Uint8Array([
+  0xff, 0xd8,
+  0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01, 0x01, 0x11, 0x00,
+  0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00,
+  0x00, 0xff, 0xd9,
+]);
+
+function pngChunk(type: string, data: number[]): number[] {
+  const typeAndData = [...type].map((character) => character.charCodeAt(0)).concat(data);
+  let crc = 0xffffffff;
+  for (const byte of typeAndData) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+  }
+  const checksum = (crc ^ 0xffffffff) >>> 0;
+  const length = data.length;
+  return [length >>> 24, (length >>> 16) & 0xff, (length >>> 8) & 0xff, length & 0xff, ...typeAndData,
+    (checksum >>> 24) & 0xff, (checksum >>> 16) & 0xff, (checksum >>> 8) & 0xff, checksum & 0xff];
+}
+
+const png = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+  ...pngChunk("IHDR", [0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0]),
+  ...pngChunk("IDAT", [0]),
+  ...pngChunk("IEND", []),
+]);
+
+const webp = new Uint8Array([
+  0x52, 0x49, 0x46, 0x46, 0x16, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
+  0x56, 0x50, 0x38, 0x20, 0x0a, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x9d, 0x01, 0x2a, 0x01, 0x00, 0x01, 0x00,
+]);
 
 function providerResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -67,6 +99,28 @@ describe("server-side GPT-6 Luna vision adapter", () => {
       code: "invalid_image",
     });
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["JPEG", "image/jpeg", new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b])],
+    ["PNG", "image/png", new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])],
+    ["WebP", "image/webp", new Uint8Array([0x52, 0x49, 0x46, 0x46, 0x04, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50])],
+  ])("rejects truncated %s containers before calling the provider", async (_format, contentType, bytes) => {
+    const fetcher = vi.fn<typeof fetch>();
+
+    await expect(analyzeAedPhoto({ bytes, contentType }, "test-secret", fetcher)).rejects.toMatchObject({ code: "invalid_image" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["JPEG", "image/jpeg", jpeg],
+    ["PNG", "image/png", png],
+    ["WebP", "image/webp", webp],
+  ])("accepts a complete %s container", async (_format, contentType, bytes) => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(outputResponse(validObservation));
+
+    await expect(analyzeAedPhoto({ bytes, contentType }, "test-secret", fetcher)).resolves.toEqual(validObservation);
+    expect(fetcher).toHaveBeenCalledOnce();
   });
 
   it("rejects provider output that does not match the observation schema", async () => {

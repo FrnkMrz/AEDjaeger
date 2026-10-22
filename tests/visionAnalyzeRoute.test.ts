@@ -4,7 +4,12 @@ import type { D1Database, D1Result, D1Statement } from "../server/storage/d1";
 import type { VisionObservation } from "../src/contracts/visionObservation";
 
 const sessionToken = "s".repeat(43);
-const imageBytes = Uint8Array.from([0xff, 0xd8, 0xff, 0x01]);
+const imageBytes = Uint8Array.from([
+  0xff, 0xd8,
+  0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01, 0x01, 0x11, 0x00,
+  0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00,
+  0x00, 0xff, 0xd9,
+]);
 const observation: VisionObservation = {
   scene: "device_visible",
   device_count: 1,
@@ -116,6 +121,23 @@ describe("protected image analysis route", () => {
     const { database, calls } = createDatabase();
     const analyze = successfulAnalysis();
     const body = JSON.stringify({ request_id: "request_1234567890", content_type: "image/jpeg", image_base64: btoa("no image") });
+    const response = await handleVisionAnalysis(analysisRequest({ body }), environment(database), { analyze });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid_image" });
+    expect(calls.some((query) => query.includes("analysis_budget_reservations"))).toBe(false);
+    expect(analyze).not.toHaveBeenCalled();
+  });
+
+  it("does not reserve cost for a truncated image container", async () => {
+    const { database, calls } = createDatabase();
+    const analyze = successfulAnalysis();
+    const truncatedJpeg = Uint8Array.from([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b]);
+    const body = JSON.stringify({
+      request_id: "request_1234567890",
+      content_type: "image/jpeg",
+      image_base64: btoa(String.fromCharCode(...truncatedJpeg)),
+    });
     const response = await handleVisionAnalysis(analysisRequest({ body }), environment(database), { analyze });
 
     expect(response.status).toBe(400);
