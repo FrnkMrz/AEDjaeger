@@ -3,6 +3,7 @@ import { exchangeOSMCodeForIdentity } from "./auth/osmOidc";
 import type { D1Database } from "./storage/d1";
 import { consumeOSMOAuthTransaction, storeOSMOAuthTransaction } from "./storage/osmOAuthTransactions";
 import { deleteOSMSession, findOSMSession, rotateOSMSession } from "./storage/osmSessions";
+import { handleVisionAnalysis } from "./vision/analyzeRoute";
 
 type StaticAssets = { fetch(request: Request): Promise<Response> };
 type WorkerEnvironment = {
@@ -11,6 +12,11 @@ type WorkerEnvironment = {
   OSM_CLIENT_ID?: string;
   OSM_REDIRECT_URI?: string;
   OSM_OAUTH_ENCRYPTION_KEY?: string;
+  OPENAI_API_KEY?: string;
+  AI_ANALYSIS_ENABLED?: string;
+  AI_ANALYSIS_COST_RESERVATION_MICROS?: string;
+  AI_ANALYSIS_USER_DAILY_LIMIT_MICROS?: string;
+  AI_ANALYSIS_GLOBAL_DAILY_LIMIT_MICROS?: string;
 };
 
 const AUTH_COOKIE = "aedjaeger_osm_auth";
@@ -41,6 +47,7 @@ const worker = {
       if (request.method !== "POST") return jsonResponse({ error: "method_not_allowed" }, 405, { Allow: "POST" });
       return logout(request, environment);
     }
+    if (pathname === "/api/vision/analyze") return handleVisionAnalysis(request, environment);
     if (pathname === "/api" || pathname.startsWith("/api/")) return jsonResponse({ error: "not_found" }, 404);
     return environment.ASSETS.fetch(request);
   },

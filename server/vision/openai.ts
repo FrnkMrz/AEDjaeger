@@ -2,7 +2,7 @@ import { IMAGE_ISSUES, parseVisionObservation, VISION_SCENES, type VisionObserva
 
 export const OPENAI_VISION_MODEL = "gpt-6-luna";
 
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+export const MAX_VISION_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_OUTPUT_TOKENS = 2_000;
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
 
@@ -72,7 +72,7 @@ export async function analyzeAedPhoto(
     throw new VisionAnalysisError("missing_secret", "Die Bildanalyse ist nicht konfiguriert.");
   }
 
-  const imageType = validateImage(image);
+  const imageType = validateAedImage(image);
   const imageDataUrl = `data:${imageType};base64,${toBase64(image.bytes)}`;
   let response: Response;
   try {
@@ -164,11 +164,12 @@ export async function analyzeAedPhoto(
   return observation.value;
 }
 
-function validateImage(image: AedPhotoInput): SupportedImageType {
+/** Validate untrusted bytes before making any paid provider request or reserving cost. */
+export function validateAedImage(image: AedPhotoInput): SupportedImageType {
   if (
     !ALLOWED_IMAGE_TYPES.includes(image.contentType as SupportedImageType) ||
     image.bytes.byteLength === 0 ||
-    image.bytes.byteLength > MAX_IMAGE_BYTES ||
+    image.bytes.byteLength > MAX_VISION_IMAGE_BYTES ||
     !hasMatchingSignature(image.bytes, image.contentType)
   ) {
     throw new VisionAnalysisError("invalid_image", "Das Fotoformat oder die Bildgröße wird nicht unterstützt.");

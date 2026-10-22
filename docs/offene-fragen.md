@@ -25,12 +25,19 @@ Stand: 22.10.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto
 ## Noch zu entscheiden
 
 - Welche Erkennungsqualität erreicht GPT-6 Luna bei vorab annotierten positiven, negativen und unklaren Beispielen? Der erste Drei-Bilder-Test ist dafür zu klein.
-- Welche maximalen KI-Ausgaben pro Nutzer und pro Tag sollen im Pilot gelten? Die Reservierungslogik setzt selbst keine Beträge oder Limits fest.
-- Welche Betreiberlimits gelten für die ersten API-Tests, bevor wir eine geschützte Analyse-Route freischalten? Die Login-Implementierung selbst ruft kein KI-Modell auf.
+- Welche maximale Kostenreservierung pro Anfrage sowie Nutzer- und Gesamt-Tageslimits sollen für die ersten API-Tests gelten? Die geschützte Analyse-Route ist implementiert, aber standardmäßig abgeschaltet und ruft ohne alle drei Betreiberwerte kein Modell auf. Die Reservierung muss mindestens die aktuelle Obergrenze für ein maximal zulässiges GPT-6-Luna-Bild abdecken.
+- Wann soll die Bildanalyse in die PWA eingebunden werden? Der Endpunkt liefert bislang ausschließlich strukturierte Bildbeobachtungen; Kandidatensuche, Vorschau und eine sichtbare Bestätigung fehlen noch.
 - Welche minimalen Pflichtangaben sind bei Neuanlagen tatsächlich nötig, und wann ist eine Standortkorrektur erforderlich?
 - Reicht Cloudflare Free für den Pilot? Workers Paid (mindestens 5 USD pro Monat) erst aktivieren, falls Free-Grenzen oder ein konkreter Betriebsbedarf es erforderlich machen. Eigene Domain ebenfalls erst dann wählen, wenn sie gebraucht wird.
 - Welche Lizenz passt zum Projekt?
 - Nach dem Pilot: Ist eine sichtbare oder teilbare Fortschrittskarte den Aufwand und die Datenschutzprüfung wert?
+
+Für die spätere kontrollierte Aktivierung des API-Endpunkts sind serverseitig
+`OPENAI_API_KEY`, `AI_ANALYSIS_ENABLED=true`, `AI_ANALYSIS_COST_RESERVATION_MICROS`,
+`AI_ANALYSIS_USER_DAILY_LIMIT_MICROS` und `AI_ANALYSIS_GLOBAL_DAILY_LIMIT_MICROS`
+erforderlich. Aktuell sind keine dieser Aktivierungswerte gesetzt. Die Reservierung
+muss anhand einer belastbaren Obergrenze pro zulässigem Bild berechnet werden; ein
+Kontolimit beim Anbieter ersetzt die anfragebezogene Reservierung in D1 nicht.
 
 Vor einem Pilot müssen Verarbeitung und Aufbewahrung beim ausgewählten Dienst geprüft und verständlich erklärt werden. Öffentliche Bildspeicherung ist keine Produktfunktion. Die lokale Demo überträgt weiterhin keine Fotos an externe Dienste.
 

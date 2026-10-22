@@ -13,6 +13,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Security
 
+- Ergänzt eine standardmäßig deaktivierte Bildanalyse-Route, die OSM-Sitzung, Origin, Bildformat und Größenlimit prüft und D1-Budget vor jedem GPT-6-Luna-Aufruf reserviert; API-Schlüssel und Bilddaten gelangen nicht in Browserantworten oder Logs.
 - Prüft OSM-OIDC-Metadaten gegen feste OpenStreetMap-Endpunkte und akzeptiert ausschließlich signierte RS256-ID-Tokens mit passendem Issuer, Client, Ablaufdatum und einmaliger Nonce; Providerabrufe sind begrenzt und folgen keinen Weiterleitungen.
 - Bindet OSM-Anmeldetransaktionen über HttpOnly-/SameSite-Cookies an den startenden Browser, widerruft die vorherige Sitzung bei einer Anmeldung und begrenzt die neue Sitzung serverseitig auf zwölf Stunden; OAuth-Tokens und Nutzerprofile gelangen nicht in Browserantworten oder Logs.
 - Reserviert das Analysebudget in einem einzelnen bedingten Datenbank-Schreibvorgang und behandelt wiederholte Anfrage-IDs ohne zweite Reservierung.
@@ -20,6 +21,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Added
 
+- Ergänzt einen geschützten `/api/vision/analyze`-Worker-Endpunkt für strukturierte GPT-6-Luna-Bildbeobachtungen. Der Endpunkt bleibt ohne explizite Aktivierung, serverseitigen Schlüssel und vollständige Kostenlimits abgeschaltet; Tests verwenden ausschließlich simulierte Sitzungen, D1 und Modellantworten.
 - Verbindet die PWA mit dem OSM-Sitzungsstatus und zeigt Login oder Abmeldung erst bei konfigurierter Worker-Anmeldung an; alle sechs Sprachen weisen darauf hin, dass der Login nur die Identität bestätigt und OSM-Änderungen deaktiviert bleiben.
 - Bindet die Cloudflare-D1-Pilotdatenbank ein; `aedjaeger-pilot` wurde im Cloudflare-Konto angelegt und mit den drei vorhandenen Schema-Migrationen initialisiert. Ein Paid-Tarif wurde nicht aktiviert und ein Worker-Deployment ist nicht enthalten.
 
