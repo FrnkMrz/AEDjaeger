@@ -5,6 +5,15 @@
   "compatibility_date": "2026-10-20",
   "workers_dev": true,
   "send_metrics": false,
+  // This binding name matches WorkerEnvironment.DB. Schema changes stay in migrations/.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "aedjaeger-pilot",
+      "database_id": "90ddb34e-06a9-411b-9453-e9e717cd5f79",
+      "migrations_dir": "migrations"
+    }
+  ],
   "assets": {
     "directory": "./dist/",
     "binding": "ASSETS",
