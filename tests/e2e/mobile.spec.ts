@@ -135,6 +135,26 @@ test("the login stays unavailable while a selected photo or proposal is active",
   await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toBeVisible();
 });
 
+test("the login is blocked immediately while a selected photo is still decoding", async ({ page }) => {
+  await page.addInitScript(() => {
+    let finishDecode: (() => void) | undefined;
+    Object.defineProperty(window, "finishPhotoDecodeForTest", { value: () => finishDecode?.() });
+    HTMLImageElement.prototype.decode = function () {
+      if (this.src.startsWith("blob:")) return new Promise<void>((resolve) => { finishDecode = resolve; });
+      return Promise.resolve();
+    };
+  });
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
+  await page.goto("/");
+  await page.getByText("Vorschau testen", { exact: true }).click();
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+
+  await expect(page.locator(".account-panel")).toContainText("Schließe den aktuellen Fotoablauf ab");
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toHaveCount(0);
+  await page.evaluate(() => (window as unknown as Window & { finishPhotoDecodeForTest: () => void }).finishPhotoDecodeForTest());
+  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+});
+
 test("a session status connection error can be retried without losing the selected photo", async ({ page }) => {
   let checks = 0;
   await page.route("**/api/auth/session", (route) => {

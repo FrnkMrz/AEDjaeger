@@ -20,6 +20,7 @@ let oauthReturnFailed = new URLSearchParams(window.location.search).get("login")
 let analysisTimer: number | undefined;
 let saveTimer: number | undefined;
 let photoSelectionVersion = 0;
+let photoSelectionPending = false;
 
 function readLanguage(): Language {
   const saved = localStorage.getItem("aedjaeger-language");
@@ -34,7 +35,7 @@ function accountPanel(): string {
   if (accountState === "checking") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountChecking")}</section>`;
   if (accountState === "not-configured") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountUnavailable")}</section>`;
   if (accountState === "connection-error") return `<section class="account-panel" aria-live="polite" tabindex="-1"><span>${t("accountConnectionError")}</span><button class="account-button" id="osm-session-retry" type="button">${t("accountRetry")}</button></section>`;
-  if (hasActivePhotoDraft(state) && accountState !== "signed-in") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountLoginBlocked")}</section>`;
+  if ((photoSelectionPending || hasActivePhotoDraft(state)) && accountState !== "signed-in") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountLoginBlocked")}</section>`;
   if (accountState === "login-error") return `<section class="account-panel" aria-live="polite"><p role="alert">${t("accountLoginError")}</p><a class="account-button" id="osm-sign-in" href="/api/auth/osm/start">${t("accountSignIn")}</a></section>`;
   if (accountState === "signed-in") {
     return `<section class="account-panel" aria-live="polite"><div><strong>${t("accountSignedIn")}</strong><p>${t("accountIdentityOnly")}</p></div><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>`;
@@ -246,7 +247,12 @@ async function onPhotoSelected(event: Event): Promise<void> {
   const file = input.files?.[0];
   if (!file) return;
   const selectionVersion = ++photoSelectionVersion;
+  // Block OAuth as soon as the chooser returns a file; decoding can take long enough to lose it.
+  photoSelectionPending = true;
+  updateAccountPanel();
   if (!file.type.startsWith("image/")) {
+    photoSelectionPending = false;
+    updateAccountPanel();
     window.alert(t("cameraError"));
     return;
   }
@@ -259,7 +265,11 @@ async function onPhotoSelected(event: Event): Promise<void> {
     await image.decode();
   } catch {
     URL.revokeObjectURL(photoUrl);
-    if (selectionVersion === photoSelectionVersion) window.alert(t("cameraError"));
+    if (selectionVersion === photoSelectionVersion) {
+      photoSelectionPending = false;
+      updateAccountPanel();
+      window.alert(t("cameraError"));
+    }
     return;
   }
   if (selectionVersion !== photoSelectionVersion) {
@@ -267,6 +277,7 @@ async function onPhotoSelected(event: Event): Promise<void> {
     return;
   }
 
+  photoSelectionPending = false;
   clearTimers();
   releasePhoto();
   state = { kind: "photo", photoUrl };
