@@ -54,6 +54,7 @@ function environment(database: D1Database, overrides: Partial<VisionRouteEnviron
     DB: database,
     OPENAI_API_KEY: "server-only-test-key",
     AI_ANALYSIS_ENABLED: "true",
+    AI_ANALYSIS_ALLOWED_OSM_SUBJECTS: "osm-test-user",
     AI_ANALYSIS_COST_RESERVATION_MICROS: "5000",
     AI_ANALYSIS_USER_DAILY_LIMIT_MICROS: "20000",
     AI_ANALYSIS_GLOBAL_DAILY_LIMIT_MICROS: "100000",
@@ -111,10 +112,23 @@ describe("protected image analysis route", () => {
     const { database, calls } = createDatabase();
     const response = await handleVisionAnalysis(analysisRequest(), environment(database, { AI_ANALYSIS_GLOBAL_DAILY_LIMIT_MICROS: "0" }));
     const missingKey = await handleVisionAnalysis(analysisRequest(), environment(database, { OPENAI_API_KEY: undefined }));
+    const missingAllowlist = await handleVisionAnalysis(analysisRequest(), environment(database, { AI_ANALYSIS_ALLOWED_OSM_SUBJECTS: undefined }));
 
     expect(response.status).toBe(503);
     expect(missingKey.status).toBe(503);
+    expect(missingAllowlist.status).toBe(503);
     expect(calls).toEqual([]);
+  });
+
+  it("rejects authenticated OSM users outside the configured pilot allowlist before reading the image or reserving budget", async () => {
+    const { database, calls } = createDatabase();
+    const analyze = successfulAnalysis();
+    const response = await handleVisionAnalysis(analysisRequest(), environment(database, { AI_ANALYSIS_ALLOWED_OSM_SUBJECTS: "another-osm-user" }), { analyze });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "analysis_not_allowed" });
+    expect(calls.some((query) => query.includes("analysis_budget_reservations"))).toBe(false);
+    expect(analyze).not.toHaveBeenCalled();
   });
 
   it("does not reserve cost or call OpenAI for malformed image bytes", async () => {

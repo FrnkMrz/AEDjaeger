@@ -12,6 +12,7 @@ export type VisionRouteEnvironment = {
   DB?: D1Database;
   OPENAI_API_KEY?: string;
   AI_ANALYSIS_ENABLED?: string;
+  AI_ANALYSIS_ALLOWED_OSM_SUBJECTS?: string;
   AI_ANALYSIS_COST_RESERVATION_MICROS?: string;
   AI_ANALYSIS_USER_DAILY_LIMIT_MICROS?: string;
   AI_ANALYSIS_GLOBAL_DAILY_LIMIT_MICROS?: string;
@@ -52,6 +53,9 @@ export async function handleVisionAnalysis(
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
   if (!session) return jsonResponse({ error: "authentication_required" }, 401);
+  if (!limits.allowedSubjects.includes(session.subject)) {
+    return jsonResponse({ error: "analysis_not_allowed" }, 403);
+  }
 
   if (request.headers.get("Content-Type")?.split(";", 1)[0]?.trim().toLowerCase() !== "application/json") {
     return jsonResponse({ error: "unsupported_media_type" }, 415);
@@ -171,14 +175,24 @@ function parseRequestBody(bytes: Uint8Array): { requestId: string; contentType: 
   return { requestId: record.request_id, contentType: record.content_type as SupportedImageType, imageBytes };
 }
 
-function getAnalysisLimits(environment: VisionRouteEnvironment): { reservationMicros: number; userDailyMicros: number; globalDailyMicros: number } | null {
+function getAnalysisLimits(environment: VisionRouteEnvironment): { allowedSubjects: string[]; reservationMicros: number; userDailyMicros: number; globalDailyMicros: number } | null {
   if (environment.AI_ANALYSIS_ENABLED !== "true") return null;
+  const allowedSubjects = parseAllowedSubjects(environment.AI_ANALYSIS_ALLOWED_OSM_SUBJECTS);
   const reservationMicros = parsePositiveInteger(environment.AI_ANALYSIS_COST_RESERVATION_MICROS);
   const userDailyMicros = parsePositiveInteger(environment.AI_ANALYSIS_USER_DAILY_LIMIT_MICROS);
   const globalDailyMicros = parsePositiveInteger(environment.AI_ANALYSIS_GLOBAL_DAILY_LIMIT_MICROS);
-  if (!reservationMicros || !userDailyMicros || !globalDailyMicros) return null;
+  if (!allowedSubjects || !reservationMicros || !userDailyMicros || !globalDailyMicros) return null;
   if (reservationMicros > userDailyMicros || reservationMicros > globalDailyMicros) return null;
-  return { reservationMicros, userDailyMicros, globalDailyMicros };
+  return { allowedSubjects, reservationMicros, userDailyMicros, globalDailyMicros };
+}
+
+function parseAllowedSubjects(value: string | undefined): string[] | null {
+  if (!value || value.length > 25_600) return null;
+  const subjects = value.split(",").map((subject) => subject.trim());
+  if (subjects.length === 0 || subjects.length > 100 || subjects.some((subject) => !subject || subject.length > 256 || /[\u0000-\u001f]/u.test(subject))) {
+    return null;
+  }
+  return [...new Set(subjects)];
 }
 
 function parsePositiveInteger(value: string | undefined): number | null {
