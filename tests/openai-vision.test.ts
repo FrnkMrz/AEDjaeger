@@ -123,6 +123,20 @@ describe("server-side GPT-6 Luna vision adapter", () => {
     expect(fetcher).toHaveBeenCalledOnce();
   });
 
+  it("rejects PNGs with excessive chunk counts before calling the provider", async () => {
+    const chunks = [
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ...pngChunk("IHDR", [0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0]),
+      ...pngChunk("IDAT", [0]),
+    ];
+    for (let index = 0; index < 4_097; index += 1) chunks.push(...pngChunk("tEXt", []));
+    chunks.push(...pngChunk("IEND", []));
+    const fetcher = vi.fn<typeof fetch>();
+
+    await expect(analyzeAedPhoto({ bytes: new Uint8Array(chunks), contentType: "image/png" }, "test-secret", fetcher)).rejects.toMatchObject({ code: "invalid_image" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("rejects provider output that does not match the observation schema", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(outputResponse({ ...validObservation, osm_tags: { emergency: "defibrillator" } }));
 

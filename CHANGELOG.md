@@ -13,7 +13,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Security
 
-- Ergänzt eine standardmäßig deaktivierte Bildanalyse-Route, die OSM-Sitzung, Origin, Bildcontainer und Größenlimit vor einer D1-Budgetreservierung prüft; API-Schlüssel und Bilddaten gelangen nicht in Browserantworten oder Logs.
+- Ergänzt eine standardmäßig deaktivierte Bildanalyse-Route, die OSM-Sitzung, Origin, Bildcontainer und Größenlimit vor einer D1-Budgetreservierung prüft und die PNG-Chunk-Anzahl begrenzt; API-Schlüssel und Bilddaten gelangen nicht in Browserantworten oder Logs.
 - Prüft OSM-OIDC-Metadaten gegen feste OpenStreetMap-Endpunkte und akzeptiert ausschließlich signierte RS256-ID-Tokens mit passendem Issuer, Client, Ablaufdatum und einmaliger Nonce; Providerabrufe sind begrenzt und folgen keinen Weiterleitungen.
 - Bindet OSM-Anmeldetransaktionen über HttpOnly-/SameSite-Cookies an den startenden Browser, widerruft die vorherige Sitzung bei einer Anmeldung und begrenzt die neue Sitzung serverseitig auf zwölf Stunden; OAuth-Tokens und Nutzerprofile gelangen nicht in Browserantworten oder Logs.
 - Reserviert das Analysebudget in einem einzelnen bedingten Datenbank-Schreibvorgang und behandelt wiederholte Anfrage-IDs ohne zweite Reservierung.

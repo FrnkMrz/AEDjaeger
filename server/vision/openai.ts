@@ -5,6 +5,8 @@ export const OPENAI_VISION_MODEL = "gpt-6-luna";
 export const MAX_VISION_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_OUTPUT_TOKENS = 2_000;
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+const MAX_PNG_CHUNKS = 4_096;
+const PNG_CRC_LOOKUP = createPngCrcTable();
 
 export type SupportedImageType = (typeof ALLOWED_IMAGE_TYPES)[number];
 
@@ -241,8 +243,11 @@ function hasValidPngContainer(bytes: Uint8Array): boolean {
   let offset = 8;
   let hasHeader = false;
   let hasImageData = false;
+  let chunkCount = 0;
 
   while (offset + 12 <= bytes.length) {
+    chunkCount += 1;
+    if (chunkCount > MAX_PNG_CHUNKS) return false;
     const chunkLength = readUint32BigEndian(bytes, offset);
     const chunkEnd = offset + 12 + chunkLength;
     if (chunkEnd > bytes.length) return false;
@@ -318,15 +323,14 @@ function readAscii(bytes: Uint8Array, offset: number, length: number): string {
 }
 
 function pngCrc32(bytes: Uint8Array): number {
-  const table = pngCrcTable();
   let crc = 0xffffffff;
   for (const byte of bytes) {
-    crc = (crc >>> 8) ^ table[(crc ^ byte) & 0xff];
+    crc = (crc >>> 8) ^ PNG_CRC_LOOKUP[(crc ^ byte) & 0xff];
   }
   return (crc ^ 0xffffffff) >>> 0;
 }
 
-function pngCrcTable(): Uint32Array {
+function createPngCrcTable(): Uint32Array {
   const table = new Uint32Array(256);
   for (let value = 0; value < table.length; value += 1) {
     let remainder = value;
