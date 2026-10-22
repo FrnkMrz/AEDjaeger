@@ -127,7 +127,7 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment):
 
 async function getSession(request: Request, environment: WorkerEnvironment): Promise<Response> {
   const token = readCookie(request.headers.get("Cookie"), SESSION_COOKIE);
-  const loginAvailable = Boolean(getAuthConfiguration(environment) && environment.DB);
+  const loginAvailable = await isOSMLoginAvailable(environment, new URL(request.url).origin);
   if (!token || !environment.DB) return jsonResponse({ authenticated: false, loginAvailable }, 200);
   try {
     const session = await findOSMSession(environment.DB, token, Date.now());
@@ -168,6 +168,18 @@ function getAuthConfiguration(environment: WorkerEnvironment): { clientId: strin
     return { clientId: environment.OSM_CLIENT_ID, redirectUri: redirectUri.toString(), encryptionKey: environment.OSM_OAUTH_ENCRYPTION_KEY };
   } catch {
     return null;
+  }
+}
+
+/** Keep the UI login link hidden unless the same checks needed to start OAuth already pass. */
+async function isOSMLoginAvailable(environment: WorkerEnvironment, requestOrigin: string): Promise<boolean> {
+  const configuration = getAuthConfiguration(environment);
+  if (!configuration || !environment.DB || new URL(configuration.redirectUri).origin !== requestOrigin) return false;
+  try {
+    await importOAuthEncryptionKey(configuration.encryptionKey);
+    return true;
+  } catch {
+    return false;
   }
 }
 

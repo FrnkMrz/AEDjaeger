@@ -105,6 +105,30 @@ describe("Cloudflare Worker shell", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
 
+  it("offers login only when the redirect origin and encryption key are usable", async () => {
+    const rawKey = crypto.getRandomValues(new Uint8Array(32));
+    const encryptionKey = btoa(String.fromCharCode(...rawKey)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+    const base = {
+      ...environment(),
+      DB: {} as D1Database,
+      OSM_CLIENT_ID: "aedjaeger-client",
+      OSM_REDIRECT_URI: "https://aedjaeger.example/api/auth/osm/callback",
+      OSM_OAUTH_ENCRYPTION_KEY: encryptionKey,
+    };
+
+    const configured = await worker.fetch(new Request("https://aedjaeger.example/api/auth/session"), base);
+    expect(await configured.json()).toEqual({ authenticated: false, loginAvailable: true });
+
+    const wrongOrigin = await worker.fetch(new Request("https://other.example/api/auth/session"), base);
+    expect(await wrongOrigin.json()).toEqual({ authenticated: false, loginAvailable: false });
+
+    const invalidKey = await worker.fetch(new Request("https://aedjaeger.example/api/auth/session"), {
+      ...base,
+      OSM_OAUTH_ENCRYPTION_KEY: "not-a-valid-key",
+    });
+    expect(await invalidKey.json()).toEqual({ authenticated: false, loginAvailable: false });
+  });
+
   it("rejects cross-origin logout requests before touching the session", async () => {
     const env = environment();
     const response = await worker.fetch(new Request("https://aedjaeger.test/api/auth/logout", {

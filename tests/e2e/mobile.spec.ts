@@ -75,7 +75,29 @@ test("an authenticated user can end the OSM session without exposing profile dat
   await expect(page.locator(".account-panel")).toContainText("Mit OpenStreetMap verbunden");
   await expect(page.locator(".account-panel")).toContainText("Änderungen an OpenStreetMap sind noch deaktiviert");
   await page.getByRole("button", { name: "Abmelden" }).click();
-  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toBeVisible();
+  const signIn = page.getByRole("link", { name: "Mit OpenStreetMap anmelden" });
+  await expect(signIn).toBeFocused();
+});
+
+test("a failed OAuth return shows a localized retry message and removes the callback marker", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
+  await page.goto("/?login=error");
+
+  const errors = [
+    "Die OpenStreetMap-Anmeldung ist fehlgeschlagen oder abgelaufen. Bitte versuche es erneut.",
+    "OpenStreetMap sign-in failed or expired. Please try again.",
+    "Logowanie OpenStreetMap nie powiodło się lub wygasło. Spróbuj ponownie.",
+    "OpenStreetMapへのログインに失敗したか、期限切れです。もう一度お試しください。",
+    "La connexion OpenStreetMap a échoué ou expiré. Veuillez réessayer.",
+    "El acceso a OpenStreetMap falló o caducó. Inténtalo de nuevo.",
+  ];
+
+  for (const [index, language] of languageCodes.entries()) {
+    await page.locator("#language").selectOption(language);
+    await expect(page.locator(".account-panel")).toContainText(errors[index]);
+    await expect(page.getByRole("link", { name: ["Mit OpenStreetMap anmelden", "Sign in with OpenStreetMap", "Zaloguj się przez OpenStreetMap", "OpenStreetMapでログイン", "Se connecter avec OpenStreetMap", "Iniciar sesión con OpenStreetMap"][index] })).toHaveAttribute("href", "/api/auth/osm/start");
+  }
+  await expect(page).not.toHaveURL(/login=error/u);
 });
 
 test("keyboard focus indicators use a high-contrast color throughout the controls", async ({ page }) => {

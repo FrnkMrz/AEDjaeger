@@ -14,8 +14,9 @@ const supportedLanguages = Object.keys(translations) as Language[];
 let language = readLanguage();
 let scenario: DemoScenario = "existing";
 let state: FlowState = { kind: "ready" };
-type AccountState = "checking" | "not-configured" | "connection-error" | "signed-out" | "signed-in" | "logout-error";
+type AccountState = "checking" | "not-configured" | "connection-error" | "login-error" | "signed-out" | "signed-in" | "logout-error";
 let accountState: AccountState = "checking";
+let oauthReturnFailed = new URLSearchParams(window.location.search).get("login") === "error";
 let analysisTimer: number | undefined;
 let saveTimer: number | undefined;
 let photoSelectionVersion = 0;
@@ -30,16 +31,17 @@ function readLanguage(): Language {
 function t(key: TranslationKey): string { return translate(language, key); }
 
 function accountPanel(): string {
-  if (accountState === "checking") return `<section class="account-panel" aria-live="polite">${t("accountChecking")}</section>`;
-  if (accountState === "not-configured") return `<section class="account-panel" aria-live="polite">${t("accountUnavailable")}</section>`;
-  if (accountState === "connection-error") return `<section class="account-panel" aria-live="polite">${t("accountConnectionError")}</section>`;
+  if (accountState === "checking") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountChecking")}</section>`;
+  if (accountState === "not-configured") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountUnavailable")}</section>`;
+  if (accountState === "connection-error") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountConnectionError")}</section>`;
+  if (accountState === "login-error") return `<section class="account-panel" aria-live="polite"><p role="alert">${t("accountLoginError")}</p><a class="account-button" id="osm-sign-in" href="/api/auth/osm/start">${t("accountSignIn")}</a></section>`;
   if (accountState === "signed-in") {
     return `<section class="account-panel" aria-live="polite"><div><strong>${t("accountSignedIn")}</strong><p>${t("accountIdentityOnly")}</p></div><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>`;
   }
   if (accountState === "logout-error") {
     return `<section class="account-panel" aria-live="polite"><span>${t("accountSignOutError")}</span><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>`;
   }
-  return `<section class="account-panel"><a class="account-button" href="/api/auth/osm/start">${t("accountSignIn")}</a><p>${t("accountIdentityOnly")}</p></section>`;
+  return `<section class="account-panel"><a class="account-button" id="osm-sign-in" href="/api/auth/osm/start">${t("accountSignIn")}</a><p>${t("accountIdentityOnly")}</p></section>`;
 }
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
@@ -155,7 +157,7 @@ function bindAccountPanel(): void {
   app!.querySelector<HTMLButtonElement>("#osm-sign-out")?.addEventListener("click", () => { void signOutFromOSM(); });
 }
 
-function updateAccountPanel(): void {
+function updateAccountPanel(focusSelector?: string): void {
   const currentPanel = app!.querySelector(".account-panel");
   if (!currentPanel) return;
   const replacement = document.createElement("div");
@@ -164,28 +166,40 @@ function updateAccountPanel(): void {
   if (!nextPanel) return;
   currentPanel.replaceWith(nextPanel);
   bindAccountPanel();
+  if (focusSelector) {
+    const focusTarget = nextPanel instanceof HTMLElement && nextPanel.matches(focusSelector) ? nextPanel : nextPanel.querySelector<HTMLElement>(focusSelector);
+    if (focusTarget) focusTarget.focus();
+    else if (nextPanel instanceof HTMLElement) nextPanel.focus();
+  }
 }
 
-async function refreshAccountState(): Promise<void> {
+async function refreshAccountState(focusSelector?: string): Promise<void> {
   try {
     const status = await loadOSMSession();
-    accountState = status.authenticated ? "signed-in" : status.loginAvailable ? "signed-out" : "not-configured";
+    const failedOAuthReturn = oauthReturnFailed;
+    if (failedOAuthReturn) {
+      oauthReturnFailed = false;
+      const returnUrl = new URL(window.location.href);
+      returnUrl.searchParams.delete("login");
+      history.replaceState(null, "", `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`);
+    }
+    accountState = status.authenticated ? "signed-in" : !status.loginAvailable ? "not-configured" : failedOAuthReturn ? "login-error" : "signed-out";
   } catch {
     // Local Vite previews and an unavailable Worker must not imply that an OSM session exists.
     accountState = "connection-error";
   }
-  updateAccountPanel();
+  updateAccountPanel(focusSelector);
 }
 
 async function signOutFromOSM(): Promise<void> {
   accountState = "checking";
-  updateAccountPanel();
+  updateAccountPanel(".account-panel");
   try {
     await endOSMSession();
-    await refreshAccountState();
+    await refreshAccountState("#osm-sign-in");
   } catch {
     accountState = "logout-error";
-    updateAccountPanel();
+    updateAccountPanel("#osm-sign-out");
   }
 }
 
