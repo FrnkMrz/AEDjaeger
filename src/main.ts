@@ -33,8 +33,8 @@ function t(key: TranslationKey): string { return translate(language, key); }
 function accountPanel(): string {
   if (accountState === "checking") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountChecking")}</section>`;
   if (accountState === "not-configured") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountUnavailable")}</section>`;
-  if (accountState === "connection-error") return `<section class="account-panel" aria-live="polite"><span>${t("accountConnectionError")}</span><button class="account-button" id="osm-session-retry" type="button">${t("accountRetry")}</button></section>`;
-  if (hasUnresolvedSave(state) && accountState !== "signed-in") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountLoginBlocked")}</section>`;
+  if (accountState === "connection-error") return `<section class="account-panel" aria-live="polite" tabindex="-1"><span>${t("accountConnectionError")}</span><button class="account-button" id="osm-session-retry" type="button">${t("accountRetry")}</button></section>`;
+  if (hasActivePhotoDraft(state) && accountState !== "signed-in") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountLoginBlocked")}</section>`;
   if (accountState === "login-error") return `<section class="account-panel" aria-live="polite"><p role="alert">${t("accountLoginError")}</p><a class="account-button" id="osm-sign-in" href="/api/auth/osm/start">${t("accountSignIn")}</a></section>`;
   if (accountState === "signed-in") {
     return `<section class="account-panel" aria-live="polite"><div><strong>${t("accountSignedIn")}</strong><p>${t("accountIdentityOnly")}</p></div><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>`;
@@ -54,6 +54,10 @@ function getPhotoUrl(current: FlowState): string | undefined {
 
 function hasUnresolvedSave(current: FlowState): boolean {
   return current.kind === "sending" || current.kind === "checking-status" || current.kind === "unclear-error";
+}
+
+function hasActivePhotoDraft(current: FlowState): boolean {
+  return current.kind !== "ready" && current.kind !== "saved";
 }
 
 function statusContent(): string {
@@ -190,7 +194,11 @@ async function refreshAccountState(focusSelector?: string): Promise<void> {
     // Local Vite previews and an unavailable Worker must not imply that an OSM session exists.
     accountState = "connection-error";
   }
-  updateAccountPanel(focusSelector);
+  const nextActionSelector = accountState === "connection-error" ? "#osm-session-retry"
+    : accountState === "signed-in" ? "#osm-sign-out"
+      : accountState === "signed-out" || accountState === "login-error" ? "#osm-sign-in"
+        : ".account-panel";
+  updateAccountPanel(focusSelector === "next-action" ? nextActionSelector : focusSelector);
 }
 
 async function signOutFromOSM(): Promise<void> {
@@ -198,7 +206,7 @@ async function signOutFromOSM(): Promise<void> {
   updateAccountPanel(".account-panel");
   try {
     await endOSMSession();
-    await refreshAccountState("#osm-sign-in");
+    await refreshAccountState("next-action");
   } catch {
     accountState = "logout-error";
     updateAccountPanel("#osm-sign-out");
@@ -208,7 +216,7 @@ async function signOutFromOSM(): Promise<void> {
 async function retryOSMSessionStatus(): Promise<void> {
   accountState = "checking";
   updateAccountPanel(".account-panel");
-  await refreshAccountState("#osm-sign-in");
+  await refreshAccountState("next-action");
 }
 
 function focusCurrentState(): void {

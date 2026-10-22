@@ -110,13 +110,29 @@ test("the login cannot discard an unclear save and returns after recovery", asyn
   await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
 
   await expect(page.getByRole("heading", { name: "Ergebnis noch unklar" })).toBeVisible();
-  await expect(page.locator(".account-panel")).toContainText("Klär zuerst den offenen Speichervorgang");
+  await expect(page.locator(".account-panel")).toContainText("Schließe den aktuellen Fotoablauf ab");
   await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toHaveCount(0);
   await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
 
   await page.getByRole("button", { name: "Vorgangsstatus prüfen" }).click();
   await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toBeVisible();
   await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+});
+
+test("the login stays unavailable while a selected photo or proposal is active", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
+  await page.goto("/");
+  await page.getByText("Vorschau testen", { exact: true }).click();
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+
+  await expect(page.locator(".account-panel")).toContainText("Schließe den aktuellen Fotoablauf ab");
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Foto und Umgebung prüfen" }).click();
+  await expect(page.getByRole("heading", { name: "AED gefunden" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Anderes Foto" }).click();
+
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toBeVisible();
 });
 
 test("a session status connection error can be retried without losing the selected photo", async ({ page }) => {
@@ -135,8 +151,20 @@ test("a session status connection error can be retried without losing the select
 
   await page.getByRole("button", { name: "Erneut prüfen" }).click();
 
-  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toBeVisible();
+  await expect(page.locator(".account-panel")).toContainText("Schließe den aktuellen Fotoablauf ab");
+  await expect(page.getByRole("button", { name: "Erneut prüfen" })).toHaveCount(0);
   await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+  await page.getByRole("button", { name: "Anderes Foto" }).click();
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toBeVisible();
+});
+
+test("a repeated session status error focuses the retry action", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ status: 503, json: { error: "session_unavailable" } }));
+  await page.goto("/");
+  const retry = page.getByRole("button", { name: "Erneut prüfen" });
+  await retry.click();
+
+  await expect(retry).toBeFocused();
 });
 
 test("keyboard focus indicators use a high-contrast color throughout the controls", async ({ page }) => {
