@@ -33,7 +33,7 @@ function t(key: TranslationKey): string { return translate(language, key); }
 function accountPanel(): string {
   if (accountState === "checking") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountChecking")}</section>`;
   if (accountState === "not-configured") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountUnavailable")}</section>`;
-  if (accountState === "connection-error") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountConnectionError")}</section>`;
+  if (accountState === "connection-error") return `<section class="account-panel" aria-live="polite"><span>${t("accountConnectionError")}</span><button class="account-button" id="osm-session-retry" type="button">${t("accountRetry")}</button></section>`;
   if (hasUnresolvedSave(state) && accountState !== "signed-in") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountLoginBlocked")}</section>`;
   if (accountState === "login-error") return `<section class="account-panel" aria-live="polite"><p role="alert">${t("accountLoginError")}</p><a class="account-button" id="osm-sign-in" href="/api/auth/osm/start">${t("accountSignIn")}</a></section>`;
   if (accountState === "signed-in") {
@@ -156,6 +156,7 @@ function render(restoreFlowFocus = false): void {
 
 function bindAccountPanel(): void {
   app!.querySelector<HTMLButtonElement>("#osm-sign-out")?.addEventListener("click", () => { void signOutFromOSM(); });
+  app!.querySelector<HTMLButtonElement>("#osm-session-retry")?.addEventListener("click", () => { void retryOSMSessionStatus(); });
 }
 
 function updateAccountPanel(focusSelector?: string): void {
@@ -202,6 +203,12 @@ async function signOutFromOSM(): Promise<void> {
     accountState = "logout-error";
     updateAccountPanel("#osm-sign-out");
   }
+}
+
+async function retryOSMSessionStatus(): Promise<void> {
+  accountState = "checking";
+  updateAccountPanel(".account-panel");
+  await refreshAccountState("#osm-sign-in");
 }
 
 function focusCurrentState(): void {

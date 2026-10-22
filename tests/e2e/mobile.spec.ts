@@ -119,6 +119,26 @@ test("the login cannot discard an unclear save and returns after recovery", asyn
   await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
 });
 
+test("a session status connection error can be retried without losing the selected photo", async ({ page }) => {
+  let checks = 0;
+  await page.route("**/api/auth/session", (route) => {
+    checks += 1;
+    return checks === 1
+      ? route.fulfill({ status: 503, json: { error: "session_unavailable" } })
+      : route.fulfill({ json: { authenticated: false, loginAvailable: true } });
+  });
+  await page.goto("/");
+  await expect(page.locator(".account-panel")).toContainText("Anmeldung ist gerade nicht erreichbar");
+  await page.getByText("Vorschau testen", { exact: true }).click();
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Erneut prüfen" }).click();
+
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+});
+
 test("keyboard focus indicators use a high-contrast color throughout the controls", async ({ page }) => {
   await page.goto("/");
   await page.getByText("Vorschau testen", { exact: true }).focus();
