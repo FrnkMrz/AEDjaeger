@@ -82,6 +82,12 @@ h1 { margin-bottom: 12px; font: 800 clamp(30px, 8vw, 43px)/1.14 "Noto Sans", sys
 .spinner { width: 19px; height: 19px; border: 2px solid #dce9de; border-top-color: var(--green); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 footer { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 28px 0 max(22px, env(safe-area-inset-bottom)); color: #626d66; font-size: 12px; }
+.account-panel { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 14px; margin: 0 0 18px; border: 1px solid #e5e9e3; border-radius: 14px; padding: 11px 14px; color: #57645d; background: #fff; font-size: 12px; text-align: center; }
+.account-panel > div { flex: 1 1 180px; }
+.account-panel strong { color: #27523d; }
+.account-panel p { margin: 4px 0 0; line-height: 1.45; }
+.account-button { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #dbe7dd; border-radius: 10px; padding: 7px 11px; color: #27523d; background: #f5f8f4; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+.account-button:focus-visible { outline: 3px solid #176b4b; outline-offset: 2px; }
 .footer-symbol { color: #75a184; font-size: 16px; }
 .demo-badge { margin-left: 3px; border: 1px solid #dce4dc; border-radius: 5px; padding: 2px 5px; color: #626d66; font-size: 9px; font-weight: 700; letter-spacing: .06em; }
 .info-dialog { width: min(540px, calc(100% - 28px)); max-width: none; max-height: min(86dvh, 780px); overflow: hidden; border: 1px solid #e0e8df; border-radius: 24px; padding: 0; color: var(--ink); background: #fff; box-shadow: 0 24px 80px #14251b35; }

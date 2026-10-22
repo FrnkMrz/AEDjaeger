@@ -1,4 +1,5 @@
 import "./styles.css";
+import { endOSMSession, loadOSMSession } from "./auth/osmSession";
 import { analysisResult, chooseCandidate, confirmationResult, recoveryResult, type CandidateId, type DemoScenario, type FlowState } from "./domain/workflow";
 import { translate, translations, type Language, type TranslationKey } from "./i18n/translations";
 
@@ -13,9 +14,13 @@ const supportedLanguages = Object.keys(translations) as Language[];
 let language = readLanguage();
 let scenario: DemoScenario = "existing";
 let state: FlowState = { kind: "ready" };
+type AccountState = "checking" | "not-configured" | "connection-error" | "login-error" | "signed-out" | "signed-in" | "logout-error";
+let accountState: AccountState = "checking";
+let oauthReturnFailed = new URLSearchParams(window.location.search).get("login") === "error";
 let analysisTimer: number | undefined;
 let saveTimer: number | undefined;
 let photoSelectionVersion = 0;
+let photoSelectionPending = false;
 
 function readLanguage(): Language {
   const saved = localStorage.getItem("aedjaeger-language");
@@ -25,6 +30,21 @@ function readLanguage(): Language {
 }
 
 function t(key: TranslationKey): string { return translate(language, key); }
+
+function accountPanel(): string {
+  if (accountState === "checking") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountChecking")}</section>`;
+  if (accountState === "not-configured") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountUnavailable")}</section>`;
+  if (accountState === "connection-error") return `<section class="account-panel" aria-live="polite" tabindex="-1"><span>${t("accountConnectionError")}</span><button class="account-button" id="osm-session-retry" type="button">${t("accountRetry")}</button></section>`;
+  if ((photoSelectionPending || hasActivePhotoDraft(state)) && accountState !== "signed-in") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountLoginBlocked")}</section>`;
+  if (accountState === "login-error") return `<section class="account-panel" aria-live="polite"><p role="alert">${t("accountLoginError")}</p><a class="account-button" id="osm-sign-in" href="/api/auth/osm/start">${t("accountSignIn")}</a></section>`;
+  if (accountState === "signed-in") {
+    return `<section class="account-panel" aria-live="polite"><div><strong>${t("accountSignedIn")}</strong><p>${t("accountIdentityOnly")}</p></div><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>`;
+  }
+  if (accountState === "logout-error") {
+    return `<section class="account-panel" aria-live="polite"><span>${t("accountSignOutError")}</span><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>`;
+  }
+  return `<section class="account-panel"><a class="account-button" id="osm-sign-in" href="/api/auth/osm/start">${t("accountSignIn")}</a><p>${t("accountIdentityOnly")}</p></section>`;
+}
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
 }
@@ -35,6 +55,10 @@ function getPhotoUrl(current: FlowState): string | undefined {
 
 function hasUnresolvedSave(current: FlowState): boolean {
   return current.kind === "sending" || current.kind === "checking-status" || current.kind === "unclear-error";
+}
+
+function hasActivePhotoDraft(current: FlowState): boolean {
+  return current.kind !== "ready" && current.kind !== "saved";
 }
 
 function statusContent(): string {
@@ -88,6 +112,7 @@ function render(restoreFlowFocus = false): void {
           ${isReady ? `<details class="demo-panel"><summary>${t("demo")}</summary><label for="scenario">${t("scenario")}</label><select id="scenario">${(Object.keys(scenarioKeys) as DemoScenario[]).map((key) => `<option value="${key}" ${scenario === key ? "selected" : ""}>${t(scenarioKeys[key])}</option>`).join("")}</select></details>` : ""}
         </section>
       </main>
+      ${accountPanel()}
       <footer><span class="footer-symbol" aria-hidden="true">✳</span><span>${t("sourceNote")}</span><span class="demo-badge">DEMO</span></footer>
       <dialog class="info-dialog" id="info-dialog" aria-labelledby="info-title" aria-describedby="info-intro">
         <div class="info-dialog-content">
@@ -129,8 +154,70 @@ function render(restoreFlowFocus = false): void {
   document.querySelector<HTMLInputElement>("#camera-input")?.addEventListener("change", onPhotoSelected);
   document.querySelector<HTMLInputElement>("#file-input")?.addEventListener("change", onPhotoSelected);
   document.querySelectorAll<HTMLElement>("[data-action]").forEach((button) => button.addEventListener("click", () => handleAction(button.dataset.action)));
+  bindAccountPanel();
 
   if (restoreFlowFocus) focusCurrentState();
+}
+
+function bindAccountPanel(): void {
+  app!.querySelector<HTMLButtonElement>("#osm-sign-out")?.addEventListener("click", () => { void signOutFromOSM(); });
+  app!.querySelector<HTMLButtonElement>("#osm-session-retry")?.addEventListener("click", () => { void retryOSMSessionStatus(); });
+}
+
+function updateAccountPanel(focusSelector?: string): void {
+  const currentPanel = app!.querySelector(".account-panel");
+  if (!currentPanel) return;
+  const replacement = document.createElement("div");
+  replacement.innerHTML = accountPanel();
+  const nextPanel = replacement.firstElementChild;
+  if (!nextPanel) return;
+  currentPanel.replaceWith(nextPanel);
+  bindAccountPanel();
+  if (focusSelector) {
+    const focusTarget = nextPanel instanceof HTMLElement && nextPanel.matches(focusSelector) ? nextPanel : nextPanel.querySelector<HTMLElement>(focusSelector);
+    if (focusTarget) focusTarget.focus();
+    else if (nextPanel instanceof HTMLElement) nextPanel.focus();
+  }
+}
+
+async function refreshAccountState(focusSelector?: string): Promise<void> {
+  try {
+    const status = await loadOSMSession();
+    const failedOAuthReturn = oauthReturnFailed;
+    if (failedOAuthReturn) {
+      oauthReturnFailed = false;
+      const returnUrl = new URL(window.location.href);
+      returnUrl.searchParams.delete("login");
+      history.replaceState(null, "", `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`);
+    }
+    accountState = status.authenticated ? "signed-in" : !status.loginAvailable ? "not-configured" : failedOAuthReturn ? "login-error" : "signed-out";
+  } catch {
+    // Local Vite previews and an unavailable Worker must not imply that an OSM session exists.
+    accountState = "connection-error";
+  }
+  const nextActionSelector = accountState === "connection-error" ? "#osm-session-retry"
+    : accountState === "signed-in" ? "#osm-sign-out"
+      : accountState === "signed-out" || accountState === "login-error" ? "#osm-sign-in"
+        : ".account-panel";
+  updateAccountPanel(focusSelector === "next-action" ? nextActionSelector : focusSelector);
+}
+
+async function signOutFromOSM(): Promise<void> {
+  accountState = "checking";
+  updateAccountPanel(".account-panel");
+  try {
+    await endOSMSession();
+    await refreshAccountState("next-action");
+  } catch {
+    accountState = "logout-error";
+    updateAccountPanel("#osm-sign-out");
+  }
+}
+
+async function retryOSMSessionStatus(): Promise<void> {
+  accountState = "checking";
+  updateAccountPanel(".account-panel");
+  await refreshAccountState("next-action");
 }
 
 function focusCurrentState(): void {
@@ -160,7 +247,12 @@ async function onPhotoSelected(event: Event): Promise<void> {
   const file = input.files?.[0];
   if (!file) return;
   const selectionVersion = ++photoSelectionVersion;
+  // Block OAuth as soon as the chooser returns a file; decoding can take long enough to lose it.
+  photoSelectionPending = true;
+  updateAccountPanel();
   if (!file.type.startsWith("image/")) {
+    photoSelectionPending = false;
+    updateAccountPanel();
     window.alert(t("cameraError"));
     return;
   }
@@ -173,7 +265,11 @@ async function onPhotoSelected(event: Event): Promise<void> {
     await image.decode();
   } catch {
     URL.revokeObjectURL(photoUrl);
-    if (selectionVersion === photoSelectionVersion) window.alert(t("cameraError"));
+    if (selectionVersion === photoSelectionVersion) {
+      photoSelectionPending = false;
+      updateAccountPanel();
+      window.alert(t("cameraError"));
+    }
     return;
   }
   if (selectionVersion !== photoSelectionVersion) {
@@ -181,6 +277,7 @@ async function onPhotoSelected(event: Event): Promise<void> {
     return;
   }
 
+  photoSelectionPending = false;
   clearTimers();
   releasePhoto();
   state = { kind: "photo", photoUrl };
@@ -239,6 +336,7 @@ function releasePhoto(): void {
 }
 
 render();
+void refreshAccountState();
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", () => {
     // Every build gets a new worker URL, including deployments that only change the HTML, manifest or icon.

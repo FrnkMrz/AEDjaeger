@@ -31,6 +31,162 @@ test("changing the UI language keeps keyboard focus on the language selector", a
   await expect(page.locator("html")).toHaveAttribute("lang", "fr");
 });
 
+test("the OSM login is offered only when configured and is localized in all six languages", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto("/");
+
+  const expectedLabels = [
+    "Mit OpenStreetMap anmelden",
+    "Sign in with OpenStreetMap",
+    "Zaloguj się przez OpenStreetMap",
+    "OpenStreetMapでログイン",
+    "Se connecter avec OpenStreetMap",
+    "Iniciar sesión con OpenStreetMap",
+  ];
+
+  for (const [index, language] of languageCodes.entries()) {
+    await page.locator("#language").selectOption(language);
+    const signIn = page.getByRole("link", { name: expectedLabels[index] });
+    await expect(signIn).toHaveAttribute("href", "/api/auth/osm/start");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `horizontal page overflow in ${language}`).toBeLessThanOrEqual(320);
+    await expect(page.locator(".account-panel")).toContainText(language === "de" ? "Änderungen an OpenStreetMap" : "OpenStreetMap");
+  }
+});
+
+test("the OSM login link stays hidden when the Worker has no OAuth setup", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: false } }));
+  await page.goto("/");
+
+  await expect(page.locator(".account-panel")).toContainText("OpenStreetMap-Anmeldung ist noch nicht eingerichtet");
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toHaveCount(0);
+});
+
+test("an authenticated user can end the OSM session without exposing profile data", async ({ page }) => {
+  let authenticated = true;
+  page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated, loginAvailable: true } }));
+  page.route("**/api/auth/logout", async (route) => {
+    expect(route.request().method()).toBe("POST");
+    authenticated = false;
+    await route.fulfill({ status: 204 });
+  });
+  await page.goto("/");
+
+  await expect(page.locator(".account-panel")).toContainText("Mit OpenStreetMap verbunden");
+  await expect(page.locator(".account-panel")).toContainText("Änderungen an OpenStreetMap sind noch deaktiviert");
+  await page.getByRole("button", { name: "Abmelden" }).click();
+  const signIn = page.getByRole("link", { name: "Mit OpenStreetMap anmelden" });
+  await expect(signIn).toBeFocused();
+});
+
+test("a failed OAuth return shows a localized retry message and removes the callback marker", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
+  await page.goto("/?login=error");
+
+  const errors = [
+    "Die OpenStreetMap-Anmeldung ist fehlgeschlagen oder abgelaufen. Bitte versuche es erneut.",
+    "OpenStreetMap sign-in failed or expired. Please try again.",
+    "Logowanie OpenStreetMap nie powiodło się lub wygasło. Spróbuj ponownie.",
+    "OpenStreetMapへのログインに失敗したか、期限切れです。もう一度お試しください。",
+    "La connexion OpenStreetMap a échoué ou expiré. Veuillez réessayer.",
+    "El acceso a OpenStreetMap falló o caducó. Inténtalo de nuevo.",
+  ];
+
+  for (const [index, language] of languageCodes.entries()) {
+    await page.locator("#language").selectOption(language);
+    await expect(page.locator(".account-panel")).toContainText(errors[index]);
+    await expect(page.getByRole("link", { name: ["Mit OpenStreetMap anmelden", "Sign in with OpenStreetMap", "Zaloguj się przez OpenStreetMap", "OpenStreetMapでログイン", "Se connecter avec OpenStreetMap", "Iniciar sesión con OpenStreetMap"][index] })).toHaveAttribute("href", "/api/auth/osm/start");
+  }
+  await expect(page).not.toHaveURL(/login=error/u);
+});
+
+test("the login cannot discard an unclear save and returns after recovery", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
+  await page.goto("/");
+  await page.getByText("Vorschau testen", { exact: true }).click();
+  await page.locator("#scenario").selectOption("upload-unclear");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Foto und Umgebung prüfen" }).click();
+  await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
+
+  await expect(page.getByRole("heading", { name: "Ergebnis noch unklar" })).toBeVisible();
+  await expect(page.locator(".account-panel")).toContainText("Schließe den aktuellen Fotoablauf ab");
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toHaveCount(0);
+  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Vorgangsstatus prüfen" }).click();
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+});
+
+test("the login stays unavailable while a selected photo or proposal is active", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
+  await page.goto("/");
+  await page.getByText("Vorschau testen", { exact: true }).click();
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+
+  await expect(page.locator(".account-panel")).toContainText("Schließe den aktuellen Fotoablauf ab");
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Foto und Umgebung prüfen" }).click();
+  await expect(page.getByRole("heading", { name: "AED gefunden" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Anderes Foto" }).click();
+
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toBeVisible();
+});
+
+test("the login is blocked immediately while a selected photo is still decoding", async ({ page }) => {
+  await page.addInitScript(() => {
+    let finishDecode: (() => void) | undefined;
+    Object.defineProperty(window, "finishPhotoDecodeForTest", { value: () => finishDecode?.() });
+    HTMLImageElement.prototype.decode = function () {
+      if (this.src.startsWith("blob:")) return new Promise<void>((resolve) => { finishDecode = resolve; });
+      return Promise.resolve();
+    };
+  });
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
+  await page.goto("/");
+  await page.getByText("Vorschau testen", { exact: true }).click();
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+
+  await expect(page.locator(".account-panel")).toContainText("Schließe den aktuellen Fotoablauf ab");
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toHaveCount(0);
+  await page.evaluate(() => (window as unknown as Window & { finishPhotoDecodeForTest: () => void }).finishPhotoDecodeForTest());
+  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+});
+
+test("a session status connection error can be retried without losing the selected photo", async ({ page }) => {
+  let checks = 0;
+  await page.route("**/api/auth/session", (route) => {
+    checks += 1;
+    return checks === 1
+      ? route.fulfill({ status: 503, json: { error: "session_unavailable" } })
+      : route.fulfill({ json: { authenticated: false, loginAvailable: true } });
+  });
+  await page.goto("/");
+  await expect(page.locator(".account-panel")).toContainText("Anmeldung ist gerade nicht erreichbar");
+  await page.getByText("Vorschau testen", { exact: true }).click();
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Erneut prüfen" }).click();
+
+  await expect(page.locator(".account-panel")).toContainText("Schließe den aktuellen Fotoablauf ab");
+  await expect(page.getByRole("button", { name: "Erneut prüfen" })).toHaveCount(0);
+  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+  await page.getByRole("button", { name: "Anderes Foto" }).click();
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toBeVisible();
+});
+
+test("a repeated session status error focuses the retry action", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ status: 503, json: { error: "session_unavailable" } }));
+  await page.goto("/");
+  const retry = page.getByRole("button", { name: "Erneut prüfen" });
+  await retry.click();
+
+  await expect(retry).toBeFocused();
+});
+
 test("keyboard focus indicators use a high-contrast color throughout the controls", async ({ page }) => {
   await page.goto("/");
   await page.getByText("Vorschau testen", { exact: true }).focus();
