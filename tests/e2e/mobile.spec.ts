@@ -100,6 +100,25 @@ test("a failed OAuth return shows a localized retry message and removes the call
   await expect(page).not.toHaveURL(/login=error/u);
 });
 
+test("the login cannot discard an unclear save and returns after recovery", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
+  await page.goto("/");
+  await page.getByText("Vorschau testen", { exact: true }).click();
+  await page.locator("#scenario").selectOption("upload-unclear");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Foto und Umgebung prüfen" }).click();
+  await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
+
+  await expect(page.getByRole("heading", { name: "Ergebnis noch unklar" })).toBeVisible();
+  await expect(page.locator(".account-panel")).toContainText("Klär zuerst den offenen Speichervorgang");
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toHaveCount(0);
+  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Vorgangsstatus prüfen" }).click();
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+});
+
 test("keyboard focus indicators use a high-contrast color throughout the controls", async ({ page }) => {
   await page.goto("/");
   await page.getByText("Vorschau testen", { exact: true }).focus();

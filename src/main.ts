@@ -34,6 +34,7 @@ function accountPanel(): string {
   if (accountState === "checking") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountChecking")}</section>`;
   if (accountState === "not-configured") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountUnavailable")}</section>`;
   if (accountState === "connection-error") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountConnectionError")}</section>`;
+  if (hasUnresolvedSave(state) && accountState !== "signed-in") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountLoginBlocked")}</section>`;
   if (accountState === "login-error") return `<section class="account-panel" aria-live="polite"><p role="alert">${t("accountLoginError")}</p><a class="account-button" id="osm-sign-in" href="/api/auth/osm/start">${t("accountSignIn")}</a></section>`;
   if (accountState === "signed-in") {
     return `<section class="account-panel" aria-live="polite"><div><strong>${t("accountSignedIn")}</strong><p>${t("accountIdentityOnly")}</p></div><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>`;
