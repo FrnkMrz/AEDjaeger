@@ -34,6 +34,8 @@ Die [Dokumentation zu `check_date`](https://wiki.openstreetmap.org/wiki/Key:chec
 
 [Overpass](https://wiki.openstreetmap.org/wiki/Overpass_API) dient zum Lesen vorhandener Objekte. Schreibzugriffe laufen über die [OSM API v0.6](https://wiki.openstreetmap.org/wiki/API_v0.6) mit dem autorisierten Benutzerkonto. [OAuth 2.0 mit PKCE](https://wiki.openstreetmap.org/wiki/OAuth) ist dafür ein passender Ansatz.
 
+Die Worker-Anmeldung verwendet vorerst ausschließlich den OSM-Scope `openid`. Sie bestätigt die OSM-Identität, speichert aber keinen OSM-Zugriffstoken und kann daher keine Kartendaten ändern. Für spätere Schreibtests müssen die OSM-Anwendung und ihr ausdrücklich freigegebener Scope separat eingerichtet werden; der erste produktive Schreibtest darf nicht gegen OpenStreetMap laufen. Die OSM-Dokumentation nennt für Production die Autorisierungs- und Token-Endpunkte auf `www.openstreetmap.org` und unterstützt Authorization Code mit PKCE. [OSM OAuth-Dokumentation](https://wiki.openstreetmap.org/wiki/OAuth)
+
 Beispiel zum Erkunden eines sichtbaren Ausschnitts in [Overpass Turbo](https://overpass-turbo.eu/), hier nur als Recherchehilfe, nicht als getestete App-Implementierung:
 
 ```overpass
