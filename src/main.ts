@@ -1,4 +1,5 @@
 import "./styles.css";
+import { endOSMSession, loadOSMSession } from "./auth/osmSession";
 import { analysisResult, chooseCandidate, confirmationResult, recoveryResult, type CandidateId, type DemoScenario, type FlowState } from "./domain/workflow";
 import { translate, translations, type Language, type TranslationKey } from "./i18n/translations";
 
@@ -13,6 +14,8 @@ const supportedLanguages = Object.keys(translations) as Language[];
 let language = readLanguage();
 let scenario: DemoScenario = "existing";
 let state: FlowState = { kind: "ready" };
+type AccountState = "checking" | "not-configured" | "connection-error" | "signed-out" | "signed-in" | "logout-error";
+let accountState: AccountState = "checking";
 let analysisTimer: number | undefined;
 let saveTimer: number | undefined;
 let photoSelectionVersion = 0;
@@ -25,6 +28,19 @@ function readLanguage(): Language {
 }
 
 function t(key: TranslationKey): string { return translate(language, key); }
+
+function accountPanel(): string {
+  if (accountState === "checking") return `<section class="account-panel" aria-live="polite">${t("accountChecking")}</section>`;
+  if (accountState === "not-configured") return `<section class="account-panel" aria-live="polite">${t("accountUnavailable")}</section>`;
+  if (accountState === "connection-error") return `<section class="account-panel" aria-live="polite">${t("accountConnectionError")}</section>`;
+  if (accountState === "signed-in") {
+    return `<section class="account-panel" aria-live="polite"><div><strong>${t("accountSignedIn")}</strong><p>${t("accountIdentityOnly")}</p></div><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>`;
+  }
+  if (accountState === "logout-error") {
+    return `<section class="account-panel" aria-live="polite"><span>${t("accountSignOutError")}</span><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>`;
+  }
+  return `<section class="account-panel"><a class="account-button" href="/api/auth/osm/start">${t("accountSignIn")}</a><p>${t("accountIdentityOnly")}</p></section>`;
+}
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
 }
@@ -88,6 +104,7 @@ function render(restoreFlowFocus = false): void {
           ${isReady ? `<details class="demo-panel"><summary>${t("demo")}</summary><label for="scenario">${t("scenario")}</label><select id="scenario">${(Object.keys(scenarioKeys) as DemoScenario[]).map((key) => `<option value="${key}" ${scenario === key ? "selected" : ""}>${t(scenarioKeys[key])}</option>`).join("")}</select></details>` : ""}
         </section>
       </main>
+      ${accountPanel()}
       <footer><span class="footer-symbol" aria-hidden="true">✳</span><span>${t("sourceNote")}</span><span class="demo-badge">DEMO</span></footer>
       <dialog class="info-dialog" id="info-dialog" aria-labelledby="info-title" aria-describedby="info-intro">
         <div class="info-dialog-content">
@@ -129,8 +146,47 @@ function render(restoreFlowFocus = false): void {
   document.querySelector<HTMLInputElement>("#camera-input")?.addEventListener("change", onPhotoSelected);
   document.querySelector<HTMLInputElement>("#file-input")?.addEventListener("change", onPhotoSelected);
   document.querySelectorAll<HTMLElement>("[data-action]").forEach((button) => button.addEventListener("click", () => handleAction(button.dataset.action)));
+  bindAccountPanel();
 
   if (restoreFlowFocus) focusCurrentState();
+}
+
+function bindAccountPanel(): void {
+  app!.querySelector<HTMLButtonElement>("#osm-sign-out")?.addEventListener("click", () => { void signOutFromOSM(); });
+}
+
+function updateAccountPanel(): void {
+  const currentPanel = app!.querySelector(".account-panel");
+  if (!currentPanel) return;
+  const replacement = document.createElement("div");
+  replacement.innerHTML = accountPanel();
+  const nextPanel = replacement.firstElementChild;
+  if (!nextPanel) return;
+  currentPanel.replaceWith(nextPanel);
+  bindAccountPanel();
+}
+
+async function refreshAccountState(): Promise<void> {
+  try {
+    const status = await loadOSMSession();
+    accountState = status.authenticated ? "signed-in" : status.loginAvailable ? "signed-out" : "not-configured";
+  } catch {
+    // Local Vite previews and an unavailable Worker must not imply that an OSM session exists.
+    accountState = "connection-error";
+  }
+  updateAccountPanel();
+}
+
+async function signOutFromOSM(): Promise<void> {
+  accountState = "checking";
+  updateAccountPanel();
+  try {
+    await endOSMSession();
+    await refreshAccountState();
+  } catch {
+    accountState = "logout-error";
+    updateAccountPanel();
+  }
 }
 
 function focusCurrentState(): void {
@@ -239,6 +295,7 @@ function releasePhoto(): void {
 }
 
 render();
+void refreshAccountState();
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", () => {
     // Every build gets a new worker URL, including deployments that only change the HTML, manifest or icon.

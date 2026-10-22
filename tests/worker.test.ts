@@ -101,7 +101,7 @@ describe("Cloudflare Worker shell", () => {
     }), env);
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ authenticated: false });
+    expect(await response.json()).toEqual({ authenticated: false, loginAvailable: false });
     expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
 

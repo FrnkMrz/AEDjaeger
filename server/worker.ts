@@ -127,10 +127,11 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment):
 
 async function getSession(request: Request, environment: WorkerEnvironment): Promise<Response> {
   const token = readCookie(request.headers.get("Cookie"), SESSION_COOKIE);
-  if (!token || !environment.DB) return jsonResponse({ authenticated: false }, 200);
+  const loginAvailable = Boolean(getAuthConfiguration(environment) && environment.DB);
+  if (!token || !environment.DB) return jsonResponse({ authenticated: false, loginAvailable }, 200);
   try {
     const session = await findOSMSession(environment.DB, token, Date.now());
-    return jsonResponse({ authenticated: session !== null }, 200);
+    return jsonResponse({ authenticated: session !== null, loginAvailable }, 200);
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }

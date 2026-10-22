@@ -31,6 +31,53 @@ test("changing the UI language keeps keyboard focus on the language selector", a
   await expect(page.locator("html")).toHaveAttribute("lang", "fr");
 });
 
+test("the OSM login is offered only when configured and is localized in all six languages", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto("/");
+
+  const expectedLabels = [
+    "Mit OpenStreetMap anmelden",
+    "Sign in with OpenStreetMap",
+    "Zaloguj się przez OpenStreetMap",
+    "OpenStreetMapでログイン",
+    "Se connecter avec OpenStreetMap",
+    "Iniciar sesión con OpenStreetMap",
+  ];
+
+  for (const [index, language] of languageCodes.entries()) {
+    await page.locator("#language").selectOption(language);
+    const signIn = page.getByRole("link", { name: expectedLabels[index] });
+    await expect(signIn).toHaveAttribute("href", "/api/auth/osm/start");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `horizontal page overflow in ${language}`).toBeLessThanOrEqual(320);
+    await expect(page.locator(".account-panel")).toContainText(language === "de" ? "Änderungen an OpenStreetMap" : "OpenStreetMap");
+  }
+});
+
+test("the OSM login link stays hidden when the Worker has no OAuth setup", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: false } }));
+  await page.goto("/");
+
+  await expect(page.locator(".account-panel")).toContainText("OpenStreetMap-Anmeldung ist noch nicht eingerichtet");
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toHaveCount(0);
+});
+
+test("an authenticated user can end the OSM session without exposing profile data", async ({ page }) => {
+  let authenticated = true;
+  page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated, loginAvailable: true } }));
+  page.route("**/api/auth/logout", async (route) => {
+    expect(route.request().method()).toBe("POST");
+    authenticated = false;
+    await route.fulfill({ status: 204 });
+  });
+  await page.goto("/");
+
+  await expect(page.locator(".account-panel")).toContainText("Mit OpenStreetMap verbunden");
+  await expect(page.locator(".account-panel")).toContainText("Änderungen an OpenStreetMap sind noch deaktiviert");
+  await page.getByRole("button", { name: "Abmelden" }).click();
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toBeVisible();
+});
+
 test("keyboard focus indicators use a high-contrast color throughout the controls", async ({ page }) => {
   await page.goto("/");
   await page.getByText("Vorschau testen", { exact: true }).focus();

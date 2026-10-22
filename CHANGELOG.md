@@ -20,6 +20,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Added
 
+- Verbindet die PWA mit dem OSM-Sitzungsstatus und zeigt Login oder Abmeldung erst bei konfigurierter Worker-Anmeldung an; alle sechs Sprachen weisen darauf hin, dass der Login nur die Identität bestätigt und OSM-Änderungen deaktiviert bleiben.
 - Bindet die Cloudflare-D1-Pilotdatenbank ein; `aedjaeger-pilot` wurde im Cloudflare-Konto angelegt und mit den drei vorhandenen Schema-Migrationen initialisiert. Ein Paid-Tarif wurde nicht aktiviert und ein Worker-Deployment ist nicht enthalten.
 
 - Ergänzt OSM-Loginrouten für PKCE-Codeaustausch, OIDC-ID-Tokenprüfung, Sitzungsabfrage und Abmeldung. Der Login nutzt nur `openid`, legt keinen OSM-Zugriffstoken ab und ist noch nicht mit der App-Oberfläche verbunden.
