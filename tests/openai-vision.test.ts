@@ -137,6 +137,25 @@ describe("server-side GPT-6 Luna vision adapter", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it("rejects JPEG and WebP containers with excessive segment counts before calling the provider", async () => {
+    const jpegSegments = [0xff, 0xd8];
+    for (let index = 0; index < 4_097; index += 1) jpegSegments.push(0xff, 0xe0, 0x00, 0x02);
+
+    const webpChunks = [0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50];
+    for (let index = 0; index < 4_097; index += 1) webpChunks.push(0x4a, 0x55, 0x4e, 0x4b, 0x00, 0x00, 0x00, 0x00);
+    webpChunks.push(0x56, 0x50, 0x38, 0x20, 0x0a, 0, 0, 0, 0, 0, 0, 0x9d, 1, 0x2a, 1, 0, 1, 0);
+    const riffSize = webpChunks.length - 8;
+    webpChunks[4] = riffSize & 0xff;
+    webpChunks[5] = (riffSize >>> 8) & 0xff;
+    webpChunks[6] = (riffSize >>> 16) & 0xff;
+    webpChunks[7] = (riffSize >>> 24) & 0xff;
+
+    const fetcher = vi.fn<typeof fetch>();
+    await expect(analyzeAedPhoto({ bytes: new Uint8Array(jpegSegments), contentType: "image/jpeg" }, "test-secret", fetcher)).rejects.toMatchObject({ code: "invalid_image" });
+    await expect(analyzeAedPhoto({ bytes: new Uint8Array(webpChunks), contentType: "image/webp" }, "test-secret", fetcher)).rejects.toMatchObject({ code: "invalid_image" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("rejects provider output that does not match the observation schema", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(outputResponse({ ...validObservation, osm_tags: { emergency: "defibrillator" } }));
 

@@ -5,7 +5,7 @@ export const OPENAI_VISION_MODEL = "gpt-6-luna";
 export const MAX_VISION_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_OUTPUT_TOKENS = 2_000;
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
-const MAX_PNG_CHUNKS = 4_096;
+const MAX_IMAGE_CONTAINER_SEGMENTS = 4_096;
 const PNG_CRC_LOOKUP = createPngCrcTable();
 
 export type SupportedImageType = (typeof ALLOWED_IMAGE_TYPES)[number];
@@ -195,10 +195,13 @@ function hasValidJpegContainer(bytes: Uint8Array): boolean {
   if (bytes.length < 16 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return false;
   let offset = 2;
   let hasFrame = false;
+  let segmentCount = 0;
 
   // Parse marker lengths through the start-of-scan header. A JPEG must have
   // dimensions, a scan, scan data, and a terminal EOI marker before upload.
   while (offset < bytes.length - 2) {
+    segmentCount += 1;
+    if (segmentCount > MAX_IMAGE_CONTAINER_SEGMENTS) return false;
     if (bytes[offset] !== 0xff) return false;
     while (bytes[offset] === 0xff) offset += 1;
     const marker = bytes[offset];
@@ -247,7 +250,7 @@ function hasValidPngContainer(bytes: Uint8Array): boolean {
 
   while (offset + 12 <= bytes.length) {
     chunkCount += 1;
-    if (chunkCount > MAX_PNG_CHUNKS) return false;
+    if (chunkCount > MAX_IMAGE_CONTAINER_SEGMENTS) return false;
     const chunkLength = readUint32BigEndian(bytes, offset);
     const chunkEnd = offset + 12 + chunkLength;
     if (chunkEnd > bytes.length) return false;
@@ -283,7 +286,10 @@ function hasValidWebpContainer(bytes: Uint8Array): boolean {
   let offset = 12;
   let imageChunks = 0;
   let hasExtendedHeader = false;
+  let chunkCount = 0;
   while (offset + 8 <= bytes.length) {
+    chunkCount += 1;
+    if (chunkCount > MAX_IMAGE_CONTAINER_SEGMENTS) return false;
     const type = readAscii(bytes, offset, 4);
     const length = readUint32LittleEndian(bytes, offset + 4);
     const dataStart = offset + 8;
