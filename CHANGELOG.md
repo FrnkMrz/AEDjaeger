@@ -25,7 +25,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Added
 
-- Ergänzt eine reine OSM-Änderungsvorschau: Bestätigte vorhandene Knoten dürfen nur `check_date` ändern; Neuanlagen bleiben auf bestätigte Position und freigegebene Grund-Tags beschränkt.
+- Ergänzt eine reine OSM-Änderungsvorschau: Bestätigte vorhandene Knoten dürfen nur `check_date` ändern; Neuanlagen verlangen eine bestätigte Position innerhalb des vollständig durchsuchten Gebiets und bleiben auf freigegebene Grund-Tags beschränkt.
 - Ergänzt eine geschützte, ausschließlich lesende Overpass-Suchroute mit begrenzter Standortgenauigkeit, festem Suchradius, Zeit- und Antwortgrößenlimit sowie konservativer Kennzeichnung unvollständiger Ergebnisse.
 - Verbindet die Fotoanalyse mit der geschützten Umgebungssuche: Der angemeldete Nutzer startet die einmalige Standortabfrage ausdrücklich, sieht mögliche OSM-Treffer und erhält auch bei fehlender oder unvollständiger Suche keinen automatischen Neuanlage- oder Schreibvorgang.
 - Verbindet die Fotooberfläche über eine ausdrückliche Nutzeraktion mit der geschützten GPT-6-Luna-Analyse: Bilder werden lokal verkleinert und neu kodiert, KI-Antworten erneut validiert und nur als Beobachtung angezeigt; die App löst keine OSM-Änderung aus.
