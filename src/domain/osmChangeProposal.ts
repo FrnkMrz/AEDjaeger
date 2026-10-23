@@ -1,4 +1,4 @@
-import type { Coordinate } from "./candidateMatch";
+import { distanceMeters, type Coordinate } from "./candidateMatch";
 import type { OverpassCandidate } from "../osm/overpassSearch";
 
 export interface TagChange {
@@ -29,6 +29,8 @@ export type ProposalError =
   | "search-not-clear"
   | "position-not-confirmed"
   | "invalid-position"
+  | "invalid-search-coverage"
+  | "position-outside-search"
   | "invalid-location-description";
 
 export type ProposalResult<T> = T | { kind: "blocked"; reason: ProposalError };
@@ -96,6 +98,9 @@ export function previewNewAed(
     searchStatus: "complete" | "partial" | "failed";
     assessmentKind: "new-entry-eligible" | "candidate-review" | "search-incomplete" | "search-failed" | "location-too-uncertain" | "invalid-input";
     position: Coordinate;
+    searchCenter: Coordinate;
+    coverageRadiusMeters: number;
+    nearbyRadiusMeters: number;
     positionConfirmed: boolean;
     observedOn: string;
     locationDescription?: string;
@@ -107,6 +112,22 @@ export function previewNewAed(
   if (!isValidDate(input.observedOn)) return { kind: "blocked", reason: "invalid-date" };
   if (!isValidPosition(input.position)) return { kind: "blocked", reason: "invalid-position" };
   if (!input.positionConfirmed) return { kind: "blocked", reason: "position-not-confirmed" };
+  if (
+    !isValidPosition(input.searchCenter)
+    || !Number.isFinite(input.coverageRadiusMeters)
+    || input.coverageRadiusMeters <= 0
+    || !Number.isFinite(input.nearbyRadiusMeters)
+    || input.nearbyRadiusMeters <= 0
+  ) {
+    return { kind: "blocked", reason: "invalid-search-coverage" };
+  }
+
+  // An empty result only helps at the location that was actually searched. Require
+  // the full candidate radius around the user's confirmed point to fit in that area.
+  const distanceFromSearchCenter = distanceMeters(input.searchCenter, input.position);
+  if (distanceFromSearchCenter + input.nearbyRadiusMeters > input.coverageRadiusMeters) {
+    return { kind: "blocked", reason: "position-outside-search" };
+  }
 
   const tags: Record<string, string> = {
     emergency: "defibrillator",
