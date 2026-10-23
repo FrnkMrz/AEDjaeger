@@ -61,15 +61,13 @@ export async function requestNearbyCandidates(
       && typeof (payload as Record<string, unknown>).error === "string"
       ? (payload as Record<string, string>).error
       : "search_failed";
-    const retryAfterSeconds = code === "search_rate_limited" || code === "overpass_rate_limited"
-      ? readRetryAfter(response)
-      : undefined;
+    const retryAfterSeconds = response.headers.has("Retry-After") ? readRetryAfter(response) : undefined;
     throw new CandidateSearchError(code, retryAfterSeconds);
   }
 
   const result = parseSearchResult(payload);
   if (!result) throw new CandidateSearchError("invalid_response");
-  if (result.status === "partial") result.retryAfterSeconds = readRetryAfter(response);
+  result.retryAfterSeconds = readRetryAfter(response);
   return result;
 }
 

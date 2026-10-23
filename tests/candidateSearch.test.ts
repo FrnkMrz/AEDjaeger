@@ -32,6 +32,14 @@ describe("nearby candidate client", () => {
       .rejects.toMatchObject({ code: "search_rate_limited", retryAfterSeconds: 17 });
   });
 
+  it("preserves the cooldown header on upstream errors too", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ error: "overpass_unavailable" }), {
+      status: 502, headers: { "Content-Type": "application/json", "Retry-After": "23" },
+    }));
+    await expect(requestNearbyCandidates({ latitude: 52.52, longitude: 13.405, accuracyMeters: 12 }, fetcher))
+      .rejects.toMatchObject({ code: "overpass_unavailable", retryAfterSeconds: 23 });
+  });
+
   it("aborts a stalled request so the photo flow can offer a retry", async () => {
     vi.useFakeTimers();
     let signal: AbortSignal | undefined;

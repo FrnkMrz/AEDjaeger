@@ -124,6 +124,15 @@ describe("protected Overpass candidate search", () => {
     expect(overpass).not.toHaveBeenCalled();
   });
 
+  it("returns the reserved cooldown for fast Overpass failures", async () => {
+    const { database } = createDatabase();
+    const overpass = vi.fn(async () => new Response("upstream unavailable", { status: 500 }));
+    const response = await handleOverpassSearch(searchRequest(), { DB: database }, { fetch: overpass });
+
+    expect(response.status).toBe(502);
+    expect(response.headers.get("Retry-After")).toBe("30");
+  });
+
   it("fails closed on D1 errors and maps upstream refusal without exposing its body", async () => {
     const brokenDatabase = createDatabase({ d1Failure: true });
     const shouldNotRun = vi.fn(async () => noCandidates());
