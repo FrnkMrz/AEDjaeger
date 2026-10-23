@@ -18,7 +18,13 @@ export type AnalysisBudgetResult =
   | { reserved: true }
   | { reserved: false; reason: "budget_exceeded" | "duplicate" };
 
-type ExistingReservation = { id: string; status: string; provider_started_at: number | null };
+type ExistingReservation = {
+  id: string;
+  status: string;
+  provider_started_at: number | null;
+  utc_day: string;
+  cost_micros: number;
+};
 
 /**
  * Reserve an analysis before contacting an AI provider.
@@ -76,20 +82,20 @@ export async function reserveAnalysisBudget(
     // D1 can reject the promise (for example on a constraint error), bypassing `success`.
     // If the insert committed before its reply was lost, let the caller resume
     // this still-unclaimed reservation with the same request ID.
-    if (await findResumableReservation(database, request.userId, request.requestId)) return { reserved: true };
+    if (await findResumableReservation(database, request)) return { reserved: true };
     throw new Error("Die Analyse konnte nicht sicher reserviert werden.");
   }
 
   if (!result.success) {
     // Do not include SQL parameters or database diagnostics in user-facing errors.
-    if (await findResumableReservation(database, request.userId, request.requestId)) return { reserved: true };
+    if (await findResumableReservation(database, request)) return { reserved: true };
     throw new Error("Die Analyse konnte nicht sicher reserviert werden.");
   }
 
   if ((result.meta?.changes ?? 0) === 1) return { reserved: true };
 
   const duplicate = await findExistingReservation(database, request.userId, request.requestId);
-  if (duplicate?.status === "reserved" && duplicate.provider_started_at === null) return { reserved: true };
+  if (isResumableReservation(duplicate, request)) return { reserved: true };
   return duplicate ? { reserved: false, reason: "duplicate" } : { reserved: false, reason: "budget_exceeded" };
 }
 
@@ -121,16 +127,26 @@ export async function markAnalysisProviderStarted(
   }
 }
 
-async function findResumableReservation(database: D1Database, userId: string, requestId: string): Promise<boolean> {
-  const existing = await findExistingReservation(database, userId, requestId);
-  return existing?.status === "reserved" && existing.provider_started_at === null;
+async function findResumableReservation(database: D1Database, request: AnalysisBudgetRequest): Promise<boolean> {
+  const existing = await findExistingReservation(database, request.userId, request.requestId);
+  return isResumableReservation(existing, request);
+}
+
+function isResumableReservation(existing: ExistingReservation | null, request: AnalysisBudgetRequest): boolean {
+  // A reservation is tied to the day and amount checked by the original INSERT.
+  // Reusing yesterday's row would bypass today's limits; a changed server-side
+  // estimate must also go through a fresh budget check instead of reusing it.
+  return existing?.status === "reserved"
+    && existing.provider_started_at === null
+    && existing.utc_day === request.utcDay
+    && existing.cost_micros === request.costMicros;
 }
 
 async function findExistingReservation(database: D1Database, userId: string, requestId: string): Promise<ExistingReservation | null> {
   try {
     return await database
       .prepare(
-        `SELECT id, status, provider_started_at
+        `SELECT id, status, provider_started_at, utc_day, cost_micros
          FROM analysis_budget_reservations
          WHERE user_id = ? AND request_id = ?`,
       )

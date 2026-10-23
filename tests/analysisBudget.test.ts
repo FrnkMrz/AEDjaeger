@@ -3,7 +3,7 @@ import { markAnalysisProviderStarted, reserveAnalysisBudget, type D1Database, ty
 
 function createDatabase(options: {
   changes?: number;
-  duplicate?: { id: string; status: string; provider_started_at: number | null } | null;
+  duplicate?: { id: string; status: string; provider_started_at: number | null; utc_day: string; cost_micros: number } | null;
   firstError?: Error;
   runError?: Error;
   success?: boolean;
@@ -78,7 +78,7 @@ describe("analysis budget reservation", () => {
   });
 
   it("distinguishes a repeated request from an exhausted budget", async () => {
-    const duplicateDatabase = createDatabase({ changes: 0, duplicate: { id: "reservation-1", status: "reserved", provider_started_at: 10 } });
+    const duplicateDatabase = createDatabase({ changes: 0, duplicate: { ...existingReservation(), provider_started_at: 10 } });
     const fullDatabase = createDatabase({ changes: 0 });
 
     await expect(reserveAnalysisBudget(duplicateDatabase.database, validRequest)).resolves.toEqual({ reserved: false, reason: "duplicate" });
@@ -93,10 +93,28 @@ describe("analysis budget reservation", () => {
   it("resumes a reservation after an ambiguous insert response if no provider claim exists", async () => {
     const { database } = createDatabase({
       runError: new Error("ambiguous insert response"),
-      duplicate: { id: "reservation-1", status: "reserved", provider_started_at: null },
+      duplicate: existingReservation(),
     });
 
     await expect(reserveAnalysisBudget(database, validRequest)).resolves.toEqual({ reserved: true });
+  });
+
+  it.each([
+    { ...existingReservation(), utc_day: "2026-10-19" },
+    { ...existingReservation(), cost_micros: 2_001 },
+  ])("does not resume a reservation from another budget day or amount", async (existing) => {
+    const { database } = createDatabase({ changes: 0, duplicate: existing });
+
+    await expect(reserveAnalysisBudget(database, validRequest)).resolves.toEqual({ reserved: false, reason: "duplicate" });
+  });
+
+  it("does not resume an ambiguous reservation after the UTC day changes", async () => {
+    const { database } = createDatabase({
+      runError: new Error("ambiguous insert response"),
+      duplicate: { ...existingReservation(), utc_day: "2026-10-19" },
+    });
+
+    await expect(reserveAnalysisBudget(database, validRequest)).rejects.toThrow("nicht sicher reserviert");
   });
 
   it("claims a provider call only once for a reservation", async () => {
@@ -134,3 +152,13 @@ describe("analysis budget reservation", () => {
     expect(calls).toHaveLength(0);
   });
 });
+
+function existingReservation() {
+  return {
+    id: "reservation-1",
+    status: "reserved",
+    provider_started_at: null,
+    utc_day: validRequest.utcDay,
+    cost_micros: validRequest.costMicros,
+  };
+}
