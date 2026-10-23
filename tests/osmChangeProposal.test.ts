@@ -14,6 +14,7 @@ const newAedInput = {
   searchCenter: { latitude: 52.52, longitude: 13.405 },
   coverageRadiusMeters: 200,
   nearbyRadiusMeters: 100,
+  searchCandidates: [],
   positionConfirmed: true,
   observedOn: "2026-10-23",
 };
@@ -88,6 +89,33 @@ describe("OSM change previews", () => {
       ...newAedInput,
       position: { latitude: 52.5213, longitude: 13.405 },
     })).toEqual({ kind: "blocked", reason: "position-outside-search" });
+  });
+
+  it("reassesses all search candidates around a moved confirmed point", () => {
+    expect(previewNewAed({
+      ...newAedInput,
+      position: { latitude: 52.52072, longitude: 13.405 },
+      searchCandidates: [{
+        id: "node/999",
+        osmType: "node",
+        coordinateQuality: "exact",
+        position: { latitude: 52.52135, longitude: 13.405 },
+        tags: { emergency: "defibrillator" },
+      }],
+    })).toEqual({ kind: "blocked", reason: "search-found-candidate" });
+  });
+
+  it("keeps approximate existing objects from being treated as an empty search", () => {
+    expect(previewNewAed({
+      ...newAedInput,
+      searchCandidates: [{
+        id: "way/456",
+        osmType: "way",
+        coordinateQuality: "approximate-center",
+        position: { latitude: 52.521, longitude: 13.405 },
+        tags: { emergency: "defibrillator" },
+      }],
+    })).toEqual({ kind: "blocked", reason: "search-found-candidate" });
   });
 
   it("rejects impossible dates, invalid coordinates and unsafe optional text", () => {
