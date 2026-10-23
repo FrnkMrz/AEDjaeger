@@ -40,6 +40,14 @@ describe("nearby candidate client", () => {
       .rejects.toMatchObject({ code: "overpass_unavailable", retryAfterSeconds: 23 });
   });
 
+  it("preserves Retry-After when a response body is invalid", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response("not-json", {
+      status: 502, headers: { "Content-Type": "application/json", "Retry-After": "9" },
+    }));
+    await expect(requestNearbyCandidates({ latitude: 52.52, longitude: 13.405, accuracyMeters: 12 }, fetcher))
+      .rejects.toMatchObject({ code: "invalid_response", retryAfterSeconds: 9 });
+  });
+
   it("aborts a stalled request so the photo flow can offer a retry", async () => {
     vi.useFakeTimers();
     let signal: AbortSignal | undefined;
@@ -65,6 +73,7 @@ describe("nearby candidate client", () => {
       signal = init?.signal ?? undefined;
       return Promise.resolve({
         ok: true,
+        headers: new Headers(),
         json: () => new Promise<unknown>((_resolve, reject) => {
           signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
         }),

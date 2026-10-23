@@ -5,7 +5,7 @@ import type { D1Database, D1Result, D1Statement } from "../server/storage/d1";
 const sessionToken = "s".repeat(43);
 const validLocation = { latitude: 52.52, longitude: 13.405, accuracy_meters: 50 };
 
-function createDatabase(options: { authenticated?: boolean; cooldown?: boolean; d1Failure?: boolean } = {}) {
+function createDatabase(options: { authenticated?: boolean; cooldown?: boolean; d1Failure?: boolean; nextAllowedAt?: number } = {}) {
   const queries: string[] = [];
   const database: D1Database = {
     prepare(query: string): D1Statement {
@@ -19,6 +19,7 @@ function createDatabase(options: { authenticated?: boolean; cooldown?: boolean; 
         async first<T>() {
           queries.push(query);
           if (query.includes("FROM osm_sessions")) return (options.authenticated === false ? null : { osm_subject: "osm-user-7" }) as T | null;
+          if (query.includes("SELECT next_allowed_at")) return { next_allowed_at: options.nextAllowedAt ?? 31_000 } as T;
           return null;
         },
       };
@@ -47,7 +48,7 @@ describe("protected Overpass candidate search", () => {
   it("requires same-origin OSM authentication before contacting Overpass", async () => {
     const { database, queries } = createDatabase({ authenticated: false });
     const overpass = vi.fn(async () => noCandidates());
-    const response = await handleOverpassSearch(searchRequest(), { DB: database }, { fetch: overpass });
+    const response = await handleOverpassSearch(searchRequest(), { DB: database }, { fetch: overpass, now: () => 1_000 });
 
     expect(response.status).toBe(401);
     expect(queries).toEqual(expect.arrayContaining([expect.stringContaining("osm_sessions")]));
@@ -115,9 +116,9 @@ describe("protected Overpass candidate search", () => {
   });
 
   it("returns a retry delay when a user's search slot is still reserved", async () => {
-    const { database } = createDatabase({ cooldown: false });
+    const { database } = createDatabase({ cooldown: false, nextAllowedAt: 31_000 });
     const overpass = vi.fn(async () => noCandidates());
-    const response = await handleOverpassSearch(searchRequest(), { DB: database }, { fetch: overpass });
+    const response = await handleOverpassSearch(searchRequest(), { DB: database }, { fetch: overpass, now: () => 1_000 });
 
     expect(response.status).toBe(429);
     expect(response.headers.get("Retry-After")).toBe("30");
@@ -127,10 +128,33 @@ describe("protected Overpass candidate search", () => {
   it("returns the reserved cooldown for fast Overpass failures", async () => {
     const { database } = createDatabase();
     const overpass = vi.fn(async () => new Response("upstream unavailable", { status: 500 }));
-    const response = await handleOverpassSearch(searchRequest(), { DB: database }, { fetch: overpass });
+    const response = await handleOverpassSearch(searchRequest(), { DB: database }, { fetch: overpass, now: () => 1_000 });
 
     expect(response.status).toBe(502);
     expect(response.headers.get("Retry-After")).toBe("30");
+  });
+
+  it("subtracts time spent waiting for Overpass from Retry-After", async () => {
+    let currentTime = 1_000;
+    const { database } = createDatabase();
+    const overpass = vi.fn(async () => {
+      currentTime = 26_000;
+      return new Response("upstream unavailable", { status: 500 });
+    });
+    const response = await handleOverpassSearch(searchRequest(), { DB: database }, { fetch: overpass, now: () => currentTime });
+
+    expect(response.status).toBe(502);
+    expect(response.headers.get("Retry-After")).toBe("5");
+  });
+
+  it("returns only the remaining cooldown for a denied concurrent search", async () => {
+    const { database } = createDatabase({ cooldown: false, nextAllowedAt: 28_100 });
+    const overpass = vi.fn(async () => noCandidates());
+    const response = await handleOverpassSearch(searchRequest(), { DB: database }, { fetch: overpass, now: () => 26_500 });
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("2");
+    expect(overpass).not.toHaveBeenCalled();
   });
 
   it("fails closed on D1 errors and maps upstream refusal without exposing its body", async () => {

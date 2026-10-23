@@ -1,13 +1,18 @@
 import type { D1Database, D1Result } from "./d1";
 
 const MINIMUM_SEARCH_INTERVAL_MS = 30_000;
+const MINIMUM_SEARCH_INTERVAL_SECONDS = MINIMUM_SEARCH_INTERVAL_MS / 1_000;
+
+export type OverpassSlotReservation =
+  | { reserved: true; nextAllowedAt: number }
+  | { reserved: false; retryAfterSeconds: number };
 
 /**
  * Keep a small per-account cooldown so accidental taps cannot flood the shared
  * public Overpass service. The table stores neither coordinates, search results,
  * nor the raw OSM account subject; the account key is one-way hashed.
  */
-export async function reserveOverpassSearchSlot(database: D1Database, userId: string, now: number): Promise<boolean> {
+export async function reserveOverpassSearchSlot(database: D1Database, userId: string, now: number): Promise<OverpassSlotReservation> {
   if (typeof userId !== "string" || userId.length === 0 || userId.length > 256 || !Number.isSafeInteger(now) || now < 0) {
     throw new Error("Die Umgebungssuche konnte nicht sicher vorbereitet werden.");
   }
@@ -39,7 +44,25 @@ export async function reserveOverpassSearchSlot(database: D1Database, userId: st
   }
 
   if (!result.success) throw new Error("Die Umgebungssuche konnte nicht sicher vorbereitet werden.");
-  return (result.meta?.changes ?? 0) === 1;
+  if ((result.meta?.changes ?? 0) === 1) return { reserved: true, nextAllowedAt: now + MINIMUM_SEARCH_INTERVAL_MS };
+
+  // Read only the existing expiry, keyed by the same one-way hash. This lets the
+  // client wait for the actual remaining cooldown instead of always waiting 30 s.
+  try {
+    const existing = await database
+      .prepare("SELECT next_allowed_at FROM overpass_search_cooldowns WHERE osm_subject_hash = ?")
+      .bind(subjectHash)
+      .first<{ next_allowed_at: number }>();
+    if (!existing || !Number.isSafeInteger(existing.next_allowed_at)) {
+      return { reserved: false, retryAfterSeconds: 0 };
+    }
+    return {
+      reserved: false,
+      retryAfterSeconds: Math.min(MINIMUM_SEARCH_INTERVAL_SECONDS, Math.max(0, Math.ceil((existing.next_allowed_at - now) / 1_000))),
+    };
+  } catch {
+    throw new Error("Die Umgebungssuche konnte nicht sicher vorbereitet werden.");
+  }
 }
 
 async function hashSubject(subject: string): Promise<string> {

@@ -10,7 +10,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Dokumentiert den festgelegten Produktnamen und die von Vitest unterstützten Node.js-Versionen in README und Paketmetadaten.
 
 - Trennt im manuellen Bildtest sichtbare AED-Geräte, AED-Gehäuse, Wegweiser, andere Gegenstände und unklare Bilder in einem gemeinsamen Prompt-Schema.
-- Meldet den Such-Cooldown nach jeder reservierten Overpass-Anfrage und aktualisiert den blockierten Retry-Countdown bei Teilantworten und Fehlern in allen sechs Sprachen.
+- Meldet die tatsächliche Restzeit des Overpass-Cooldowns nach reservierten Anfragen und aktualisiert den blockierten Retry-Countdown bei Teilantworten und Fehlern in allen sechs Sprachen.
 
 ### Security
 

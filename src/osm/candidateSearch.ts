@@ -46,11 +46,12 @@ export async function requestNearbyCandidates(
     throw new CandidateSearchError("network_error");
   }
 
+  const responseRetryAfterSeconds = response.headers.has("Retry-After") ? readRetryAfter(response) : undefined;
   let payload: unknown;
   try {
     payload = await response.json();
   } catch {
-    throw new CandidateSearchError(controller.signal.aborted ? "network_error" : "invalid_response");
+    throw new CandidateSearchError(controller.signal.aborted ? "network_error" : "invalid_response", responseRetryAfterSeconds);
   } finally {
     // fetch resolves when headers arrive; keep the timer active while the body is read.
     clearTimeout(timeout);
@@ -61,13 +62,12 @@ export async function requestNearbyCandidates(
       && typeof (payload as Record<string, unknown>).error === "string"
       ? (payload as Record<string, string>).error
       : "search_failed";
-    const retryAfterSeconds = response.headers.has("Retry-After") ? readRetryAfter(response) : undefined;
-    throw new CandidateSearchError(code, retryAfterSeconds);
+    throw new CandidateSearchError(code, responseRetryAfterSeconds);
   }
 
   const result = parseSearchResult(payload);
   if (!result) throw new CandidateSearchError("invalid_response");
-  result.retryAfterSeconds = readRetryAfter(response);
+  result.retryAfterSeconds = responseRetryAfterSeconds ?? 30;
   return result;
 }
 

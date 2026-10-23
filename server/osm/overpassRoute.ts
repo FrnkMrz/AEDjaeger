@@ -12,7 +12,6 @@ const MAX_GPS_ACCURACY_METERS = 100;
 const NEARBY_RADIUS_METERS = 100;
 const OVERPASS_TIMEOUT_SECONDS = 25;
 const REQUEST_TIMEOUT_MS = 30_000;
-const RETRY_AFTER_SECONDS = 30;
 
 export type OverpassRouteEnvironment = { DB?: D1Database };
 
@@ -59,22 +58,26 @@ export async function handleOverpassSearch(
   }
 
   const now = (dependencies.now ?? Date.now)();
+  let cooldownEndsAt: number;
   try {
-    const available = await reserveOverpassSearchSlot(environment.DB, session.subject, now);
-    if (!available) return jsonResponse({ error: "search_rate_limited" }, 429, { "Retry-After": String(RETRY_AFTER_SECONDS) });
+    const reservation = await reserveOverpassSearchSlot(environment.DB, session.subject, now);
+    if (!reservation.reserved) return jsonResponse({ error: "search_rate_limited" }, 429, { "Retry-After": String(reservation.retryAfterSeconds) });
+    cooldownEndsAt = reservation.nextAllowedAt;
   } catch {
     return jsonResponse({ error: "search_unavailable" }, 503);
   }
   // Every accepted request consumes this slot, even if Overpass fails quickly.
   // Let the client wait for the same cooldown instead of offering a retry that will be rejected.
-  const retryHeaders = { "Retry-After": String(RETRY_AFTER_SECONDS) };
+  const retryHeaders = () => ({
+    "Retry-After": String(Math.max(0, Math.ceil((cooldownEndsAt - (dependencies.now ?? Date.now)()) / 1_000))),
+  });
 
   const coverageRadiusMeters = Math.ceil(location.accuracyMeters + NEARBY_RADIUS_METERS);
   let query: string;
   try {
     query = buildOverpassQuery({ center: location, radiusMeters: coverageRadiusMeters, timeoutSeconds: OVERPASS_TIMEOUT_SECONDS });
   } catch {
-    return jsonResponse({ error: "invalid_request" }, 400, retryHeaders);
+    return jsonResponse({ error: "invalid_request" }, 400, retryHeaders());
   }
 
   const controller = new AbortController();
@@ -93,34 +96,34 @@ export async function handleOverpassSearch(
     });
 
     if (response.status === 429 || response.status === 406) {
-      return jsonResponse({ error: "overpass_rate_limited" }, 503, { "Retry-After": String(RETRY_AFTER_SECONDS) });
+      return jsonResponse({ error: "overpass_rate_limited" }, 503, retryHeaders());
     }
-    if (!response.ok) return jsonResponse({ error: "overpass_unavailable" }, 502, retryHeaders);
+    if (!response.ok) return jsonResponse({ error: "overpass_unavailable" }, 502, retryHeaders());
 
     let payloadBytes: Uint8Array;
     try {
       payloadBytes = await readLimitedBody(response, MAX_RESPONSE_BYTES);
     } catch {
-      return jsonResponse({ error: "overpass_response_too_large" }, 502, retryHeaders);
+      return jsonResponse({ error: "overpass_response_too_large" }, 502, retryHeaders());
     }
 
     let payload: unknown;
     try {
       payload = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(payloadBytes));
     } catch {
-      return jsonResponse({ error: "overpass_invalid_response" }, 502, retryHeaders);
+      return jsonResponse({ error: "overpass_invalid_response" }, 502, retryHeaders());
     }
 
     const result = normalizeOverpassResponse(payload, coverageRadiusMeters);
-    if (result.status === "failed") return jsonResponse({ error: "overpass_invalid_response" }, 502, retryHeaders);
+    if (result.status === "failed") return jsonResponse({ error: "overpass_invalid_response" }, 502, retryHeaders());
     return jsonResponse({
       status: result.status,
       candidates: result.candidates,
       coverage_radius_meters: result.coverageRadiusMeters,
       ...(result.reason ? { reason: result.reason } : {}),
-    }, 200, retryHeaders);
+    }, 200, retryHeaders());
   } catch {
-    return jsonResponse({ error: controller.signal.aborted ? "overpass_timeout" : "overpass_unavailable" }, controller.signal.aborted ? 504 : 502, retryHeaders);
+    return jsonResponse({ error: controller.signal.aborted ? "overpass_timeout" : "overpass_unavailable" }, controller.signal.aborted ? 504 : 502, retryHeaders());
   } finally {
     clearTimeout(timeout);
   }
