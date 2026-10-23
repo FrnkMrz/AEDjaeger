@@ -13,11 +13,18 @@ export interface PhoneLocation {
   accuracyMeters: number;
 }
 
+const MAX_SEARCH_ACCURACY_METERS = 100;
+
 /** Send only the location needed for one read-only nearby query; never persist it. */
 export async function requestNearbyCandidates(
   location: PhoneLocation,
   fetcher: typeof fetch = fetch,
 ): Promise<OverpassSearchResult> {
+  // Do not send a precise location that the server must reject as too uncertain.
+  if (!Number.isFinite(location.accuracyMeters) || location.accuracyMeters <= 0 || location.accuracyMeters > MAX_SEARCH_ACCURACY_METERS) {
+    throw new CandidateSearchError("location_too_uncertain");
+  }
+
   let response: Response;
   try {
     response = await fetcher("/api/osm/candidates/search", {

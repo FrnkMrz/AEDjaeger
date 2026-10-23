@@ -23,13 +23,16 @@ function createDatabase(options: { changes?: number; success?: boolean; runError
 }
 
 describe("Overpass search cooldown", () => {
-  it("atomically reserves a 30-second slot without storing coordinates", async () => {
+  it("atomically reserves a 30-second slot with a one-way account hash and no coordinates", async () => {
     const { database, calls } = createDatabase();
 
     await expect(reserveOverpassSearchSlot(database, "osm-user-7", 1_000)).resolves.toBe(true);
-    expect(calls[0].query).toContain("INSERT INTO overpass_search_cooldowns");
-    expect(calls[0].query).toContain("next_allowed_at <= ?");
-    expect(calls[0].values).toEqual(["osm-user-7", 31_000, 1_000]);
+    expect(calls[0].query).toContain("DELETE FROM overpass_search_cooldowns WHERE next_allowed_at <= ?");
+    expect(calls[1].query).toContain("INSERT INTO overpass_search_cooldowns");
+    expect(calls[1].query).toContain("osm_subject_hash");
+    expect(calls[1].query).toContain("next_allowed_at <= ?");
+    expect(calls[1].values).toEqual([expect.stringMatching(/^[a-f0-9]{64}$/u), 31_000, 1_000]);
+    expect(calls[1].values).not.toContain("osm-user-7");
   });
 
   it("rejects concurrent searches until the next slot is available", async () => {

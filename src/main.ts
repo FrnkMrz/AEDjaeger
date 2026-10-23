@@ -104,15 +104,20 @@ function statusContent(): string {
       return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv("searchProgress")}</span></div>`;
     case "candidate-result": {
       const { assessment, search } = state;
-      const candidates = assessment.kind === "candidate-review"
-        ? assessment.candidates.map((rankedCandidate) => {
+      const candidatesToShow: Array<{ candidate: typeof search.candidates[number]; distanceMeters?: number }> = [];
+      if (assessment.kind === "candidate-review") {
+        for (const rankedCandidate of assessment.candidates) {
           const candidate = search.candidates.find((item) => item.id === rankedCandidate.id);
-          if (!candidate) return "";
+          if (candidate) candidatesToShow.push({ candidate, distanceMeters: rankedCandidate.distanceMeters });
+        }
+      } else if (assessment.kind === "search-incomplete") {
+        for (const candidate of search.candidates) candidatesToShow.push({ candidate });
+      }
+      const candidates = candidatesToShow.map(({ candidate, distanceMeters }) => {
           const label = candidate.tags.name || candidate.tags["defibrillator:location"] || candidate.id;
-          const distance = tv("distance", { distance: Math.round(rankedCandidate.distanceMeters) });
-          return `<li class="candidate-item"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(distance)}</span><a href="https://www.openstreetmap.org/${escapeHtml(candidate.id)}" target="_blank" rel="noopener noreferrer">${escapeHtml(candidate.id)} ↗</a></li>`;
-        }).join("")
-        : "";
+          const distance = distanceMeters === undefined ? "" : `<span>${escapeHtml(tv("distance", { distance: Math.round(distanceMeters) }))}</span>`;
+          return `<li class="candidate-item"><strong>${escapeHtml(label)}</strong>${distance}<a href="https://www.openstreetmap.org/${escapeHtml(candidate.id)}" target="_blank" rel="noopener noreferrer">${escapeHtml(candidate.id)} ↗</a></li>`;
+        }).join("");
       let outcome: string;
       if (search.status === "partial" || assessment.kind === "search-incomplete") outcome = tv("searchPartial");
       else if (assessment.kind === "candidate-review") outcome = tv("searchFound", { count: assessment.candidates.length });
@@ -389,7 +394,7 @@ function handleAction(action: string | undefined): void {
     void runVisionAnalysis(state.photoUrl, selectedPhotoFile);
   } else if (action === "search-nearby" && state.kind === "vision-result") {
     void runNearbySearch(state.photoUrl, state.observation);
-  } else if (action === "retry-search" && state.kind === "candidate-error") {
+  } else if (action === "retry-search" && (state.kind === "candidate-error" || (state.kind === "candidate-result" && (state.search.status === "partial" || state.assessment.kind === "search-incomplete")))) {
     void runNearbySearch(state.photoUrl, state.observation);
   } else if (action === "retry-live") {
     if (state.kind !== "vision-error" || (state.reason !== "session-unavailable" && state.reason !== "analysis-budget-unavailable") || !selectedPhotoFile) return;
