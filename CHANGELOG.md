@@ -21,6 +21,8 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Added
 
+- Verbindet die Fotooberfläche über eine ausdrückliche Nutzeraktion mit der geschützten GPT-6-Luna-Analyse: Bilder werden lokal verkleinert und neu kodiert, KI-Antworten erneut validiert und nur als Beobachtung angezeigt; die App löst keine OSM-Änderung aus.
+- Ergänzt Tests für KI-Anfrage, Pilotfreigabe, Modell- und Antwortvalidierung, begrenzte Wiederholungen, mobile Darstellung und alle sechs Sprachen.
 - Ergänzt einen geschützten `/api/vision/analyze`-Worker-Endpunkt für strukturierte GPT-6-Luna-Bildbeobachtungen. Der Endpunkt bleibt ohne explizite Aktivierung, serverseitigen Schlüssel und vollständige Kostenlimits abgeschaltet; Tests verwenden ausschließlich simulierte Sitzungen, D1 und Modellantworten.
 - Verbindet die PWA mit dem OSM-Sitzungsstatus und zeigt Login oder Abmeldung erst bei konfigurierter Worker-Anmeldung an; alle sechs Sprachen weisen darauf hin, dass der Login nur die Identität bestätigt und OSM-Änderungen deaktiviert bleiben.
 - Bindet die Cloudflare-D1-Pilotdatenbank ein; `aedjaeger-pilot` wurde im Cloudflare-Konto angelegt und mit den drei vorhandenen Schema-Migrationen initialisiert. Ein Paid-Tarif wurde nicht aktiviert und ein Worker-Deployment ist nicht enthalten.

@@ -1,0 +1,54 @@
+import type { Language } from "./translations";
+
+// Keep AI-specific text beside the optional AI flow so normal demo wording remains clear.
+const messages = {
+  de: {
+    consent: "Wenn du fortfährst, wird das Foto komprimiert und ohne EXIF-/GPS-Daten an OpenAI gesendet. Die Analyse kann das eingerichtete Testbudget nutzen. OpenStreetMap wird dabei nicht geändert.",
+    action: "Foto an OpenAI senden", signIn: "Verwirf dieses Foto, melde dich unten bei OpenStreetMap an und wähle das Foto danach erneut aus.", progress: "Foto wird geschützt an OpenAI übermittelt und ausgewertet …",
+    resultTitle: "KI-Bildbeobachtung", sceneLabel: "Bildinhalt", device: "AED-Gerät sichtbar", enclosure: "AED-Gehäuse sichtbar", sign: "Nur Hinweisschild", emptyHolder: "Leere Halterung", multiple: "Mehrere Geräte", other: "Anderer Gegenstand", unclear: "Unklar",
+    count: "Sichtbare Geräte laut KI: {count}", readableText: "Lesbarer Text im Foto", noText: "Kein Text erkannt", manufacturer: "Hersteller", model: "Modell", notOsm: "Das ist nur eine KI-Bildbeobachtung. Umgebungssuche und OpenStreetMap sind nicht verbunden; es wurde nichts gespeichert.",
+    errorTitle: "Analyse nicht abgeschlossen", errorSignIn: "Die OpenStreetMap-Anmeldung fehlt oder ist abgelaufen. Bitte melde dich an und wähle das Foto erneut.", errorNotAllowed: "Dein Konto ist für diesen begrenzten Pilot nicht freigeschaltet.", errorBudget: "Das eingerichtete Analysebudget ist ausgeschöpft.", errorUnavailable: "Die Analyse ist derzeit nicht aktiviert oder nicht erreichbar.", errorInvalidImage: "Das Bild konnte nicht verarbeitet werden. Wähle ein kleineres oder anderes Foto.", errorFailed: "Die Analyse ist fehlgeschlagen oder die Antwort ging verloren.", errorInvalidResponse: "Die Serverantwort konnte nicht sicher geprüft werden.", noAutoRetry: "Die Anfrage könnte den Server bereits erreicht haben. Sie wird nicht automatisch wiederholt, um doppelte Anfragen und Kosten zu vermeiden.", return: "Foto verwerfen",
+  },
+  en: {
+    consent: "If you continue, the photo will be compressed and sent to OpenAI without EXIF/GPS metadata. The analysis may use the configured test budget. OpenStreetMap will not be changed.",
+    action: "Send photo to OpenAI", signIn: "Discard this photo, sign in to OpenStreetMap below, then select the photo again.", progress: "Sending the photo securely to OpenAI for analysis …",
+    resultTitle: "AI image observation", sceneLabel: "What appears in the image", device: "AED device visible", enclosure: "AED cabinet visible", sign: "Sign only", emptyHolder: "Empty holder", multiple: "Multiple devices", other: "Other object", unclear: "Unclear",
+    count: "Visible devices according to AI: {count}", readableText: "Readable text in the photo", noText: "No text detected", manufacturer: "Manufacturer", model: "Model", notOsm: "This is only an AI image observation. Nearby search and OpenStreetMap are not connected; nothing was saved.",
+    errorTitle: "Analysis did not complete", errorSignIn: "OpenStreetMap sign-in is missing or expired. Sign in and select the photo again.", errorNotAllowed: "Your account is not enabled for this limited pilot.", errorBudget: "The configured analysis budget has been reached.", errorUnavailable: "Analysis is not enabled or reachable right now.", errorInvalidImage: "The image could not be processed. Choose a smaller or different photo.", errorFailed: "Analysis failed or its response was lost.", errorInvalidResponse: "The server response could not be safely validated.", noAutoRetry: "The request may have reached the server. It will not be repeated automatically to avoid duplicate requests and costs.", return: "Discard photo",
+  },
+  pl: {
+    consent: "Jeśli przejdziesz dalej, zdjęcie zostanie skompresowane i wysłane do OpenAI bez metadanych EXIF/GPS. Analiza może wykorzystać skonfigurowany budżet testowy. OpenStreetMap nie zostanie zmienione.",
+    action: "Wyślij zdjęcie do OpenAI", signIn: "Odrzuć to zdjęcie, zaloguj się niżej przez OpenStreetMap, a potem wybierz zdjęcie ponownie.", progress: "Zdjęcie jest bezpiecznie wysyłane do OpenAI i analizowane …",
+    resultTitle: "Obserwacja AI", sceneLabel: "Co widać na zdjęciu", device: "Widoczne urządzenie AED", enclosure: "Widoczna szafka AED", sign: "Tylko znak", emptyHolder: "Pusty uchwyt", multiple: "Kilka urządzeń", other: "Inny obiekt", unclear: "Niejasne",
+    count: "Liczba widocznych urządzeń według AI: {count}", readableText: "Czytelny tekst na zdjęciu", noText: "Nie rozpoznano tekstu", manufacturer: "Producent", model: "Model", notOsm: "To tylko obserwacja obrazu przez AI. Wyszukiwanie w okolicy i OpenStreetMap nie są połączone; niczego nie zapisano.",
+    errorTitle: "Analiza nie została ukończona", errorSignIn: "Brakuje logowania OpenStreetMap lub wygasło. Zaloguj się i wybierz zdjęcie ponownie.", errorNotAllowed: "Twoje konto nie jest dopuszczone do tego ograniczonego pilota.", errorBudget: "Skonfigurowany budżet analizy został wykorzystany.", errorUnavailable: "Analiza jest teraz wyłączona lub niedostępna.", errorInvalidImage: "Nie udało się przetworzyć zdjęcia. Wybierz mniejsze lub inne.", errorFailed: "Analiza nie powiodła się albo odpowiedź została utracona.", errorInvalidResponse: "Nie można bezpiecznie sprawdzić odpowiedzi serwera.", noAutoRetry: "Żądanie mogło już dotrzeć do serwera. Nie ponawiamy go automatycznie, aby uniknąć duplikatów i kosztów.", return: "Odrzuć zdjęcie",
+  },
+  ja: {
+    consent: "続行すると、写真を圧縮し、EXIF/GPS情報を除去してOpenAIに送信します。分析には設定済みのテスト予算が使われる場合があります。OpenStreetMapは変更されません。",
+    action: "写真をOpenAIに送信", signIn: "この写真を破棄し、下のOpenStreetMapからログインしてから、写真をもう一度選択してください。", progress: "写真を安全にOpenAIへ送信して分析中…",
+    resultTitle: "AIによる画像の観察", sceneLabel: "画像に写っているもの", device: "AED本体が見える", enclosure: "AED収納箱が見える", sign: "案内表示のみ", emptyHolder: "空の設置場所", multiple: "複数の機器", other: "別の物体", unclear: "不明",
+    count: "AIが認識した機器数: {count}", readableText: "写真内の読み取れる文字", noText: "文字を認識できません", manufacturer: "メーカー", model: "型番", notOsm: "これはAIによる画像の観察結果です。周辺検索とOpenStreetMapは未接続で、何も保存されていません。",
+    errorTitle: "分析を完了できませんでした", errorSignIn: "OpenStreetMapのログインがないか期限切れです。ログインして写真をもう一度選択してください。", errorNotAllowed: "この限定パイロットでは、このアカウントは許可されていません。", errorBudget: "設定された分析予算に達しました。", errorUnavailable: "分析は現在無効か、接続できません。", errorInvalidImage: "画像を処理できませんでした。小さい画像か別の写真を選択してください。", errorFailed: "分析に失敗したか、応答を受信できませんでした。", errorInvalidResponse: "サーバーの応答を安全に検証できませんでした。", noAutoRetry: "リクエストはすでにサーバーに届いた可能性があります。重複や費用を避けるため、自動再送はしません。", return: "写真を破棄",
+  },
+  fr: {
+    consent: "Si vous continuez, la photo sera compressée puis envoyée à OpenAI sans métadonnées EXIF/GPS. L’analyse peut utiliser le budget de test configuré. OpenStreetMap ne sera pas modifié.",
+    action: "Envoyer la photo à OpenAI", signIn: "Supprimez cette photo, connectez-vous à OpenStreetMap ci-dessous, puis sélectionnez-la à nouveau.", progress: "Envoi sécurisé de la photo à OpenAI pour analyse…",
+    resultTitle: "Observation de l’image par l’IA", sceneLabel: "Éléments visibles", device: "Appareil DAE visible", enclosure: "Boîtier de DAE visible", sign: "Panneau seulement", emptyHolder: "Support vide", multiple: "Plusieurs appareils", other: "Autre objet", unclear: "Indéterminé",
+    count: "Appareils visibles selon l’IA : {count}", readableText: "Texte lisible sur la photo", noText: "Aucun texte détecté", manufacturer: "Fabricant", model: "Modèle", notOsm: "Il s’agit uniquement d’une observation d’image par IA. La recherche à proximité et OpenStreetMap ne sont pas connectés ; rien n’a été enregistré.",
+    errorTitle: "Analyse inachevée", errorSignIn: "La connexion OpenStreetMap est absente ou expirée. Connectez-vous et sélectionnez à nouveau la photo.", errorNotAllowed: "Votre compte n’est pas autorisé pour ce pilote limité.", errorBudget: "Le budget d’analyse configuré est atteint.", errorUnavailable: "L’analyse est désactivée ou inaccessible pour le moment.", errorInvalidImage: "L’image n’a pas pu être traitée. Choisissez une photo plus petite ou différente.", errorFailed: "L’analyse a échoué ou sa réponse a été perdue.", errorInvalidResponse: "La réponse du serveur n’a pas pu être validée en toute sécurité.", noAutoRetry: "La demande a peut-être déjà atteint le serveur. Elle ne sera pas renvoyée automatiquement afin d’éviter les doublons et les coûts.", return: "Supprimer la photo",
+  },
+  es: {
+    consent: "Si continúas, la foto se comprimirá y se enviará a OpenAI sin metadatos EXIF/GPS. El análisis puede usar el presupuesto de prueba configurado. OpenStreetMap no se modificará.",
+    action: "Enviar foto a OpenAI", signIn: "Descarta esta foto, inicia sesión en OpenStreetMap abajo y luego vuelve a elegirla.", progress: "Enviando la foto de forma segura a OpenAI para analizarla…",
+    resultTitle: "Observación de imagen de IA", sceneLabel: "Qué aparece en la imagen", device: "DEA visible", enclosure: "Armario de DEA visible", sign: "Solo señal", emptyHolder: "Soporte vacío", multiple: "Varios dispositivos", other: "Otro objeto", unclear: "No está claro",
+    count: "Dispositivos visibles según la IA: {count}", readableText: "Texto legible en la foto", noText: "No se detectó texto", manufacturer: "Fabricante", model: "Modelo", notOsm: "Esto es solo una observación de imagen de IA. La búsqueda cercana y OpenStreetMap no están conectados; no se guardó nada.",
+    errorTitle: "El análisis no terminó", errorSignIn: "Falta el acceso a OpenStreetMap o ha caducado. Inicia sesión y vuelve a seleccionar la foto.", errorNotAllowed: "Tu cuenta no está habilitada para este piloto limitado.", errorBudget: "Se alcanzó el presupuesto de análisis configurado.", errorUnavailable: "El análisis no está activado o no está disponible ahora.", errorInvalidImage: "No se pudo procesar la imagen. Elige una foto más pequeña o diferente.", errorFailed: "El análisis falló o se perdió la respuesta.", errorInvalidResponse: "No se pudo validar la respuesta del servidor de forma segura.", noAutoRetry: "Es posible que la solicitud ya haya llegado al servidor. No se repetirá automáticamente para evitar duplicados y costes.", return: "Descartar foto",
+  },
+} as const;
+
+export type VisionMessageKey = keyof (typeof messages)["de"];
+
+export function translateVision(language: Language, key: VisionMessageKey, values?: Record<string, number | string>): string {
+  const translated = messages[language][key];
+  return values ? translated.replace(/\{(\w+)\}/gu, (_, name: string) => String(values[name] ?? "")) : translated;
+}

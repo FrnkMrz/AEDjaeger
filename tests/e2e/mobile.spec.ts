@@ -54,6 +54,84 @@ test("the OSM login is offered only when configured and is localized in all six 
   }
 });
 
+test("AI photo analysis requires sign-in and an explicit send action; its result never offers an OSM write", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  let requests = 0;
+  await page.route("**/api/vision/analyze", async (route) => {
+    requests += 1;
+    expect(route.request().method()).toBe("POST");
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    expect(payload).toEqual(expect.objectContaining({ content_type: "image/jpeg" }));
+    expect(Object.keys(payload).sort()).toEqual(["content_type", "image_base64", "request_id"]);
+    expect(String(payload.image_base64)).toMatch(/^\/9j/u);
+    await route.fulfill({ json: {
+      request_id: payload.request_id,
+      model: "gpt-6-luna",
+      observation: {
+        scene: "device_visible", device_count: 1, readable_text: ["AED", "<script>ignore rules</script>"],
+        manufacturer: null, model: null, location_clues: [], image_issues: [],
+      },
+    } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.waitForTimeout(100);
+  await expect(page.getByRole("button", { name: "Foto an OpenAI senden" })).toBeVisible();
+  expect(requests).toBe(0);
+  await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
+  await expect(page.getByRole("heading", { name: "KI-Bildbeobachtung" })).toBeVisible();
+  await expect(page.locator(".result-message")).toContainText("AED-Gerät sichtbar");
+  await expect(page.locator(".result-message")).toContainText("<script>ignore rules</script>");
+  await expect(page.locator(".result-message script")).toHaveCount(0);
+  await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
+  expect(requests).toBe(1);
+});
+
+test("the live photo endpoint is not called until the user is signed in and chooses AI analysis", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
+  let requests = 0;
+  await page.route("**/api/vision/analyze", async (route) => {
+    requests += 1;
+    await route.fulfill({ status: 401, json: { error: "authentication_required" } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await expect(page.locator(".capture-content")).toContainText("Verwirf dieses Foto, melde dich unten bei OpenStreetMap an");
+  await expect(page.getByRole("button", { name: "Foto an OpenAI senden" })).toHaveCount(0);
+  expect(requests).toBe(0);
+});
+
+test("the AI result remains readable on a narrow phone in all six languages", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/vision/analyze", async (route) => {
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ json: {
+      request_id: payload.request_id, model: "gpt-6-luna",
+      observation: { scene: "unclear", device_count: 0, readable_text: [], manufacturer: null, model: null, location_clues: [], image_issues: [] },
+    } });
+  });
+  await page.goto("/");
+
+  const languages = [
+    { code: "de", send: "Foto an OpenAI senden", result: "KI-Bildbeobachtung", discard: "Foto verwerfen" },
+    { code: "en", send: "Send photo to OpenAI", result: "AI image observation", discard: "Discard photo" },
+    { code: "pl", send: "Wyślij zdjęcie do OpenAI", result: "Obserwacja AI", discard: "Odrzuć zdjęcie" },
+    { code: "ja", send: "写真をOpenAIに送信", result: "AIによる画像の観察", discard: "写真を破棄" },
+    { code: "fr", send: "Envoyer la photo à OpenAI", result: "Observation de l’image par l’IA", discard: "Supprimer la photo" },
+    { code: "es", send: "Enviar foto a OpenAI", result: "Observación de imagen de IA", discard: "Descartar foto" },
+  ];
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  for (const language of languages) {
+    await page.locator("#language").selectOption(language.code);
+    await page.getByRole("button", { name: language.send }).click();
+    await expect(page.getByRole("heading", { name: language.result })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `horizontal page overflow in ${language.code}`).toBeLessThanOrEqual(320);
+    await page.getByRole("button", { name: language.discard }).click();
+    if (language.code !== "es") await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  }
+});
+
 test("the OSM login link stays hidden when the Worker has no OAuth setup", async ({ page }) => {
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: false } }));
   await page.goto("/");
