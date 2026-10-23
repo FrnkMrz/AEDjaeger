@@ -27,4 +27,25 @@ describe("nearby candidate client", () => {
     expect(signal?.aborted).toBe(true);
     vi.useRealTimers();
   });
+
+  it("keeps the timeout active while reading a stalled response body", async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    const fetcher = vi.fn<typeof fetch>((_input, init) => {
+      signal = init?.signal ?? undefined;
+      return Promise.resolve({
+        ok: true,
+        json: () => new Promise<unknown>((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+        }),
+      } as Response);
+    });
+
+    const pendingSearch = requestNearbyCandidates({ latitude: 52.52, longitude: 13.405, accuracyMeters: 12 }, fetcher);
+    const assertion = expect(pendingSearch).rejects.toMatchObject({ code: "network_error" });
+    await vi.advanceTimersByTimeAsync(35_000);
+    await assertion;
+    expect(signal?.aborted).toBe(true);
+    vi.useRealTimers();
+  });
 });

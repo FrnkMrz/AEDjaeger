@@ -42,16 +42,18 @@ export async function requestNearbyCandidates(
       signal: controller.signal,
     });
   } catch {
-    throw new CandidateSearchError("network_error");
-  } finally {
     clearTimeout(timeout);
+    throw new CandidateSearchError("network_error");
   }
 
   let payload: unknown;
   try {
     payload = await response.json();
   } catch {
-    throw new CandidateSearchError("invalid_response");
+    throw new CandidateSearchError(controller.signal.aborted ? "network_error" : "invalid_response");
+  } finally {
+    // fetch resolves when headers arrive; keep the timer active while the body is read.
+    clearTimeout(timeout);
   }
 
   if (!response.ok) {
