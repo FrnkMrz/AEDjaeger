@@ -46,6 +46,8 @@ describe("requestVisionObservation", () => {
     await expect(requestVisionObservation(image, sessionUnavailable)).rejects.toMatchObject({ code: "session_unavailable" });
     const budgetUnavailable = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ error: "analysis_budget_unavailable" }), { status: 503 }));
     await expect(requestVisionObservation(image, budgetUnavailable)).rejects.toMatchObject({ code: "analysis_budget_unavailable" });
+    const claimUncertain = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ error: "analysis_claim_uncertain" }), { status: 503 }));
+    await expect(requestVisionObservation(image, claimUncertain)).rejects.toMatchObject({ code: "analysis_claim_uncertain" });
   });
 
   it("does not retry a network failure because the server may already have reserved the call", async () => {

@@ -12,7 +12,7 @@ export type FlowState =
   | { kind: "analyzing"; photoUrl: string }
   | { kind: "vision-analyzing"; photoUrl: string }
   | { kind: "vision-result"; photoUrl: string; observation: VisionObservation }
-  | { kind: "vision-error"; photoUrl: string; reason: "sign-in" | "not-allowed" | "budget" | "unavailable" | "session-unavailable" | "analysis-budget-unavailable" | "invalid-image" | "failed" | "invalid-response" }
+  | { kind: "vision-error"; photoUrl: string; reason: "sign-in" | "not-allowed" | "budget" | "unavailable" | "session-unavailable" | "analysis-budget-unavailable" | "analysis-claim-uncertain" | "invalid-image" | "failed" | "invalid-response" }
   | { kind: "clarification"; photoUrl: string; reason: "sign-only" | "multiple" }
   | { kind: "proposal"; photoUrl: string; proposal: ProposalKind; candidateId?: CandidateId }
   | { kind: "sending"; photoUrl: string; proposal: ProposalKind; candidateId?: CandidateId }

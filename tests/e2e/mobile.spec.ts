@@ -209,6 +209,23 @@ test("a temporary budget-reservation failure keeps the photo and offers a safe r
   expect(requestIds[1]).toBe(requestIds[0]);
 });
 
+test("an uncertain provider claim keeps the photo but does not offer a retry", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  let requests = 0;
+  await page.route("**/api/vision/analyze", async (route) => {
+    requests += 1;
+    await route.fulfill({ status: 503, json: { error: "analysis_claim_uncertain" } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
+
+  await expect(page.getByText("Die Datenbank hat den Start der Analyse nicht eindeutig bestätigt.")).toBeVisible();
+  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Mit demselben Foto erneut versuchen" })).toHaveCount(0);
+  expect(requests).toBe(1);
+});
+
 test("the AI result remains readable on a narrow phone in all six languages", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 720 });
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));

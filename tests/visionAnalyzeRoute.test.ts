@@ -20,7 +20,7 @@ const observation: VisionObservation = {
   image_issues: [],
 };
 
-function createDatabase(options: { authenticated?: boolean; reserved?: boolean; runError?: boolean; duplicate?: "reserved" | "started" } = {}) {
+function createDatabase(options: { authenticated?: boolean; reserved?: boolean; runError?: boolean; claimError?: boolean; duplicate?: "reserved" | "started" } = {}) {
   const calls: string[] = [];
   const database: D1Database = {
     prepare(query: string): D1Statement {
@@ -29,6 +29,7 @@ function createDatabase(options: { authenticated?: boolean; reserved?: boolean; 
         async run<T>() {
           calls.push(query);
           if (options.runError && query.includes("INSERT INTO analysis_budget_reservations")) throw new Error("private D1 diagnostic");
+          if (options.claimError && query.includes("provider_started_at IS NULL")) throw new Error("private D1 claim diagnostic");
           const changes = query.includes("INSERT INTO analysis_budget_reservations") ? (options.reserved === false ? 0 : 1) : 1;
           return { success: true, meta: { changes } } as D1Result<T>;
         },
@@ -215,6 +216,16 @@ describe("protected image analysis route", () => {
 
     expect(response.status).toBe(200);
     expect(analyze).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry provider startup after an ambiguous one-time claim", async () => {
+    const { database } = createDatabase({ claimError: true });
+    const analyze = successfulAnalysis();
+    const response = await handleVisionAnalysis(analysisRequest(), environment(database), { analyze });
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "analysis_claim_uncertain" });
+    expect(analyze).not.toHaveBeenCalled();
   });
 
   it("keeps provider errors, photos and secrets out of the response", async () => {

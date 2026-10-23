@@ -101,8 +101,8 @@ export async function handleVisionAnalysis(
     const claimed = await markAnalysisProviderStarted(environment.DB, session.subject, payload.requestId, now);
     if (!claimed) return jsonResponse({ error: "duplicate_request" }, 409);
   } catch {
-    // The external provider must never be called without a confirmed one-time claim.
-    return jsonResponse({ error: "analysis_budget_unavailable" }, 503);
+    // D1 may have committed the claim before losing its reply; this state must not be retried blindly.
+    return jsonResponse({ error: "analysis_claim_uncertain" }, 503);
   }
 
   try {

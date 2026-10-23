@@ -102,6 +102,7 @@ function statusContent(): string {
         "sign-in": "errorSignIn", "not-allowed": "errorNotAllowed", budget: "errorBudget", unavailable: "errorUnavailable",
         "session-unavailable": "errorSessionUnavailable",
         "analysis-budget-unavailable": "errorBudgetUnavailable",
+        "analysis-claim-uncertain": "errorClaimUncertain",
         "invalid-image": "errorInvalidImage", failed: "errorFailed", "invalid-response": "errorInvalidResponse",
       };
       const retryNotice = state.reason === "failed" || state.reason === "invalid-response" ? `<p class="simulation-note">${tv("noAutoRetry")}</p>` : "";
@@ -407,6 +408,7 @@ async function runVisionAnalysis(photoUrl: string, file: File): Promise<void> {
       analysis_unavailable: "unavailable",
       session_unavailable: "session-unavailable",
       analysis_budget_unavailable: "analysis-budget-unavailable",
+      analysis_claim_uncertain: "analysis-claim-uncertain",
       invalid_image: "invalid-image",
       image_too_large: "invalid-image",
       image_processing_failed: "invalid-image",

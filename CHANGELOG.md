@@ -49,7 +49,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Verbindet Overpass-Ergebnisse mit der konservativen Kandidatenbewertung; nur vollständige, ausreichend abgedeckte Suchen können einen Neuanlagevorschlag ermöglichen.
 
 ### Fixed
-- Resume an ambiguously committed budget reservation before provider startup, while an atomic D1 claim prevents duplicate provider calls for the same photo request.
+- Resume an ambiguously committed budget reservation before provider startup, while an atomic D1 claim prevents duplicate provider calls and unclear claim outcomes keep the photo without offering an unsafe retry.
 
 - Trennt den ausdrücklich gestarteten lokalen Demoablauf sichtbar von der echten KI-Bildanalyse.
 - Zeigt eine vom Analyse-Endpunkt abgewiesene OSM-Sitzung als abgemeldet an und begrenzt KI-Anfragen clientseitig auf 35 Sekunden ohne automatische Wiederholung.
