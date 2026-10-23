@@ -46,6 +46,16 @@ describe("Cloudflare Worker shell", () => {
     expect(env.ASSETS.fetch).not.toHaveBeenCalled();
   });
 
+  it("routes read-only AED candidate search through the protected Overpass handler", async () => {
+    const env = environment();
+    const response = await worker.fetch(new Request("https://aedjaeger.test/api/osm/candidates/search"), env);
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get("Allow")).toBe("POST");
+    expect(await response.json()).toEqual({ error: "method_not_allowed" });
+    expect(env.ASSETS.fetch).not.toHaveBeenCalled();
+  });
+
   it("does not start OSM login when the Worker has no server-side configuration", async () => {
     const env = environment();
     const response = await worker.fetch(new Request("https://aedjaeger.test/api/auth/osm/start"), env);

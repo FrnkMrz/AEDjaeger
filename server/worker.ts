@@ -4,6 +4,7 @@ import type { D1Database } from "./storage/d1";
 import { consumeOSMOAuthTransaction, storeOSMOAuthTransaction } from "./storage/osmOAuthTransactions";
 import { deleteOSMSession, findOSMSession, rotateOSMSession } from "./storage/osmSessions";
 import { handleVisionAnalysis } from "./vision/analyzeRoute";
+import { handleOverpassSearch } from "./osm/overpassRoute";
 
 type StaticAssets = { fetch(request: Request): Promise<Response> };
 type WorkerEnvironment = {
@@ -48,6 +49,7 @@ const worker = {
       if (request.method !== "POST") return jsonResponse({ error: "method_not_allowed" }, 405, { Allow: "POST" });
       return logout(request, environment);
     }
+    if (pathname === "/api/osm/candidates/search") return handleOverpassSearch(request, environment);
     if (pathname === "/api/vision/analyze") return handleVisionAnalysis(request, environment);
     if (pathname === "/api" || pathname.startsWith("/api/")) return jsonResponse({ error: "not_found" }, 404);
     return environment.ASSETS.fetch(request);

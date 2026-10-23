@@ -4,6 +4,9 @@ import { analysisResult, chooseCandidate, confirmationResult, recoveryResult, ty
 import { translate, translations, type Language, type TranslationKey } from "./i18n/translations";
 import { translateVision, type VisionMessageKey } from "./i18n/visionTranslations";
 import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservation, VisionClientError } from "./vision/analyzePhoto";
+import { assessCandidates } from "./domain/candidateMatch";
+import { CandidateSearchError, requestNearbyCandidates, type PhoneLocation } from "./osm/candidateSearch";
+import type { VisionObservation } from "./contracts/visionObservation";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root element was not found.");
@@ -65,7 +68,7 @@ function getPhotoUrl(current: FlowState): string | undefined {
 }
 
 function hasUnresolvedSave(current: FlowState): boolean {
-  return current.kind === "vision-analyzing" || current.kind === "sending" || current.kind === "checking-status" || current.kind === "unclear-error";
+  return current.kind === "vision-analyzing" || current.kind === "candidate-searching" || current.kind === "sending" || current.kind === "checking-status" || current.kind === "unclear-error";
 }
 
 function hasActivePhotoDraft(current: FlowState): boolean {
@@ -95,7 +98,38 @@ function statusContent(): string {
         observation.manufacturer ? `<p><strong>${tv("manufacturer")}:</strong> ${escapeHtml(observation.manufacturer)}</p>` : "",
         observation.model ? `<p><strong>${tv("model")}:</strong> ${escapeHtml(observation.model)}</p>` : "",
       ].join("");
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("resultTitle")}</h2><p>${tv("sceneLabel")}: ${tv(sceneKey[observation.scene])}</p><p>${tv("count", { count: observation.device_count })}</p><strong>${tv("readableText")}</strong><ul>${visibleText}</ul>${details}<p class="simulation-note">${tv("notOsm")}</p></div></div><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("resultTitle")}</h2><p>${tv("sceneLabel")}: ${tv(sceneKey[observation.scene])}</p><p>${tv("count", { count: observation.device_count })}</p><strong>${tv("readableText")}</strong><ul>${visibleText}</ul>${details}<p class="simulation-note">${tv("notOsm")}</p></div></div><p class="supporting-copy">${tv("searchConsent")}</p><button class="button button-primary" data-action="search-nearby">${icon("search")}<span>${tv("searchAction")}</span></button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+    }
+    case "candidate-searching":
+      return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv("searchProgress")}</span></div>`;
+    case "candidate-result": {
+      const { assessment, search } = state;
+      const candidates = assessment.kind === "candidate-review"
+        ? assessment.candidates.map((rankedCandidate) => {
+          const candidate = search.candidates.find((item) => item.id === rankedCandidate.id);
+          if (!candidate) return "";
+          const label = candidate.tags.name || candidate.tags["defibrillator:location"] || candidate.id;
+          const distance = tv("distance", { distance: Math.round(rankedCandidate.distanceMeters) });
+          return `<li class="candidate-item"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(distance)}</span><a href="https://www.openstreetmap.org/${escapeHtml(candidate.id)}" target="_blank" rel="noopener noreferrer">${escapeHtml(candidate.id)} ↗</a></li>`;
+        }).join("")
+        : "";
+      let outcome: string;
+      if (search.status === "partial" || assessment.kind === "search-incomplete") outcome = tv("searchPartial");
+      else if (assessment.kind === "candidate-review") outcome = tv("searchFound", { count: assessment.candidates.length });
+      else if (assessment.kind === "new-entry-eligible") outcome = tv("searchNoMatch");
+      else if (assessment.kind === "location-too-uncertain") outcome = tv("locationUncertain");
+      else outcome = tv("searchFailedResult");
+      const retry = search.status === "partial" || assessment.kind === "search-incomplete"
+        ? `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`
+        : "";
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p>${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}<p class="simulation-note">${tv("searchNoWrite")}</p></div></div>${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+    }
+    case "candidate-error": {
+      const errorKey: Record<typeof state.reason, VisionMessageKey> = {
+        "location-unavailable": "locationUnavailable", "location-denied": "locationDenied", "location-uncertain": "locationUncertain",
+        "sign-in": "errorSignIn", "rate-limited": "searchRateLimited", "service-unavailable": "searchUnavailable", failed: "searchFailed", "invalid-response": "errorInvalidResponse",
+      };
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("searchTitle")}</h2><p>${tv(errorKey[state.reason])}</p></div></div><button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     }
     case "vision-error":
       const errorKey: Record<typeof state.reason, VisionMessageKey> = {
@@ -269,6 +303,9 @@ function focusCurrentState(): void {
     analyzing: ".loading-row",
     "vision-analyzing": ".loading-row",
     "vision-result": ".result-message h2",
+    "candidate-searching": ".loading-row",
+    "candidate-result": ".result-message h2",
+    "candidate-error": ".result-message h2",
     "vision-error": ".result-message h2",
     clarification: ".result-message h2",
     proposal: '[data-action="confirm"]',
@@ -350,6 +387,10 @@ function handleAction(action: string | undefined): void {
   } else if (action === "analyze-live") {
     if (state.kind !== "photo" || accountState !== "signed-in" || !selectedPhotoFile) return;
     void runVisionAnalysis(state.photoUrl, selectedPhotoFile);
+  } else if (action === "search-nearby" && state.kind === "vision-result") {
+    void runNearbySearch(state.photoUrl, state.observation);
+  } else if (action === "retry-search" && state.kind === "candidate-error") {
+    void runNearbySearch(state.photoUrl, state.observation);
   } else if (action === "retry-live") {
     if (state.kind !== "vision-error" || (state.reason !== "session-unavailable" && state.reason !== "analysis-budget-unavailable") || !selectedPhotoFile) return;
     void runVisionAnalysis(state.photoUrl, selectedPhotoFile);
@@ -418,6 +459,57 @@ async function runVisionAnalysis(photoUrl: string, file: File): Promise<void> {
     state = { kind: "vision-error", photoUrl, reason: reasons[code] };
   }
   render(true);
+}
+
+async function runNearbySearch(photoUrl: string, observation: VisionObservation): Promise<void> {
+  if (accountState !== "signed-in") {
+    accountState = "signed-out";
+    render(true);
+    return;
+  }
+
+  state = { kind: "candidate-searching", photoUrl, observation };
+  render(true);
+  try {
+    const location = await getPhoneLocation();
+    const search = await requestNearbyCandidates(location);
+    const assessment = assessCandidates(location, search, { nearbyRadiusMeters: 100, maximumAccuracyMeters: 100 });
+    // The coordinates are needed only for this assessment; keep them out of the longer-lived UI state.
+    state = { kind: "candidate-result", photoUrl, observation, search, assessment };
+  } catch (error) {
+    const code = error instanceof CandidateSearchError ? error.code : "search_failed";
+    if (code === "authentication_required") accountState = "signed-out";
+    const reasons = {
+      location_unavailable: "location-unavailable",
+      location_denied: "location-denied",
+      location_too_uncertain: "location-uncertain",
+      authentication_required: "sign-in",
+      search_rate_limited: "rate-limited",
+      overpass_rate_limited: "rate-limited",
+      search_unavailable: "service-unavailable",
+      session_unavailable: "service-unavailable",
+      overpass_unavailable: "service-unavailable",
+      overpass_timeout: "service-unavailable",
+      network_error: "service-unavailable",
+      overpass_invalid_response: "invalid-response",
+      overpass_response_too_large: "invalid-response",
+      invalid_response: "invalid-response",
+      search_failed: "failed",
+    } as const;
+    state = { kind: "candidate-error", photoUrl, observation, reason: reasons[code as keyof typeof reasons] ?? "failed" };
+  }
+  render(true);
+}
+
+function getPhoneLocation(): Promise<PhoneLocation> {
+  if (!navigator.geolocation) return Promise.reject(new CandidateSearchError("location_unavailable"));
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => resolve({ latitude: coords.latitude, longitude: coords.longitude, accuracyMeters: coords.accuracy }),
+      (error) => reject(new CandidateSearchError(error.code === error.PERMISSION_DENIED ? "location_denied" : "location_unavailable")),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15_000 },
+    );
+  });
 }
 
 function releasePhoto(): void {
