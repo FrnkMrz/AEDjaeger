@@ -11,6 +11,9 @@ const newAedInput = {
   searchStatus: "complete" as const,
   assessmentKind: "new-entry-eligible" as const,
   position: { latitude: 52.52, longitude: 13.405 },
+  searchCenter: { latitude: 52.52, longitude: 13.405 },
+  coverageRadiusMeters: 200,
+  nearbyRadiusMeters: 100,
   positionConfirmed: true,
   observedOn: "2026-10-23",
 };
@@ -71,6 +74,20 @@ describe("OSM change previews", () => {
     expect(previewNewAed({ ...newAedInput, positionConfirmed: false })).toEqual({
       kind: "blocked", reason: "position-not-confirmed",
     });
+  });
+
+  it("blocks a proposed point beyond the completed search area", () => {
+    expect(previewNewAed({
+      ...newAedInput,
+      position: { latitude: 48.137, longitude: 11.576 },
+    })).toEqual({ kind: "blocked", reason: "position-outside-search" });
+  });
+
+  it("requires the whole nearby-candidate radius around the proposed point to be covered", () => {
+    expect(previewNewAed({
+      ...newAedInput,
+      position: { latitude: 52.5213, longitude: 13.405 },
+    })).toEqual({ kind: "blocked", reason: "position-outside-search" });
   });
 
   it("rejects impossible dates, invalid coordinates and unsafe optional text", () => {
