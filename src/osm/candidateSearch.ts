@@ -1,7 +1,7 @@
 import type { OverpassCandidate, OverpassSearchResult } from "./overpassSearch";
 
 export class CandidateSearchError extends Error {
-  constructor(readonly code: string) {
+  constructor(readonly code: string, readonly retryAfterSeconds?: number) {
     super(code);
     this.name = "CandidateSearchError";
   }
@@ -61,19 +61,22 @@ export async function requestNearbyCandidates(
       && typeof (payload as Record<string, unknown>).error === "string"
       ? (payload as Record<string, string>).error
       : "search_failed";
-    throw new CandidateSearchError(code);
+    const retryAfterSeconds = code === "search_rate_limited" || code === "overpass_rate_limited"
+      ? readRetryAfter(response)
+      : undefined;
+    throw new CandidateSearchError(code, retryAfterSeconds);
   }
 
   const result = parseSearchResult(payload);
   if (!result) throw new CandidateSearchError("invalid_response");
-  if (result.status === "partial") {
-    const retryAfterHeader = response.headers.get("Retry-After");
-    const retryAfterSeconds = retryAfterHeader === null ? Number.NaN : Number(retryAfterHeader);
-    result.retryAfterSeconds = Number.isInteger(retryAfterSeconds) && retryAfterSeconds >= 0 && retryAfterSeconds <= 120
-      ? retryAfterSeconds
-      : 30;
-  }
+  if (result.status === "partial") result.retryAfterSeconds = readRetryAfter(response);
   return result;
+}
+
+function readRetryAfter(response: Response): number {
+  const header = response.headers.get("Retry-After");
+  const seconds = header === null ? Number.NaN : Number(header);
+  return Number.isInteger(seconds) && seconds >= 0 && seconds <= 120 ? seconds : 30;
 }
 
 function parseSearchResult(value: unknown): OverpassSearchResult | null {

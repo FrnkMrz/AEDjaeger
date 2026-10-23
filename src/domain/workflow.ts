@@ -15,7 +15,7 @@ export type FlowState =
   | { kind: "vision-result"; photoUrl: string; observation: VisionObservation }
   | { kind: "candidate-searching"; photoUrl: string; observation: VisionObservation }
   | { kind: "candidate-result"; photoUrl: string; observation: VisionObservation; search: OverpassSearchResult; assessment: CandidateAssessment; retryAvailableAt?: number }
-  | { kind: "candidate-error"; photoUrl: string; observation: VisionObservation; reason: "location-unavailable" | "location-denied" | "location-uncertain" | "sign-in" | "rate-limited" | "service-unavailable" | "failed" | "invalid-response" }
+  | { kind: "candidate-error"; photoUrl: string; observation: VisionObservation; reason: "location-unavailable" | "location-denied" | "location-uncertain" | "sign-in" | "rate-limited" | "service-unavailable" | "failed" | "invalid-response"; retryAvailableAt?: number }
   | { kind: "vision-error"; photoUrl: string; reason: "sign-in" | "not-allowed" | "budget" | "unavailable" | "session-unavailable" | "analysis-budget-unavailable" | "analysis-claim-uncertain" | "invalid-image" | "failed" | "invalid-response" }
   | { kind: "clarification"; photoUrl: string; reason: "sign-only" | "multiple" }
   | { kind: "proposal"; photoUrl: string; proposal: ProposalKind; candidateId?: CandidateId }

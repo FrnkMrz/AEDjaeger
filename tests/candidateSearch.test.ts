@@ -24,6 +24,14 @@ describe("nearby candidate client", () => {
     expect(fallbackResult.retryAfterSeconds).toBe(30);
   });
 
+  it("preserves Retry-After from rate-limit errors", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ error: "search_rate_limited" }), {
+      status: 429, headers: { "Content-Type": "application/json", "Retry-After": "17" },
+    }));
+    await expect(requestNearbyCandidates({ latitude: 52.52, longitude: 13.405, accuracyMeters: 12 }, fetcher))
+      .rejects.toMatchObject({ code: "search_rate_limited", retryAfterSeconds: 17 });
+  });
+
   it("aborts a stalled request so the photo flow can offer a retry", async () => {
     vi.useFakeTimers();
     let signal: AbortSignal | undefined;

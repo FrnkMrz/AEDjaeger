@@ -195,7 +195,11 @@ test("an incomplete search cannot suggest a new AED and offers a retry", async (
   let searchRequests = 0;
   await page.route("**/api/osm/candidates/search", async (route) => {
     searchRequests += 1;
-    await route.fulfill(searchRequests === 1 ? { headers: { "Retry-After": "1" }, json: {
+    if (searchRequests === 2) {
+      await route.fulfill({ status: 429, headers: { "Retry-After": "2" }, json: { error: "search_rate_limited" } });
+      return;
+    }
+    await route.fulfill(searchRequests === 1 ? { headers: { "Retry-After": "2" }, json: {
       status: "partial", coverage_radius_meters: 112, reason: "overpass-remark",
       candidates: [{ id: "node/456", osmType: "node", coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Bahnhof" } }],
     } } : { json: { status: "complete", coverage_radius_meters: 112, candidates: [] } });
@@ -208,12 +212,18 @@ test("an incomplete search cannot suggest a new AED and offers a retry", async (
   await expect(page.locator(".capture-content")).toContainText("Die Overpass-Suche war unvollständig");
   await expect(page.locator(".candidate-list")).toContainText("Bahnhof");
   await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
+  await expect(page.locator(".capture-content")).toContainText("Erneute Suche in 2 s möglich.");
+  await expect(page.getByRole("button", { name: "Standort und AEDs erneut suchen" })).toHaveCount(0);
   await expect(page.locator(".capture-content")).toContainText("Erneute Suche in 1 s möglich.");
+  await expect(page.getByRole("button", { name: "Standort und AEDs erneut suchen" })).toBeVisible({ timeout: 3_000 });
+  await page.getByRole("button", { name: "Standort und AEDs erneut suchen" }).click();
+  await expect(page.locator(".capture-content")).toContainText("Die Suche ist vorübergehend begrenzt");
+  await expect(page.locator(".capture-content")).toContainText("Erneute Suche in 2 s möglich.");
   await expect(page.getByRole("button", { name: "Standort und AEDs erneut suchen" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Standort und AEDs erneut suchen" })).toBeVisible({ timeout: 3_000 });
   await page.getByRole("button", { name: "Standort und AEDs erneut suchen" }).click();
   await expect(page.locator(".capture-content")).toContainText("Die vollständige Suche fand im abgedeckten Bereich keinen AED");
-  expect(searchRequests).toBe(2);
+  expect(searchRequests).toBe(3);
 });
 
 test("an imprecise location is not sent to the nearby search endpoint", async ({ page, context }) => {

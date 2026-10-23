@@ -128,7 +128,7 @@ function statusContent(): string {
       const retryWaitSeconds = state.retryAvailableAt === undefined ? 0 : Math.max(0, Math.ceil((state.retryAvailableAt - Date.now()) / 1000));
       const retry = search.status === "partial" || assessment.kind === "search-incomplete"
         ? retryWaitSeconds > 0
-          ? `<p class="simulation-note">${tv("searchWait", { seconds: retryWaitSeconds })}</p>`
+          ? `<p class="simulation-note search-wait" aria-live="off">${tv("searchWait", { seconds: retryWaitSeconds })}</p>`
           : `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`
         : "";
       return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p>${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}<p class="simulation-note">${tv("searchNoWrite")}</p></div></div>${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
@@ -138,9 +138,12 @@ function statusContent(): string {
         "location-unavailable": "locationUnavailable", "location-denied": "locationDenied", "location-uncertain": "locationUncertain",
         "sign-in": "errorSignIn", "rate-limited": "searchRateLimited", "service-unavailable": "searchUnavailable", failed: "searchFailed", "invalid-response": "errorInvalidResponse",
       };
+      const retryWaitSeconds = state.retryAvailableAt === undefined ? 0 : Math.max(0, Math.ceil((state.retryAvailableAt - Date.now()) / 1000));
       const retry = state.reason === "sign-in"
         ? ""
-        : `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`;
+        : retryWaitSeconds > 0
+          ? `<p class="simulation-note search-wait" aria-live="off">${tv("searchWait", { seconds: retryWaitSeconds })}</p>`
+          : `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`;
       return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("searchTitle")}</h2><p>${tv(errorKey[state.reason])}</p></div></div>${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     }
     case "vision-error":
@@ -496,12 +499,7 @@ async function runNearbySearch(photoUrl: string, observation: VisionObservation)
       ? Date.now() + (search.retryAfterSeconds ?? 30) * 1_000
       : undefined;
     state = { kind: "candidate-result", photoUrl, observation, search, assessment, ...(retryAvailableAt === undefined ? {} : { retryAvailableAt }) };
-    if (retryAvailableAt !== undefined) {
-      searchRetryTimer = window.setTimeout(() => {
-        searchRetryTimer = undefined;
-        render(true);
-      }, Math.max(0, retryAvailableAt - Date.now()));
-    }
+    if (retryAvailableAt !== undefined) scheduleSearchRetryCountdown(retryAvailableAt);
   } catch (error) {
     const code = error instanceof CandidateSearchError ? error.code : "search_failed";
     if (code === "authentication_required") accountState = "signed-out";
@@ -522,9 +520,24 @@ async function runNearbySearch(photoUrl: string, observation: VisionObservation)
       invalid_response: "invalid-response",
       search_failed: "failed",
     } as const;
-    state = { kind: "candidate-error", photoUrl, observation, reason: reasons[code as keyof typeof reasons] ?? "failed" };
+    const retryAfterSeconds = error instanceof CandidateSearchError ? error.retryAfterSeconds : undefined;
+    const retryAvailableAt = retryAfterSeconds === undefined ? undefined : Date.now() + retryAfterSeconds * 1_000;
+    state = { kind: "candidate-error", photoUrl, observation, reason: reasons[code as keyof typeof reasons] ?? "failed", ...(retryAvailableAt === undefined ? {} : { retryAvailableAt }) };
+    if (retryAvailableAt !== undefined) scheduleSearchRetryCountdown(retryAvailableAt);
   }
   render(true);
+}
+
+function scheduleSearchRetryCountdown(retryAvailableAt: number): void {
+  const remainingSeconds = Math.max(0, Math.ceil((retryAvailableAt - Date.now()) / 1_000));
+  if (remainingSeconds === 0) {
+    searchRetryTimer = undefined;
+    render(true);
+    return;
+  }
+  const waitText = app!.querySelector<HTMLElement>(".search-wait");
+  if (waitText) waitText.textContent = tv("searchWait", { seconds: remainingSeconds });
+  searchRetryTimer = window.setTimeout(() => scheduleSearchRetryCountdown(retryAvailableAt), Math.min(1_000, retryAvailableAt - Date.now()));
 }
 
 function getPhoneLocation(): Promise<PhoneLocation> {
