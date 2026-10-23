@@ -98,10 +98,12 @@ function statusContent(): string {
     case "vision-error":
       const errorKey: Record<typeof state.reason, VisionMessageKey> = {
         "sign-in": "errorSignIn", "not-allowed": "errorNotAllowed", budget: "errorBudget", unavailable: "errorUnavailable",
+        "session-unavailable": "errorSessionUnavailable",
         "invalid-image": "errorInvalidImage", failed: "errorFailed", "invalid-response": "errorInvalidResponse",
       };
       const retryNotice = state.reason === "failed" || state.reason === "invalid-response" ? `<p class="simulation-note">${tv("noAutoRetry")}</p>` : "";
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("errorTitle")}</h2><p>${tv(errorKey[state.reason])}</p>${retryNotice}</div></div><button class="button button-quiet" data-action="reset">${tv("return")}</button>`;
+      const retryButton = state.reason === "session-unavailable" ? `<button class="button button-secondary" data-action="retry-live">${tv("retrySession")}</button>` : "";
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("errorTitle")}</h2><p>${tv(errorKey[state.reason])}</p>${retryNotice}</div></div>${retryButton}<button class="button button-quiet" data-action="reset">${tv("return")}</button>`;
     case "clarification":
       return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${t(state.reason === "multiple" ? "multipleTitle" : "signTitle")}</h2><p>${t(state.reason === "multiple" ? "multipleBody" : "signBody")}</p></div></div>${state.reason === "multiple" ? `<button class="button button-secondary" data-action="candidate-main-entrance">${t("candidateMainEntrance")}</button><button class="button button-secondary" data-action="candidate-sports-hall">${t("candidateSportsHall")}</button>` : ""}<button class="button button-quiet" data-action="retake">${t("clarifyAgain")}</button>`;
     case "proposal":
@@ -342,6 +344,9 @@ function handleAction(action: string | undefined): void {
   } else if (action === "analyze-live") {
     if (state.kind !== "photo" || accountState !== "signed-in" || !selectedPhotoFile) return;
     void runVisionAnalysis(state.photoUrl, selectedPhotoFile);
+  } else if (action === "retry-live") {
+    if (state.kind !== "vision-error" || state.reason !== "session-unavailable" || !selectedPhotoFile) return;
+    void runVisionAnalysis(state.photoUrl, selectedPhotoFile);
   } else if (action === "confirm" && state.kind === "proposal") {
     const { photoUrl, proposal, candidateId } = state;
     state = { kind: "sending", photoUrl, proposal, candidateId };
@@ -394,6 +399,7 @@ async function runVisionAnalysis(photoUrl: string, file: File): Promise<void> {
       analysis_not_allowed: "not-allowed",
       analysis_budget_exceeded: "budget",
       analysis_unavailable: "unavailable",
+      session_unavailable: "session-unavailable",
       invalid_image: "invalid-image",
       image_too_large: "invalid-image",
       image_processing_failed: "invalid-image",
