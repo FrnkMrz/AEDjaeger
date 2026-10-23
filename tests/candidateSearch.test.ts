@@ -56,6 +56,14 @@ describe("nearby candidate client", () => {
       .rejects.toMatchObject({ code: "invalid_response", retryAfterSeconds: 9 });
   });
 
+  it("preserves Retry-After when valid JSON fails the search schema", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ status: "partial" }), {
+      status: 200, headers: { "Content-Type": "application/json", "Retry-After": "11" },
+    }));
+    await expect(requestNearbyCandidates({ latitude: 52.52, longitude: 13.405, accuracyMeters: 12 }, fetcher))
+      .rejects.toMatchObject({ code: "invalid_response", retryAfterSeconds: 11 });
+  });
+
   it("aborts a stalled request so the photo flow can offer a retry", async () => {
     vi.useFakeTimers();
     let signal: AbortSignal | undefined;

@@ -5,20 +5,27 @@ import type { D1Database, D1Result, D1Statement } from "../server/storage/d1";
 const sessionToken = "s".repeat(43);
 const validLocation = { latitude: 52.52, longitude: 13.405, accuracy_meters: 50 };
 
-function createDatabase(options: { authenticated?: boolean; cooldown?: boolean; d1Failure?: boolean; nextAllowedAt?: number } = {}) {
+function createDatabase(options: { authenticated?: boolean; cooldown?: boolean; d1Failure?: boolean; nextAllowedAt?: number; upstreamCooldownUntil?: number } = {}) {
   const queries: string[] = [];
+  let upstreamCooldownUntil = options.upstreamCooldownUntil;
   const database: D1Database = {
     prepare(query: string): D1Statement {
+      let values: unknown[] = [];
       const statement: D1Statement = {
-        bind() { return statement; },
+        bind(...boundValues) { values = boundValues; return statement; },
         async run<T>() {
           queries.push(query);
           if (options.d1Failure) throw new Error("private D1 diagnostic");
+          if (query.includes("INSERT INTO overpass_upstream_cooldown")) {
+            upstreamCooldownUntil = Math.max(upstreamCooldownUntil ?? 0, Number(values[0]));
+            return { success: true, meta: { changes: 1 } } as D1Result<T>;
+          }
           return { success: true, meta: { changes: options.cooldown === false ? 0 : 1 } } as D1Result<T>;
         },
         async first<T>() {
           queries.push(query);
           if (query.includes("FROM osm_sessions")) return (options.authenticated === false ? null : { osm_subject: "osm-user-7" }) as T | null;
+          if (query.includes("overpass_upstream_cooldown")) return (upstreamCooldownUntil === undefined ? null : { next_allowed_at: upstreamCooldownUntil }) as T | null;
           if (query.includes("SELECT next_allowed_at")) return { next_allowed_at: options.nextAllowedAt ?? 31_000 } as T;
           return null;
         },
@@ -158,6 +165,20 @@ describe("protected Overpass candidate search", () => {
 
     expect(response.status).toBe(503);
     expect(response.headers.get("Retry-After")).toBe(expectedHeader);
+  });
+
+  it("stores an upstream Retry-After globally before returning it to the first account", async () => {
+    const { database, queries } = createDatabase();
+    const upstream = vi.fn(async () => new Response("rate limited", { status: 429, headers: { "Retry-After": "120" } }));
+    const first = await handleOverpassSearch(searchRequest(), { DB: database }, { fetch: upstream, now: () => 1_000 });
+    expect(first.headers.get("Retry-After")).toBe("120");
+
+    const perAccountReservations = queries.filter((query) => query.includes("INSERT INTO overpass_search_cooldowns")).length;
+    const second = await handleOverpassSearch(searchRequest(), { DB: database }, { fetch: upstream, now: () => 2_000 });
+    expect(second.status).toBe(503);
+    expect(second.headers.get("Retry-After")).toBe("119");
+    expect(queries.filter((query) => query.includes("INSERT INTO overpass_search_cooldowns")).length).toBe(perAccountReservations);
+    expect(upstream).toHaveBeenCalledTimes(1);
   });
 
   it("returns only the remaining cooldown for a denied concurrent search", async () => {

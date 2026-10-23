@@ -7,6 +7,8 @@ export type OverpassSlotReservation =
   | { reserved: true; nextAllowedAt: number }
   | { reserved: false; retryAfterSeconds: number };
 
+const MAX_UPSTREAM_COOLDOWN_SECONDS = 7 * 24 * 60 * 60;
+
 /**
  * Keep a small per-account cooldown so accidental taps cannot flood the shared
  * public Overpass service. The table stores neither coordinates, search results,
@@ -60,6 +62,52 @@ export async function reserveOverpassSearchSlot(database: D1Database, userId: st
       reserved: false,
       retryAfterSeconds: Math.min(MINIMUM_SEARCH_INTERVAL_SECONDS, Math.max(0, Math.ceil((existing.next_allowed_at - now) / 1_000))),
     };
+  } catch {
+    throw new Error("Die Umgebungssuche konnte nicht sicher vorbereitet werden.");
+  }
+}
+
+/**
+ * Overpass limits AEDjaeger's shared server identity, so this cooldown is global
+ * across OSM accounts. It stores only one expiry timestamp, never a user or location.
+ */
+export async function getOverpassUpstreamCooldownSeconds(database: D1Database, now: number): Promise<number> {
+  if (!Number.isSafeInteger(now) || now < 0) throw new Error("Die Umgebungssuche konnte nicht sicher vorbereitet werden.");
+  try {
+    const row = await database
+      .prepare("SELECT next_allowed_at FROM overpass_upstream_cooldown WHERE singleton = 1")
+      .first<{ next_allowed_at: number }>();
+    if (!row) return 0;
+    if (!Number.isSafeInteger(row.next_allowed_at)) throw new Error("Invalid upstream cooldown");
+    const remaining = Math.ceil((row.next_allowed_at - now) / 1_000);
+    if (remaining <= 0) {
+      const cleared = await database
+        .prepare("DELETE FROM overpass_upstream_cooldown WHERE singleton = 1 AND next_allowed_at <= ?")
+        .bind(now)
+        .run();
+      if (!cleared.success) throw new Error("Upstream cooldown cleanup failed");
+      return 0;
+    }
+    return Math.min(remaining, MAX_UPSTREAM_COOLDOWN_SECONDS);
+  } catch {
+    throw new Error("Die Umgebungssuche konnte nicht sicher vorbereitet werden.");
+  }
+}
+
+/** Extend the shared pause without shortening a longer pause already in D1. */
+export async function extendOverpassUpstreamCooldown(database: D1Database, now: number, seconds: number): Promise<number> {
+  if (!Number.isSafeInteger(now) || now < 0 || !Number.isSafeInteger(seconds) || seconds < 0 || seconds > MAX_UPSTREAM_COOLDOWN_SECONDS) {
+    throw new Error("Die Umgebungssuche konnte nicht sicher vorbereitet werden.");
+  }
+  try {
+    const result = await database
+      .prepare(`INSERT INTO overpass_upstream_cooldown (singleton, next_allowed_at)
+        VALUES (1, ?)
+        ON CONFLICT (singleton) DO UPDATE SET next_allowed_at = MAX(overpass_upstream_cooldown.next_allowed_at, excluded.next_allowed_at)`)
+      .bind(now + seconds * 1_000)
+      .run();
+    if (!result.success) throw new Error("Upstream cooldown write failed");
+    return await getOverpassUpstreamCooldownSeconds(database, now);
   } catch {
     throw new Error("Die Umgebungssuche konnte nicht sicher vorbereitet werden.");
   }

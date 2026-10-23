@@ -67,7 +67,7 @@ export async function requestNearbyCandidates(
   }
 
   const result = parseSearchResult(payload);
-  if (!result) throw new CandidateSearchError("invalid_response");
+  if (!result) throw new CandidateSearchError("invalid_response", responseRetryAfterSeconds);
   result.retryAfterSeconds = responseRetryAfterSeconds ?? 30;
   return result;
 }

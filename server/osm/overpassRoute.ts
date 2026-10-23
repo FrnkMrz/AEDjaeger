@@ -1,6 +1,6 @@
 import { findOSMSession } from "../storage/osmSessions";
 import type { D1Database } from "../storage/d1";
-import { reserveOverpassSearchSlot } from "../storage/overpassCooldown";
+import { extendOverpassUpstreamCooldown, getOverpassUpstreamCooldownSeconds, reserveOverpassSearchSlot } from "../storage/overpassCooldown";
 import { buildOverpassQuery, normalizeOverpassResponse, type SearchCoordinate } from "../../src/osm/overpassSearch";
 
 const SESSION_COOKIE = "aedjaeger_osm_session";
@@ -59,6 +59,15 @@ export async function handleOverpassSearch(
   }
 
   const now = (dependencies.now ?? Date.now)();
+  try {
+    const upstreamCooldown = await getOverpassUpstreamCooldownSeconds(environment.DB, now);
+    if (upstreamCooldown > 0) {
+      return jsonResponse({ error: "overpass_rate_limited" }, 503, { "Retry-After": String(upstreamCooldown) });
+    }
+  } catch {
+    return jsonResponse({ error: "search_unavailable" }, 503);
+  }
+
   let cooldownEndsAt: number;
   try {
     const reservation = await reserveOverpassSearchSlot(environment.DB, session.subject, now);
@@ -100,8 +109,14 @@ export async function handleOverpassSearch(
     });
 
     if (response.status === 429 || response.status === 406) {
-      const upstreamWait = parseRetryAfter(response.headers.get("Retry-After"), (dependencies.now ?? Date.now)());
-      return jsonResponse({ error: "overpass_rate_limited" }, 503, retryHeaders(upstreamWait));
+      const responseTime = (dependencies.now ?? Date.now)();
+      const upstreamWait = Math.max(30, parseRetryAfter(response.headers.get("Retry-After"), responseTime));
+      try {
+        const globalWait = await extendOverpassUpstreamCooldown(environment.DB!, responseTime, upstreamWait);
+        return jsonResponse({ error: "overpass_rate_limited" }, 503, retryHeaders(globalWait));
+      } catch {
+        return jsonResponse({ error: "search_unavailable" }, 503, retryHeaders(upstreamWait));
+      }
     }
     if (!response.ok) return jsonResponse({ error: "overpass_unavailable" }, 502, retryHeaders());
 

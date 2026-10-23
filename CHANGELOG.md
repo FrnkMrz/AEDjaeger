@@ -15,6 +15,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 ### Security
 
 - Begrenzt lesende Overpass-Abfragen pro angemeldetem OSM-Konto auf einen Aufruf pro 30 Sekunden; D1 speichert einen einweg-gehashten Kontoschlüssel, löscht abgelaufene Cooldowns bei der nächsten Suche und speichert weder Standort noch Suchergebnis.
+- Speichert eine von Overpass gemeldete Upstream-Sperre als globale Ablaufzeit in D1, damit kein anderes AEDjaeger-Konto den öffentlichen Dienst währenddessen erneut anfragt.
 - Setzt eine unklare Analyse-Reservierung nur mit derselben Kostenhöhe am selben UTC-Tag fort; alte Reservierungen können das Tageslimit nicht umgehen.
 - Ergänzt eine standardmäßig deaktivierte Bildanalyse-Route, die OSM-Sitzung, Pilot-Freigabeliste, Origin, Bildcontainer und Größenlimit vor einer D1-Budgetreservierung prüft und die Segment-/Chunk-Zahl in JPEG, PNG und WebP begrenzt; API-Schlüssel und Bilddaten gelangen nicht in Browserantworten oder Logs.
 - Prüft OSM-OIDC-Metadaten gegen feste OpenStreetMap-Endpunkte und akzeptiert ausschließlich signierte RS256-ID-Tokens mit passendem Issuer, Client, Ablaufdatum und einmaliger Nonce; Providerabrufe sind begrenzt und folgen keinen Weiterleitungen.
