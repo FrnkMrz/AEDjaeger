@@ -10,9 +10,12 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Dokumentiert den festgelegten Produktnamen und die von Vitest unterstützten Node.js-Versionen in README und Paketmetadaten.
 
 - Trennt im manuellen Bildtest sichtbare AED-Geräte, AED-Gehäuse, Wegweiser, andere Gegenstände und unklare Bilder in einem gemeinsamen Prompt-Schema.
+- Respektiert lokale und von Overpass gemeldete Cooldowns, meldet deren tatsächliche Restzeit und aktualisiert den blockierten Retry-Countdown in allen sechs Sprachen.
 
 ### Security
 
+- Begrenzt lesende Overpass-Abfragen pro angemeldetem OSM-Konto auf einen Aufruf pro 30 Sekunden; D1 speichert einen einweg-gehashten Kontoschlüssel, löscht abgelaufene Cooldowns bei der nächsten Suche und speichert weder Standort noch Suchergebnis.
+- Speichert eine von Overpass gemeldete Upstream-Sperre als globale Ablaufzeit in D1, damit kein anderes AEDjaeger-Konto den öffentlichen Dienst währenddessen erneut anfragt.
 - Setzt eine unklare Analyse-Reservierung nur mit derselben Kostenhöhe am selben UTC-Tag fort; alte Reservierungen können das Tageslimit nicht umgehen.
 - Ergänzt eine standardmäßig deaktivierte Bildanalyse-Route, die OSM-Sitzung, Pilot-Freigabeliste, Origin, Bildcontainer und Größenlimit vor einer D1-Budgetreservierung prüft und die Segment-/Chunk-Zahl in JPEG, PNG und WebP begrenzt; API-Schlüssel und Bilddaten gelangen nicht in Browserantworten oder Logs.
 - Prüft OSM-OIDC-Metadaten gegen feste OpenStreetMap-Endpunkte und akzeptiert ausschließlich signierte RS256-ID-Tokens mit passendem Issuer, Client, Ablaufdatum und einmaliger Nonce; Providerabrufe sind begrenzt und folgen keinen Weiterleitungen.
@@ -22,6 +25,8 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Added
 
+- Ergänzt eine geschützte, ausschließlich lesende Overpass-Suchroute mit begrenzter Standortgenauigkeit, festem Suchradius, Zeit- und Antwortgrößenlimit sowie konservativer Kennzeichnung unvollständiger Ergebnisse.
+- Verbindet die Fotoanalyse mit der geschützten Umgebungssuche: Der angemeldete Nutzer startet die einmalige Standortabfrage ausdrücklich, sieht mögliche OSM-Treffer und erhält auch bei fehlender oder unvollständiger Suche keinen automatischen Neuanlage- oder Schreibvorgang.
 - Verbindet die Fotooberfläche über eine ausdrückliche Nutzeraktion mit der geschützten GPT-6-Luna-Analyse: Bilder werden lokal verkleinert und neu kodiert, KI-Antworten erneut validiert und nur als Beobachtung angezeigt; die App löst keine OSM-Änderung aus.
 - Ergänzt Tests für KI-Anfrage, Pilotfreigabe, Modell- und Antwortvalidierung, begrenzte Wiederholungen, mobile Darstellung und alle sechs Sprachen.
 - Ergänzt einen geschützten `/api/vision/analyze`-Worker-Endpunkt für strukturierte GPT-6-Luna-Bildbeobachtungen. Der Endpunkt bleibt ohne explizite Aktivierung, serverseitigen Schlüssel und vollständige Kostenlimits abgeschaltet; Tests verwenden ausschließlich simulierte Sitzungen, D1 und Modellantworten.

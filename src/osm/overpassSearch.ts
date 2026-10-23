@@ -32,6 +32,7 @@ export interface OverpassSearchResult {
   status: "complete" | "partial" | "failed";
   candidates: OverpassCandidate[];
   coverageRadiusMeters: number;
+  retryAfterSeconds?: number;
   reason?: SearchFailureReason;
 }
 
