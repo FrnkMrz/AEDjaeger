@@ -109,7 +109,7 @@ test("a user-confirmed location search shows nearby candidates without writing t
       candidates: [{
         id: "node/123", osmType: "node", coordinateQuality: "exact",
         position: { latitude: 52.52001, longitude: 13.40501 },
-        tags: { emergency: "defibrillator", name: "Rathaus", check_date: "<img src=x onerror=alert(1)>" },
+        tags: { emergency: "defibrillator", name: "Rathaus <img src=x onerror=alert(2)>", check_date: "<img src=x onerror=alert(1)>" },
       }],
     } });
   });
@@ -128,6 +128,7 @@ test("a user-confirmed location search shows nearby candidates without writing t
   await page.getByRole("button", { name: "Als noch vorhanden bestätigen" }).click();
   await expect(page.getByRole("heading", { name: "Änderungsvorschau" })).toBeVisible();
   await expect(page.locator(".capture-content")).toContainText("Einzige vorgeschlagene Änderung: Prüfdatum");
+  await expect(page.locator(".capture-content")).toContainText("Rathaus <img src=x onerror=alert(2)>");
   await expect(page.locator(".capture-content")).toContainText("Bisher: <img src=x onerror=alert(1)>");
   await expect(page.locator(".capture-content img[onerror]")).toHaveCount(0);
   await expect(page.locator(".capture-content")).toContainText(new Date().toISOString().slice(0, 10));
