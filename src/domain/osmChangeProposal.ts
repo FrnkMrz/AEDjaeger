@@ -1,4 +1,4 @@
-import { distanceMeters, type Coordinate } from "./candidateMatch";
+import { assessCandidates, distanceMeters, type Coordinate } from "./candidateMatch";
 import type { OverpassCandidate } from "../osm/overpassSearch";
 
 export interface TagChange {
@@ -31,6 +31,7 @@ export type ProposalError =
   | "invalid-position"
   | "invalid-search-coverage"
   | "position-outside-search"
+  | "search-found-candidate"
   | "invalid-location-description";
 
 export type ProposalResult<T> = T | { kind: "blocked"; reason: ProposalError };
@@ -101,6 +102,7 @@ export function previewNewAed(
     searchCenter: Coordinate;
     coverageRadiusMeters: number;
     nearbyRadiusMeters: number;
+    searchCandidates: ReadonlyArray<OverpassCandidate>;
     positionConfirmed: boolean;
     observedOn: string;
     locationDescription?: string;
@@ -122,11 +124,30 @@ export function previewNewAed(
     return { kind: "blocked", reason: "invalid-search-coverage" };
   }
 
-  // An empty result only helps at the location that was actually searched. Require
-  // the full candidate radius around the user's confirmed point to fit in that area.
   const distanceFromSearchCenter = distanceMeters(input.searchCenter, input.position);
   if (distanceFromSearchCenter + input.nearbyRadiusMeters > input.coverageRadiusMeters) {
     return { kind: "blocked", reason: "position-outside-search" };
+  }
+
+  // An empty result only helps at the location that was actually searched. Require
+  // the full candidate radius around the user's confirmed point to fit in that area.
+  const coverageAssessment = assessCandidates(
+    { ...input.position, accuracyMeters: 0 },
+    {
+      status: "complete",
+      coverageRadiusMeters: input.coverageRadiusMeters,
+      candidates: [...input.searchCandidates],
+    },
+    { nearbyRadiusMeters: input.nearbyRadiusMeters, maximumAccuracyMeters: 0 },
+  );
+  if (coverageAssessment.kind === "search-incomplete") {
+    return { kind: "blocked", reason: "position-outside-search" };
+  }
+  // Recheck every result around the confirmed point: a node filtered as distant
+  // from the original phone position may be a plausible match after the user moves
+  // the proposed map point. Approximate ways/relations stay for manual review.
+  if (coverageAssessment.kind !== "new-entry-eligible") {
+    return { kind: "blocked", reason: "search-found-candidate" };
   }
 
   const tags: Record<string, string> = {
