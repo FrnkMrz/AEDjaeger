@@ -66,6 +66,13 @@ export async function requestNearbyCandidates(
 
   const result = parseSearchResult(payload);
   if (!result) throw new CandidateSearchError("invalid_response");
+  if (result.status === "partial") {
+    const retryAfterHeader = response.headers.get("Retry-After");
+    const retryAfterSeconds = retryAfterHeader === null ? Number.NaN : Number(retryAfterHeader);
+    result.retryAfterSeconds = Number.isInteger(retryAfterSeconds) && retryAfterSeconds >= 0 && retryAfterSeconds <= 120
+      ? retryAfterSeconds
+      : 30;
+  }
   return result;
 }
 

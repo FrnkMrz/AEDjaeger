@@ -111,6 +111,7 @@ describe("protected Overpass candidate search", () => {
     const response = await handleOverpassSearch(searchRequest(), { DB: database }, { fetch: overpass });
 
     expect(await response.json()).toMatchObject({ status: "partial", reason: "overpass-remark", candidates: [] });
+    expect(response.headers.get("Retry-After")).toBe("30");
   });
 
   it("returns a retry delay when a user's search slot is still reserved", async () => {

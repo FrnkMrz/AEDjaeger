@@ -115,7 +115,7 @@ export async function handleOverpassSearch(
       candidates: result.candidates,
       coverage_radius_meters: result.coverageRadiusMeters,
       ...(result.reason ? { reason: result.reason } : {}),
-    }, 200);
+    }, 200, result.status === "partial" ? { "Retry-After": String(RETRY_AFTER_SECONDS) } : {});
   } catch {
     return jsonResponse({ error: controller.signal.aborted ? "overpass_timeout" : "overpass_unavailable" }, controller.signal.aborted ? 504 : 502);
   } finally {

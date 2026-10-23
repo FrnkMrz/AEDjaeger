@@ -14,7 +14,7 @@ export type FlowState =
   | { kind: "vision-analyzing"; photoUrl: string }
   | { kind: "vision-result"; photoUrl: string; observation: VisionObservation }
   | { kind: "candidate-searching"; photoUrl: string; observation: VisionObservation }
-  | { kind: "candidate-result"; photoUrl: string; observation: VisionObservation; search: OverpassSearchResult; assessment: CandidateAssessment }
+  | { kind: "candidate-result"; photoUrl: string; observation: VisionObservation; search: OverpassSearchResult; assessment: CandidateAssessment; retryAvailableAt?: number }
   | { kind: "candidate-error"; photoUrl: string; observation: VisionObservation; reason: "location-unavailable" | "location-denied" | "location-uncertain" | "sign-in" | "rate-limited" | "service-unavailable" | "failed" | "invalid-response" }
   | { kind: "vision-error"; photoUrl: string; reason: "sign-in" | "not-allowed" | "budget" | "unavailable" | "session-unavailable" | "analysis-budget-unavailable" | "analysis-claim-uncertain" | "invalid-image" | "failed" | "invalid-response" }
   | { kind: "clarification"; photoUrl: string; reason: "sign-only" | "multiple" }

@@ -26,6 +26,7 @@ let accountState: AccountState = "checking";
 let oauthReturnFailed = new URLSearchParams(window.location.search).get("login") === "error";
 let analysisTimer: number | undefined;
 let saveTimer: number | undefined;
+let searchRetryTimer: number | undefined;
 let selectedPhotoFile: File | undefined;
 // Keep a stable ID while this photo is active; the server uses it to avoid double reservations after retries.
 let liveAnalysisRequestId: string | undefined;
@@ -124,8 +125,11 @@ function statusContent(): string {
       else if (assessment.kind === "new-entry-eligible") outcome = tv("searchNoMatch");
       else if (assessment.kind === "location-too-uncertain") outcome = tv("locationUncertain");
       else outcome = tv("searchFailedResult");
+      const retryWaitSeconds = state.retryAvailableAt === undefined ? 0 : Math.max(0, Math.ceil((state.retryAvailableAt - Date.now()) / 1000));
       const retry = search.status === "partial" || assessment.kind === "search-incomplete"
-        ? `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`
+        ? retryWaitSeconds > 0
+          ? `<p class="simulation-note">${tv("searchWait", { seconds: retryWaitSeconds })}</p>`
+          : `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`
         : "";
       return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p>${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}<p class="simulation-note">${tv("searchNoWrite")}</p></div></div>${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     }
@@ -380,6 +384,7 @@ async function onPhotoSelected(event: Event): Promise<void> {
 
 function handleAction(action: string | undefined): void {
   if (action === "retake") {
+    clearTimers();
     releasePhoto();
     demoMode = false;
     state = { kind: "ready" };
@@ -433,8 +438,10 @@ function handleAction(action: string | undefined): void {
 function clearTimers(): void {
   if (analysisTimer) window.clearTimeout(analysisTimer);
   if (saveTimer) window.clearTimeout(saveTimer);
+  if (searchRetryTimer) window.clearTimeout(searchRetryTimer);
   analysisTimer = undefined;
   saveTimer = undefined;
+  searchRetryTimer = undefined;
 }
 
 async function runVisionAnalysis(photoUrl: string, file: File): Promise<void> {
@@ -470,6 +477,8 @@ async function runVisionAnalysis(photoUrl: string, file: File): Promise<void> {
 }
 
 async function runNearbySearch(photoUrl: string, observation: VisionObservation): Promise<void> {
+  if (searchRetryTimer) window.clearTimeout(searchRetryTimer);
+  searchRetryTimer = undefined;
   if (accountState !== "signed-in") {
     accountState = "signed-out";
     render(true);
@@ -483,7 +492,16 @@ async function runNearbySearch(photoUrl: string, observation: VisionObservation)
     const search = await requestNearbyCandidates(location);
     const assessment = assessCandidates(location, search, { nearbyRadiusMeters: 100, maximumAccuracyMeters: 100 });
     // The coordinates are needed only for this assessment; keep them out of the longer-lived UI state.
-    state = { kind: "candidate-result", photoUrl, observation, search, assessment };
+    const retryAvailableAt = search.status === "partial"
+      ? Date.now() + (search.retryAfterSeconds ?? 30) * 1_000
+      : undefined;
+    state = { kind: "candidate-result", photoUrl, observation, search, assessment, ...(retryAvailableAt === undefined ? {} : { retryAvailableAt }) };
+    if (retryAvailableAt !== undefined) {
+      searchRetryTimer = window.setTimeout(() => {
+        searchRetryTimer = undefined;
+        render(true);
+      }, Math.max(0, retryAvailableAt - Date.now()));
+    }
   } catch (error) {
     const code = error instanceof CandidateSearchError ? error.code : "search_failed";
     if (code === "authentication_required") accountState = "signed-out";

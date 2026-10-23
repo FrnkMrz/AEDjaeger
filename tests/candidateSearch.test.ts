@@ -10,6 +10,20 @@ describe("nearby candidate client", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it("uses the server retry delay for partial results and defaults safely when it is missing", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      status: "partial", coverage_radius_meters: 112, reason: "overpass-remark", candidates: [],
+    }), { status: 200, headers: { "Content-Type": "application/json", "Retry-After": "12" } }));
+    const result = await requestNearbyCandidates({ latitude: 52.52, longitude: 13.405, accuracyMeters: 12 }, fetcher);
+    expect(result.retryAfterSeconds).toBe(12);
+
+    fetcher.mockResolvedValue(new Response(JSON.stringify({
+      status: "partial", coverage_radius_meters: 112, reason: "overpass-remark", candidates: [],
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const fallbackResult = await requestNearbyCandidates({ latitude: 52.52, longitude: 13.405, accuracyMeters: 12 }, fetcher);
+    expect(fallbackResult.retryAfterSeconds).toBe(30);
+  });
+
   it("aborts a stalled request so the photo flow can offer a retry", async () => {
     vi.useFakeTimers();
     let signal: AbortSignal | undefined;
