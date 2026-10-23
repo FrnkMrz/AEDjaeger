@@ -77,6 +77,7 @@ test("AI photo analysis requires sign-in and an explicit send action; its result
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.waitForTimeout(100);
   await expect(page.getByRole("button", { name: "Foto an OpenAI senden" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Demoablauf simulieren" })).toHaveCount(0);
   expect(requests).toBe(0);
   await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
   await expect(page.getByRole("heading", { name: "KI-Bildbeobachtung" })).toBeVisible();
@@ -99,6 +100,18 @@ test("the live photo endpoint is not called until the user is signed in and choo
   await expect(page.locator(".capture-content")).toContainText("Verwirf dieses Foto, melde dich unten bei OpenStreetMap an");
   await expect(page.getByRole("button", { name: "Foto an OpenAI senden" })).toHaveCount(0);
   expect(requests).toBe(0);
+});
+
+test("an expired server session is shown as signed out after a 401", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/vision/analyze", (route) => route.fulfill({ status: 401, json: { error: "authentication_required" } }));
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
+
+  await expect(page.locator(".account-panel")).toContainText("Schließe den aktuellen Fotoablauf ab oder verwerfe ihn");
+  await page.getByRole("button", { name: "Foto verwerfen" }).click();
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toBeVisible();
 });
 
 test("the AI result remains readable on a narrow phone in all six languages", async ({ page }) => {
@@ -184,7 +197,7 @@ test("the login cannot discard an unclear save and returns after recovery", asyn
   await page.getByText("Vorschau testen", { exact: true }).click();
   await page.locator("#scenario").selectOption("upload-unclear");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
-  await page.getByRole("button", { name: "Foto und Umgebung prüfen" }).click();
+  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
   await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
 
   await expect(page.getByRole("heading", { name: "Ergebnis noch unklar" })).toBeVisible();
@@ -201,12 +214,13 @@ test("the login stays unavailable while a selected photo or proposal is active",
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
   await page.goto("/");
   await page.getByText("Vorschau testen", { exact: true }).click();
+  await page.locator("#scenario").selectOption("new");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
 
   await expect(page.locator(".account-panel")).toContainText("Schließe den aktuellen Fotoablauf ab");
   await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Foto und Umgebung prüfen" }).click();
-  await expect(page.getByRole("heading", { name: "AED gefunden" })).toBeVisible();
+  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
+  await expect(page.getByRole("heading", { name: "Neuen AED vorbereiten" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toHaveCount(0);
   await page.getByRole("button", { name: "Anderes Foto" }).click();
 
@@ -283,7 +297,7 @@ test("a mobile photo can select a nearby AED and reach the preview confirmation"
   await page.getByText("Vorschau testen", { exact: true }).click();
   await page.locator("#scenario").selectOption("multiple");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
-  await page.getByRole("button", { name: "Foto und Umgebung prüfen" }).click();
+  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
 
   await expect(page.getByRole("heading", { name: "Welcher AED ist es?" })).toBeVisible();
   await page.getByRole("button", { name: "Rathaus · Sporthalle" }).click();
@@ -300,7 +314,7 @@ test("an unclear save results the draft stays available for status recovery", as
   await page.getByText("Vorschau testen", { exact: true }).click();
   await page.locator("#scenario").selectOption("upload-unclear");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
-  await page.getByRole("button", { name: "Foto und Umgebung prüfen" }).click();
+  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
   await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
 
   await expect(page.getByRole("heading", { name: "Ergebnis noch unklar" })).toBeVisible();
@@ -316,7 +330,7 @@ test("the brand link cannot discard a draft while save status is unclear", async
   await page.getByText("Vorschau testen", { exact: true }).click();
   await page.locator("#scenario").selectOption("upload-unclear");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
-  await page.getByRole("button", { name: "Foto und Umgebung prüfen" }).click();
+  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
   await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
   await expect(page.getByRole("heading", { name: "Ergebnis noch unklar" })).toBeVisible();
 
@@ -335,7 +349,7 @@ test("the brand link stays disabled while saving and checking the save status", 
   await page.getByText("Vorschau testen", { exact: true }).click();
   await page.locator("#scenario").selectOption("upload-unclear");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
-  await page.getByRole("button", { name: "Foto und Umgebung prüfen" }).click();
+  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
   await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
 
   const brand = page.locator(".brand");
@@ -360,7 +374,7 @@ test("a damaged image is rejected before the AED flow can start", async ({ page 
   const dialog = await dialogPromise;
   expect(dialog.message()).toContain("Das Bild konnte nicht geöffnet werden");
   await dialog.accept();
-  await expect(page.getByRole("button", { name: "Foto und Umgebung prüfen" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Demoablauf simulieren" })).toHaveCount(0);
 });
 
 test("the installed app shell and hashed assets remain fetchable after going offline", async ({ page, context }) => {

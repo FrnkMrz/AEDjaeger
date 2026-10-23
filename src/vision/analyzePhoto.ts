@@ -4,6 +4,7 @@ const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_SOURCE_BYTES = 40 * 1024 * 1024;
 const MAX_IMAGE_EDGE = 1_600;
 const API_PATH = "/api/vision/analyze";
+const REQUEST_TIMEOUT_MS = 35_000;
 
 export type VisionClientErrorCode =
   | "authentication_required"
@@ -67,6 +68,7 @@ export async function requestVisionObservation(
   image: Blob,
   fetcher: typeof fetch = fetch,
   requestId = createRequestId(),
+  timeoutMs = REQUEST_TIMEOUT_MS,
 ): Promise<VisionObservation> {
   if (image.type !== "image/jpeg" || image.size === 0 || image.size > MAX_IMAGE_BYTES) {
     throw new VisionClientError(image.size > MAX_IMAGE_BYTES ? "image_too_large" : "invalid_image");
@@ -74,23 +76,29 @@ export async function requestVisionObservation(
 
   const imageBase64 = await blobToBase64(image);
   let response: Response;
+  let payload: unknown;
+  const controller = new AbortController();
+  // The server provider call is capped at 25 seconds; this leaves room for the mobile connection.
+  const timeout = globalThis.setTimeout(() => controller.abort(), timeoutMs);
   try {
     response = await fetcher(API_PATH, {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ request_id: requestId, content_type: "image/jpeg", image_base64: imageBase64 }),
+      signal: controller.signal,
     });
-  } catch {
+    try {
+      payload = await response.json();
+    } catch {
+      throw new VisionClientError("invalid_response");
+    }
+  } catch (error) {
     // The server may already have reserved a request; callers must not blindly resubmit it.
+    if (error instanceof VisionClientError) throw error;
     throw new VisionClientError("analysis_failed");
-  }
-
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    throw new VisionClientError("invalid_response");
+  } finally {
+    globalThis.clearTimeout(timeout);
   }
   if (!response.ok) {
     const errorCode = isRecord(payload) && typeof payload.error === "string" ? payload.error : "";

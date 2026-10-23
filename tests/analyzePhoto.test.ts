@@ -50,6 +50,16 @@ describe("requestVisionObservation", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it("aborts a stalled request and reports an ambiguous failure without retrying", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation((_input, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+    }));
+
+    await expect(requestVisionObservation(image, fetcher, "a".repeat(32), 5)).rejects.toMatchObject({ code: "analysis_failed" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][1]?.signal?.aborted).toBe(true);
+  });
+
   it("rejects files outside the server's image contract before making a request", async () => {
     const fetcher = vi.fn<typeof fetch>();
     await expect(requestVisionObservation(new Blob(["bad"], { type: "image/png" }), fetcher)).rejects.toMatchObject({ code: "invalid_image" });

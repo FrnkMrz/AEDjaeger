@@ -15,6 +15,8 @@ const scenarioKeys: Record<DemoScenario, TranslationKey> = {
 const supportedLanguages = Object.keys(translations) as Language[];
 let language = readLanguage();
 let scenario: DemoScenario = "existing";
+// Local fixture workflows stay hidden until the user explicitly opens the preview panel.
+let demoMode = false;
 let state: FlowState = { kind: "ready" };
 type AccountState = "checking" | "not-configured" | "connection-error" | "login-error" | "signed-out" | "signed-in" | "logout-error";
 let accountState: AccountState = "checking";
@@ -75,7 +77,7 @@ function statusContent(): string {
     case "ready":
       return `<div class="empty-illustration" aria-hidden="true"><span class="device-card"><span class="device-heart">♥</span><span class="device-zap">ϟ</span></span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>`;
     case "photo":
-      return `${photoMarkup}<p class="supporting-copy">${tv("consent")}</p>${accountState === "signed-in" ? `<button class="button button-primary" data-action="analyze-live">${icon("search")}<span>${tv("action")}</span></button>` : `<p class="supporting-copy">${tv("signIn")}</p>`}<button class="button button-secondary" data-action="analyze">${t("analyze")}</button><button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
+      return `${photoMarkup}<p class="supporting-copy">${tv("consent")}</p>${accountState === "signed-in" ? `<button class="button button-primary" data-action="analyze-live">${icon("search")}<span>${tv("action")}</span></button>` : `<p class="supporting-copy">${tv("signIn")}</p>`}${demoMode ? `<button class="button button-secondary" data-action="analyze">${t("demoAnalyze")}</button>` : ""}<button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
     case "analyzing":
       return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${t("checking")}</span></div>`;
     case "vision-analyzing":
@@ -179,6 +181,8 @@ function render(restoreFlowFocus = false): void {
   });
   document.querySelector<HTMLSelectElement>("#scenario")?.addEventListener("change", (event) => {
     scenario = (event.currentTarget as HTMLSelectElement).value as DemoScenario;
+    // Choosing a fixture is itself an explicit request to use the local simulation.
+    demoMode = true;
   });
   document.querySelector<HTMLInputElement>("#camera-input")?.addEventListener("change", onPhotoSelected);
   document.querySelector<HTMLInputElement>("#file-input")?.addEventListener("change", onPhotoSelected);
@@ -254,7 +258,7 @@ async function retryOSMSessionStatus(): Promise<void> {
 function focusCurrentState(): void {
   const focusTargets: Record<FlowState["kind"], string> = {
     ready: "#camera-input",
-    photo: accountState === "signed-in" ? '[data-action="analyze-live"]' : '[data-action="analyze"]',
+    photo: accountState === "signed-in" ? '[data-action="analyze-live"]' : '[data-action="retake"]',
     analyzing: ".loading-row",
     "vision-analyzing": ".loading-row",
     "vision-result": ".result-message h2",
@@ -314,6 +318,8 @@ async function onPhotoSelected(event: Event): Promise<void> {
   photoSelectionPending = false;
   clearTimers();
   releasePhoto();
+  // The open disclosure is an explicit user choice; carry that preview mode into this photo.
+  demoMode = demoMode || (document.querySelector<HTMLDetailsElement>(".demo-panel")?.open ?? false);
   selectedPhotoFile = file;
   state = { kind: "photo", photoUrl };
   render(true);
@@ -322,6 +328,7 @@ async function onPhotoSelected(event: Event): Promise<void> {
 function handleAction(action: string | undefined): void {
   if (action === "retake") {
     releasePhoto();
+    demoMode = false;
     state = { kind: "ready" };
   } else if (action === "analyze") {
     const photoUrl = getPhotoUrl(state);
@@ -357,6 +364,7 @@ function handleAction(action: string | undefined): void {
   } else if (action === "reset") {
     clearTimers();
     releasePhoto();
+    demoMode = false;
     state = { kind: "ready" };
   }
   render(true);
@@ -379,6 +387,8 @@ async function runVisionAnalysis(photoUrl: string, file: File): Promise<void> {
     state = { kind: "vision-result", photoUrl, observation };
   } catch (error) {
     const code = error instanceof VisionClientError ? error.code : "analysis_failed";
+    // A 401 means the server no longer accepts this browser session, even if its last check passed.
+    if (code === "authentication_required") accountState = "signed-out";
     const reasons = {
       authentication_required: "sign-in",
       analysis_not_allowed: "not-allowed",
