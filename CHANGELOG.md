@@ -4,6 +4,10 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ## [Unreleased]
 
+### Added
+
+- Verbindet bestätigte AED-Knoten aus der Umgebungssuche mit einer lokalen Änderungsvorschau, die ausschließlich `check_date` enthält. Es wird weiterhin nichts an OpenStreetMap gesendet.
+
 ### Changed
 
 - Vereinheitlicht den App-Namen in allen Sprachen auf `AEDjaeger` ohne Umlaute.
