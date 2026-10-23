@@ -156,6 +156,31 @@ test("denied location access does not send a nearby search request", async ({ pa
   expect(searchRequests).toBe(0);
 });
 
+test("an expired OSM session does not offer a search retry that cannot work", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/vision/analyze", async (route) => {
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ json: {
+      request_id: payload.request_id, model: "gpt-6-luna",
+      observation: { scene: "device_visible", device_count: 1, readable_text: [], manufacturer: null, model: null, location_clues: [], image_issues: [] },
+    } });
+  });
+  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ status: 401, json: { error: "authentication_required" } }));
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
+  await page.getByRole("button", { name: "AEDs in der Umgebung suchen" }).click();
+
+  await expect(page.locator(".capture-content")).toContainText("Die OpenStreetMap-Anmeldung fehlt oder ist abgelaufen");
+  await expect(page.getByRole("button", { name: "Standort und AEDs erneut suchen" })).toHaveCount(0);
+  await expect(page.locator(".account-panel")).toContainText("Schließe den aktuellen Fotoablauf ab oder verwerfe ihn");
+  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+  await page.getByRole("button", { name: "Foto verwerfen" }).click();
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toBeVisible();
+});
+
 test("an incomplete search cannot suggest a new AED and offers a retry", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });

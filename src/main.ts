@@ -134,7 +134,10 @@ function statusContent(): string {
         "location-unavailable": "locationUnavailable", "location-denied": "locationDenied", "location-uncertain": "locationUncertain",
         "sign-in": "errorSignIn", "rate-limited": "searchRateLimited", "service-unavailable": "searchUnavailable", failed: "searchFailed", "invalid-response": "errorInvalidResponse",
       };
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("searchTitle")}</h2><p>${tv(errorKey[state.reason])}</p></div></div><button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      const retry = state.reason === "sign-in"
+        ? ""
+        : `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("searchTitle")}</h2><p>${tv(errorKey[state.reason])}</p></div></div>${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     }
     case "vision-error":
       const errorKey: Record<typeof state.reason, VisionMessageKey> = {
