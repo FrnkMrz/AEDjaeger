@@ -5,6 +5,7 @@ import { translate, translations, type Language, type TranslationKey } from "./i
 import { translateVision, type VisionMessageKey } from "./i18n/visionTranslations";
 import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservation, VisionClientError } from "./vision/analyzePhoto";
 import { assessCandidates } from "./domain/candidateMatch";
+import { previewExistingAedCheck } from "./domain/osmChangeProposal";
 import { CandidateSearchError, requestNearbyCandidates, type PhoneLocation } from "./osm/candidateSearch";
 import type { VisionObservation } from "./contracts/visionObservation";
 
@@ -117,7 +118,10 @@ function statusContent(): string {
       const candidates = candidatesToShow.map(({ candidate, distanceMeters }) => {
           const label = candidate.tags.name || candidate.tags["defibrillator:location"] || candidate.id;
           const distance = distanceMeters === undefined ? "" : `<span>${escapeHtml(tv("distance", { distance: Math.round(distanceMeters) }))}</span>`;
-          return `<li class="candidate-item"><strong>${escapeHtml(label)}</strong>${distance}<a href="https://www.openstreetmap.org/${escapeHtml(candidate.id)}" target="_blank" rel="noopener noreferrer">${escapeHtml(candidate.id)} ↗</a></li>`;
+          const reviewAction = candidate.osmType === "node"
+            ? `<button class="button button-secondary" data-action="preview-candidate" data-candidate-id="${escapeHtml(candidate.id)}">${tv("selectCandidate")}</button>`
+            : `<span class="supporting-copy">${tv("previewUnsupportedShort")}</span>`;
+          return `<li class="candidate-item"><strong>${escapeHtml(label)}</strong>${distance}<a href="https://www.openstreetmap.org/${escapeHtml(candidate.id)}" target="_blank" rel="noopener noreferrer">${escapeHtml(candidate.id)} ↗</a>${reviewAction}</li>`;
         }).join("");
       let outcome: string;
       if (search.status === "partial" || assessment.kind === "search-incomplete") outcome = tv("searchPartial");
@@ -132,6 +136,13 @@ function statusContent(): string {
           : `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`
         : "";
       return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p>${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}<p class="simulation-note">${tv("searchNoWrite")}</p></div></div>${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+    }
+    case "osm-preview": {
+      const { result } = state;
+      const content = result.kind === "ready"
+        ? `<p><strong>${tv("previewCheckDate")}</strong></p><p>${tv("previewOldDate", { date: result.changes[0].before ?? tv("previewNoDate") })}</p><p>${tv("previewNewDate", { date: result.changes[0].after })}</p>`
+        : `<p>${tv("previewUnsupported")}</p>`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("previewTitle")}</h2><p>${tv("previewTarget", { target: state.candidateLabel })}</p><p><a href="https://www.openstreetmap.org/${escapeHtml(state.candidateId)}" target="_blank" rel="noopener noreferrer">${escapeHtml(state.candidateId)} ↗</a></p>${content}<p class="simulation-note">${tv("previewNoWrite")}</p></div></div><button class="button button-quiet" data-action="back-to-candidates">${tv("previewBack")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     }
     case "candidate-error": {
       const errorKey: Record<typeof state.reason, VisionMessageKey> = {
@@ -242,7 +253,7 @@ function render(restoreFlowFocus = false): void {
   });
   document.querySelector<HTMLInputElement>("#camera-input")?.addEventListener("change", onPhotoSelected);
   document.querySelector<HTMLInputElement>("#file-input")?.addEventListener("change", onPhotoSelected);
-  document.querySelectorAll<HTMLElement>("[data-action]").forEach((button) => button.addEventListener("click", () => handleAction(button.dataset.action)));
+  document.querySelectorAll<HTMLElement>("[data-action]").forEach((button) => button.addEventListener("click", () => handleAction(button.dataset.action, button)));
   bindAccountPanel();
 
   if (restoreFlowFocus) focusCurrentState();
@@ -320,6 +331,7 @@ function focusCurrentState(): void {
     "vision-result": ".result-message h2",
     "candidate-searching": ".loading-row",
     "candidate-result": ".result-message h2",
+    "osm-preview": ".result-message h2",
     "candidate-error": ".result-message h2",
     "vision-error": ".result-message h2",
     clarification: ".result-message h2",
@@ -385,7 +397,7 @@ async function onPhotoSelected(event: Event): Promise<void> {
   render(true);
 }
 
-function handleAction(action: string | undefined): void {
+function handleAction(action: string | undefined, source?: HTMLElement): void {
   if (action === "retake") {
     clearTimers();
     releasePhoto();
@@ -407,6 +419,15 @@ function handleAction(action: string | undefined): void {
     void runNearbySearch(state.photoUrl, state.observation);
   } else if (action === "retry-search" && (state.kind === "candidate-error" || (state.kind === "candidate-result" && (state.search.status === "partial" || state.assessment.kind === "search-incomplete")))) {
     void runNearbySearch(state.photoUrl, state.observation);
+  } else if (action === "preview-candidate" && state.kind === "candidate-result") {
+    const candidateId = source?.dataset.candidateId;
+    const candidate = state.search.candidates.find((item) => item.id === candidateId);
+    if (!candidate || !candidateId) return;
+    const result = previewExistingAedCheck(candidate, true, new Date().toISOString().slice(0, 10));
+    const candidateLabel = candidate.tags.name || candidate.tags["defibrillator:location"] || candidate.id;
+    state = { kind: "osm-preview", photoUrl: state.photoUrl, candidateId, candidateLabel, result, returnState: state };
+  } else if (action === "back-to-candidates" && state.kind === "osm-preview") {
+    state = state.returnState;
   } else if (action === "retry-live") {
     if (state.kind !== "vision-error" || (state.reason !== "session-unavailable" && state.reason !== "analysis-budget-unavailable") || !selectedPhotoFile) return;
     void runVisionAnalysis(state.photoUrl, selectedPhotoFile);
@@ -494,11 +515,12 @@ async function runNearbySearch(photoUrl: string, observation: VisionObservation)
     const location = await getPhoneLocation();
     const search = await requestNearbyCandidates(location);
     const assessment = assessCandidates(location, search, { nearbyRadiusMeters: 100, maximumAccuracyMeters: 100 });
-    // The coordinates are needed only for this assessment; keep them out of the longer-lived UI state.
+    // Keep coordinates only in the active in-memory photo flow so a later preview can stay tied to
+    // the exact search location. They are discarded when the photo is replaced and never persisted.
     const retryAvailableAt = search.status === "partial"
       ? Date.now() + (search.retryAfterSeconds ?? 30) * 1_000
       : undefined;
-    state = { kind: "candidate-result", photoUrl, observation, search, assessment, ...(retryAvailableAt === undefined ? {} : { retryAvailableAt }) };
+    state = { kind: "candidate-result", photoUrl, observation, search, assessment, location, ...(retryAvailableAt === undefined ? {} : { retryAvailableAt }) };
     if (retryAvailableAt !== undefined) scheduleSearchRetryCountdown(retryAvailableAt);
   } catch (error) {
     const code = error instanceof CandidateSearchError ? error.code : "search_failed";
