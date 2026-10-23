@@ -2,6 +2,8 @@ import "./styles.css";
 import { endOSMSession, loadOSMSession } from "./auth/osmSession";
 import { analysisResult, chooseCandidate, confirmationResult, recoveryResult, type CandidateId, type DemoScenario, type FlowState } from "./domain/workflow";
 import { translate, translations, type Language, type TranslationKey } from "./i18n/translations";
+import { translateVision, type VisionMessageKey } from "./i18n/visionTranslations";
+import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservation, VisionClientError } from "./vision/analyzePhoto";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root element was not found.");
@@ -13,12 +15,17 @@ const scenarioKeys: Record<DemoScenario, TranslationKey> = {
 const supportedLanguages = Object.keys(translations) as Language[];
 let language = readLanguage();
 let scenario: DemoScenario = "existing";
+// Local fixture workflows stay hidden until the user explicitly opens the preview panel.
+let demoMode = false;
 let state: FlowState = { kind: "ready" };
 type AccountState = "checking" | "not-configured" | "connection-error" | "login-error" | "signed-out" | "signed-in" | "logout-error";
 let accountState: AccountState = "checking";
 let oauthReturnFailed = new URLSearchParams(window.location.search).get("login") === "error";
 let analysisTimer: number | undefined;
 let saveTimer: number | undefined;
+let selectedPhotoFile: File | undefined;
+// Keep a stable ID while this photo is active; the server uses it to avoid double reservations after retries.
+let liveAnalysisRequestId: string | undefined;
 let photoSelectionVersion = 0;
 let photoSelectionPending = false;
 
@@ -29,7 +36,11 @@ function readLanguage(): Language {
   return supportedLanguages.includes(deviceLanguage) ? deviceLanguage : "de";
 }
 
-function t(key: TranslationKey): string { return translate(language, key); }
+function t(key: TranslationKey, values?: Record<string, number | string>): string {
+  const translated = translate(language, key);
+  return values ? translated.replace(/\{(\w+)\}/gu, (_, name: string) => String(values[name] ?? "")) : translated;
+}
+function tv(key: VisionMessageKey, values?: Record<string, number | string>): string { return translateVision(language, key, values); }
 
 function accountPanel(): string {
   if (accountState === "checking") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountChecking")}</section>`;
@@ -54,7 +65,7 @@ function getPhotoUrl(current: FlowState): string | undefined {
 }
 
 function hasUnresolvedSave(current: FlowState): boolean {
-  return current.kind === "sending" || current.kind === "checking-status" || current.kind === "unclear-error";
+  return current.kind === "vision-analyzing" || current.kind === "sending" || current.kind === "checking-status" || current.kind === "unclear-error";
 }
 
 function hasActivePhotoDraft(current: FlowState): boolean {
@@ -68,9 +79,36 @@ function statusContent(): string {
     case "ready":
       return `<div class="empty-illustration" aria-hidden="true"><span class="device-card"><span class="device-heart">♥</span><span class="device-zap">ϟ</span></span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>`;
     case "photo":
-      return `${photoMarkup}<p class="supporting-copy">${t("privacy")}</p><button class="button button-primary" data-action="analyze">${icon("search")}<span>${t("analyze")}</span></button><button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
+      return `${photoMarkup}<p class="supporting-copy">${tv("consent")}</p>${accountState === "signed-in" ? `<button class="button button-primary" data-action="analyze-live">${icon("search")}<span>${tv("action")}</span></button>` : `<p class="supporting-copy">${tv("signIn")}</p>`}${demoMode ? `<button class="button button-secondary" data-action="analyze">${t("demoAnalyze")}</button>` : ""}<button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
     case "analyzing":
       return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${t("checking")}</span></div>`;
+    case "vision-analyzing":
+      return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv("progress")}</span></div>`;
+    case "vision-result": {
+      const observation = state.observation;
+      const sceneKey: Record<typeof observation.scene, VisionMessageKey> = {
+        device_visible: "device", enclosure_visible: "enclosure", sign_only: "sign",
+        empty_holder: "emptyHolder", multiple_devices: "multiple", other_object: "other", unclear: "unclear",
+      };
+      const visibleText = observation.readable_text.length ? observation.readable_text.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : `<li>${tv("noText")}</li>`;
+      const details = [
+        observation.manufacturer ? `<p><strong>${tv("manufacturer")}:</strong> ${escapeHtml(observation.manufacturer)}</p>` : "",
+        observation.model ? `<p><strong>${tv("model")}:</strong> ${escapeHtml(observation.model)}</p>` : "",
+      ].join("");
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("resultTitle")}</h2><p>${tv("sceneLabel")}: ${tv(sceneKey[observation.scene])}</p><p>${tv("count", { count: observation.device_count })}</p><strong>${tv("readableText")}</strong><ul>${visibleText}</ul>${details}<p class="simulation-note">${tv("notOsm")}</p></div></div><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+    }
+    case "vision-error":
+      const errorKey: Record<typeof state.reason, VisionMessageKey> = {
+        "sign-in": "errorSignIn", "not-allowed": "errorNotAllowed", budget: "errorBudget", unavailable: "errorUnavailable",
+        "session-unavailable": "errorSessionUnavailable",
+        "analysis-budget-unavailable": "errorBudgetUnavailable",
+        "analysis-claim-uncertain": "errorClaimUncertain",
+        "invalid-image": "errorInvalidImage", failed: "errorFailed", "invalid-response": "errorInvalidResponse",
+      };
+      const retryNotice = state.reason === "failed" || state.reason === "invalid-response" ? `<p class="simulation-note">${tv("noAutoRetry")}</p>` : "";
+      const retryableBeforeProvider = state.reason === "session-unavailable" || state.reason === "analysis-budget-unavailable";
+      const retryButton = retryableBeforeProvider ? `<button class="button button-secondary" data-action="retry-live">${tv("retrySession")}</button>` : "";
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("errorTitle")}</h2><p>${tv(errorKey[state.reason])}</p>${retryNotice}</div></div>${retryButton}<button class="button button-quiet" data-action="reset">${tv("return")}</button>`;
     case "clarification":
       return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${t(state.reason === "multiple" ? "multipleTitle" : "signTitle")}</h2><p>${t(state.reason === "multiple" ? "multipleBody" : "signBody")}</p></div></div>${state.reason === "multiple" ? `<button class="button button-secondary" data-action="candidate-main-entrance">${t("candidateMainEntrance")}</button><button class="button button-secondary" data-action="candidate-sports-hall">${t("candidateSportsHall")}</button>` : ""}<button class="button button-quiet" data-action="retake">${t("clarifyAgain")}</button>`;
     case "proposal":
@@ -105,7 +143,7 @@ function render(restoreFlowFocus = false): void {
     <div class="page-shell">
       <header class="topbar"><a class="brand" href="/" aria-label="${t("appName")}" ${hasUnresolvedSave(state) ? 'aria-disabled="true"' : ""}><span class="brand-mark">${icon("check")}</span><span>${t("appName")}</span></a><div class="topbar-actions"><button class="info-link" id="open-info" type="button"><span class="info-mark" aria-hidden="true">i</span><span>${t("aboutButton")}</span></button><label class="language-picker"><span class="sr-only">${t("language")}</span><select id="language" aria-label="${t("language")}">${supportedLanguages.map((code) => `<option value="${code}" ${language === code ? "selected" : ""}>${languageNames[code]}</option>`).join("")}</select><span class="language-globe" aria-hidden="true">◎</span></label></div></header>
       <main>
-        <section class="hero ${isReady ? "" : "hero-compact"}"><div class="hero-kicker"><span></span>${t("eyebrow")}</div><h1>${isReady ? t("title") : state.kind === "analyzing" || state.kind === "sending" ? t("checking") : t("tagline")}</h1>${isReady ? `<p>${t("intro")}</p>` : ""}</section>
+        <section class="hero ${isReady ? "" : "hero-compact"}"><div class="hero-kicker"><span></span>${t("eyebrow")}</div><h1>${isReady ? t("title") : state.kind === "analyzing" || state.kind === "vision-analyzing" || state.kind === "sending" ? t("checking") : t("tagline")}</h1>${isReady ? `<p>${t("intro")}</p>` : ""}</section>
         <section class="capture-card" aria-live="polite" aria-atomic="false">
           <div class="capture-content">${isReady ? `<div class="empty-illustration" aria-hidden="true"><span class="device-card"><span class="device-heart">♥</span><span class="device-zap">ϟ</span></span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>` : statusContent()}</div>
           ${isReady ? `<div class="capture-actions"><label class="button button-primary camera-label">${icon("camera")}<span>${t("camera")}</span><input id="camera-input" type="file" accept="image/*" capture="environment" /></label><label class="button button-secondary camera-label">${t("choosePhoto")}<input id="file-input" type="file" accept="image/*" /></label><p class="supporting-copy">${t("privacy")}</p></div>` : ""}
@@ -150,6 +188,8 @@ function render(restoreFlowFocus = false): void {
   });
   document.querySelector<HTMLSelectElement>("#scenario")?.addEventListener("change", (event) => {
     scenario = (event.currentTarget as HTMLSelectElement).value as DemoScenario;
+    // Choosing a fixture is itself an explicit request to use the local simulation.
+    demoMode = true;
   });
   document.querySelector<HTMLInputElement>("#camera-input")?.addEventListener("change", onPhotoSelected);
   document.querySelector<HTMLInputElement>("#file-input")?.addEventListener("change", onPhotoSelected);
@@ -200,6 +240,8 @@ async function refreshAccountState(focusSelector?: string): Promise<void> {
       : accountState === "signed-out" || accountState === "login-error" ? "#osm-sign-in"
         : ".account-panel";
   updateAccountPanel(focusSelector === "next-action" ? nextActionSelector : focusSelector);
+  // A photo may be selected while the initial session check is still running.
+  if (state.kind === "photo") render();
 }
 
 async function signOutFromOSM(): Promise<void> {
@@ -223,8 +265,11 @@ async function retryOSMSessionStatus(): Promise<void> {
 function focusCurrentState(): void {
   const focusTargets: Record<FlowState["kind"], string> = {
     ready: "#camera-input",
-    photo: '[data-action="analyze"]',
+    photo: accountState === "signed-in" ? '[data-action="analyze-live"]' : '[data-action="retake"]',
     analyzing: ".loading-row",
+    "vision-analyzing": ".loading-row",
+    "vision-result": ".result-message h2",
+    "vision-error": ".result-message h2",
     clarification: ".result-message h2",
     proposal: '[data-action="confirm"]',
     sending: ".loading-row",
@@ -280,6 +325,10 @@ async function onPhotoSelected(event: Event): Promise<void> {
   photoSelectionPending = false;
   clearTimers();
   releasePhoto();
+  // The open disclosure is an explicit user choice; carry that preview mode into this photo.
+  demoMode = demoMode || (document.querySelector<HTMLDetailsElement>(".demo-panel")?.open ?? false);
+  selectedPhotoFile = file;
+  liveAnalysisRequestId = undefined;
   state = { kind: "photo", photoUrl };
   render(true);
 }
@@ -287,6 +336,7 @@ async function onPhotoSelected(event: Event): Promise<void> {
 function handleAction(action: string | undefined): void {
   if (action === "retake") {
     releasePhoto();
+    demoMode = false;
     state = { kind: "ready" };
   } else if (action === "analyze") {
     const photoUrl = getPhotoUrl(state);
@@ -297,6 +347,12 @@ function handleAction(action: string | undefined): void {
       state = analysisResult(scenario, photoUrl);
       render(true);
     }, 700);
+  } else if (action === "analyze-live") {
+    if (state.kind !== "photo" || accountState !== "signed-in" || !selectedPhotoFile) return;
+    void runVisionAnalysis(state.photoUrl, selectedPhotoFile);
+  } else if (action === "retry-live") {
+    if (state.kind !== "vision-error" || (state.reason !== "session-unavailable" && state.reason !== "analysis-budget-unavailable") || !selectedPhotoFile) return;
+    void runVisionAnalysis(state.photoUrl, selectedPhotoFile);
   } else if (action === "confirm" && state.kind === "proposal") {
     const { photoUrl, proposal, candidateId } = state;
     state = { kind: "sending", photoUrl, proposal, candidateId };
@@ -319,6 +375,7 @@ function handleAction(action: string | undefined): void {
   } else if (action === "reset") {
     clearTimers();
     releasePhoto();
+    demoMode = false;
     state = { kind: "ready" };
   }
   render(true);
@@ -330,9 +387,44 @@ function clearTimers(): void {
   analysisTimer = undefined;
   saveTimer = undefined;
 }
+
+async function runVisionAnalysis(photoUrl: string, file: File): Promise<void> {
+  // The button is the user's explicit choice to send this single photo to the protected API.
+  state = { kind: "vision-analyzing", photoUrl };
+  render(true);
+  try {
+    const sanitizedImage = await preparePhotoForAnalysis(file);
+    liveAnalysisRequestId ??= createVisionRequestId();
+    const observation = await requestVisionObservation(sanitizedImage, fetch, liveAnalysisRequestId);
+    state = { kind: "vision-result", photoUrl, observation };
+  } catch (error) {
+    const code = error instanceof VisionClientError ? error.code : "analysis_failed";
+    // A 401 means the server no longer accepts this browser session, even if its last check passed.
+    if (code === "authentication_required") accountState = "signed-out";
+    const reasons = {
+      authentication_required: "sign-in",
+      analysis_not_allowed: "not-allowed",
+      analysis_budget_exceeded: "budget",
+      analysis_unavailable: "unavailable",
+      session_unavailable: "session-unavailable",
+      analysis_budget_unavailable: "analysis-budget-unavailable",
+      analysis_claim_uncertain: "analysis-claim-uncertain",
+      invalid_image: "invalid-image",
+      image_too_large: "invalid-image",
+      image_processing_failed: "invalid-image",
+      analysis_failed: "failed",
+      invalid_response: "invalid-response",
+    } as const;
+    state = { kind: "vision-error", photoUrl, reason: reasons[code] };
+  }
+  render(true);
+}
+
 function releasePhoto(): void {
   const photoUrl = getPhotoUrl(state);
   if (photoUrl?.startsWith("blob:")) URL.revokeObjectURL(photoUrl);
+  selectedPhotoFile = undefined;
+  liveAnalysisRequestId = undefined;
 }
 
 render();

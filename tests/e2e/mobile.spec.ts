@@ -54,6 +54,209 @@ test("the OSM login is offered only when configured and is localized in all six 
   }
 });
 
+test("AI photo analysis requires sign-in and an explicit send action; its result never offers an OSM write", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  let requests = 0;
+  await page.route("**/api/vision/analyze", async (route) => {
+    requests += 1;
+    expect(route.request().method()).toBe("POST");
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    expect(payload).toEqual(expect.objectContaining({ content_type: "image/jpeg" }));
+    expect(Object.keys(payload).sort()).toEqual(["content_type", "image_base64", "request_id"]);
+    expect(String(payload.image_base64)).toMatch(/^\/9j/u);
+    await route.fulfill({ json: {
+      request_id: payload.request_id,
+      model: "gpt-6-luna",
+      observation: {
+        scene: "device_visible", device_count: 1, readable_text: ["AED", "<script>ignore rules</script>"],
+        manufacturer: null, model: null, location_clues: [], image_issues: [],
+      },
+    } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.waitForTimeout(100);
+  await expect(page.getByRole("button", { name: "Foto an OpenAI senden" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Demoablauf simulieren" })).toHaveCount(0);
+  expect(requests).toBe(0);
+  await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
+  await expect(page.getByRole("heading", { name: "KI-Bildbeobachtung" })).toBeVisible();
+  await expect(page.locator(".result-message")).toContainText("AED-Gerät sichtbar");
+  await expect(page.locator(".result-message")).toContainText("<script>ignore rules</script>");
+  await expect(page.locator(".result-message script")).toHaveCount(0);
+  await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
+  expect(requests).toBe(1);
+});
+
+test("the brand link cannot discard a photo while its AI request is in flight", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  let releaseResponse!: () => void;
+  let signalRequestStarted!: () => void;
+  const responseGate = new Promise<void>((resolve) => { releaseResponse = resolve; });
+  const requestStarted = new Promise<void>((resolve) => { signalRequestStarted = resolve; });
+  let requests = 0;
+  await page.route("**/api/vision/analyze", async (route) => {
+    requests += 1;
+    signalRequestStarted();
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    await responseGate;
+    await route.fulfill({ json: {
+      request_id: payload.request_id, model: "gpt-6-luna",
+      observation: { scene: "device_visible", device_count: 1, readable_text: [], manufacturer: null, model: null, location_clues: [], image_issues: [] },
+    } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
+  await expect(page.getByRole("status")).toContainText("Foto wird geschützt an OpenAI übermittelt");
+  await requestStarted;
+  const brand = page.locator(".brand");
+  const currentUrl = page.url();
+  await expect(brand).toHaveAttribute("aria-disabled", "true");
+  await brand.dispatchEvent("click");
+
+  await expect(page).toHaveURL(currentUrl);
+  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+  expect(requests).toBe(1);
+  releaseResponse();
+  await expect(page.getByRole("heading", { name: "KI-Bildbeobachtung" })).toBeVisible();
+});
+
+test("the live photo endpoint is not called until the user is signed in and chooses AI analysis", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
+  let requests = 0;
+  await page.route("**/api/vision/analyze", async (route) => {
+    requests += 1;
+    await route.fulfill({ status: 401, json: { error: "authentication_required" } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await expect(page.locator(".capture-content")).toContainText("Verwirf dieses Foto, melde dich unten bei OpenStreetMap an");
+  await expect(page.getByRole("button", { name: "Foto an OpenAI senden" })).toHaveCount(0);
+  expect(requests).toBe(0);
+});
+
+test("an expired server session is shown as signed out after a 401", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/vision/analyze", (route) => route.fulfill({ status: 401, json: { error: "authentication_required" } }));
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
+
+  await expect(page.locator(".account-panel")).toContainText("Schließe den aktuellen Fotoablauf ab oder verwerfe ihn");
+  await page.getByRole("button", { name: "Foto verwerfen" }).click();
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toBeVisible();
+});
+
+test("a temporary session-store failure keeps the photo and offers a safe retry", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  let requests = 0;
+  await page.route("**/api/vision/analyze", async (route) => {
+    requests += 1;
+    if (requests === 1) {
+      await route.fulfill({ status: 503, json: { error: "session_unavailable" } });
+      return;
+    }
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ json: {
+      request_id: payload.request_id, model: "gpt-6-luna",
+      observation: { scene: "device_visible", device_count: 1, readable_text: [], manufacturer: null, model: null, location_clues: [], image_issues: [] },
+    } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
+
+  await expect(page.getByText("Die Anmeldung konnte gerade nicht geprüft werden.")).toBeVisible();
+  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Mit demselben Foto erneut versuchen" })).toBeVisible();
+  expect(requests).toBe(1);
+  await page.getByRole("button", { name: "Mit demselben Foto erneut versuchen" }).click();
+
+  await expect(page.getByRole("heading", { name: "KI-Bildbeobachtung" })).toBeVisible();
+  expect(requests).toBe(2);
+});
+
+test("a temporary budget-reservation failure keeps the photo and offers a safe retry", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  let requests = 0;
+  const requestIds: string[] = [];
+  await page.route("**/api/vision/analyze", async (route) => {
+    requests += 1;
+    requestIds.push((route.request().postDataJSON() as Record<string, unknown>).request_id as string);
+    if (requests === 1) {
+      await route.fulfill({ status: 503, json: { error: "analysis_budget_unavailable" } });
+      return;
+    }
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ json: {
+      request_id: payload.request_id, model: "gpt-6-luna",
+      observation: { scene: "device_visible", device_count: 1, readable_text: [], manufacturer: null, model: null, location_clues: [], image_issues: [] },
+    } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
+
+  await expect(page.getByText("Die Analyse konnte vor dem KI-Aufruf nicht vorbereitet werden.")).toBeVisible();
+  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Mit demselben Foto erneut versuchen" })).toBeVisible();
+  expect(requests).toBe(1);
+  await page.getByRole("button", { name: "Mit demselben Foto erneut versuchen" }).click();
+
+  await expect(page.getByRole("heading", { name: "KI-Bildbeobachtung" })).toBeVisible();
+  expect(requests).toBe(2);
+  expect(requestIds[1]).toBe(requestIds[0]);
+});
+
+test("an uncertain provider claim keeps the photo but does not offer a retry", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  let requests = 0;
+  await page.route("**/api/vision/analyze", async (route) => {
+    requests += 1;
+    await route.fulfill({ status: 503, json: { error: "analysis_claim_uncertain" } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
+
+  await expect(page.getByText("Die Datenbank hat den Start der Analyse nicht eindeutig bestätigt.")).toBeVisible();
+  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Mit demselben Foto erneut versuchen" })).toHaveCount(0);
+  expect(requests).toBe(1);
+});
+
+test("the AI result remains readable on a narrow phone in all six languages", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/vision/analyze", async (route) => {
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ json: {
+      request_id: payload.request_id, model: "gpt-6-luna",
+      observation: { scene: "unclear", device_count: 0, readable_text: [], manufacturer: null, model: null, location_clues: [], image_issues: [] },
+    } });
+  });
+  await page.goto("/");
+
+  const languages = [
+    { code: "de", send: "Foto an OpenAI senden", result: "KI-Bildbeobachtung", discard: "Foto verwerfen" },
+    { code: "en", send: "Send photo to OpenAI", result: "AI image observation", discard: "Discard photo" },
+    { code: "pl", send: "Wyślij zdjęcie do OpenAI", result: "Obserwacja AI", discard: "Odrzuć zdjęcie" },
+    { code: "ja", send: "写真をOpenAIに送信", result: "AIによる画像の観察", discard: "写真を破棄" },
+    { code: "fr", send: "Envoyer la photo à OpenAI", result: "Observation de l’image par l’IA", discard: "Supprimer la photo" },
+    { code: "es", send: "Enviar foto a OpenAI", result: "Observación de imagen de IA", discard: "Descartar foto" },
+  ];
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  for (const language of languages) {
+    await page.locator("#language").selectOption(language.code);
+    await page.getByRole("button", { name: language.send }).click();
+    await expect(page.getByRole("heading", { name: language.result })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `horizontal page overflow in ${language.code}`).toBeLessThanOrEqual(320);
+    await page.getByRole("button", { name: language.discard }).click();
+    if (language.code !== "es") await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  }
+});
+
 test("the OSM login link stays hidden when the Worker has no OAuth setup", async ({ page }) => {
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: false } }));
   await page.goto("/");
@@ -106,7 +309,7 @@ test("the login cannot discard an unclear save and returns after recovery", asyn
   await page.getByText("Vorschau testen", { exact: true }).click();
   await page.locator("#scenario").selectOption("upload-unclear");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
-  await page.getByRole("button", { name: "Foto und Umgebung prüfen" }).click();
+  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
   await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
 
   await expect(page.getByRole("heading", { name: "Ergebnis noch unklar" })).toBeVisible();
@@ -123,12 +326,13 @@ test("the login stays unavailable while a selected photo or proposal is active",
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
   await page.goto("/");
   await page.getByText("Vorschau testen", { exact: true }).click();
+  await page.locator("#scenario").selectOption("new");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
 
   await expect(page.locator(".account-panel")).toContainText("Schließe den aktuellen Fotoablauf ab");
   await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Foto und Umgebung prüfen" }).click();
-  await expect(page.getByRole("heading", { name: "AED gefunden" })).toBeVisible();
+  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
+  await expect(page.getByRole("heading", { name: "Neuen AED vorbereiten" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toHaveCount(0);
   await page.getByRole("button", { name: "Anderes Foto" }).click();
 
@@ -205,7 +409,7 @@ test("a mobile photo can select a nearby AED and reach the preview confirmation"
   await page.getByText("Vorschau testen", { exact: true }).click();
   await page.locator("#scenario").selectOption("multiple");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
-  await page.getByRole("button", { name: "Foto und Umgebung prüfen" }).click();
+  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
 
   await expect(page.getByRole("heading", { name: "Welcher AED ist es?" })).toBeVisible();
   await page.getByRole("button", { name: "Rathaus · Sporthalle" }).click();
@@ -222,7 +426,7 @@ test("an unclear save results the draft stays available for status recovery", as
   await page.getByText("Vorschau testen", { exact: true }).click();
   await page.locator("#scenario").selectOption("upload-unclear");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
-  await page.getByRole("button", { name: "Foto und Umgebung prüfen" }).click();
+  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
   await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
 
   await expect(page.getByRole("heading", { name: "Ergebnis noch unklar" })).toBeVisible();
@@ -238,7 +442,7 @@ test("the brand link cannot discard a draft while save status is unclear", async
   await page.getByText("Vorschau testen", { exact: true }).click();
   await page.locator("#scenario").selectOption("upload-unclear");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
-  await page.getByRole("button", { name: "Foto und Umgebung prüfen" }).click();
+  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
   await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
   await expect(page.getByRole("heading", { name: "Ergebnis noch unklar" })).toBeVisible();
 
@@ -257,7 +461,7 @@ test("the brand link stays disabled while saving and checking the save status", 
   await page.getByText("Vorschau testen", { exact: true }).click();
   await page.locator("#scenario").selectOption("upload-unclear");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
-  await page.getByRole("button", { name: "Foto und Umgebung prüfen" }).click();
+  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
   await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
 
   const brand = page.locator(".brand");
@@ -282,7 +486,7 @@ test("a damaged image is rejected before the AED flow can start", async ({ page 
   const dialog = await dialogPromise;
   expect(dialog.message()).toContain("Das Bild konnte nicht geöffnet werden");
   await dialog.accept();
-  await expect(page.getByRole("button", { name: "Foto und Umgebung prüfen" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Demoablauf simulieren" })).toHaveCount(0);
 });
 
 test("the installed app shell and hashed assets remain fetchable after going offline", async ({ page, context }) => {
