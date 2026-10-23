@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { reserveAnalysisBudget, type D1Database, type D1Result, type D1Statement } from "../server/storage/analysisBudget";
+import { markAnalysisProviderStarted, reserveAnalysisBudget, type D1Database, type D1Result, type D1Statement } from "../server/storage/analysisBudget";
 
 function createDatabase(options: {
   changes?: number;
-  duplicate?: { id: string } | null;
+  duplicate?: { id: string; status: string; provider_started_at: number | null } | null;
   firstError?: Error;
   runError?: Error;
   success?: boolean;
@@ -78,19 +78,32 @@ describe("analysis budget reservation", () => {
   });
 
   it("distinguishes a repeated request from an exhausted budget", async () => {
-    const duplicateDatabase = createDatabase({ changes: 0, duplicate: { id: "reservation-1" } });
+    const duplicateDatabase = createDatabase({ changes: 0, duplicate: { id: "reservation-1", status: "reserved", provider_started_at: 10 } });
     const fullDatabase = createDatabase({ changes: 0 });
 
-    await expect(reserveAnalysisBudget(duplicateDatabase.database, validRequest)).resolves.toEqual({
-      reserved: false,
-      reason: "duplicate",
-    });
+    await expect(reserveAnalysisBudget(duplicateDatabase.database, validRequest)).resolves.toEqual({ reserved: false, reason: "duplicate" });
     await expect(reserveAnalysisBudget(fullDatabase.database, validRequest)).resolves.toEqual({
       reserved: false,
       reason: "budget_exceeded",
     });
     expect(duplicateDatabase.calls).toHaveLength(2);
     expect(fullDatabase.calls).toHaveLength(2);
+  });
+
+  it("resumes a reservation after an ambiguous insert response if no provider claim exists", async () => {
+    const { database } = createDatabase({
+      runError: new Error("ambiguous insert response"),
+      duplicate: { id: "reservation-1", status: "reserved", provider_started_at: null },
+    });
+
+    await expect(reserveAnalysisBudget(database, validRequest)).resolves.toEqual({ reserved: true });
+  });
+
+  it("claims a provider call only once for a reservation", async () => {
+    const { database, calls } = createDatabase({ changes: 1 });
+
+    await expect(markAnalysisProviderStarted(database, validRequest.userId, validRequest.requestId, validRequest.createdAt)).resolves.toBe(true);
+    expect(calls[0].query).toContain("provider_started_at IS NULL");
   });
 
   it("fails closed when the database cannot confirm the reservation", async () => {

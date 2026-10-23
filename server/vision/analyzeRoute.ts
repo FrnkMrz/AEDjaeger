@@ -1,6 +1,6 @@
 import { findOSMSession } from "../storage/osmSessions";
 import type { D1Database } from "../storage/d1";
-import { reserveAnalysisBudget } from "../storage/analysisBudget";
+import { markAnalysisProviderStarted, reserveAnalysisBudget } from "../storage/analysisBudget";
 import { analyzeAedPhoto, MAX_VISION_IMAGE_BYTES, OPENAI_VISION_MODEL, validateAedImage, VisionAnalysisError, type SupportedImageType } from "./openai";
 
 const SESSION_COOKIE = "aedjaeger_osm_session";
@@ -94,6 +94,14 @@ export async function handleVisionAnalysis(
     }
   } catch {
     // Fail closed: no provider call unless D1 confirmed a reservation first.
+    return jsonResponse({ error: "analysis_budget_unavailable" }, 503);
+  }
+
+  try {
+    const claimed = await markAnalysisProviderStarted(environment.DB, session.subject, payload.requestId, now);
+    if (!claimed) return jsonResponse({ error: "duplicate_request" }, 409);
+  } catch {
+    // The external provider must never be called without a confirmed one-time claim.
     return jsonResponse({ error: "analysis_budget_unavailable" }, 503);
   }
 

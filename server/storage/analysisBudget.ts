@@ -18,6 +18,8 @@ export type AnalysisBudgetResult =
   | { reserved: true }
   | { reserved: false; reason: "budget_exceeded" | "duplicate" };
 
+type ExistingReservation = { id: string; status: string; provider_started_at: number | null };
+
 /**
  * Reserve an analysis before contacting an AI provider.
  *
@@ -37,8 +39,8 @@ export async function reserveAnalysisBudget(
     result = await database
       .prepare(
         `INSERT INTO analysis_budget_reservations
-          (id, user_id, request_id, utc_day, cost_micros, status, created_at)
-         SELECT ?, ?, ?, ?, ?, 'reserved', ?
+          (id, user_id, request_id, utc_day, cost_micros, status, provider_started_at, created_at)
+         SELECT ?, ?, ?, ?, ?, 'reserved', NULL, ?
          WHERE ? <= ?
            AND COALESCE((
              SELECT SUM(cost_micros)
@@ -72,31 +74,71 @@ export async function reserveAnalysisBudget(
       .run();
   } catch {
     // D1 can reject the promise (for example on a constraint error), bypassing `success`.
+    // If the insert committed before its reply was lost, let the caller resume
+    // this still-unclaimed reservation with the same request ID.
+    if (await findResumableReservation(database, request.userId, request.requestId)) return { reserved: true };
     throw new Error("Die Analyse konnte nicht sicher reserviert werden.");
   }
 
   if (!result.success) {
     // Do not include SQL parameters or database diagnostics in user-facing errors.
+    if (await findResumableReservation(database, request.userId, request.requestId)) return { reserved: true };
     throw new Error("Die Analyse konnte nicht sicher reserviert werden.");
   }
 
   if ((result.meta?.changes ?? 0) === 1) return { reserved: true };
 
-  let duplicate: { id: string } | null;
+  const duplicate = await findExistingReservation(database, request.userId, request.requestId);
+  if (duplicate?.status === "reserved" && duplicate.provider_started_at === null) return { reserved: true };
+  return duplicate ? { reserved: false, reason: "duplicate" } : { reserved: false, reason: "budget_exceeded" };
+}
+
+/** Atomically ensure only one request for an ID can begin the paid provider call. */
+export async function markAnalysisProviderStarted(
+  database: D1Database,
+  userId: string,
+  requestId: string,
+  startedAt: number,
+): Promise<boolean> {
+  if (!isShortIdentifier(userId) || !isShortIdentifier(requestId) || !Number.isSafeInteger(startedAt) || startedAt < 0) {
+    throw new Error("Ungültige Kennung für den Analyseaufruf.");
+  }
+
   try {
-    duplicate = await database
+    const result = await database
       .prepare(
-        `SELECT id
+        `UPDATE analysis_budget_reservations
+         SET provider_started_at = ?
+         WHERE user_id = ? AND request_id = ? AND status = 'reserved' AND provider_started_at IS NULL`,
+      )
+      .bind(startedAt, userId, requestId)
+      .run();
+    if (!result.success) throw new Error();
+    return (result.meta?.changes ?? 0) === 1;
+  } catch {
+    // No provider call may begin unless D1 confirms this one-time claim.
+    throw new Error("Der Analyseaufruf konnte nicht sicher vorbereitet werden.");
+  }
+}
+
+async function findResumableReservation(database: D1Database, userId: string, requestId: string): Promise<boolean> {
+  const existing = await findExistingReservation(database, userId, requestId);
+  return existing?.status === "reserved" && existing.provider_started_at === null;
+}
+
+async function findExistingReservation(database: D1Database, userId: string, requestId: string): Promise<ExistingReservation | null> {
+  try {
+    return await database
+      .prepare(
+        `SELECT id, status, provider_started_at
          FROM analysis_budget_reservations
          WHERE user_id = ? AND request_id = ?`,
       )
-      .bind(request.userId, request.requestId)
-      .first<{ id: string }>();
+      .bind(userId, requestId)
+      .first<ExistingReservation>();
   } catch {
     throw new Error("Die Analyse konnte nicht sicher reserviert werden.");
   }
-
-  return duplicate ? { reserved: false, reason: "duplicate" } : { reserved: false, reason: "budget_exceeded" };
 }
 
 function validateRequest(request: AnalysisBudgetRequest): void {

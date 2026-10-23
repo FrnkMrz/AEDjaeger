@@ -20,7 +20,7 @@ const observation: VisionObservation = {
   image_issues: [],
 };
 
-function createDatabase(options: { authenticated?: boolean; reserved?: boolean; runError?: boolean; duplicate?: boolean } = {}) {
+function createDatabase(options: { authenticated?: boolean; reserved?: boolean; runError?: boolean; duplicate?: "reserved" | "started" } = {}) {
   const calls: string[] = [];
   const database: D1Database = {
     prepare(query: string): D1Statement {
@@ -28,7 +28,7 @@ function createDatabase(options: { authenticated?: boolean; reserved?: boolean; 
         bind() { return statement; },
         async run<T>() {
           calls.push(query);
-          if (options.runError) throw new Error("private D1 diagnostic");
+          if (options.runError && query.includes("INSERT INTO analysis_budget_reservations")) throw new Error("private D1 diagnostic");
           const changes = query.includes("INSERT INTO analysis_budget_reservations") ? (options.reserved === false ? 0 : 1) : 1;
           return { success: true, meta: { changes } } as D1Result<T>;
         },
@@ -38,7 +38,11 @@ function createDatabase(options: { authenticated?: boolean; reserved?: boolean; 
             return (options.authenticated === false ? null : { osm_subject: "osm-test-user" }) as T | null;
           }
           if (query.includes("FROM analysis_budget_reservations")) {
-            return (options.duplicate ? { id: "prior-reservation" } : null) as T | null;
+            return (options.duplicate ? {
+              id: "prior-reservation",
+              status: "reserved",
+              provider_started_at: options.duplicate === "started" ? 1 : null,
+            } : null) as T | null;
           }
           return null;
         },
@@ -176,6 +180,7 @@ describe("protected image analysis route", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(await response.json()).toEqual({ request_id: "request_1234567890", model: "gpt-6-luna", observation });
     expect(analyze).toHaveBeenCalledWith({ bytes: imageBytes, contentType: "image/jpeg" }, "server-only-test-key");
+    expect(calls.some((query) => query.includes("provider_started_at IS NULL"))).toBe(true);
   });
 
   it("never calls the provider when a reservation is denied or cannot be confirmed", async () => {
@@ -194,13 +199,22 @@ describe("protected image analysis route", () => {
   });
 
   it("does not repeat a provider request when the same user reuses a request id", async () => {
-    const { database } = createDatabase({ reserved: false, duplicate: true });
+    const { database } = createDatabase({ reserved: false, duplicate: "started" });
     const analyze = successfulAnalysis();
     const response = await handleVisionAnalysis(analysisRequest(), environment(database), { analyze });
 
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "duplicate_request" });
     expect(analyze).not.toHaveBeenCalled();
+  });
+
+  it("resumes a committed reservation after an ambiguous D1 insert response", async () => {
+    const { database } = createDatabase({ runError: true, duplicate: "reserved" });
+    const analyze = successfulAnalysis();
+    const response = await handleVisionAnalysis(analysisRequest(), environment(database), { analyze });
+
+    expect(response.status).toBe(200);
+    expect(analyze).toHaveBeenCalledTimes(1);
   });
 
   it("keeps provider errors, photos and secrets out of the response", async () => {
