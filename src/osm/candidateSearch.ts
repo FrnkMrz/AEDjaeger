@@ -14,6 +14,7 @@ export interface PhoneLocation {
 }
 
 const MAX_SEARCH_ACCURACY_METERS = 100;
+const SEARCH_REQUEST_TIMEOUT_MS = 35_000;
 
 /** Send only the location needed for one read-only nearby query; never persist it. */
 export async function requestNearbyCandidates(
@@ -26,6 +27,8 @@ export async function requestNearbyCandidates(
   }
 
   let response: Response;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SEARCH_REQUEST_TIMEOUT_MS);
   try {
     response = await fetcher("/api/osm/candidates/search", {
       method: "POST",
@@ -36,9 +39,12 @@ export async function requestNearbyCandidates(
         accuracy_meters: location.accuracyMeters,
       }),
       cache: "no-store",
+      signal: controller.signal,
     });
   } catch {
     throw new CandidateSearchError("network_error");
+  } finally {
+    clearTimeout(timeout);
   }
 
   let payload: unknown;
