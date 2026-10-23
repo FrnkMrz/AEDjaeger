@@ -12,6 +12,7 @@ const MAX_GPS_ACCURACY_METERS = 100;
 const NEARBY_RADIUS_METERS = 100;
 const OVERPASS_TIMEOUT_SECONDS = 25;
 const REQUEST_TIMEOUT_MS = 30_000;
+const MAX_RETRY_AFTER_SECONDS = 7 * 24 * 60 * 60;
 
 export type OverpassRouteEnvironment = { DB?: D1Database };
 
@@ -68,8 +69,11 @@ export async function handleOverpassSearch(
   }
   // Every accepted request consumes this slot, even if Overpass fails quickly.
   // Let the client wait for the same cooldown instead of offering a retry that will be rejected.
-  const retryHeaders = () => ({
-    "Retry-After": String(Math.max(0, Math.ceil((cooldownEndsAt - (dependencies.now ?? Date.now)()) / 1_000))),
+  const retryHeaders = (minimumSeconds = 0) => ({
+    "Retry-After": String(Math.max(
+      Math.max(0, Math.ceil((cooldownEndsAt - (dependencies.now ?? Date.now)()) / 1_000)),
+      minimumSeconds,
+    )),
   });
 
   const coverageRadiusMeters = Math.ceil(location.accuracyMeters + NEARBY_RADIUS_METERS);
@@ -96,7 +100,8 @@ export async function handleOverpassSearch(
     });
 
     if (response.status === 429 || response.status === 406) {
-      return jsonResponse({ error: "overpass_rate_limited" }, 503, retryHeaders());
+      const upstreamWait = parseRetryAfter(response.headers.get("Retry-After"), (dependencies.now ?? Date.now)());
+      return jsonResponse({ error: "overpass_rate_limited" }, 503, retryHeaders(upstreamWait));
     }
     if (!response.ok) return jsonResponse({ error: "overpass_unavailable" }, 502, retryHeaders());
 
@@ -127,6 +132,15 @@ export async function handleOverpassSearch(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function parseRetryAfter(value: string | null, now: number): number {
+  if (value === null) return 0;
+  const seconds = /^\d+$/u.test(value) ? Number(value) : Number.NaN;
+  if (Number.isSafeInteger(seconds) && seconds >= 0) return Math.min(seconds, MAX_RETRY_AFTER_SECONDS);
+  const date = Date.parse(value);
+  if (!Number.isFinite(date)) return 0;
+  return Math.min(MAX_RETRY_AFTER_SECONDS, Math.max(0, Math.ceil((date - now) / 1_000)));
 }
 
 class BodyTooLargeError extends Error {}

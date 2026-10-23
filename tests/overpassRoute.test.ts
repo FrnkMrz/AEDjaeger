@@ -147,6 +147,19 @@ describe("protected Overpass candidate search", () => {
     expect(response.headers.get("Retry-After")).toBe("5");
   });
 
+  it.each([
+    ["120", "120"],
+    ["Thu, 01 Jan 1970 00:02:01 GMT", "120"],
+    ["5", "30"],
+  ])("respects the longer upstream Retry-After value %s", async (upstreamHeader, expectedHeader) => {
+    const { database } = createDatabase();
+    const overpass = vi.fn(async () => new Response("rate limited", { status: 429, headers: { "Retry-After": upstreamHeader } }));
+    const response = await handleOverpassSearch(searchRequest(), { DB: database }, { fetch: overpass, now: () => 1_000 });
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe(expectedHeader);
+  });
+
   it("returns only the remaining cooldown for a denied concurrent search", async () => {
     const { database } = createDatabase({ cooldown: false, nextAllowedAt: 28_100 });
     const overpass = vi.fn(async () => noCandidates());

@@ -15,6 +15,7 @@ export interface PhoneLocation {
 
 const MAX_SEARCH_ACCURACY_METERS = 100;
 const SEARCH_REQUEST_TIMEOUT_MS = 35_000;
+const MAX_RETRY_AFTER_SECONDS = 7 * 24 * 60 * 60;
 
 /** Send only the location needed for one read-only nearby query; never persist it. */
 export async function requestNearbyCandidates(
@@ -74,7 +75,7 @@ export async function requestNearbyCandidates(
 function readRetryAfter(response: Response): number {
   const header = response.headers.get("Retry-After");
   const seconds = header === null ? Number.NaN : Number(header);
-  return Number.isInteger(seconds) && seconds >= 0 && seconds <= 120 ? seconds : 30;
+  return Number.isSafeInteger(seconds) && seconds >= 0 && seconds <= MAX_RETRY_AFTER_SECONDS ? seconds : 30;
 }
 
 function parseSearchResult(value: unknown): OverpassSearchResult | null {
