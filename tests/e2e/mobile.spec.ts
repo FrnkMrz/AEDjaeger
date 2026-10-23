@@ -124,6 +124,16 @@ test("a user-confirmed location search shows nearby candidates without writing t
   await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
   await expect(page.locator(".capture-content")).toContainText("nichts gespeichert oder in OpenStreetMap geändert");
   expect(searchRequests).toBe(1);
+
+  await page.getByRole("button", { name: "Als noch vorhanden bestätigen" }).click();
+  await expect(page.getByRole("heading", { name: "Änderungsvorschau" })).toBeVisible();
+  await expect(page.locator(".capture-content")).toContainText("Einzige vorgeschlagene Änderung: Prüfdatum");
+  await expect(page.locator(".capture-content")).toContainText("Bisher: nicht gesetzt");
+  await expect(page.locator(".capture-content")).toContainText(new Date().toISOString().slice(0, 10));
+  await expect(page.locator(".capture-content")).toContainText("nichts gespeichert oder an OpenStreetMap gesendet");
+  await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
+  await expect(page.locator("[data-action='back-to-candidates']")).toBeVisible();
+  expect(searchRequests).toBe(1);
 });
 
 test("denied location access does not send a nearby search request", async ({ page }) => {
