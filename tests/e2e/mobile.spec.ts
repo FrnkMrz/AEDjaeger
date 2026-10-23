@@ -88,6 +88,40 @@ test("AI photo analysis requires sign-in and an explicit send action; its result
   expect(requests).toBe(1);
 });
 
+test("the brand link cannot discard a photo while its AI request is in flight", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  let releaseResponse!: () => void;
+  let signalRequestStarted!: () => void;
+  const responseGate = new Promise<void>((resolve) => { releaseResponse = resolve; });
+  const requestStarted = new Promise<void>((resolve) => { signalRequestStarted = resolve; });
+  let requests = 0;
+  await page.route("**/api/vision/analyze", async (route) => {
+    requests += 1;
+    signalRequestStarted();
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    await responseGate;
+    await route.fulfill({ json: {
+      request_id: payload.request_id, model: "gpt-6-luna",
+      observation: { scene: "device_visible", device_count: 1, readable_text: [], manufacturer: null, model: null, location_clues: [], image_issues: [] },
+    } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
+  await expect(page.getByRole("status")).toContainText("Foto wird geschützt an OpenAI übermittelt");
+  await requestStarted;
+  const brand = page.locator(".brand");
+  const currentUrl = page.url();
+  await expect(brand).toHaveAttribute("aria-disabled", "true");
+  await brand.dispatchEvent("click");
+
+  await expect(page).toHaveURL(currentUrl);
+  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+  expect(requests).toBe(1);
+  releaseResponse();
+  await expect(page.getByRole("heading", { name: "KI-Bildbeobachtung" })).toBeVisible();
+});
+
 test("the live photo endpoint is not called until the user is signed in and chooses AI analysis", async ({ page }) => {
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
   let requests = 0;

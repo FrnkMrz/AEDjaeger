@@ -63,7 +63,7 @@ function getPhotoUrl(current: FlowState): string | undefined {
 }
 
 function hasUnresolvedSave(current: FlowState): boolean {
-  return current.kind === "sending" || current.kind === "checking-status" || current.kind === "unclear-error";
+  return current.kind === "vision-analyzing" || current.kind === "sending" || current.kind === "checking-status" || current.kind === "unclear-error";
 }
 
 function hasActivePhotoDraft(current: FlowState): boolean {

@@ -53,6 +53,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Trennt den ausdrücklich gestarteten lokalen Demoablauf sichtbar von der echten KI-Bildanalyse.
 - Zeigt eine vom Analyse-Endpunkt abgewiesene OSM-Sitzung als abgemeldet an und begrenzt KI-Anfragen clientseitig auf 35 Sekunden ohne automatische Wiederholung.
 - Erhält das ausgewählte Foto bei einem vorübergehenden Ausfall der Sitzungsprüfung und bietet eine sichere Wiederholung vor der KI-Anfrage an.
+- Verhindert, dass eine laufende KI-Anfrage durch die Navigation über den App-Namen das Foto oder die Zuordnung ihrer Antwort verliert.
 - Begrenzt strukturierte KI-Textbeobachtungen, schließt leere und reine Leerraumwerte aus, verwirft unvollständige Antworten und normalisiert unerwartete Provider-Strukturen zu einem kontrollierten Fehlerzustand.
 - Schließt den Markdown-Promptblock im Bildtest korrekt und repariert den Linkanker zur Ergebnisüberschrift.
 - Dokumentiert die erfolgreiche Handyprüfung von Kamera- und Bibliotheksauswahl samt noch offenen Geräteprüfungen.
