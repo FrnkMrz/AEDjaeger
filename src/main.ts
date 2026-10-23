@@ -3,7 +3,7 @@ import { endOSMSession, loadOSMSession } from "./auth/osmSession";
 import { analysisResult, chooseCandidate, confirmationResult, recoveryResult, type CandidateId, type DemoScenario, type FlowState } from "./domain/workflow";
 import { translate, translations, type Language, type TranslationKey } from "./i18n/translations";
 import { translateVision, type VisionMessageKey } from "./i18n/visionTranslations";
-import { preparePhotoForAnalysis, requestVisionObservation, VisionClientError } from "./vision/analyzePhoto";
+import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservation, VisionClientError } from "./vision/analyzePhoto";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root element was not found.");
@@ -24,6 +24,8 @@ let oauthReturnFailed = new URLSearchParams(window.location.search).get("login")
 let analysisTimer: number | undefined;
 let saveTimer: number | undefined;
 let selectedPhotoFile: File | undefined;
+// Keep a stable ID while this photo is active; the server uses it to avoid double reservations after retries.
+let liveAnalysisRequestId: string | undefined;
 let photoSelectionVersion = 0;
 let photoSelectionPending = false;
 
@@ -325,6 +327,7 @@ async function onPhotoSelected(event: Event): Promise<void> {
   // The open disclosure is an explicit user choice; carry that preview mode into this photo.
   demoMode = demoMode || (document.querySelector<HTMLDetailsElement>(".demo-panel")?.open ?? false);
   selectedPhotoFile = file;
+  liveAnalysisRequestId = undefined;
   state = { kind: "photo", photoUrl };
   render(true);
 }
@@ -390,7 +393,8 @@ async function runVisionAnalysis(photoUrl: string, file: File): Promise<void> {
   render(true);
   try {
     const sanitizedImage = await preparePhotoForAnalysis(file);
-    const observation = await requestVisionObservation(sanitizedImage);
+    liveAnalysisRequestId ??= createVisionRequestId();
+    const observation = await requestVisionObservation(sanitizedImage, fetch, liveAnalysisRequestId);
     state = { kind: "vision-result", photoUrl, observation };
   } catch (error) {
     const code = error instanceof VisionClientError ? error.code : "analysis_failed";
@@ -418,6 +422,7 @@ function releasePhoto(): void {
   const photoUrl = getPhotoUrl(state);
   if (photoUrl?.startsWith("blob:")) URL.revokeObjectURL(photoUrl);
   selectedPhotoFile = undefined;
+  liveAnalysisRequestId = undefined;
 }
 
 render();

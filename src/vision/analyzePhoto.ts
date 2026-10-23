@@ -69,7 +69,7 @@ export async function preparePhotoForAnalysis(file: File): Promise<Blob> {
 export async function requestVisionObservation(
   image: Blob,
   fetcher: typeof fetch = fetch,
-  requestId = createRequestId(),
+  requestId = createVisionRequestId(),
   timeoutMs = REQUEST_TIMEOUT_MS,
 ): Promise<VisionObservation> {
   if (image.type !== "image/jpeg" || image.size === 0 || image.size > MAX_IMAGE_BYTES) {
@@ -128,7 +128,8 @@ export async function requestVisionObservation(
   return observation.value;
 }
 
-function createRequestId(): string {
+/** Generate once per photo transaction so every explicit retry remains idempotent. */
+export function createVisionRequestId(): string {
   // The ID only prevents accidental duplicate reservations; it is not a credential.
   if (typeof crypto.randomUUID === "function") return crypto.randomUUID().replaceAll("-", "");
   return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`;

@@ -180,8 +180,10 @@ test("a temporary session-store failure keeps the photo and offers a safe retry"
 test("a temporary budget-reservation failure keeps the photo and offers a safe retry", async ({ page }) => {
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
   let requests = 0;
+  const requestIds: string[] = [];
   await page.route("**/api/vision/analyze", async (route) => {
     requests += 1;
+    requestIds.push((route.request().postDataJSON() as Record<string, unknown>).request_id as string);
     if (requests === 1) {
       await route.fulfill({ status: 503, json: { error: "analysis_budget_unavailable" } });
       return;
@@ -204,6 +206,7 @@ test("a temporary budget-reservation failure keeps the photo and offers a safe r
 
   await expect(page.getByRole("heading", { name: "KI-Bildbeobachtung" })).toBeVisible();
   expect(requests).toBe(2);
+  expect(requestIds[1]).toBe(requestIds[0]);
 });
 
 test("the AI result remains readable on a narrow phone in all six languages", async ({ page }) => {
