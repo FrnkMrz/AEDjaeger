@@ -10,6 +10,7 @@ export type VisionClientErrorCode =
   | "authentication_required"
   | "analysis_not_allowed"
   | "analysis_unavailable"
+  | "analysis_budget_unavailable"
   | "session_unavailable"
   | "analysis_budget_exceeded"
   | "invalid_image"
@@ -106,8 +107,9 @@ export async function requestVisionObservation(
     switch (errorCode) {
       case "authentication_required": throw new VisionClientError("authentication_required");
       case "analysis_not_allowed": throw new VisionClientError("analysis_not_allowed");
-      case "analysis_unavailable":
-      case "analysis_budget_unavailable": throw new VisionClientError("analysis_unavailable");
+      case "analysis_unavailable": throw new VisionClientError("analysis_unavailable");
+      // Budget reservation happens before the provider call, so this exact error is safe to retry.
+      case "analysis_budget_unavailable": throw new VisionClientError("analysis_budget_unavailable");
       case "session_unavailable": throw new VisionClientError("session_unavailable");
       case "analysis_budget_exceeded": throw new VisionClientError("analysis_budget_exceeded");
       case "invalid_image": throw new VisionClientError("invalid_image");

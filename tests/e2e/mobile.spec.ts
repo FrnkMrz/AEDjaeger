@@ -177,6 +177,35 @@ test("a temporary session-store failure keeps the photo and offers a safe retry"
   expect(requests).toBe(2);
 });
 
+test("a temporary budget-reservation failure keeps the photo and offers a safe retry", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  let requests = 0;
+  await page.route("**/api/vision/analyze", async (route) => {
+    requests += 1;
+    if (requests === 1) {
+      await route.fulfill({ status: 503, json: { error: "analysis_budget_unavailable" } });
+      return;
+    }
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ json: {
+      request_id: payload.request_id, model: "gpt-6-luna",
+      observation: { scene: "device_visible", device_count: 1, readable_text: [], manufacturer: null, model: null, location_clues: [], image_issues: [] },
+    } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
+
+  await expect(page.getByText("Die Analyse konnte vor dem KI-Aufruf nicht vorbereitet werden.")).toBeVisible();
+  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Mit demselben Foto erneut versuchen" })).toBeVisible();
+  expect(requests).toBe(1);
+  await page.getByRole("button", { name: "Mit demselben Foto erneut versuchen" }).click();
+
+  await expect(page.getByRole("heading", { name: "KI-Bildbeobachtung" })).toBeVisible();
+  expect(requests).toBe(2);
+});
+
 test("the AI result remains readable on a narrow phone in all six languages", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 720 });
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
