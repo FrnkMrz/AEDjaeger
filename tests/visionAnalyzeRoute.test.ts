@@ -20,15 +20,20 @@ const observation: VisionObservation = {
   image_issues: [],
 };
 
-function createDatabase(options: { authenticated?: boolean; reserved?: boolean; runError?: boolean; claimError?: boolean; duplicate?: "reserved" | "started" } = {}) {
+function createDatabase(options: { authenticated?: boolean; environment?: "production" | "development"; reserved?: boolean; runError?: boolean; claimError?: boolean; duplicate?: "reserved" | "started" } = {}) {
   const calls: string[] = [];
+  const budgetIdentities: string[] = [];
   let reservationDay: string | undefined;
   let reservationCost: number | undefined;
   const database: D1Database = {
     prepare(query: string): D1Statement {
       let boundValues: unknown[] = [];
       const statement: D1Statement = {
-        bind(...values) {\n          boundValues = values;\n          if (query.includes("INSERT INTO analysis_budget_reservations") || query.includes("provider_started_at IS NULL")) budgetIdentities.push(String(values[1]));\n          return statement;\n        },
+        bind(...values) {
+          boundValues = values;
+          if (query.includes("INSERT INTO analysis_budget_reservations") || query.includes("provider_started_at IS NULL")) budgetIdentities.push(String(values[1]));
+          return statement;
+        },
         async run<T>() {
           calls.push(query);
           if (query.includes("INSERT INTO analysis_budget_reservations")) {
@@ -156,6 +161,17 @@ describe("protected image analysis route", () => {
     expect(analyze).not.toHaveBeenCalled();
   });
 
+  it("does not let a same-subject test-server account inherit production AI access", async () => {
+    const { database, calls } = createDatabase({ environment: "development" });
+    const analyze = successfulAnalysis();
+    const response = await handleVisionAnalysis(analysisRequest(), environment(database), { analyze });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "analysis_not_allowed" });
+    expect(calls.some((query) => query.includes("analysis_budget_reservations"))).toBe(false);
+    expect(analyze).not.toHaveBeenCalled();
+  });
+
   it("does not reserve cost or call OpenAI for malformed image bytes", async () => {
     const { database, calls } = createDatabase();
     const analyze = successfulAnalysis();
@@ -201,7 +217,9 @@ describe("protected image analysis route", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(await response.json()).toEqual({ request_id: "request_1234567890", model: "gpt-6-luna", observation });
     expect(analyze).toHaveBeenCalledWith({ bytes: imageBytes, contentType: "image/jpeg" }, "server-only-test-key");
-    expect(calls.some((query) => query.includes("provider_started_at IS NULL"))).toBe(true);\n    expect(budgetIdentities).toEqual(["production:osm-test-user", "production:osm-test-user"]);
+    expect(calls.some((query) => query.includes("provider_started_at IS NULL"))).toBe(true);
+    expect(budgetIdentities).toEqual(["production:osm-test-user", "production:osm-test-user"]);
+    expect(budgetIdentities).toEqual(["production:osm-test-user", "production:osm-test-user"]);
   });
 
   it("never calls the provider when a reservation is denied or cannot be confirmed", async () => {
