@@ -79,7 +79,7 @@ async function encryptionKey(): Promise<CryptoKey> {
 describe("OSM development token vault", () => {
   it("stores the token encrypted and returns it only to the active session", async () => {
     const { database, sessions, tokens, calls } = createDatabase();
-    const hash = await sha256(sessionToken);
+    const hash = await sha(sessionToken);
     sessions.set(hash, now + 60_000);
     const key = await encryptionKey();
 
@@ -95,7 +95,7 @@ describe("OSM development token vault", () => {
 
   it("replaces a stored token and does not return it after its expiry", async () => {
     const { database, sessions, tokens } = createDatabase();
-    const hash = await sha256(sessionToken);
+    const hash = await sha(sessionToken);
     sessions.set(hash, now + 60_000);
     const key = await encryptionKey();
     await storeOSMDevelopmentToken(database, sessionToken, accessToken, now + 30_000, now, key);
@@ -107,7 +107,7 @@ describe("OSM development token vault", () => {
 
   it("rejects decryption with a different key and deletes a token on logout", async () => {
     const { database, sessions, tokens } = createDatabase();
-    const hash = await sha256(sessionToken);
+    const hash = await sha(sessionToken);
     sessions.set(hash, now + 60_000);
     const key = await encryptionKey();
     await storeOSMDevelopmentToken(database, sessionToken, accessToken, now + 30_000, now, key);
