@@ -131,7 +131,7 @@ export function createPositionPicker(
 
   function onPointerDown(event: PointerEvent): void {
     if ((event.target as HTMLElement).closest(".position-map-controls, .position-map-attribution")) return;
-    if (event.button !== 0) return;
+    if (event.button !== 0 || pointer) return;
     pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
     container.setPointerCapture(event.pointerId);
     container.classList.add("is-dragging");
