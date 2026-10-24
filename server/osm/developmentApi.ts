@@ -27,5 +27,10 @@ export function buildOSMDevelopmentApiUrl(environment: unknown, apiPath: string)
 
   // The fixed base prevents callers from redirecting a test token to production
   // or to a host supplied by a request. Never follow redirects when calling it.
-  return new URL(apiPath, OSM_DEVELOPMENT_SERVER_ORIGIN);
+  const url = new URL(apiPath, OSM_DEVELOPMENT_SERVER_ORIGIN);
+  // URL normalizes encoded dot segments, so check the final pathname too.
+  if (!url.pathname.startsWith(OSM_API_PATH_PREFIX)) {
+    throw new Error("Ungültiger Pfad zur OSM-Entwicklungs-API.");
+  }
+  return url;
 }
