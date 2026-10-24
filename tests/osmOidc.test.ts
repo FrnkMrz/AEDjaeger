@@ -9,7 +9,8 @@ function encode(value: unknown): string {
   return btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
 }
 
-async function signedFixture(claimOverrides: Record<string, unknown> = {}, environment: "production" | "development" = "production", tokenOverrides: Record<string, unknown> = {}) {\n  const origin = environment === "development" ? "https://master.apis.dev.openstreetmap.org" : "https://www.openstreetmap.org";
+async function signedFixture(claimOverrides: Record<string, unknown> = {}, environment: "production" | "development" = "production", tokenOverrides: Record<string, unknown> = {}) {
+  const origin = environment === "development" ? "https://master.apis.dev.openstreetmap.org" : "https://www.openstreetmap.org";
   const keyPair = await crypto.subtle.generateKey(
     { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
     true,
@@ -35,9 +36,9 @@ async function signedFixture(claimOverrides: Record<string, unknown> = {}, envir
     const url = String(input);
     if (url === `${origin}/.well-known/openid-configuration`) {
       return Response.json({
-        issuer: "https://www.openstreetmap.org",
-        token_endpoint: "https://www.openstreetmap.org/oauth2/token",
-        jwks_uri: "https://www.openstreetmap.org/oauth2/discovery/keys",
+        issuer: origin,
+        token_endpoint: `${origin}/oauth2/token`,
+        jwks_uri: `${origin}/oauth2/discovery/keys`,
         id_token_signing_alg_values_supported: ["RS256"],
       });
     }
