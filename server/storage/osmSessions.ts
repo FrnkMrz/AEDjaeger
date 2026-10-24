@@ -1,18 +1,20 @@
+import type { OSMEnvironment } from "../auth/osmProvider";
 import type { D1Database } from "./d1";
 
 export const OSM_SESSION_LIFETIME_MS = 12 * 60 * 60 * 1_000;
 
-type StoredOSMSession = { osm_subject: string };
+type StoredOSMSession = { osm_subject: string; osm_environment: OSMEnvironment };
 
-/** Speichert nur einen Hash des zufälligen Browser-Cookies und die OSM-ID. */
+/** Speichert nur einen Hash des Browser-Cookies sowie OSM-Kennung und Anbieterumgebung. */
 export async function createOSMSession(
   database: D1Database,
   sessionToken: string,
   osmSubject: string,
   now: number,
+  osmEnvironment: OSMEnvironment = "production",
   cryptoApi: Crypto = crypto,
 ): Promise<void> {
-  if (!isSecret(sessionToken) || !isSubject(osmSubject) || !Number.isSafeInteger(now) || now < 0) {
+  if (!isSecret(sessionToken) || !isSubject(osmSubject) || !isOSMEnvironment(osmEnvironment) || !Number.isSafeInteger(now) || now < 0) {
     throw new Error("Ungültige OSM-Sitzung.");
   }
 
@@ -21,8 +23,8 @@ export async function createOSMSession(
     const cleanup = await database.prepare("DELETE FROM osm_sessions WHERE expires_at <= ?").bind(now).run();
     if (!cleanup.success) throw new Error("D1 cleanup failed");
     const result = await database
-      .prepare("INSERT INTO osm_sessions (session_hash, osm_subject, created_at, expires_at) VALUES (?, ?, ?, ?)")
-      .bind(sessionHash, osmSubject, now, now + OSM_SESSION_LIFETIME_MS)
+      .prepare("INSERT INTO osm_sessions (session_hash, osm_subject, osm_environment, created_at, expires_at) VALUES (?, ?, ?, ?, ?)")
+      .bind(sessionHash, osmSubject, osmEnvironment, now, now + OSM_SESSION_LIFETIME_MS)
       .run();
     if (!result.success || result.meta?.changes !== 1) throw new Error("D1 insert failed");
   } catch {
@@ -35,16 +37,18 @@ export async function findOSMSession(
   sessionToken: string,
   now: number,
   cryptoApi: Crypto = crypto,
-): Promise<{ subject: string } | null> {
+): Promise<{ subject: string; environment: OSMEnvironment } | null> {
   if (!isSecret(sessionToken) || !Number.isSafeInteger(now) || now < 0) return null;
 
   try {
     const sessionHash = await sha256Hex(sessionToken, cryptoApi);
     const session = await database
-      .prepare("SELECT osm_subject FROM osm_sessions WHERE session_hash = ? AND expires_at > ?")
+      .prepare("SELECT osm_subject, osm_environment FROM osm_sessions WHERE session_hash = ? AND expires_at > ?")
       .bind(sessionHash, now)
       .first<StoredOSMSession>();
-    return session && isSubject(session.osm_subject) ? { subject: session.osm_subject } : null;
+    return session && isSubject(session.osm_subject) && isOSMEnvironment(session.osm_environment)
+      ? { subject: session.osm_subject, environment: session.osm_environment }
+      : null;
   } catch {
     throw new Error("Die OSM-Sitzung konnte nicht geprüft werden.");
   }
@@ -72,11 +76,16 @@ export async function rotateOSMSession(
   nextToken: string,
   osmSubject: string,
   now: number,
+  osmEnvironment: OSMEnvironment = "production",
   cryptoApi: Crypto = crypto,
 ): Promise<void> {
   if (previousToken === nextToken) throw new Error("Ungültige OSM-Sitzungsrotation.");
   if (previousToken) await deleteOSMSession(database, previousToken, cryptoApi);
-  await createOSMSession(database, nextToken, osmSubject, now, cryptoApi);
+  await createOSMSession(database, nextToken, osmSubject, now, osmEnvironment, cryptoApi);
+}
+
+function isOSMEnvironment(value: unknown): value is OSMEnvironment {
+  return value === "production" || value === "development";
 }
 
 function isSecret(value: unknown): value is string {
