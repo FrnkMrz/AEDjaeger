@@ -52,7 +52,9 @@ export async function exchangeOSMDevelopmentCodeForAccess(input: {
   cryptoApi?: Crypto;
 }): Promise<OSMDevelopmentAuthorization> {
   const { subject, tokenResponse } = await exchangeCode(input, "development");
-  const scopes = typeof tokenResponse.scope === "string"\n    ? tokenResponse.scope.split(/\s+/u).filter(Boolean)\n    : tokenResponse.scope === undefined ? ["openid", "write_api"] : [];
+  const scopes = typeof tokenResponse.scope === "string"
+    ? tokenResponse.scope.split(/\s+/u).filter(Boolean)
+    : tokenResponse.scope === undefined ? ["openid", "write_api"] : [];
   const uniqueScopes = new Set(scopes);
   if (
     typeof tokenResponse.access_token !== "string" ||
