@@ -6,8 +6,6 @@
  * browser input or an unrestricted Worker variable.
  */
 export const OSM_DEVELOPMENT_SERVER_ORIGIN = "https://master.apis.dev.openstreetmap.org";
-const OSM_API_PATH_PREFIX = "/api/0.6/";
-
 export function buildOSMDevelopmentApiUrl(environment: unknown, apiPath: string): URL {
   if (environment !== "development") {
     throw new Error("OSM-Schreibzugriffe sind ausschließlich für die Entwicklungsinstanz freigegeben.");
