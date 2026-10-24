@@ -44,10 +44,6 @@ function createDatabase() {
         async first<T>() {
           calls.push({ query, values });
           const hash = String(values[0]);
-          if (query.includes("FROM osm_sessions")) {
-            const expiresAt = sessions.get(hash);
-            return expiresAt !== undefined && expiresAt > Number(values[1]) ? { session_hash: hash } as T : null;
-          }
           if (query.includes("FROM osm_development_tokens")) {
             const token = tokens.get(hash);
             const sessionExpiresAt = sessions.get(hash);
@@ -62,6 +58,10 @@ function createDatabase() {
               token_ciphertext: token.token_ciphertext,
               token_expires_at: token.token_expires_at,
             } as T;
+          }
+          if (query.includes("FROM osm_sessions")) {
+            const expiresAt = sessions.get(hash);
+            return expiresAt !== undefined && expiresAt > Number(values[1]) ? { session_hash: hash } as T : null;
           }
           throw new Error(`Unexpected D1 query: ${query}`);
         },
