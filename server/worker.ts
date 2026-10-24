@@ -7,6 +7,7 @@ import { deleteOSMSession, findOSMSession, rotateOSMSession, OSM_SESSION_LIFETIM
 import { storeOSMDevelopmentToken } from "./storage/osmDevelopmentTokens";
 import { handleVisionAnalysis } from "./vision/analyzeRoute";
 import { handleOverpassSearch } from "./osm/overpassRoute";
+import { handleDevelopmentCheckDate } from "./osm/developmentWriteRoute";
 
 type StaticAssets = { fetch(request: Request): Promise<Response> };
 type WorkerEnvironment = {
@@ -17,6 +18,7 @@ type WorkerEnvironment = {
   OSM_DEV_LOGIN_ENABLED?: string;
   OSM_DEV_CLIENT_ID?: string;
   OSM_DEV_REDIRECT_URI?: string;
+  OSM_DEV_WRITES_ENABLED?: string;
   OSM_OAUTH_ENCRYPTION_KEY?: string;
   OPENAI_API_KEY?: string;
   AI_ANALYSIS_ENABLED?: string;
@@ -63,6 +65,7 @@ const worker = {
       return logout(request, environment);
     }
     if (pathname === "/api/osm/candidates/search") return handleOverpassSearch(request, environment);
+    if (pathname === "/api/osm/development/check-date") return handleDevelopmentCheckDate(request, environment);
     if (pathname === "/api/vision/analyze") return handleVisionAnalysis(request, environment);
     if (pathname === "/api" || pathname.startsWith("/api/")) return jsonResponse({ error: "not_found" }, 404);
     return environment.ASSETS.fetch(request);
@@ -168,10 +171,11 @@ async function getSession(request: Request, environment: WorkerEnvironment): Pro
   const requestOrigin = new URL(request.url).origin;
   const loginAvailable = await isOSMLoginAvailable(environment, requestOrigin);
   const developmentLoginAvailable = await isOSMLoginAvailable(environment, requestOrigin, "development");
-  if (!token || !environment.DB) return jsonResponse({ authenticated: false, loginAvailable, developmentLoginAvailable, developmentSession: false }, 200);
+  const developmentWriteAvailable = environment.OSM_DEV_WRITES_ENABLED === "true" && developmentLoginAvailable;
+  if (!token || !environment.DB) return jsonResponse({ authenticated: false, loginAvailable, developmentLoginAvailable, developmentSession: false, developmentWriteAvailable }, 200);
   try {
     const session = await findOSMSession(environment.DB, token, Date.now());
-    return jsonResponse({ authenticated: session !== null, loginAvailable, developmentLoginAvailable, developmentSession: session?.environment === "development" }, 200);
+    return jsonResponse({ authenticated: session !== null, loginAvailable, developmentLoginAvailable, developmentSession: session?.environment === "development", developmentWriteAvailable }, 200);
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }

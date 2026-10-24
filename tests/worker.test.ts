@@ -156,10 +156,10 @@ describe("Cloudflare Worker shell", () => {
     };
 
     const configured = await worker.fetch(new Request("https://aedjaeger.example/api/auth/session"), env);
-    expect(await configured.json()).toEqual({ authenticated: false, loginAvailable: false, developmentLoginAvailable: true, developmentSession: false });
+    expect(await configured.json()).toEqual({ authenticated: false, loginAvailable: false, developmentLoginAvailable: true, developmentSession: false, developmentWriteAvailable: false });
 
     const otherOrigin = await worker.fetch(new Request("https://other.example/api/auth/session"), env);
-    expect(await otherOrigin.json()).toEqual({ authenticated: false, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false });
+    expect(await otherOrigin.json()).toEqual({ authenticated: false, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false, developmentWriteAvailable: false });
   });
 
   it("keeps login and logout methods narrow", async () => {
@@ -181,7 +181,7 @@ describe("Cloudflare Worker shell", () => {
     }), env);
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ authenticated: false, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false });
+    expect(await response.json()).toEqual({ authenticated: false, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false, developmentWriteAvailable: false });
     expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
 
@@ -197,16 +197,16 @@ describe("Cloudflare Worker shell", () => {
     };
 
     const configured = await worker.fetch(new Request("https://aedjaeger.example/api/auth/session"), base);
-    expect(await configured.json()).toEqual({ authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false });
+    expect(await configured.json()).toEqual({ authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false, developmentWriteAvailable: false });
 
     const wrongOrigin = await worker.fetch(new Request("https://other.example/api/auth/session"), base);
-    expect(await wrongOrigin.json()).toEqual({ authenticated: false, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false });
+    expect(await wrongOrigin.json()).toEqual({ authenticated: false, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false, developmentWriteAvailable: false });
 
     const invalidKey = await worker.fetch(new Request("https://aedjaeger.example/api/auth/session"), {
       ...base,
       OSM_OAUTH_ENCRYPTION_KEY: "not-a-valid-key",
     });
-    expect(await invalidKey.json()).toEqual({ authenticated: false, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false });
+    expect(await invalidKey.json()).toEqual({ authenticated: false, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false, developmentWriteAvailable: false });
   });
 
   it("rejects cross-origin logout requests before touching the session", async () => {
