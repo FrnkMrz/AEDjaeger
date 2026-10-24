@@ -15,11 +15,8 @@ export function buildOSMDevelopmentApiUrl(environment: unknown, apiPath: string)
 
   if (
     typeof apiPath !== "string" ||
-    !apiPath.startsWith(OSM_API_PATH_PREFIX) ||
-    apiPath.includes("\\") ||
-    apiPath.includes("?") ||
-    apiPath.includes("#") ||
-    /[\u0000-\u001f\u007f]/u.test(apiPath) ||
+    !/^\/api\/0\.6\/[A-Za-z0-9/_-]+$/u.test(apiPath) ||
+    apiPath.includes("//") ||
     apiPath.split("/").some((segment) => segment === "." || segment === "..")
   ) {
     throw new Error("Ungültiger Pfad zur OSM-Entwicklungs-API.");
@@ -27,10 +24,7 @@ export function buildOSMDevelopmentApiUrl(environment: unknown, apiPath: string)
 
   // The fixed base prevents callers from redirecting a test token to production
   // or to a host supplied by a request. Never follow redirects when calling it.
-  const url = new URL(apiPath, OSM_DEVELOPMENT_SERVER_ORIGIN);
-  // URL normalizes encoded dot segments, so check the final pathname too.
-  if (!url.pathname.startsWith(OSM_API_PATH_PREFIX)) {
-    throw new Error("Ungültiger Pfad zur OSM-Entwicklungs-API.");
-  }
-  return url;
+  // OSM API paths need only plain endpoint names and numeric IDs. Rejecting
+  // percent escapes here avoids proxy-specific decoding of encoded separators.
+  return new URL(apiPath, OSM_DEVELOPMENT_SERVER_ORIGIN);
 }
