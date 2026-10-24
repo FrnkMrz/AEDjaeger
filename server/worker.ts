@@ -136,6 +136,7 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment, 
       sessionToken,
       exchanged.identity.subject,
       now,
+      exchanged.environment,
     );
     if (exchanged.environment === "development") {
       try {
@@ -167,10 +168,10 @@ async function getSession(request: Request, environment: WorkerEnvironment): Pro
   const requestOrigin = new URL(request.url).origin;
   const loginAvailable = await isOSMLoginAvailable(environment, requestOrigin);
   const developmentLoginAvailable = await isOSMLoginAvailable(environment, requestOrigin, "development");
-  if (!token || !environment.DB) return jsonResponse({ authenticated: false, loginAvailable, developmentLoginAvailable }, 200);
+  if (!token || !environment.DB) return jsonResponse({ authenticated: false, loginAvailable, developmentLoginAvailable, developmentSession: false }, 200);
   try {
     const session = await findOSMSession(environment.DB, token, Date.now());
-    return jsonResponse({ authenticated: session !== null, loginAvailable, developmentLoginAvailable }, 200);
+    return jsonResponse({ authenticated: session !== null, loginAvailable, developmentLoginAvailable, developmentSession: session?.environment === "development" }, 200);
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
