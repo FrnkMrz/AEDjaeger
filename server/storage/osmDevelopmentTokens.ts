@@ -176,7 +176,7 @@ function toBase64Url(bytes: Uint8Array): string {
 function fromBase64Url(value: string): Uint8Array {
   if (!/^[A-Za-z0-9_-]+$/u.test(value)) throw new Error("Invalid base64url");
   const base64 = value.replaceAll("-", "+").replaceAll("_", "/");
-  const binary = atob(base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+  const binary = atob(base64 + "=".repeat((4 - (base64.length % 4)) % 4));
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
