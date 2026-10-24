@@ -147,7 +147,7 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
 .position-map.is-dragging { cursor: grabbing; }
 .position-map-tiles { position: absolute; inset: 0; }
 .position-map-tiles img { position: absolute; max-width: none; pointer-events: none; }
-.position-map-crosshair { position: absolute; top: 50%; left: 50%; width: 22px; height: 22px; border: 3px solid #fff; border-radius: 50% 50% 50% 0; background: #cb3c32; box-shadow: 0 1px 5px #17281b88; transform: translate(-50%, -75%) rotate(-45deg); pointer-events: none; }
+.position-map-crosshair { position: absolute; top: 50%; left: 50%; width: 22px; height: 22px; border: 3px solid #fff; border-radius: 50%; background: #cb3c32; box-shadow: 0 1px 5px #17281b88; transform: translate(-50%, -50%); pointer-events: none; }
 .position-map-crosshair::after { position: absolute; inset: 5px; border-radius: 50%; background: #fff; content: ""; }
 .position-map-controls { position: absolute; top: 9px; right: 9px; display: grid; gap: 5px; }
 .position-map-controls button { width: 38px; height: 38px; border: 1px solid #c8d2c8; border-radius: 10px; color: #263c2e; background: #fff; box-shadow: 0 1px 4px #17281b33; font-size: 21px; font-weight: 700; cursor: pointer; }
