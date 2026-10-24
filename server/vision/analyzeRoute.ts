@@ -53,7 +53,8 @@ export async function handleVisionAnalysis(
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
   if (!session) return jsonResponse({ error: "authentication_required" }, 401);
-  const providerIdentity = `${session.environment}:${session.subject}`;\n  if (!limits.allowedSubjects.includes(providerIdentity)) {
+  const providerIdentity = `${session.environment}:${session.subject}`;
+  if (!limits.allowedSubjects.includes(providerIdentity)) {
     return jsonResponse({ error: "analysis_not_allowed" }, 403);
   }
 
