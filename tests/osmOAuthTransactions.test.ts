@@ -96,7 +96,7 @@ describe("OSM OAuth transaction storage", () => {
 
     await expect(
       consumeOSMOAuthTransaction(database, validInput.state, validInput.browserBinding, validInput.createdAt + 1, key),
-    ).resolves.toEqual({ verifier: validInput.verifier, nonce: validInput.nonce });
+    ).resolves.toEqual({ verifier: validInput.verifier, nonce: validInput.nonce, environment: "production" });
     await expect(
       consumeOSMOAuthTransaction(database, validInput.state, validInput.browserBinding, validInput.createdAt + 1, key),
     ).resolves.toBeNull();
@@ -107,6 +107,20 @@ describe("OSM OAuth transaction storage", () => {
     expect(deletion.values[0]).not.toBe(validInput.state);
     expect(deletion.values[1]).not.toBe(validInput.browserBinding);
     expect(deletion.values[2]).toBe(validInput.createdAt + 1);
+  });
+
+  it("keeps development OAuth transactions bound to the test environment", async () => {
+    const { database } = createDatabase();
+    const key = await createEncryptionKey();
+    await storeOSMOAuthTransaction(database, { ...validInput, environment: "development" }, key);
+
+    await expect(
+      consumeOSMOAuthTransaction(database, validInput.state, validInput.browserBinding, validInput.createdAt + 1, key),
+    ).resolves.toEqual({
+      verifier: validInput.verifier,
+      nonce: validInput.nonce,
+      environment: "development",
+    });
   });
 
   it("returns no transaction at its expiry boundary", async () => {
