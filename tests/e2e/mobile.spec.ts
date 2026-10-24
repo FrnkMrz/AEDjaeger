@@ -140,6 +140,7 @@ test("a user-confirmed location search shows nearby candidates without writing t
 
 test("a new AED preview requires confirmed GPS position and a complete empty search", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
+  await page.route("https://tile.openstreetmap.org/**", (route) => route.fulfill({ status: 200, contentType: "image/svg+xml", body: "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"256\"><rect width=\"256\" height=\"256\" fill=\"#e5ece3\"/></svg>" }));
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
   await page.route("**/api/vision/analyze", async (route) => {
@@ -165,6 +166,8 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
   await page.getByRole("button", { name: "AEDs in der Umgebung suchen" }).click();
   await expect(page.getByRole("button", { name: "Neuen AED vorbereiten" })).toBeVisible();
+  await expect(page.locator("#new-aed-position-map")).toBeVisible();
+  await expect(page.locator(".position-map-attribution")).toContainText("OpenStreetMap contributors");
 
   await page.getByRole("button", { name: "Neuen AED vorbereiten" }).click();
   await expect(page.getByRole("heading", { name: "Vorschau für neuen AED" })).toBeVisible();
@@ -173,9 +176,18 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   await page.getByRole("button", { name: "Zurück zu den Treffern" }).click();
 
   await page.locator("#new-aed-position-confirmed").check();
+  const mapBox = await page.locator("#new-aed-position-map").boundingBox();
+  if (!mapBox) throw new Error("Position map is not visible");
+  await page.mouse.move(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(mapBox.x + mapBox.width / 2 + 20, mapBox.y + mapBox.height / 2, { steps: 4 });
+  await page.mouse.up();
+  await expect(page.locator("#new-aed-position-confirmed")).not.toBeChecked();
+  await expect(page.locator("#new-aed-position-coordinates")).not.toContainText("52.52000, 13.40500");
+  await page.locator("#new-aed-position-confirmed").check();
   await page.getByRole("button", { name: "Neuen AED vorbereiten" }).click();
   await expect(page.getByRole("heading", { name: "Vorschau für neuen AED" })).toBeVisible();
-  await expect(page.locator(".capture-content")).toContainText("52.52000");
+  await expect(page.locator(".capture-content")).not.toContainText("52.52000, 13.40500");
   await expect(page.locator(".capture-content")).toContainText("emergency=defibrillator");
   await expect(page.locator(".capture-content")).toContainText("check_date=");
   await expect(page.getByRole("link", { name: "Position auf OpenStreetMap ansehen" })).toHaveAttribute("href", /openstreetmap\.org\/\?mlat=52\.52000/u);
