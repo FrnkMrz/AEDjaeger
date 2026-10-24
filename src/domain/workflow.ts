@@ -19,14 +19,13 @@ export type CandidateResultState = {
   retryAvailableAt?: number;
 };
 
-export type DevelopmentCheckRequest = {
+export type DevelopmentWriteRequest = {
   operationId: string;
-  target: string;
   candidateLabel: string;
-  expectedVersion: number;
-  expectedCheckDate: string | null;
-  observedOn: string;
-};
+} & (
+  | { kind: "check-date"; target: string; expectedVersion: number; expectedCheckDate: string | null; observedOn: string }
+  | { kind: "create-node"; latitude: number; longitude: number; observedOn: string; locationDescription: string | null }
+);
 
 export type FlowState =
   | { kind: "ready" }
@@ -36,9 +35,9 @@ export type FlowState =
   | { kind: "vision-result"; photoUrl: string; observation: VisionObservation }
   | { kind: "candidate-searching"; photoUrl: string; observation: VisionObservation }
   | CandidateResultState
-  | { kind: "new-aed-preview"; photoUrl: string; result: ProposalResult<NewAedPreview>; returnState: CandidateResultState }
+  | { kind: "new-aed-preview"; photoUrl: string; result: ProposalResult<NewAedPreview>; returnState: CandidateResultState; writeStatus?: "sending" | "complete" | "uncertain" | "conflict" | "failed"; operationId?: string }
   | { kind: "osm-preview"; photoUrl: string; candidateId: string; candidateLabel: string; result: ProposalResult<ExistingCheckDatePreview>; returnState: CandidateResultState; writeStatus?: "sending" | "complete" | "uncertain" | "conflict" | "failed"; operationId?: string }
-  | { kind: "development-write-recovery"; request: DevelopmentCheckRequest; writeStatus: "uncertain" | "sending" | "complete" | "conflict" | "failed" }
+  | { kind: "development-write-recovery"; request: DevelopmentWriteRequest; writeStatus: "uncertain" | "sending" | "complete" | "conflict" | "failed" }
   | { kind: "candidate-error"; photoUrl: string; observation: VisionObservation; reason: "location-unavailable" | "location-denied" | "location-uncertain" | "sign-in" | "rate-limited" | "service-unavailable" | "failed" | "invalid-response"; retryAvailableAt?: number }
   | { kind: "vision-error"; photoUrl: string; reason: "sign-in" | "not-allowed" | "budget" | "unavailable" | "session-unavailable" | "analysis-budget-unavailable" | "analysis-claim-uncertain" | "invalid-image" | "failed" | "invalid-response" }
   | { kind: "clarification"; photoUrl: string; reason: "sign-only" | "multiple" }

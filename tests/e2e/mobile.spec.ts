@@ -132,7 +132,7 @@ test("a user-confirmed location search shows nearby candidates without writing t
   await expect(page.locator(".capture-content")).toContainText("Bisher: <img src=x onerror=alert(1)>");
   await expect(page.locator(".capture-content img[onerror]")).toHaveCount(0);
   await expect(page.locator(".capture-content")).toContainText(new Date().toISOString().slice(0, 10));
-  await expect(page.locator(".capture-content")).toContainText("nichts gespeichert oder an OpenStreetMap gesendet");
+  await expect(page.locator(".capture-content")).toContainText("Das ist nur eine Vorschau. Es wurde nichts gespeichert oder an OpenStreetMap gesendet.");
   await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
   await expect(page.locator("[data-action='back-to-candidates']")).toBeVisible();
   expect(searchRequests).toBe(1);
@@ -223,7 +223,7 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   await context.grantPermissions(["geolocation"]);
   await page.route("https://tile.openstreetmap.org/**", (route) => route.fulfill({ status: 200, contentType: "image/svg+xml", body: "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"256\"><rect width=\"256\" height=\"256\" fill=\"#e5ece3\"/></svg>" }));
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true } }));
   await page.route("**/api/vision/analyze", async (route) => {
     const payload = route.request().postDataJSON() as Record<string, unknown>;
     await route.fulfill({ json: {
@@ -293,10 +293,30 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   await expect(page.locator(".capture-content")).toContainText("emergency=defibrillator");
   await expect(page.locator(".capture-content")).toContainText("check_date=");
   await expect(page.getByRole("link", { name: "Position auf OpenStreetMap ansehen" })).toHaveAttribute("href", /openstreetmap\.org\/\?mlat=52\.52000/u);
-  await expect(page.locator(".capture-content")).toContainText("nichts gespeichert oder an OpenStreetMap gesendet");
+  await expect(page.locator(".capture-content")).toContainText("Änderungen bleiben auf dem OSM-Testserver.");
   await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
   expect(searchRequests).toBe(1);
   expect(nonSearchOsmRequests).toEqual([]);
+
+  let createRequest: Record<string, unknown> | undefined;
+  await page.route("**/api/osm/development/create-node", async (route) => {
+    createRequest = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ json: { status: "complete", node_id: "456", version: 1 } });
+  });
+  const createResponse = page.waitForResponse("**/api/osm/development/create-node");
+  await page.getByRole("button", { name: "Testserver: AED eintragen" }).click();
+  await expect.poll(() => createRequest).toBeDefined();
+  const createResponseBody = await createResponse.then((response) => response.json() as Promise<Record<string, unknown>>);
+  expect(createResponseBody).toEqual({ status: "complete", node_id: "456", version: 1 });
+  await expect(page.getByRole("status")).toContainText("Neuer AED wurde eingetragen");
+  expect(createRequest).toMatchObject({
+    confirmed: true,
+    latitude: 52.52,
+    observed_on: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/u),
+    location_description: null,
+  });
+  expect(createRequest?.longitude).toBeCloseTo(13.40495, 4);
+  expect(createRequest?.operation_id).toMatch(/^[0-9a-f-]{36}$/iu);
 });
 
 test("a partial nearby search never offers a new AED preview", async ({ page, context }) => {

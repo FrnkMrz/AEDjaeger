@@ -8,6 +8,7 @@ import { storeOSMDevelopmentToken } from "./storage/osmDevelopmentTokens";
 import { handleVisionAnalysis } from "./vision/analyzeRoute";
 import { handleOverpassSearch } from "./osm/overpassRoute";
 import { handleDevelopmentCheckDate } from "./osm/developmentWriteRoute";
+import { handleDevelopmentCreateNode } from "./osm/developmentCreateNodeRoute";
 
 type StaticAssets = { fetch(request: Request): Promise<Response> };
 type WorkerEnvironment = {
@@ -66,6 +67,7 @@ const worker = {
     }
     if (pathname === "/api/osm/candidates/search") return handleOverpassSearch(request, environment);
     if (pathname === "/api/osm/development/check-date") return handleDevelopmentCheckDate(request, environment);
+    if (pathname === "/api/osm/development/create-node") return handleDevelopmentCreateNode(request, environment);
     if (pathname === "/api/vision/analyze") return handleVisionAnalysis(request, environment);
     if (pathname === "/api" || pathname.startsWith("/api/")) return jsonResponse({ error: "not_found" }, 404);
     return environment.ASSETS.fetch(request);

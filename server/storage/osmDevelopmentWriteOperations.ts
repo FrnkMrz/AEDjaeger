@@ -7,6 +7,7 @@ export type OSMDevelopmentWriteOperation = {
   state: OSMDevelopmentWriteState;
   changeset_id: string | null;
   result_version: number | null;
+  result_node_id: string | null;
 };
 
 const OPERATION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1_000;
@@ -35,12 +36,13 @@ export async function reserveOSMDevelopmentWrite(
     if (!insert.success) throw new Error("D1 insert failed");
 
     const operation = await database.prepare(
-      `SELECT request_hash, state, changeset_id, result_version
+      `SELECT request_hash, state, changeset_id, result_version, result_node_id
        FROM osm_development_write_operations
        WHERE session_hash = ? AND operation_id = ? AND expires_at > ?`,
     ).bind(sessionHash, operationId, now).first<OSMDevelopmentWriteOperation>();
     if (!operation || !isState(operation.state) || (operation.changeset_id !== null && !isPositiveIntegerString(operation.changeset_id))
-      || (operation.result_version !== null && (!Number.isSafeInteger(operation.result_version) || operation.result_version <= 0))) {
+      || (operation.result_version !== null && (!Number.isSafeInteger(operation.result_version) || operation.result_version <= 0))
+      || (operation.result_node_id !== null && !isPositiveIntegerString(operation.result_node_id))) {
       throw new Error("D1 read failed");
     }
     return { operation, created: insert.meta?.changes === 1 };
@@ -77,20 +79,22 @@ export async function updateOSMDevelopmentWrite(
     now: number;
     changesetId?: string;
     resultVersion?: number;
+    resultNodeId?: string;
   },
 ): Promise<void> {
-  const { sessionHash, operationId, state, now, changesetId, resultVersion } = input;
+  const { sessionHash, operationId, state, now, changesetId, resultVersion, resultNodeId } = input;
   if (!isSha256(sessionHash) || !isUuid(operationId) || !isState(state) || !isTimestamp(now)
     || (changesetId !== undefined && !isPositiveIntegerString(changesetId))
-    || (resultVersion !== undefined && (!Number.isSafeInteger(resultVersion) || resultVersion <= 0))) {
+    || (resultVersion !== undefined && (!Number.isSafeInteger(resultVersion) || resultVersion <= 0))
+    || (resultNodeId !== undefined && !isPositiveIntegerString(resultNodeId))) {
     throw new Error("Ungültiger OSM-Testvorgang.");
   }
   try {
     const result = await database.prepare(
       `UPDATE osm_development_write_operations
-       SET state = ?, changeset_id = COALESCE(?, changeset_id), result_version = COALESCE(?, result_version), updated_at = ?
+       SET state = ?, changeset_id = COALESCE(?, changeset_id), result_version = COALESCE(?, result_version), result_node_id = COALESCE(?, result_node_id), updated_at = ?
        WHERE session_hash = ? AND operation_id = ?`,
-    ).bind(state, changesetId ?? null, resultVersion ?? null, now, sessionHash, operationId).run();
+    ).bind(state, changesetId ?? null, resultVersion ?? null, resultNodeId ?? null, now, sessionHash, operationId).run();
     if (!result.success || result.meta?.changes !== 1) throw new Error("D1 update failed");
   } catch {
     throw new Error("Der OSM-Testvorgang konnte nicht sicher aktualisiert werden.");
