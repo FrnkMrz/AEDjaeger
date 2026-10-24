@@ -93,6 +93,25 @@ export async function failStaleStartedOSMDevelopmentWrite(
   }
 }
 
+/** Retire an uncertain create only after OSM confirms its changeset is closed and empty. */
+export async function failEmptyUncertainOSMDevelopmentWrite(
+  database: D1Database,
+  input: { sessionHash: string; operationId: string; changesetId: string; now: number },
+): Promise<boolean> {
+  if (!isSha256(input.sessionHash) || !isUuid(input.operationId) || !isPositiveIntegerString(input.changesetId) || !isTimestamp(input.now)) {
+    throw new Error("Ungültiger OSM-Testvorgang.");
+  }
+  try {
+    const result = await database.prepare(
+      `UPDATE osm_development_write_operations SET state = 'failed', updated_at = ?
+       WHERE session_hash = ? AND operation_id = ? AND changeset_id = ? AND state IN ('uploading', 'uncertain') AND expires_at > ?`,
+    ).bind(input.now, input.sessionHash, input.operationId, input.changesetId, input.now).run();
+    return result.success && result.meta?.changes === 1;
+  } catch {
+    throw new Error("Der OSM-Testvorgang konnte nicht sicher abgeschlossen werden.");
+  }
+}
+
 /** Persist the changeset only if this request still owns the initial `started` operation. */
 export async function recordOSMDevelopmentChangeset(
   database: D1Database,

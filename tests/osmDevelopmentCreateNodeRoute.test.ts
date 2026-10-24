@@ -75,6 +75,11 @@ class MemoryD1 implements D1Database {
       return { success: true, meta: { changes: 1 } };
     }
     if (sql.includes("SET state = 'failed', updated_at = ?")) {
+      if (sql.includes("changeset_id = ? AND state IN ('uploading', 'uncertain')")) {
+        const [time, hash, id, changeset, expires] = values as [number, string, string, string, number]; const row = this.operations.get(`${hash}:${id}`);
+        if (!row || row.changeset_id !== changeset || !["uploading", "uncertain"].includes(row.state) || row.expires_at <= expires) return { success: true, meta: { changes: 0 } };
+        row.state = "failed"; row.updated_at = time; return { success: true, meta: { changes: 1 } };
+      }
       const [time, hash, id, staleBefore, expires] = values as [number, string, string, number, number]; const row = this.operations.get(`${hash}:${id}`);
       if (!row || row.state !== "started" || row.updated_at > staleBefore || row.expires_at <= expires) return { success: true, meta: { changes: 0 } };
       row.state = "failed"; row.updated_at = time; return { success: true, meta: { changes: 1 } };
@@ -124,7 +129,7 @@ function makeRequest(body: unknown = input): Request {
   });
 }
 
-function makeFetch(options: { nearbyAed?: boolean; loseUploadResponse?: boolean; invalidMap?: boolean } = {}) {
+function makeFetch(options: { nearbyAed?: boolean; loseUploadResponse?: boolean; invalidMap?: boolean; emptyChangeset?: boolean } = {}) {
   let loseUploadResponse = options.loseUploadResponse ?? false;
   let uploadCount = 0;
   const calls: Array<{ url: string; method: string; body?: string }> = [];
@@ -144,7 +149,9 @@ function makeFetch(options: { nearbyAed?: boolean; loseUploadResponse?: boolean;
       if (loseUploadResponse) { loseUploadResponse = false; throw new Error("connection lost after upload"); }
       return new Response('<diffResult><node old_id="-1" new_id="456" new_version="1"/></diffResult>', { status: 200 });
     }
-    if (url.endsWith("/changeset/77/download")) return new Response('<osm><node id="456" version="1" lat="52.52" lon="13.405" changeset="77"><tag k="check_date" v="2026-10-24"/><tag k="emergency" v="defibrillator"/><tag k="defibrillator:location" v="Near main entrance"/></node></osm>', { status: 200 });
+    if (url.endsWith("/changeset/77/download")) return new Response(options.emptyChangeset
+      ? '<?xml version="1.0" encoding="UTF-8"?><osmChange version="0.6" generator="test"><create/><modify/><delete/></osmChange>'
+      : '<osmChange version="0.6"><create><node id="456" version="1" lat="52.52" lon="13.405" changeset="77"><tag k="check_date" v="2026-10-24"/><tag k="emergency" v="defibrillator"/><tag k="defibrillator:location" v="Near main entrance"/></node></create><modify/><delete/></osmChange>', { status: 200 });
     if (url.endsWith("/changeset/77/close")) return new Response(null, { status: 200 });
     throw new Error(`Unexpected OSM request ${method} ${url}`);
   };
@@ -208,6 +215,21 @@ describe("OSM development node creation", () => {
     expect(retry.status).toBe(200);
     expect(await retry.json()).toEqual({ status: "complete", node_id: "456", version: 1 });
     expect(api.uploadCount).toBe(1);
+  });
+
+  it("closes and reconciles an empty changeset before releasing a lost upload", async () => {
+    const DB = await setupDatabase(); const api = makeFetch({ loseUploadResponse: true, emptyChangeset: true });
+    const dependencies = { now: () => now, fetch: api.fetcher };
+    const first = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies);
+    expect(first.status).toBe(202);
+    expect(await first.json()).toEqual({ status: "uncertain" });
+
+    const retry = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies);
+    expect(retry.status).toBe(422);
+    expect(await retry.json()).toEqual({ error: "write_failed" });
+    expect(DB.operations.values().next().value?.state).toBe("failed");
+    expect(api.calls.filter((call) => call.url.endsWith("/upload"))).toHaveLength(1);
+    expect(api.calls.some((call) => call.url.endsWith("/close"))).toBe(true);
   });
 
   it("refuses a production session before calling OSM", async () => {

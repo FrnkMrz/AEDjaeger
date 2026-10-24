@@ -3,6 +3,7 @@ import { findOSMSession } from "../storage/osmSessions";
 import { findOSMDevelopmentToken } from "../storage/osmDevelopmentTokens";
 import {
   claimOSMDevelopmentUpload,
+  failEmptyUncertainOSMDevelopmentWrite,
   failStaleStartedOSMDevelopmentWrite,
   finishStartedOSMDevelopmentWrite,
   hashOSMDevelopmentWriteValue,
@@ -234,11 +235,28 @@ async function reconcileUncertainCreate(
 ): Promise<Response> {
   if (!operation.changeset_id) return jsonResponse({ status: "uncertain" }, 202);
   try {
+    // Closing the changeset is a barrier: OSM will reject any upload that has
+    // not committed yet. We can then inspect a stable snapshot without risking
+    // that a late request creates a node after we retire this operation.
+    if (!await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch)) {
+      return jsonResponse({ status: "uncertain" }, 202);
+    }
     const response = await requestOSMDevelopmentApi("development", `/api/0.6/changeset/${operation.changeset_id}/download`, token, { method: "GET" }, dependencies.fetch ?? fetch);
     if (!response.ok) return jsonResponse({ status: "uncertain" }, 202);
     const body = await readLimitedText(response, MAX_MAP_BYTES);
     const result = findCreatedNodeInChangeset(body, operation.changeset_id, input);
-    if (!result) return jsonResponse({ status: "uncertain" }, 202);
+    if (!result) {
+      if (isEmptyChangesetDownload(body)) {
+        const failed = await failEmptyUncertainOSMDevelopmentWrite(database, {
+          sessionHash,
+          operationId: input.operation_id,
+          changesetId: operation.changeset_id,
+          now: (dependencies.now ?? Date.now)(),
+        });
+        if (failed) return jsonResponse({ error: "write_failed" }, 422);
+      }
+      return jsonResponse({ status: "uncertain" }, 202);
+    }
     await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state: "uploaded", changesetId: operation.changeset_id, resultNodeId: String(result.id), resultVersion: result.version, now: (dependencies.now ?? Date.now)() });
     return finishChangeset(database, sessionHash, input.operation_id, { ...operation, state: "uploaded", result_node_id: String(result.id), result_version: result.version }, token, dependencies);
   } catch {
@@ -265,8 +283,27 @@ async function createChangeset(token: string, fetcher: typeof fetch): Promise<st
 async function closeChangeset(token: string, changesetId: string, fetcher: typeof fetch): Promise<boolean> {
   try {
     const response = await requestOSMDevelopmentApi("development", `/api/0.6/changeset/${changesetId}/close`, token, { method: "PUT" }, fetcher);
-    return response.ok || response.status === 409;
+    if (response.ok) return true;
+    // A 409 can mean either "already closed" or "not owned by this user".
+    // Confirm the server's state instead of treating every conflict as success.
+    if (response.status !== 409) return false;
+    const status = await requestOSMDevelopmentApi("development", `/api/0.6/changeset/${changesetId}`, token, { method: "GET" }, fetcher);
+    if (!status.ok) return false;
+    const body = await readLimitedText(status, MAX_RESPONSE_BYTES);
+    return new RegExp(`<changeset\\b(?=[^>]*\\bid="${changesetId}"(?=[\\s>]))(?=[^>]*\\bopen="false"(?=[\\s>]))[^>]*\\/?\\s*>`, "u").test(body);
   } catch { return false; }
+}
+
+/** Distinguish a valid, empty OSM Changeset from malformed or unknown data. */
+function isEmptyChangesetDownload(value: string): boolean {
+  const withoutDeclaration = value.replace(/^\s*<\?xml\s+version="1\.0"(?:\s+encoding="[^"]+")?\s*\?>\s*/iu, "");
+  const root = /^<osmChange\b[^>]*>([\s\S]*)<\/osmChange>\s*$/u.exec(withoutDeclaration);
+  if (!root) return false;
+  const content = root[1].replace(/<!--([\s\S]*?)-->/gu, "").trim();
+  if (!content) return true;
+  // The API may serialize the three empty action groups explicitly.
+  return content.replace(/<(create|modify|delete)\s*\/\s*>/giu, "")
+    .replace(/<(create|modify|delete)\s*>\s*<\/\1\s*>/giu, "").trim().length === 0;
 }
 
 function buildCreateNodeChange(input: CreateRequest, tags: Record<string, string>, changesetId: string): string {
