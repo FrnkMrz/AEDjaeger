@@ -54,7 +54,7 @@ function tv(key: VisionMessageKey, values?: Record<string, number | string>): st
 
 function signInLinks(): string {
   const productionLink = productionLoginAvailable ? `<a class="account-button" id="osm-sign-in" href="/api/auth/osm/start">${t("accountSignIn")}</a>` : "";
-  const developmentLink = developmentLoginAvailable ? `<a class="account-button account-button-secondary" id="osm-dev-sign-in" href="/api/auth/osm/development/start">${t("accountDevSignIn")}</a><p class="simulation-note">${t("accountDevNotice")}</p>` : "";
+  const developmentLink = developmentLoginAvailable ? `<a class="account-button" id="osm-dev-sign-in" href="/api/auth/osm/development/start">${t("accountDevSignIn")}</a><p class="simulation-note">${t("accountDevNotice")}</p>` : "";
   return `${productionLink}${developmentLink}`;
 }
 
