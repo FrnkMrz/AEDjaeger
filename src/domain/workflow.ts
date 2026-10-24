@@ -19,6 +19,15 @@ export type CandidateResultState = {
   retryAvailableAt?: number;
 };
 
+export type DevelopmentCheckRequest = {
+  operationId: string;
+  target: string;
+  candidateLabel: string;
+  expectedVersion: number;
+  expectedCheckDate: string | null;
+  observedOn: string;
+};
+
 export type FlowState =
   | { kind: "ready" }
   | { kind: "photo"; photoUrl: string }
@@ -28,7 +37,8 @@ export type FlowState =
   | { kind: "candidate-searching"; photoUrl: string; observation: VisionObservation }
   | CandidateResultState
   | { kind: "new-aed-preview"; photoUrl: string; result: ProposalResult<NewAedPreview>; returnState: CandidateResultState }
-  | { kind: "osm-preview"; photoUrl: string; candidateId: string; candidateLabel: string; result: ProposalResult<ExistingCheckDatePreview>; returnState: CandidateResultState }
+  | { kind: "osm-preview"; photoUrl: string; candidateId: string; candidateLabel: string; result: ProposalResult<ExistingCheckDatePreview>; returnState: CandidateResultState; writeStatus?: "sending" | "complete" | "uncertain" | "conflict" | "failed"; operationId?: string }
+  | { kind: "development-write-recovery"; request: DevelopmentCheckRequest; writeStatus: "uncertain" | "sending" | "complete" | "conflict" | "failed" }
   | { kind: "candidate-error"; photoUrl: string; observation: VisionObservation; reason: "location-unavailable" | "location-denied" | "location-uncertain" | "sign-in" | "rate-limited" | "service-unavailable" | "failed" | "invalid-response"; retryAvailableAt?: number }
   | { kind: "vision-error"; photoUrl: string; reason: "sign-in" | "not-allowed" | "budget" | "unavailable" | "session-unavailable" | "analysis-budget-unavailable" | "analysis-claim-uncertain" | "invalid-image" | "failed" | "invalid-response" }
   | { kind: "clarification"; photoUrl: string; reason: "sign-only" | "multiple" }

@@ -8,6 +8,7 @@ describe("OSM session status", () => {
       loginAvailable: true,
       developmentLoginAvailable: false,
       developmentSession: true,
+      developmentWriteAvailable: true,
     }));
 
     expect(status).toEqual({
@@ -15,6 +16,7 @@ describe("OSM session status", () => {
       loginAvailable: true,
       developmentLoginAvailable: false,
       developmentSession: true,
+      developmentWriteAvailable: true,
     });
   });
 

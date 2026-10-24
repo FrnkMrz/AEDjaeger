@@ -91,6 +91,7 @@ function parseSearchResult(value: unknown): OverpassSearchResult | null {
     if (typeof candidateValue !== "object" || candidateValue === null || Array.isArray(candidateValue)) return null;
     const candidate = candidateValue as Record<string, unknown>;
     if (typeof candidate.id !== "string" || !/^(node|way|relation)\/\d+$/u.test(candidate.id)) return null;
+    if (candidate.version !== undefined && (!Number.isSafeInteger(candidate.version) || (candidate.version as number) <= 0)) return null;
     const osmType = candidate.id.split("/", 1)[0];
     if (candidate.osmType !== osmType) return null;
     if (candidate.coordinateQuality !== (osmType === "node" ? "exact" : "approximate-center")) return null;

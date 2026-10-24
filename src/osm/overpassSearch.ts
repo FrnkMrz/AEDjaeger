@@ -18,6 +18,8 @@ export interface OverpassSearchRequest {
 export interface OverpassCandidate {
   id: string;
   osmType: "node" | "way" | "relation";
+  /** OSM version returned by Overpass; required to safely update an existing node. */
+  version?: number;
   coordinateQuality: "exact" | "approximate-center";
   position: SearchCoordinate;
   tags: Readonly<Record<string, string>>;
@@ -135,6 +137,7 @@ function readCandidate(value: unknown): OverpassCandidate | null {
   return {
     id: `${type}/${id}`,
     osmType: type,
+    ...(typeof value.version === "number" && Number.isSafeInteger(value.version) && value.version > 0 ? { version: value.version } : {}),
     coordinateQuality: type === "node" ? "exact" : "approximate-center",
     position,
     tags,

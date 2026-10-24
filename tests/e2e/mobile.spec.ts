@@ -138,6 +138,87 @@ test("a user-confirmed location search shows nearby candidates without writing t
   expect(searchRequests).toBe(1);
 });
 
+test("the development-session preview sends one explicitly confirmed, versioned check-date update", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
+    authenticated: true, loginAvailable: true, developmentLoginAvailable: true,
+    developmentSession: true, developmentWriteAvailable: true,
+  } }));
+  await page.route("**/api/vision/analyze", async (route) => {
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ json: {
+      request_id: payload.request_id, model: "gpt-6-luna",
+      observation: { scene: "device_visible", device_count: 1, readable_text: ["AED"], manufacturer: null, model: null, location_clues: [], image_issues: [] },
+    } });
+  });
+  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
+    status: "complete", coverage_radius_meters: 112,
+    candidates: [{ id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2025-10-20" } }],
+  } }));
+  const writeRequests: Array<Record<string, unknown>> = [];
+  await page.route("**/api/osm/development/check-date", async (route) => {
+    expect(route.request().method()).toBe("POST");
+    writeRequests.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({ json: { status: "complete", version: 8 } });
+  });
+
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.locator('[data-action="analyze-live"]').click();
+  await page.getByRole("button", { name: "AEDs in der Umgebung suchen" }).click();
+  await page.getByRole("button", { name: "Als noch vorhanden bestätigen" }).click();
+  await expect(page.getByRole("button", { name: "Testserver: Prüfdatum speichern" })).toBeVisible();
+  await page.getByRole("button", { name: "Testserver: Prüfdatum speichern" }).click();
+  await expect(page.getByRole("status")).toContainText("Vor-Ort-Prüfung gespeichert");
+  expect(writeRequests).toHaveLength(1);
+  expect(writeRequests[0]).toMatchObject({ confirmed: true, target: "node/123", expected_version: 7, expected_check_date: "2025-10-20" });
+  expect(writeRequests[0].operation_id).toMatch(/^[0-9a-f-]{36}$/u);
+});
+
+test("an uncertain test-server response survives reload and retries with the same operation ID", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
+    authenticated: true, loginAvailable: true, developmentLoginAvailable: true,
+    developmentSession: true, developmentWriteAvailable: true,
+  } }));
+  await page.route("**/api/vision/analyze", async (route) => {
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ json: {
+      request_id: payload.request_id, model: "gpt-6-luna",
+      observation: { scene: "device_visible", device_count: 1, readable_text: ["AED"], manufacturer: null, model: null, location_clues: [], image_issues: [] },
+    } });
+  });
+  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
+    status: "complete", coverage_radius_meters: 112,
+    candidates: [{ id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2025-10-20" } }],
+  } }));
+  const operationIds: unknown[] = [];
+  let attempts = 0;
+  await page.route("**/api/osm/development/check-date", async (route) => {
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    operationIds.push(payload.operation_id);
+    attempts += 1;
+    if (attempts === 1) await route.fulfill({ status: 202, json: { status: "uncertain" } });
+    else await route.fulfill({ json: { status: "complete", version: 8 } });
+  });
+
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.locator('[data-action="analyze-live"]').click();
+  await page.getByRole("button", { name: "AEDs in der Umgebung suchen" }).click();
+  await page.getByRole("button", { name: "Als noch vorhanden bestätigen" }).click();
+  await page.getByRole("button", { name: "Testserver: Prüfdatum speichern" }).click();
+  await expect(page.getByRole("status")).toContainText("Ergebnis unklar");
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Testserver: Status erneut prüfen" })).toBeVisible();
+  await page.getByRole("button", { name: "Testserver: Status erneut prüfen" }).click();
+  await expect(page.getByRole("status")).toContainText("Vor-Ort-Prüfung gespeichert");
+  expect(operationIds).toHaveLength(2);
+  expect(operationIds[1]).toBe(operationIds[0]);
+});
+
 test("a new AED preview requires confirmed GPS position and a complete empty search", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await page.route("https://tile.openstreetmap.org/**", (route) => route.fulfill({ status: 200, contentType: "image/svg+xml", body: "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"256\"><rect width=\"256\" height=\"256\" fill=\"#e5ece3\"/></svg>" }));
