@@ -79,11 +79,13 @@ export async function handleVisionAnalysis(
   }
 
   const now = (dependencies.now ?? Date.now)();
+  let budgetUserId: string;
   try {
+    budgetUserId = await createBudgetUserId(session.environment, session.subject);
     const reservation = await reserveAnalysisBudget(environment.DB, {
       reservationId: (dependencies.randomUUID ?? crypto.randomUUID.bind(crypto))(),
       requestId: payload.requestId,
-      userId: providerIdentity,
+      userId: budgetUserId,
       utcDay: new Date(now).toISOString().slice(0, 10),
       costMicros: limits.reservationMicros,
       userLimitMicros: limits.userDailyMicros,
@@ -99,7 +101,7 @@ export async function handleVisionAnalysis(
   }
 
   try {
-    const claimed = await markAnalysisProviderStarted(environment.DB, providerIdentity, payload.requestId, now);
+    const claimed = await markAnalysisProviderStarted(environment.DB, budgetUserId, payload.requestId, now);
     if (!claimed) return jsonResponse({ error: "duplicate_request" }, 409);
   } catch {
     // D1 may have committed the claim before losing its reply; this state must not be retried blindly.
@@ -202,6 +204,14 @@ function parseAllowedSubjects(value: string | undefined): string[] | null {
     return null;
   }
   return [...new Set(subjects)];
+}
+
+async function createBudgetUserId(environment: "production" | "development", subject: string): Promise<string> {
+  // OSM subjects are unique only within an issuer. Hash both values so D1 stores
+  // a fixed-size key that cannot collide across the production and test servers.
+  const source = new TextEncoder().encode(`${environment}\0${subject}`);
+  const digest = await crypto.subtle.digest("SHA-256", source);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function parsePositiveInteger(value: string | undefined): number | null {
