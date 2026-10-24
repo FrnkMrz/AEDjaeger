@@ -102,6 +102,66 @@ describe("Cloudflare Worker shell", () => {
     expect(queries.some((query) => query.startsWith("INSERT INTO osm_oauth_transactions"))).toBe(true);
   });
 
+  it("keeps the development login disabled unless explicitly configured", async () => {
+    const response = await worker.fetch(new Request("https://aedjaeger.test/api/auth/osm/development/start"), environment());
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "login_unavailable" });
+  });
+
+  it("starts development login only at the OSM test server with write_api", async () => {
+    const queries: string[] = [];
+    const database: D1Database = {
+      prepare(query: string): D1Statement {
+        queries.push(query);
+        return {
+          bind() { return this; },
+          async run<T>() { return { success: true, meta: { changes: 1 } } as D1Result<T>; },
+          async first<T>() { return null as T | null; },
+        };
+      },
+    };
+    const rawKey = crypto.getRandomValues(new Uint8Array(32));
+    const encryptionKey = btoa(String.fromCharCode(...rawKey)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+    const env = {
+      ...environment(),
+      DB: database,
+      OSM_DEV_LOGIN_ENABLED: "true",
+      OSM_DEV_CLIENT_ID: "aedjaeger-dev-client",
+      OSM_DEV_REDIRECT_URI: "https://aedjaeger.example/api/auth/osm/development/callback",
+      OSM_OAUTH_ENCRYPTION_KEY: encryptionKey,
+    };
+
+    const response = await worker.fetch(new Request("https://aedjaeger.example/api/auth/osm/development/start"), env);
+    const redirect = new URL(response.headers.get("Location") ?? "https://invalid.example");
+
+    expect(response.status).toBe(302);
+    expect(redirect.origin).toBe("https://master.apis.dev.openstreetmap.org");
+    expect(redirect.pathname).toBe("/oauth2/authorize");
+    expect(redirect.searchParams.get("scope")).toBe("openid write_api");
+    expect(redirect.searchParams.get("redirect_uri")).toBe(env.OSM_DEV_REDIRECT_URI);
+    expect(queries.some((query) => query.startsWith("INSERT INTO osm_oauth_transactions"))).toBe(true);
+  });
+
+  it("reports development login availability only for its configured origin", async () => {
+    const rawKey = crypto.getRandomValues(new Uint8Array(32));
+    const encryptionKey = btoa(String.fromCharCode(...rawKey)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+    const env = {
+      ...environment(),
+      DB: {} as D1Database,
+      OSM_DEV_LOGIN_ENABLED: "true",
+      OSM_DEV_CLIENT_ID: "aedjaeger-dev-client",
+      OSM_DEV_REDIRECT_URI: "https://aedjaeger.example/api/auth/osm/development/callback",
+      OSM_OAUTH_ENCRYPTION_KEY: encryptionKey,
+    };
+
+    const configured = await worker.fetch(new Request("https://aedjaeger.example/api/auth/session"), env);
+    expect(await configured.json()).toEqual({ authenticated: false, loginAvailable: false, developmentLoginAvailable: true });
+
+    const otherOrigin = await worker.fetch(new Request("https://other.example/api/auth/session"), env);
+    expect(await otherOrigin.json()).toEqual({ authenticated: false, loginAvailable: false, developmentLoginAvailable: false });
+  });
+
   it("keeps login and logout methods narrow", async () => {
     const env = environment();
     const start = await worker.fetch(new Request("https://aedjaeger.test/api/auth/osm/start", { method: "POST" }), env);
@@ -121,7 +181,7 @@ describe("Cloudflare Worker shell", () => {
     }), env);
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ authenticated: false, loginAvailable: false });
+    expect(await response.json()).toEqual({ authenticated: false, loginAvailable: false, developmentLoginAvailable: false });
     expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
 
@@ -137,16 +197,16 @@ describe("Cloudflare Worker shell", () => {
     };
 
     const configured = await worker.fetch(new Request("https://aedjaeger.example/api/auth/session"), base);
-    expect(await configured.json()).toEqual({ authenticated: false, loginAvailable: true });
+    expect(await configured.json()).toEqual({ authenticated: false, loginAvailable: true, developmentLoginAvailable: false });
 
     const wrongOrigin = await worker.fetch(new Request("https://other.example/api/auth/session"), base);
-    expect(await wrongOrigin.json()).toEqual({ authenticated: false, loginAvailable: false });
+    expect(await wrongOrigin.json()).toEqual({ authenticated: false, loginAvailable: false, developmentLoginAvailable: false });
 
     const invalidKey = await worker.fetch(new Request("https://aedjaeger.example/api/auth/session"), {
       ...base,
       OSM_OAUTH_ENCRYPTION_KEY: "not-a-valid-key",
     });
-    expect(await invalidKey.json()).toEqual({ authenticated: false, loginAvailable: false });
+    expect(await invalidKey.json()).toEqual({ authenticated: false, loginAvailable: false, developmentLoginAvailable: false });
   });
 
   it("rejects cross-origin logout requests before touching the session", async () => {
