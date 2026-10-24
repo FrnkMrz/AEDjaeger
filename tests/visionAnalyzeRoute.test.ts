@@ -28,7 +28,7 @@ function createDatabase(options: { authenticated?: boolean; reserved?: boolean; 
     prepare(query: string): D1Statement {
       let boundValues: unknown[] = [];
       const statement: D1Statement = {
-        bind(...values) { boundValues = values; return statement; },
+        bind(...values) {\n          boundValues = values;\n          if (query.includes("INSERT INTO analysis_budget_reservations") || query.includes("provider_started_at IS NULL")) budgetIdentities.push(String(values[1]));\n          return statement;\n        },
         async run<T>() {
           calls.push(query);
           if (query.includes("INSERT INTO analysis_budget_reservations")) {
@@ -43,7 +43,7 @@ function createDatabase(options: { authenticated?: boolean; reserved?: boolean; 
         async first<T>() {
           calls.push(query);
           if (query.includes("FROM osm_sessions")) {
-            return (options.authenticated === false ? null : { osm_subject: "osm-test-user" }) as T | null;
+            return (options.authenticated === false ? null : { osm_subject: "osm-test-user", osm_environment: options.environment ?? "production" }) as T | null;
           }
           if (query.includes("FROM analysis_budget_reservations")) {
             return (options.duplicate ? {
@@ -60,7 +60,7 @@ function createDatabase(options: { authenticated?: boolean; reserved?: boolean; 
       return statement;
     },
   };
-  return { database, calls };
+  return { database, calls, budgetIdentities };
 }
 
 function environment(database: D1Database, overrides: Partial<VisionRouteEnvironment> = {}): VisionRouteEnvironment {
@@ -68,7 +68,7 @@ function environment(database: D1Database, overrides: Partial<VisionRouteEnviron
     DB: database,
     OPENAI_API_KEY: "server-only-test-key",
     AI_ANALYSIS_ENABLED: "true",
-    AI_ANALYSIS_ALLOWED_OSM_SUBJECTS: "osm-test-user",
+    AI_ANALYSIS_ALLOWED_OSM_SUBJECTS: "production:osm-test-user",
     AI_ANALYSIS_COST_RESERVATION_MICROS: "5000",
     AI_ANALYSIS_USER_DAILY_LIMIT_MICROS: "20000",
     AI_ANALYSIS_GLOBAL_DAILY_LIMIT_MICROS: "100000",
@@ -145,6 +145,17 @@ describe("protected image analysis route", () => {
     expect(analyze).not.toHaveBeenCalled();
   });
 
+  it("does not let a same-subject test-server account inherit production AI access", async () => {
+    const { database, calls } = createDatabase({ environment: "development" });
+    const analyze = successfulAnalysis();
+    const response = await handleVisionAnalysis(analysisRequest(), environment(database), { analyze });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "analysis_not_allowed" });
+    expect(calls.some((query) => query.includes("analysis_budget_reservations"))).toBe(false);
+    expect(analyze).not.toHaveBeenCalled();
+  });
+
   it("does not reserve cost or call OpenAI for malformed image bytes", async () => {
     const { database, calls } = createDatabase();
     const analyze = successfulAnalysis();
@@ -190,7 +201,7 @@ describe("protected image analysis route", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(await response.json()).toEqual({ request_id: "request_1234567890", model: "gpt-6-luna", observation });
     expect(analyze).toHaveBeenCalledWith({ bytes: imageBytes, contentType: "image/jpeg" }, "server-only-test-key");
-    expect(calls.some((query) => query.includes("provider_started_at IS NULL"))).toBe(true);
+    expect(calls.some((query) => query.includes("provider_started_at IS NULL"))).toBe(true);\n    expect(budgetIdentities).toEqual(["production:osm-test-user", "production:osm-test-user"]);
   });
 
   it("never calls the provider when a reservation is denied or cannot be confirmed", async () => {
