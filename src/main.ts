@@ -5,6 +5,7 @@ import { translate, translations, type Language, type TranslationKey } from "./i
 import { translateVision, type VisionMessageKey } from "./i18n/visionTranslations";
 import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservation, VisionClientError } from "./vision/analyzePhoto";
 import { assessCandidates } from "./domain/candidateMatch";
+import { createPositionPicker, type Coordinate } from "./map/positionPicker";
 import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
 import { CandidateSearchError, requestNearbyCandidates, type PhoneLocation } from "./osm/candidateSearch";
 import type { VisionObservation } from "./contracts/visionObservation";
@@ -33,6 +34,8 @@ let selectedPhotoFile: File | undefined;
 let liveAnalysisRequestId: string | undefined;
 let photoSelectionVersion = 0;
 let photoSelectionPending = false;
+let activePositionPicker: { destroy(): void } | undefined;
+let newAedPositionOverride: Coordinate | undefined;
 
 function readLanguage(): Language {
   const saved = localStorage.getItem("aedjaeger-language");
@@ -129,8 +132,9 @@ function statusContent(): string {
       else if (assessment.kind === "new-entry-eligible") outcome = tv("searchNoMatch");
       else if (assessment.kind === "location-too-uncertain") outcome = tv("locationUncertain");
       else outcome = tv("searchFailedResult");
+      const selectedPosition = newAedPositionOverride ?? state.location;
       const newEntryAction = search.status === "complete" && assessment.kind === "new-entry-eligible"
-        ? `<div class="position-confirmation"><label for="new-aed-position-confirmed"><input id="new-aed-position-confirmed" type="checkbox" />${tv("newPositionConfirm", { latitude: state.location.latitude.toFixed(5), longitude: state.location.longitude.toFixed(5) })}</label><button class="button button-primary" data-action="preview-new-aed">${tv("newPreviewAction")}</button></div>`
+        ? `<section class="position-picker-panel" aria-labelledby="new-aed-position-title"><h3 id="new-aed-position-title">${tv("newPositionMapLabel")}</h3><p class="position-picker-help">${tv("newPositionMapHelp")}</p><p class="position-map-privacy">${tv("newPositionMapPrivacy")}</p><div id="new-aed-position-map" class="position-map" role="application" tabindex="0" aria-label="${tv("newPositionMapLabel")}"></div><p class="position-map-coordinates" id="new-aed-position-coordinates" aria-live="polite">${tv("newPreviewCoordinates", { latitude: selectedPosition.latitude.toFixed(5), longitude: selectedPosition.longitude.toFixed(5) })}</p><div class="position-confirmation"><label for="new-aed-position-confirmed"><input id="new-aed-position-confirmed" type="checkbox" /><span id="new-aed-position-label">${tv("newPositionConfirm", { latitude: selectedPosition.latitude.toFixed(5), longitude: selectedPosition.longitude.toFixed(5) })}</span></label><button class="button button-primary" data-action="preview-new-aed">${tv("newPreviewAction")}</button></div></section>`
         : "";
       const retryWaitSeconds = state.retryAvailableAt === undefined ? 0 : Math.max(0, Math.ceil((state.retryAvailableAt - Date.now()) / 1000));
       const retry = search.status === "partial" || assessment.kind === "search-incomplete"
@@ -210,6 +214,8 @@ function icon(kind: "camera" | "search" | "check"): string {
 }
 
 function render(restoreFlowFocus = false): void {
+  activePositionPicker?.destroy();
+  activePositionPicker = undefined;
   const isReady = state.kind === "ready";
   document.documentElement.lang = language;
   document.title = `${t("appName")} · ${t("tagline")}`;
@@ -241,6 +247,27 @@ function render(restoreFlowFocus = false): void {
         </div>
       </dialog>
     </div>`;
+
+  if (state.kind === "candidate-result" && state.search.status === "complete" && state.assessment.kind === "new-entry-eligible") {
+    const mapContainer = app!.querySelector<HTMLDivElement>("#new-aed-position-map");
+    if (mapContainer) {
+      activePositionPicker = createPositionPicker(mapContainer, newAedPositionOverride ?? state.location, {
+        mapLabel: tv("newPositionMapLabel"),
+        zoomInLabel: tv("newPositionMapZoomIn"),
+        zoomOutLabel: tv("newPositionMapZoomOut"),
+        tileErrorLabel: tv("newPositionMapTileError"),
+        onPositionChange(position) {
+          newAedPositionOverride = position;
+          const confirmation = app!.querySelector<HTMLInputElement>("#new-aed-position-confirmed");
+          if (confirmation) confirmation.checked = false;
+          const coordinates = app!.querySelector<HTMLParagraphElement>("#new-aed-position-coordinates");
+          if (coordinates) coordinates.textContent = tv("newPreviewCoordinates", { latitude: position.latitude.toFixed(5), longitude: position.longitude.toFixed(5) });
+          const label = app!.querySelector<HTMLSpanElement>("#new-aed-position-label");
+          if (label) label.textContent = tv("newPositionConfirm", { latitude: position.latitude.toFixed(5), longitude: position.longitude.toFixed(5) });
+        },
+      });
+    }
+  }
 
   document.querySelector<HTMLButtonElement>("#open-info")?.addEventListener("click", () => {
     document.querySelector<HTMLDialogElement>("#info-dialog")?.showModal();
@@ -447,7 +474,7 @@ function handleAction(action: string | undefined, source?: HTMLElement): void {
     const result = previewNewAed({
       searchStatus: state.search.status,
       assessmentKind: state.assessment.kind,
-      position: state.location,
+      position: newAedPositionOverride ?? state.location,
       searchCenter: state.location,
       coverageRadiusMeters: state.search.coverageRadiusMeters,
       nearbyRadiusMeters: 100,
@@ -533,6 +560,7 @@ async function runVisionAnalysis(photoUrl: string, file: File): Promise<void> {
 }
 
 async function runNearbySearch(photoUrl: string, observation: VisionObservation): Promise<void> {
+  newAedPositionOverride = undefined;
   if (searchRetryTimer) window.clearTimeout(searchRetryTimer);
   searchRetryTimer = undefined;
   if (accountState !== "signed-in") {
@@ -606,6 +634,7 @@ function getPhoneLocation(): Promise<PhoneLocation> {
 }
 
 function releasePhoto(): void {
+  newAedPositionOverride = undefined;
   const photoUrl = getPhotoUrl(state);
   if (photoUrl?.startsWith("blob:")) URL.revokeObjectURL(photoUrl);
   selectedPhotoFile = undefined;
