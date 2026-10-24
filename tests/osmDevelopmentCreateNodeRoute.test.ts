@@ -13,12 +13,13 @@ const input = { operation_id: operationId, confirmed: true, latitude: 52.52, lon
 
 type SessionRow = { session_hash: string; osm_subject: string; osm_environment: string; expires_at: number };
 type TokenRow = { session_hash: string; token_iv: string; token_ciphertext: string; token_expires_at: number };
-type OperationRow = { session_hash: string; operation_id: string; request_hash: string; state: string; changeset_id: string | null; result_version: number | null; result_node_id: string | null; expires_at: number };
+type OperationRow = { session_hash: string; operation_id: string; request_hash: string; state: string; changeset_id: string | null; result_version: number | null; result_node_id: string | null; updated_at: number; expires_at: number };
 
 class MemoryD1 implements D1Database {
   sessions = new Map<string, SessionRow>();
   tokens = new Map<string, TokenRow>();
   operations = new Map<string, OperationRow>();
+  failChangesetRecord = false;
 
   prepare(query: string): D1Statement {
     const database = this;
@@ -48,7 +49,7 @@ class MemoryD1 implements D1Database {
     if (sql.includes("FROM osm_development_write_operations")) {
       const [hash, id, time] = values as [string, string, number]; const row = this.operations.get(`${hash}:${id}`);
       if (!row || row.expires_at <= time) return null;
-      return { request_hash: row.request_hash, state: row.state, changeset_id: row.changeset_id, result_version: row.result_version, result_node_id: row.result_node_id } as T;
+      return { request_hash: row.request_hash, state: row.state, changeset_id: row.changeset_id, result_version: row.result_version, result_node_id: row.result_node_id, updated_at: row.updated_at } as T;
     }
     throw new Error(`Unexpected D1 query: ${sql}`);
   }
@@ -70,8 +71,29 @@ class MemoryD1 implements D1Database {
       const [hash, id, requestHash, _created, _updated, expires] = values as [string, string, string, number, number, number];
       const key = `${hash}:${id}`;
       if (this.operations.has(key)) return { success: true, meta: { changes: 0 } };
-      this.operations.set(key, { session_hash: hash, operation_id: id, request_hash: requestHash, state: "started", changeset_id: null, result_version: null, result_node_id: null, expires_at: expires });
+      this.operations.set(key, { session_hash: hash, operation_id: id, request_hash: requestHash, state: "started", changeset_id: null, result_version: null, result_node_id: null, updated_at: _updated, expires_at: expires });
       return { success: true, meta: { changes: 1 } };
+    }
+    if (sql.includes("SET state = 'failed', updated_at = ?")) {
+      const [time, hash, id, staleBefore, expires] = values as [number, string, string, number, number]; const row = this.operations.get(`${hash}:${id}`);
+      if (!row || row.state !== "started" || row.updated_at > staleBefore || row.expires_at <= expires) return { success: true, meta: { changes: 0 } };
+      row.state = "failed"; row.updated_at = time; return { success: true, meta: { changes: 1 } };
+    }
+    if (sql.includes("SET state = 'changeset-created'")) {
+      const [changeset, time, hash, id, expires] = values as [string, number, string, string, number]; const row = this.operations.get(`${hash}:${id}`);
+      if (this.failChangesetRecord) { this.failChangesetRecord = false; return { success: true, meta: { changes: 0 } }; }
+      if (!row || row.state !== "started" || row.expires_at <= expires) return { success: true, meta: { changes: 0 } };
+      row.state = "changeset-created"; row.changeset_id = changeset; row.updated_at = time; return { success: true, meta: { changes: 1 } };
+    }
+    if (sql.includes("SET state = ?, updated_at = ?")) {
+      const [state, time, hash, id, expires] = values as [string, number, string, string, number]; const row = this.operations.get(`${hash}:${id}`);
+      if (!row || row.state !== "started" || row.expires_at <= expires) return { success: true, meta: { changes: 0 } };
+      row.state = state; row.updated_at = time; return { success: true, meta: { changes: 1 } };
+    }
+    if (sql.includes("SET updated_at = ?")) {
+      const [time, hash, id, expires] = values as [number, string, string, number]; const row = this.operations.get(`${hash}:${id}`);
+      if (!row || row.state !== "started" || row.expires_at <= expires) return { success: true, meta: { changes: 0 } };
+      row.updated_at = time; return { success: true, meta: { changes: 1 } };
     }
     if (sql.includes("SET state = 'uploading'")) {
       const [_time, hash, id, expires] = values as [number, string, string, number]; const row = this.operations.get(`${hash}:${id}`);
@@ -81,7 +103,7 @@ class MemoryD1 implements D1Database {
     if (sql.includes("SET state = ?, changeset_id = COALESCE")) {
       const [state, changeset, version, nodeId, _time, hash, id] = values as [string, string | null, number | null, string | null, number, string, string];
       const row = this.operations.get(`${hash}:${id}`); if (!row) return { success: true, meta: { changes: 0 } };
-      row.state = state; row.changeset_id ??= changeset; row.result_version ??= version; row.result_node_id ??= nodeId;
+      row.state = state; row.changeset_id ??= changeset; row.result_version ??= version; row.result_node_id ??= nodeId; row.updated_at = _time;
       return { success: true, meta: { changes: 1 } };
     }
     throw new Error(`Unexpected D1 statement: ${sql}`);
@@ -158,6 +180,22 @@ describe("OSM development node creation", () => {
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({ error: "development_api_unavailable" });
     expect(api.calls.some((call) => call.url.endsWith("/changeset/create"))).toBe(false);
+    expect(api.calls.some((call) => call.url.endsWith("/upload"))).toBe(false);
+  });
+
+  it("terminates a stale started operation instead of leaving the confirmed draft pending forever", async () => {
+    const DB = await setupDatabase(); const api = makeFetch();
+    DB.failChangesetRecord = true;
+    const firstTime = now - 121_000;
+    const first = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, { now: () => firstTime, fetch: api.fetcher });
+    expect(first.status).toBe(422);
+    expect(DB.operations.values().next().value?.state).toBe("started");
+
+    const retry = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    expect(retry.status).toBe(422);
+    expect(await retry.json()).toEqual({ error: "write_failed" });
+    expect(DB.operations.values().next().value?.state).toBe("failed");
+    expect(api.calls.filter((call) => call.url.endsWith("/changeset/create"))).toHaveLength(1);
     expect(api.calls.some((call) => call.url.endsWith("/upload"))).toBe(false);
   });
 

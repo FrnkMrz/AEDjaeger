@@ -3,8 +3,12 @@ import { findOSMSession } from "../storage/osmSessions";
 import { findOSMDevelopmentToken } from "../storage/osmDevelopmentTokens";
 import {
   claimOSMDevelopmentUpload,
+  failStaleStartedOSMDevelopmentWrite,
+  finishStartedOSMDevelopmentWrite,
   hashOSMDevelopmentWriteValue,
+  recordOSMDevelopmentChangeset,
   reserveOSMDevelopmentWrite,
+  touchStartedOSMDevelopmentWrite,
   updateOSMDevelopmentWrite,
   type OSMDevelopmentWriteOperation,
 } from "../storage/osmDevelopmentWriteOperations";
@@ -83,7 +87,7 @@ export async function handleDevelopmentCreateNode(
   if (operation.request_hash !== requestHash) return jsonResponse({ error: "operation_id_conflict" }, 409);
   if (operation.state === "complete") return completeResponse(operation);
   if (operation.state === "conflict") return jsonResponse({ error: "nearby_aed_found" }, 409);
-  if (operation.state === "failed") return jsonResponse({ error: "write_failed" }, 502);
+  if (operation.state === "failed") return jsonResponse({ error: "write_failed" }, 422);
 
   if (!reserved.created) {
     if (operation.state === "uploaded") return finishChangeset(environment.DB, sessionHash, input.operation_id, operation, token, dependencies);
@@ -95,18 +99,34 @@ export async function handleDevelopmentCreateNode(
       if (!claimed) return jsonResponse({ status: "pending" }, 202);
       return uploadCreatedNode(environment.DB, sessionHash, input, operation, token, dependencies);
     }
+    if (operation.state === "started") {
+      const currentTime = (dependencies.now ?? Date.now)();
+      try {
+        if (await failStaleStartedOSMDevelopmentWrite(environment.DB, sessionHash, input.operation_id, currentTime)) {
+          return jsonResponse({ error: "write_failed" }, 422);
+        }
+      } catch {
+        return jsonResponse({ error: "write_status_unavailable" }, 503);
+      }
+    }
     return jsonResponse({ status: "pending" }, 202);
   }
 
+  let possibleDuplicate: boolean;
   try {
-    const possibleDuplicate = await findNearbyAed(input, token, dependencies.fetch ?? fetch);
-    if (possibleDuplicate) {
-      await safelyUpdate(environment.DB, { sessionHash, operationId: input.operation_id, state: "conflict", now: (dependencies.now ?? Date.now)() });
-      return jsonResponse({ error: "nearby_aed_found" }, 409);
-    }
+    possibleDuplicate = await findNearbyAed(input, token, dependencies.fetch ?? fetch);
   } catch {
-    await safelyUpdate(environment.DB, { sessionHash, operationId: input.operation_id, state: "failed", now: (dependencies.now ?? Date.now)() });
+    await safelyFinishStarted(environment.DB, sessionHash, input.operation_id, "failed", (dependencies.now ?? Date.now)());
     return jsonResponse({ error: "development_api_unavailable" }, 502);
+  }
+  // If a second request retired this operation while the map lookup was slow,
+  // this compare-and-set prevents it from opening a changeset afterwards.
+  if (!await safelyTouchStarted(environment.DB, sessionHash, input.operation_id, (dependencies.now ?? Date.now)())) {
+    return jsonResponse({ error: "write_failed" }, 422);
+  }
+  if (possibleDuplicate) {
+    const marked = await safelyFinishStarted(environment.DB, sessionHash, input.operation_id, "conflict", (dependencies.now ?? Date.now)());
+    return marked ? jsonResponse({ error: "nearby_aed_found" }, 409) : jsonResponse({ error: "write_failed" }, 422);
   }
 
   let changesetId: string;
@@ -114,15 +134,23 @@ export async function handleDevelopmentCreateNode(
     changesetId = await createChangeset(token, dependencies.fetch ?? fetch);
   } catch {
     // No node upload has started yet, so an empty changeset cannot create a duplicate AED.
-    await safelyUpdate(environment.DB, { sessionHash, operationId: input.operation_id, state: "failed", now: (dependencies.now ?? Date.now)() });
+    await safelyFinishStarted(environment.DB, sessionHash, input.operation_id, "failed", (dependencies.now ?? Date.now)());
     return jsonResponse({ error: "development_api_unavailable" }, 502);
   }
+  let changesetRecorded: boolean;
   try {
-    await updateOSMDevelopmentWrite(environment.DB, {
-      sessionHash, operationId: input.operation_id, state: "changeset-created", changesetId, now: (dependencies.now ?? Date.now)(),
+    changesetRecorded = await recordOSMDevelopmentChangeset(environment.DB, {
+      sessionHash, operationId: input.operation_id, changesetId, now: (dependencies.now ?? Date.now)(),
     });
   } catch {
+    // A database error can happen after the update committed. Leave the changeset
+    // open so a retry can use it if D1 recorded it; stale `started` rows are
+    // retired separately after their lease expires.
     return jsonResponse({ error: "write_status_unavailable" }, 503);
+  }
+  if (!changesetRecorded) {
+    await closeChangeset(token, changesetId, dependencies.fetch ?? fetch);
+    return jsonResponse({ error: "write_failed" }, 422);
   }
   const claimed = await safelyClaimUpload(environment.DB, sessionHash, input.operation_id, (dependencies.now ?? Date.now)());
   if (!claimed) return jsonResponse({ status: "pending" }, 202);
@@ -309,6 +337,8 @@ function readCookie(header: string | null, name: string): string | null { if (!h
 async function readLimitedBody(request: Request | Response, maximum: number): Promise<Uint8Array> { const length = request.headers.get("Content-Length"); if (length !== null && (!/^\d+$/u.test(length) || Number(length) > maximum)) throw new BodyTooLargeError(); if (!request.body) return new Uint8Array(); const reader = request.body.getReader(); const chunks: Uint8Array[] = []; let size = 0; try { while (true) { const { done, value } = await reader.read(); if (done) break; size += value.byteLength; if (size > maximum) { await reader.cancel().catch(() => undefined); throw new BodyTooLargeError(); } chunks.push(value); } } finally { reader.releaseLock(); } const body = new Uint8Array(size); let offset = 0; for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; } return body; }
 async function readLimitedText(response: Response, maximum: number): Promise<string> { return new TextDecoder("utf-8", { fatal: true }).decode(await readLimitedBody(response, maximum)); }
 async function safelyClaimUpload(database: D1Database, sessionHash: string, operationId: string, now: number): Promise<boolean> { try { return await claimOSMDevelopmentUpload(database, sessionHash, operationId, now); } catch { return false; } }
+async function safelyTouchStarted(database: D1Database, sessionHash: string, operationId: string, now: number): Promise<boolean> { try { return await touchStartedOSMDevelopmentWrite(database, sessionHash, operationId, now); } catch { return false; } }
+async function safelyFinishStarted(database: D1Database, sessionHash: string, operationId: string, state: "conflict" | "failed", now: number): Promise<boolean> { try { return await finishStartedOSMDevelopmentWrite(database, { sessionHash, operationId, state, now }); } catch { return false; } }
 async function safelyUpdate(database: D1Database, input: Parameters<typeof updateOSMDevelopmentWrite>[1]): Promise<void> { try { await updateOSMDevelopmentWrite(database, input); } catch { /* Keep database internals out of user-facing errors. */ } }
 function completeResponse(operation: OSMDevelopmentWriteOperation): Response { return jsonResponse({ status: "complete", node_id: operation.result_node_id, version: operation.result_version }, 200); }
 function jsonResponse(body: Record<string, unknown>, status: number, headers: Record<string, string> = {}): Response { return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", ...headers } }); }
