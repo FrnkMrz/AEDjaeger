@@ -21,6 +21,8 @@ describe("OSM development API boundary", () => {
     "https://www.openstreetmap.org/api/0.6/node/create",
     "//www.openstreetmap.org/api/0.6/node/create",
     "/api/0.6/../oauth2/token",
+    "/api/0.6/%2e%2e/%2e%2e/oauth2/token",
+    "/api/0.6/..%2f..%2foauth2/token",
     "/api/0.6/node/create?redirect=https://www.openstreetmap.org",
     "/api/0.6/node/create#fragment",
     "/api/0.6\\node\\create",
