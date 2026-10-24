@@ -126,7 +126,7 @@ export async function consumeOSMOAuthTransaction(
     );
     const payload = JSON.parse(new TextDecoder().decode(plaintext)) as unknown;
     if (!isPayload(payload)) throw new Error("Invalid payload");
-    return payload;
+    return { verifier: payload.verifier, nonce: payload.nonce, environment: payload.environment ?? "production" };
   } catch {
     // Der Eintrag ist bereits verbraucht. Beschädigte oder teilweise entschlüsselte
     // Daten werden nicht erneut versucht; ein neuer Login kann sicher starten.
