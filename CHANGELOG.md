@@ -5,6 +5,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 ## [Unreleased]
 
 ### Added
+- Ergänzt einen getrennt aktivierbaren OSM-Entwicklungslogin, der ausschließlich den festen OSM-Testserver anspricht, den angeforderten `write_api`-Zugriff serverseitig verschlüsselt an die App-Sitzung bindet und in der Oberfläche ausdrücklich als Testserver kennzeichnet. Es gibt weiterhin keine OSM-Schreibroute.
 
 - Ergänzt eine verschiebbare OSM-Karte zur Prüfung und Korrektur des vorgeschlagenen AED-Standorts. Jede Kartenbewegung hebt die Standortbestätigung auf.
 - Ergänzt im Fotoablauf eine Vorschau für neue AED-Knoten. Eine Neuanlage wird nur nach vollständiger Suche und ausdrücklicher Bestätigung des angezeigten GPS-Punkts vorbereitet; gespeichert oder an OSM gesendet wird nichts.
