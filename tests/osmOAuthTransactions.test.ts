@@ -149,7 +149,7 @@ describe("OSM OAuth transaction storage", () => {
     ).resolves.toBeNull();
     await expect(
       consumeOSMOAuthTransaction(database, validInput.state, validInput.browserBinding, validInput.createdAt + 1, key),
-    ).resolves.toEqual({ verifier: validInput.verifier, nonce: validInput.nonce });
+    ).resolves.toEqual({ verifier: validInput.verifier, nonce: validInput.nonce, environment: "production" });
   });
 
   it("fails closed and consumes the row when ciphertext cannot be authenticated", async () => {
