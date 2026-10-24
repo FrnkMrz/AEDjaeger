@@ -2,6 +2,7 @@
 export type OSMSessionStatus = {
   authenticated: boolean;
   loginAvailable: boolean;
+  developmentLoginAvailable: boolean;
 };
 
 /** Fail closed when the Worker is unreachable or returns an unexpected response. */
@@ -27,5 +28,5 @@ export async function endOSMSession(fetcher: typeof fetch = fetch): Promise<void
 function isSessionStatus(value: unknown): value is OSMSessionStatus {
   if (typeof value !== "object" || value === null) return false;
   const status = value as Record<string, unknown>;
-  return typeof status.authenticated === "boolean" && typeof status.loginAvailable === "boolean";
+  return typeof status.authenticated === "boolean" && typeof status.loginAvailable === "boolean" && typeof status.developmentLoginAvailable === "boolean";
 }
