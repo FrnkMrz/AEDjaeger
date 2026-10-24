@@ -186,12 +186,23 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   await page.getByRole("button", { name: "Zurück zu den Treffern" }).click();
 
   await page.locator("#new-aed-position-confirmed").check();
-  const mapBox = await page.locator("#new-aed-position-map").boundingBox();
-  if (!mapBox) throw new Error("Position map is not visible");
-  await page.mouse.move(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(mapBox.x + mapBox.width / 2 + 20, mapBox.y + mapBox.height / 2, { steps: 4 });
-  await page.mouse.up();
+  await page.locator("#new-aed-position-map").evaluate((element) => {
+    const map = element as HTMLDivElement;
+    // Simulate the browser retaining a first touch while a second finger taps the map.
+    map.setPointerCapture = () => {};
+    map.hasPointerCapture = () => false;
+    const dispatch = (type: string, pointerId: number, clientX: number, clientY: number) => {
+      map.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId, pointerType: "touch",
+        isPrimary: pointerId === 1, button: 0, clientX, clientY,
+      }));
+    };
+    dispatch("pointerdown", 1, 120, 120);
+    dispatch("pointermove", 1, 140, 120);
+    dispatch("pointerdown", 2, 220, 120);
+    dispatch("pointerup", 2, 220, 120);
+    dispatch("pointerup", 1, 140, 120);
+  });
   await expect(page.locator("#new-aed-position-confirmed")).not.toBeChecked();
   await expect(page.locator("#new-aed-position-coordinates")).not.toContainText("52.52000, 13.40500");
   await page.locator("#new-aed-position-confirmed").check();
