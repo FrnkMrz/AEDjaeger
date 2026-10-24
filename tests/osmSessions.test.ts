@@ -102,6 +102,6 @@ describe("OSM session storage", () => {
     await expect(createOSMSession(database, "short", "subject", 1)).rejects.toThrow("Ungültige");
     await expect(findOSMSession(database, "short", 1)).resolves.toBeNull();
     await expect(createOSMSession(database, "a".repeat(43), "", 1)).rejects.toThrow("Ungültige");
-    await expect(createOSMSession(database, "a".repeat(43), "subject", 1, "other" as "development")).rejects.toThrow("Ungültige");
+    await expect(createOSMSession(database, "a".repeat(43), "subject", 1, "other" as unknown as "production" | "development")).rejects.toThrow("Ungültige");
   });
 });
