@@ -20,6 +20,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Security
 
+- Ergänzt einen serverseitigen OSM-API-URL-Baustein, der nur bei exakt gesetzter Entwicklungsumgebung Anfragen an den festen OSM-Testserver zulässt und frei wählbare Hosts oder Pfad-Ausbrüche abweist. Eine Schreibroute ist damit noch nicht freigeschaltet.
 - Begrenzt lesende Overpass-Abfragen pro angemeldetem OSM-Konto auf einen Aufruf pro 30 Sekunden; D1 speichert einen einweg-gehashten Kontoschlüssel, löscht abgelaufene Cooldowns bei der nächsten Suche und speichert weder Standort noch Suchergebnis.
 - Speichert eine von Overpass gemeldete Upstream-Sperre als globale Ablaufzeit in D1, damit kein anderes AEDjaeger-Konto den öffentlichen Dienst währenddessen erneut anfragt.
 - Setzt eine unklare Analyse-Reservierung nur mit derselben Kostenhöhe am selben UTC-Tag fort; alte Reservierungen können das Tageslimit nicht umgehen.
