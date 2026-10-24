@@ -339,7 +339,9 @@ async function refreshAccountState(focusSelector?: string): Promise<void> {
       returnUrl.searchParams.delete("login");
       history.replaceState(null, "", `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`);
     }
-    productionLoginAvailable = status.loginAvailable;\n    developmentLoginAvailable = status.developmentLoginAvailable;\n    accountState = status.authenticated ? "signed-in" : !productionLoginAvailable && !developmentLoginAvailable ? "not-configured" : failedOAuthReturn ? "login-error" : "signed-out";
+    productionLoginAvailable = status.loginAvailable;
+    developmentLoginAvailable = status.developmentLoginAvailable;
+    accountState = status.authenticated ? "signed-in" : !productionLoginAvailable && !developmentLoginAvailable ? "not-configured" : failedOAuthReturn ? "login-error" : "signed-out";
   } catch {
     // Local Vite previews and an unavailable Worker must not imply that an OSM session exists.
     accountState = "connection-error";
