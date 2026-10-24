@@ -32,7 +32,7 @@ test("changing the UI language keeps keyboard focus on the language selector", a
 });
 
 test("the OSM login is offered only when configured and is localized in all six languages", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   await page.setViewportSize({ width: 320, height: 720 });
   await page.goto("/");
 
@@ -55,7 +55,7 @@ test("the OSM login is offered only when configured and is localized in all six 
 });
 
 test("AI photo analysis requires sign-in and an explicit send action; its result never offers an OSM write", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   let requests = 0;
   await page.route("**/api/vision/analyze", async (route) => {
     requests += 1;
@@ -91,7 +91,7 @@ test("AI photo analysis requires sign-in and an explicit send action; its result
 test("a user-confirmed location search shows nearby candidates without writing to OSM", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   await page.route("**/api/vision/analyze", async (route) => {
     const payload = route.request().postDataJSON() as Record<string, unknown>;
     await route.fulfill({ json: {
@@ -142,7 +142,7 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   await context.grantPermissions(["geolocation"]);
   await page.route("https://tile.openstreetmap.org/**", (route) => route.fulfill({ status: 200, contentType: "image/svg+xml", body: "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"256\"><rect width=\"256\" height=\"256\" fill=\"#e5ece3\"/></svg>" }));
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   await page.route("**/api/vision/analyze", async (route) => {
     const payload = route.request().postDataJSON() as Record<string, unknown>;
     await route.fulfill({ json: {
@@ -221,7 +221,7 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
 test("a partial nearby search never offers a new AED preview", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   await page.route("**/api/vision/analyze", async (route) => {
     const payload = route.request().postDataJSON() as Record<string, unknown>;
     await route.fulfill({ json: {
@@ -251,7 +251,7 @@ test("denied location access does not send a nearby search request", async ({ pa
       },
     } });
   });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   await page.route("**/api/vision/analyze", async (route) => {
     const payload = route.request().postDataJSON() as Record<string, unknown>;
     await route.fulfill({ json: {
@@ -276,7 +276,7 @@ test("denied location access does not send a nearby search request", async ({ pa
 test("an expired OSM session does not offer a search retry that cannot work", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   await page.route("**/api/vision/analyze", async (route) => {
     const payload = route.request().postDataJSON() as Record<string, unknown>;
     await route.fulfill({ json: {
@@ -301,7 +301,7 @@ test("an expired OSM session does not offer a search retry that cannot work", as
 test("an incomplete search cannot suggest a new AED and offers a retry", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   await page.route("**/api/vision/analyze", async (route) => {
     const payload = route.request().postDataJSON() as Record<string, unknown>;
     await route.fulfill({ json: {
@@ -355,7 +355,7 @@ test("an incomplete search cannot suggest a new AED and offers a retry", async (
 test("an imprecise location is not sent to the nearby search endpoint", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 150 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   await page.route("**/api/vision/analyze", async (route) => {
     const payload = route.request().postDataJSON() as Record<string, unknown>;
     await route.fulfill({ json: {
@@ -378,7 +378,7 @@ test("an imprecise location is not sent to the nearby search endpoint", async ({
 });
 
 test("the brand link cannot discard a photo while its AI request is in flight", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   let releaseResponse!: () => void;
   let signalRequestStarted!: () => void;
   const responseGate = new Promise<void>((resolve) => { releaseResponse = resolve; });
@@ -412,7 +412,7 @@ test("the brand link cannot discard a photo while its AI request is in flight", 
 });
 
 test("the live photo endpoint is not called until the user is signed in and chooses AI analysis", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   let requests = 0;
   await page.route("**/api/vision/analyze", async (route) => {
     requests += 1;
@@ -426,7 +426,7 @@ test("the live photo endpoint is not called until the user is signed in and choo
 });
 
 test("an expired server session is shown as signed out after a 401", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   await page.route("**/api/vision/analyze", (route) => route.fulfill({ status: 401, json: { error: "authentication_required" } }));
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
@@ -438,7 +438,7 @@ test("an expired server session is shown as signed out after a 401", async ({ pa
 });
 
 test("a temporary session-store failure keeps the photo and offers a safe retry", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   let requests = 0;
   await page.route("**/api/vision/analyze", async (route) => {
     requests += 1;
@@ -467,7 +467,7 @@ test("a temporary session-store failure keeps the photo and offers a safe retry"
 });
 
 test("a temporary budget-reservation failure keeps the photo and offers a safe retry", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   let requests = 0;
   const requestIds: string[] = [];
   await page.route("**/api/vision/analyze", async (route) => {
@@ -499,7 +499,7 @@ test("a temporary budget-reservation failure keeps the photo and offers a safe r
 });
 
 test("an uncertain provider claim keeps the photo but does not offer a retry", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   let requests = 0;
   await page.route("**/api/vision/analyze", async (route) => {
     requests += 1;
@@ -517,7 +517,7 @@ test("an uncertain provider claim keeps the photo but does not offer a retry", a
 
 test("the AI result remains readable on a narrow phone in all six languages", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 720 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   await page.route("**/api/vision/analyze", async (route) => {
     const payload = route.request().postDataJSON() as Record<string, unknown>;
     await route.fulfill({ json: {
@@ -547,7 +547,7 @@ test("the AI result remains readable on a narrow phone in all six languages", as
 });
 
 test("the OSM login link stays hidden when the Worker has no OAuth setup", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: false } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false } }));
   await page.goto("/");
 
   await expect(page.locator(".account-panel")).toContainText("OpenStreetMap-Anmeldung ist noch nicht eingerichtet");
@@ -556,7 +556,7 @@ test("the OSM login link stays hidden when the Worker has no OAuth setup", async
 
 test("an authenticated user can end the OSM session without exposing profile data", async ({ page }) => {
   let authenticated = true;
-  page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated, loginAvailable: true } }));
+  page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   page.route("**/api/auth/logout", async (route) => {
     expect(route.request().method()).toBe("POST");
     authenticated = false;
@@ -572,7 +572,7 @@ test("an authenticated user can end the OSM session without exposing profile dat
 });
 
 test("a failed OAuth return shows a localized retry message and removes the callback marker", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   await page.goto("/?login=error");
 
   const errors = [
@@ -593,7 +593,7 @@ test("a failed OAuth return shows a localized retry message and removes the call
 });
 
 test("the login cannot discard an unclear save and returns after recovery", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   await page.goto("/");
   await page.getByText("Vorschau testen", { exact: true }).click();
   await page.locator("#scenario").selectOption("upload-unclear");
@@ -612,7 +612,7 @@ test("the login cannot discard an unclear save and returns after recovery", asyn
 });
 
 test("the login stays unavailable while a selected photo or proposal is active", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   await page.goto("/");
   await page.getByText("Vorschau testen", { exact: true }).click();
   await page.locator("#scenario").selectOption("new");
@@ -637,7 +637,7 @@ test("the login is blocked immediately while a selected photo is still decoding"
       return Promise.resolve();
     };
   });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   await page.goto("/");
   await page.getByText("Vorschau testen", { exact: true }).click();
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
@@ -654,7 +654,7 @@ test("a session status connection error can be retried without losing the select
     checks += 1;
     return checks === 1
       ? route.fulfill({ status: 503, json: { error: "session_unavailable" } })
-      : route.fulfill({ json: { authenticated: false, loginAvailable: true } });
+      : route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } });
   });
   await page.goto("/");
   await expect(page.locator(".account-panel")).toContainText("Anmeldung ist gerade nicht erreichbar");

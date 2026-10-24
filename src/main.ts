@@ -25,6 +25,9 @@ let demoMode = false;
 let state: FlowState = { kind: "ready" };
 type AccountState = "checking" | "not-configured" | "connection-error" | "login-error" | "signed-out" | "signed-in" | "logout-error";
 let accountState: AccountState = "checking";
+let productionLoginAvailable = false;
+let developmentLoginAvailable = false;
+let developmentSession = false;
 let oauthReturnFailed = new URLSearchParams(window.location.search).get("login") === "error";
 let analysisTimer: number | undefined;
 let saveTimer: number | undefined;
@@ -50,19 +53,27 @@ function t(key: TranslationKey, values?: Record<string, number | string>): strin
 }
 function tv(key: VisionMessageKey, values?: Record<string, number | string>): string { return translateVision(language, key, values); }
 
+function signInLinks(): string {
+  const productionLink = productionLoginAvailable ? `<a class="account-button" id="osm-sign-in" href="/api/auth/osm/start">${t("accountSignIn")}</a>` : "";
+  const developmentLink = developmentLoginAvailable ? `<a class="account-button" id="osm-dev-sign-in" href="/api/auth/osm/development/start">${t("accountDevSignIn")}</a><p class="simulation-note">${t("accountDevNotice")}</p>` : "";
+  return `${productionLink}${developmentLink}`;
+}
+
 function accountPanel(): string {
   if (accountState === "checking") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountChecking")}</section>`;
   if (accountState === "not-configured") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountUnavailable")}</section>`;
   if (accountState === "connection-error") return `<section class="account-panel" aria-live="polite" tabindex="-1"><span>${t("accountConnectionError")}</span><button class="account-button" id="osm-session-retry" type="button">${t("accountRetry")}</button></section>`;
   if ((photoSelectionPending || hasActivePhotoDraft(state)) && accountState !== "signed-in") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountLoginBlocked")}</section>`;
-  if (accountState === "login-error") return `<section class="account-panel" aria-live="polite"><p role="alert">${t("accountLoginError")}</p><a class="account-button" id="osm-sign-in" href="/api/auth/osm/start">${t("accountSignIn")}</a></section>`;
+  if (accountState === "login-error") return `<section class="account-panel" aria-live="polite"><p role="alert">${t("accountLoginError")}</p>${signInLinks()}</section>`;
   if (accountState === "signed-in") {
-    return `<section class="account-panel" aria-live="polite"><div><strong>${t("accountSignedIn")}</strong><p>${t("accountIdentityOnly")}</p></div><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>`;
+    const signedInTitle = developmentSession ? t("accountDevSignedIn") : t("accountSignedIn");
+    const sessionMessage = developmentSession ? t("accountDevNotice") : t("accountIdentityOnly");
+    return `<section class="account-panel" aria-live="polite"><div><strong>${signedInTitle}</strong><p>${sessionMessage}</p></div><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>`;
   }
   if (accountState === "logout-error") {
     return `<section class="account-panel" aria-live="polite"><span>${t("accountSignOutError")}</span><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>`;
   }
-  return `<section class="account-panel"><a class="account-button" id="osm-sign-in" href="/api/auth/osm/start">${t("accountSignIn")}</a><p>${t("accountIdentityOnly")}</p></section>`;
+  return `<section class="account-panel">${signInLinks()}<p>${t("accountIdentityOnly")}</p></section>`;
 }
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
@@ -87,7 +98,7 @@ function statusContent(): string {
     case "ready":
       return `<div class="empty-illustration" aria-hidden="true"><span class="device-card"><span class="device-heart">♥</span><span class="device-zap">ϟ</span></span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>`;
     case "photo":
-      return `${photoMarkup}<p class="supporting-copy">${tv("consent")}</p>${accountState === "signed-in" ? `<button class="button button-primary" data-action="analyze-live">${icon("search")}<span>${tv("action")}</span></button>` : `<p class="supporting-copy">${tv("signIn")}</p>`}${demoMode ? `<button class="button button-secondary" data-action="analyze">${t("demoAnalyze")}</button>` : ""}<button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
+      return `${photoMarkup}<p class="supporting-copy">${tv("consent")}</p>${accountState === "signed-in" && !developmentSession ? `<button class="button button-primary" data-action="analyze-live">${icon("search")}<span>${tv("action")}</span></button>` : developmentSession ? `<p class="supporting-copy">${t("accountDevPhotoDisabled")}</p>` : `<p class="supporting-copy">${tv("signIn")}</p>`}${demoMode ? `<button class="button button-secondary" data-action="analyze">${t("demoAnalyze")}</button>` : ""}<button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
     case "analyzing":
       return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${t("checking")}</span></div>`;
     case "vision-analyzing":
@@ -331,7 +342,10 @@ async function refreshAccountState(focusSelector?: string): Promise<void> {
       returnUrl.searchParams.delete("login");
       history.replaceState(null, "", `${returnUrl.pathname}${returnUrl.search}${returnUrl.hash}`);
     }
-    accountState = status.authenticated ? "signed-in" : !status.loginAvailable ? "not-configured" : failedOAuthReturn ? "login-error" : "signed-out";
+    productionLoginAvailable = status.loginAvailable;
+    developmentLoginAvailable = status.developmentLoginAvailable;
+    developmentSession = status.developmentSession;
+    accountState = status.authenticated ? "signed-in" : !productionLoginAvailable && !developmentLoginAvailable ? "not-configured" : failedOAuthReturn ? "login-error" : "signed-out";
   } catch {
     // Local Vite previews and an unavailable Worker must not imply that an OSM session exists.
     accountState = "connection-error";

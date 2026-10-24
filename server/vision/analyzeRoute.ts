@@ -46,14 +46,15 @@ export async function handleVisionAnalysis(
   const sessionToken = readCookie(request.headers.get("Cookie"), SESSION_COOKIE);
   if (!sessionToken) return jsonResponse({ error: "authentication_required" }, 401);
 
-  let session: { subject: string } | null;
+  let session: { subject: string; environment: "production" | "development" } | null;
   try {
     session = await findOSMSession(environment.DB, sessionToken, (dependencies.now ?? Date.now)());
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
   if (!session) return jsonResponse({ error: "authentication_required" }, 401);
-  if (!limits.allowedSubjects.includes(session.subject)) {
+  const providerIdentity = `${session.environment}:${session.subject}`;
+  if (!limits.allowedSubjects.includes(providerIdentity)) {
     return jsonResponse({ error: "analysis_not_allowed" }, 403);
   }
 
@@ -78,11 +79,13 @@ export async function handleVisionAnalysis(
   }
 
   const now = (dependencies.now ?? Date.now)();
+  let budgetUserId: string;
   try {
+    budgetUserId = await createBudgetUserId(session.environment, session.subject);
     const reservation = await reserveAnalysisBudget(environment.DB, {
       reservationId: (dependencies.randomUUID ?? crypto.randomUUID.bind(crypto))(),
       requestId: payload.requestId,
-      userId: session.subject,
+      userId: budgetUserId,
       utcDay: new Date(now).toISOString().slice(0, 10),
       costMicros: limits.reservationMicros,
       userLimitMicros: limits.userDailyMicros,
@@ -98,7 +101,7 @@ export async function handleVisionAnalysis(
   }
 
   try {
-    const claimed = await markAnalysisProviderStarted(environment.DB, session.subject, payload.requestId, now);
+    const claimed = await markAnalysisProviderStarted(environment.DB, budgetUserId, payload.requestId, now);
     if (!claimed) return jsonResponse({ error: "duplicate_request" }, 409);
   } catch {
     // D1 may have committed the claim before losing its reply; this state must not be retried blindly.
@@ -197,10 +200,18 @@ function getAnalysisLimits(environment: VisionRouteEnvironment): { allowedSubjec
 function parseAllowedSubjects(value: string | undefined): string[] | null {
   if (!value || value.length > 25_600) return null;
   const subjects = value.split(",").map((subject) => subject.trim());
-  if (subjects.length === 0 || subjects.length > 100 || subjects.some((subject) => !subject || subject.length > 256 || /[\u0000-\u001f]/u.test(subject))) {
+  if (subjects.length === 0 || subjects.length > 100 || subjects.some((subject) => !subject || subject.length > 320 || /[\u0000-\u001f]/u.test(subject))) {
     return null;
   }
   return [...new Set(subjects)];
+}
+
+async function createBudgetUserId(environment: "production" | "development", subject: string): Promise<string> {
+  // OSM subjects are unique only within an issuer. Hash both values so D1 stores
+  // a fixed-size key that cannot collide across the production and test servers.
+  const source = new TextEncoder().encode(`${environment}\0${subject}`);
+  const digest = await crypto.subtle.digest("SHA-256", source);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function parsePositiveInteger(value: string | undefined): number | null {

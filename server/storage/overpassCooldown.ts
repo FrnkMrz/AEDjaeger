@@ -15,7 +15,7 @@ const MAX_UPSTREAM_COOLDOWN_SECONDS = 7 * 24 * 60 * 60;
  * nor the raw OSM account subject; the account key is one-way hashed.
  */
 export async function reserveOverpassSearchSlot(database: D1Database, userId: string, now: number): Promise<OverpassSlotReservation> {
-  if (typeof userId !== "string" || userId.length === 0 || userId.length > 256 || !Number.isSafeInteger(now) || now < 0) {
+  if (typeof userId !== "string" || userId.length === 0 || userId.length > 320 || !Number.isSafeInteger(now) || now < 0) {
     throw new Error("Die Umgebungssuche konnte nicht sicher vorbereitet werden.");
   }
 

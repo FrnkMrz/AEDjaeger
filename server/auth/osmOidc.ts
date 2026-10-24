@@ -1,11 +1,16 @@
-const OSM_ISSUER = "https://www.openstreetmap.org";
-const OSM_DISCOVERY_URL = `${OSM_ISSUER}/.well-known/openid-configuration`;
-const OSM_TOKEN_URL = `${OSM_ISSUER}/oauth2/token`;
-const OSM_JWKS_URL = `${OSM_ISSUER}/oauth2/discovery/keys`;
+import { OSM_SESSION_LIFETIME_MS } from "../storage/osmSessions";
+import { getOSMProviderEndpoints, type OSMEnvironment } from "./osmProvider";
+
 const MAX_PROVIDER_RESPONSE_BYTES = 64 * 1024;
+const MAX_ACCESS_TOKEN_LENGTH = 8_192;
 
 export type OSMIdentityToken = {
   subject: string;
+};
+
+export type OSMDevelopmentAuthorization = OSMIdentityToken & {
+  accessToken: string;
+  expiresAt: number;
 };
 
 type Fetcher = typeof fetch;
@@ -15,8 +20,9 @@ type OSMDiscoveryDocument = {
   jwks_uri?: unknown;
   id_token_signing_alg_values_supported?: unknown;
 };
+type TokenResponse = Record<string, unknown> & { id_token: string };
 
-/** Tauscht den einmaligen Code ein und validiert das OSM-ID-Token vollständig. */
+/** Production login only verifies identity and never returns its access token. */
 export async function exchangeOSMCodeForIdentity(input: {
   code: string;
   verifier: string;
@@ -27,10 +33,72 @@ export async function exchangeOSMCodeForIdentity(input: {
   fetcher?: Fetcher;
   cryptoApi?: Crypto;
 }): Promise<OSMIdentityToken> {
+  const { subject } = await exchangeCode(input, "production");
+  return { subject };
+}
+
+/**
+ * Exchanges a code at the fixed OSM test server and accepts only the small
+ * development scope requested by AEDjaeger. The returned token stays server-side.
+ */
+export async function exchangeOSMDevelopmentCodeForAccess(input: {
+  code: string;
+  verifier: string;
+  nonce: string;
+  clientId: string;
+  redirectUri: string;
+  now?: number;
+  fetcher?: Fetcher;
+  cryptoApi?: Crypto;
+}): Promise<OSMDevelopmentAuthorization> {
+  const { subject, tokenResponse } = await exchangeCode(input, "development");
+  const scopes = typeof tokenResponse.scope === "string"
+    ? tokenResponse.scope.split(/\s+/u).filter(Boolean)
+    : tokenResponse.scope === undefined ? ["openid", "write_api"] : [];
+  const uniqueScopes = new Set(scopes);
+  if (
+    typeof tokenResponse.access_token !== "string" ||
+    !isAccessToken(tokenResponse.access_token) ||
+    tokenResponse.token_type !== "Bearer" ||
+    !uniqueScopes.has("openid") ||
+    !uniqueScopes.has("write_api") ||
+    [...uniqueScopes].some((scope) => scope !== "openid" && scope !== "write_api")
+  ) {
+    throw new Error("Die OSM-Testanmeldung hat nicht den erwarteten Zugriff erteilt.");
+  }
+
+  const now = input.now ?? Date.now();
+  const expiresIn = tokenResponse.expires_in;
+  // OSM access tokens currently may not provide an expiry. In that case the
+  // app limits retention to its own short-lived session instead.
+  const expiresAt = typeof expiresIn === "number" && Number.isSafeInteger(expiresIn) && expiresIn > 0
+    ? now + expiresIn * 1_000
+    : now + OSM_SESSION_LIFETIME_MS;
+  if (!Number.isSafeInteger(expiresAt) || expiresAt <= now) {
+    throw new Error("Die OSM-Testanmeldung hat eine ungültige Tokenlaufzeit geliefert.");
+  }
+
+  return { subject, accessToken: tokenResponse.access_token, expiresAt };
+}
+
+async function exchangeCode(
+  input: {
+    code: string;
+    verifier: string;
+    nonce: string;
+    clientId: string;
+    redirectUri: string;
+    now?: number;
+    fetcher?: Fetcher;
+    cryptoApi?: Crypto;
+  },
+  environment: OSMEnvironment,
+): Promise<{ subject: string; tokenResponse: TokenResponse }> {
   const fetcher = input.fetcher ?? fetch;
   const cryptoApi = input.cryptoApi ?? crypto;
-  const discovery = await loadDiscovery(fetcher);
-  const response = await fetcher(OSM_TOKEN_URL, {
+  const endpoints = getOSMProviderEndpoints(environment);
+  const discovery = await loadDiscovery(fetcher, endpoints);
+  const response = await fetcher(endpoints.token, {
     method: "POST",
     redirect: "error",
     signal: AbortSignal.timeout(10_000),
@@ -49,7 +117,7 @@ export async function exchangeOSMCodeForIdentity(input: {
     throw new Error("Die OpenStreetMap-Anmeldung konnte nicht abgeschlossen werden.");
   }
 
-  const jwksResponse = await fetcher(OSM_JWKS_URL, {
+  const jwksResponse = await fetcher(endpoints.jwks, {
     headers: { Accept: "application/json" },
     redirect: "error",
     signal: AbortSignal.timeout(10_000),
@@ -59,11 +127,12 @@ export async function exchangeOSMCodeForIdentity(input: {
     throw new Error("Die OpenStreetMap-Anmeldung konnte nicht geprüft werden.");
   }
 
-  return { subject: await verifyIdToken(tokenResponse.id_token, jwks.keys, input, discovery, cryptoApi) };
+  const subject = await verifyIdToken(tokenResponse.id_token, jwks.keys, input, discovery, endpoints.issuer, cryptoApi);
+  return { subject, tokenResponse: tokenResponse as TokenResponse };
 }
 
-async function loadDiscovery(fetcher: Fetcher): Promise<OSMDiscoveryDocument> {
-  const response = await fetcher(OSM_DISCOVERY_URL, {
+async function loadDiscovery(fetcher: Fetcher, endpoints: ReturnType<typeof getOSMProviderEndpoints>): Promise<OSMDiscoveryDocument> {
+  const response = await fetcher(endpoints.discovery, {
     headers: { Accept: "application/json" },
     redirect: "error",
     signal: AbortSignal.timeout(10_000),
@@ -72,9 +141,9 @@ async function loadDiscovery(fetcher: Fetcher): Promise<OSMDiscoveryDocument> {
   if (
     !response.ok ||
     !isRecord(discovery) ||
-    discovery.issuer !== OSM_ISSUER ||
-    discovery.token_endpoint !== OSM_TOKEN_URL ||
-    discovery.jwks_uri !== OSM_JWKS_URL ||
+    discovery.issuer !== endpoints.issuer ||
+    discovery.token_endpoint !== endpoints.token ||
+    discovery.jwks_uri !== endpoints.jwks ||
     !Array.isArray(discovery.id_token_signing_alg_values_supported) ||
     !discovery.id_token_signing_alg_values_supported.includes("RS256")
   ) {
@@ -88,6 +157,7 @@ async function verifyIdToken(
   keys: unknown[],
   input: { nonce: string; clientId: string; now?: number },
   discovery: OSMDiscoveryDocument,
+  expectedIssuer: string,
   cryptoApi: Crypto,
 ): Promise<string> {
   const parts = token.split(".");
@@ -133,7 +203,7 @@ async function verifyIdToken(
   const nowSeconds = Math.floor((input.now ?? Date.now()) / 1_000);
   const audience = claims.aud;
   if (
-    claims.iss !== OSM_ISSUER ||
+    claims.iss !== expectedIssuer ||
     !(audience === input.clientId || (Array.isArray(audience) && audience.includes(input.clientId))) ||
     (claims.azp !== undefined && claims.azp !== input.clientId) ||
     (Array.isArray(audience) && audience.length > 1 && claims.azp !== input.clientId) ||
@@ -148,7 +218,7 @@ async function verifyIdToken(
     (claims.nbf !== undefined && (typeof claims.nbf !== "number" || claims.nbf > nowSeconds)) ||
     claims.nonce !== input.nonce
   ) {
-    throw new Error("Die OSM-Anmeldung konnte nicht bestätigt werden.");
+    throw new Error("Die OpenStreetMap-Anmeldung konnte nicht bestätigt werden.");
   }
   return claims.sub;
 }
@@ -192,4 +262,8 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isAccessToken(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_ACCESS_TOKEN_LENGTH && /^[\x21-\x7E]+$/u.test(value);
 }

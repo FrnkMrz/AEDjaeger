@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exchangeOSMCodeForIdentity } from "../server/auth/osmOidc";
+import { exchangeOSMCodeForIdentity, exchangeOSMDevelopmentCodeForAccess } from "../server/auth/osmOidc";
 
 const clientId = "aedjaeger-client";
 const nonce = "expected-nonce";
@@ -9,7 +9,8 @@ function encode(value: unknown): string {
   return btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
 }
 
-async function signedFixture(claimOverrides: Record<string, unknown> = {}) {
+async function signedFixture(claimOverrides: Record<string, unknown> = {}, environment: "production" | "development" = "production", tokenOverrides: Record<string, unknown> = {}) {
+  const origin = environment === "development" ? "https://master.apis.dev.openstreetmap.org" : "https://www.openstreetmap.org";
   const keyPair = await crypto.subtle.generateKey(
     { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
     true,
@@ -18,7 +19,7 @@ async function signedFixture(claimOverrides: Record<string, unknown> = {}) {
   const publicJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
   const header = encode({ alg: "RS256", kid: "osm-key-1", typ: "JWT" });
   const claims = encode({
-    iss: "https://www.openstreetmap.org",
+    iss: origin,
     sub: "987654321",
     aud: clientId,
     exp: Math.floor(now / 1_000) + 300,
@@ -33,20 +34,20 @@ async function signedFixture(claimOverrides: Record<string, unknown> = {}) {
   const token = `${signingInput}.${encodedSignature}`;
   const fetcher = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = String(input);
-    if (url === "https://www.openstreetmap.org/.well-known/openid-configuration") {
+    if (url === `${origin}/.well-known/openid-configuration`) {
       return Response.json({
-        issuer: "https://www.openstreetmap.org",
-        token_endpoint: "https://www.openstreetmap.org/oauth2/token",
-        jwks_uri: "https://www.openstreetmap.org/oauth2/discovery/keys",
+        issuer: origin,
+        token_endpoint: `${origin}/oauth2/token`,
+        jwks_uri: `${origin}/oauth2/discovery/keys`,
         id_token_signing_alg_values_supported: ["RS256"],
       });
     }
-    if (url === "https://www.openstreetmap.org/oauth2/token") {
+    if (url === `${origin}/oauth2/token`) {
       expect(init?.method).toBe("POST");
       expect(String(init?.body)).toContain("code_verifier=verifier-value");
-      return Response.json({ id_token: token, access_token: "discarded", token_type: "Bearer" });
+      return Response.json({ id_token: token, access_token: "A".repeat(60), token_type: "Bearer", ...(environment === "development" ? { scope: "openid write_api" } : {}), ...tokenOverrides });
     }
-    if (url === "https://www.openstreetmap.org/oauth2/discovery/keys") {
+    if (url === `${origin}/oauth2/discovery/keys`) {
       return Response.json({ keys: [{ ...publicJwk, kid: "osm-key-1", use: "sig", alg: "RS256" }] });
     }
     throw new Error(`Unexpected provider URL: ${url}`);
@@ -67,6 +68,49 @@ describe("OSM OpenID Connect verification", () => {
       now,
       fetcher,
     })).resolves.toEqual({ subject: "987654321" });
+  });
+
+  it("exchanges development authorization only against the fixed test issuer and accepts write_api", async () => {
+    const { fetcher } = await signedFixture({}, "development", { expires_in: 3_600 });
+    await expect(exchangeOSMDevelopmentCodeForAccess({
+      code: "one-time-code",
+      verifier: "verifier-value",
+      nonce,
+      clientId,
+      redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback",
+      now,
+      fetcher,
+    })).resolves.toMatchObject({
+      subject: "987654321",
+      accessToken: "A".repeat(60),
+      expiresAt: now + 3_600_000,
+    });
+  });
+
+  it("accepts an omitted scope field because the exact requested scope is unchanged", async () => {
+    const { fetcher } = await signedFixture({}, "development", { scope: undefined });
+    await expect(exchangeOSMDevelopmentCodeForAccess({
+      code: "one-time-code",
+      verifier: "verifier-value",
+      nonce,
+      clientId,
+      redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback",
+      now,
+      fetcher,
+    })).resolves.toMatchObject({ subject: "987654321", accessToken: "A".repeat(60) });
+  });
+
+  it("rejects extra scopes from the OSM development authorization", async () => {
+    const { fetcher } = await signedFixture({}, "development", { scope: "openid write_api read_prefs" });
+    await expect(exchangeOSMDevelopmentCodeForAccess({
+      code: "one-time-code",
+      verifier: "verifier-value",
+      nonce,
+      clientId,
+      redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback",
+      now,
+      fetcher,
+    })).rejects.toThrow("erwarteten Zugriff");
   });
 
   it.each([

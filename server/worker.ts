@@ -1,8 +1,10 @@
 import { buildOSMAuthorizationUrl, createOAuthSecret, createPkceTransaction, importOAuthEncryptionKey, validateOSMAuthorizationCallback } from "./auth/osmOAuth";
-import { exchangeOSMCodeForIdentity } from "./auth/osmOidc";
+import { exchangeOSMCodeForIdentity, exchangeOSMDevelopmentCodeForAccess } from "./auth/osmOidc";
+import type { OSMEnvironment } from "./auth/osmProvider";
 import type { D1Database } from "./storage/d1";
 import { consumeOSMOAuthTransaction, storeOSMOAuthTransaction } from "./storage/osmOAuthTransactions";
-import { deleteOSMSession, findOSMSession, rotateOSMSession } from "./storage/osmSessions";
+import { deleteOSMSession, findOSMSession, rotateOSMSession, OSM_SESSION_LIFETIME_MS } from "./storage/osmSessions";
+import { storeOSMDevelopmentToken } from "./storage/osmDevelopmentTokens";
 import { handleVisionAnalysis } from "./vision/analyzeRoute";
 import { handleOverpassSearch } from "./osm/overpassRoute";
 
@@ -12,6 +14,9 @@ type WorkerEnvironment = {
   DB?: D1Database;
   OSM_CLIENT_ID?: string;
   OSM_REDIRECT_URI?: string;
+  OSM_DEV_LOGIN_ENABLED?: string;
+  OSM_DEV_CLIENT_ID?: string;
+  OSM_DEV_REDIRECT_URI?: string;
   OSM_OAUTH_ENCRYPTION_KEY?: string;
   OPENAI_API_KEY?: string;
   AI_ANALYSIS_ENABLED?: string;
@@ -32,6 +37,14 @@ const worker = {
     if (pathname === "/api/health") {
       if (request.method !== "GET") return jsonResponse({ error: "method_not_allowed" }, 405, { Allow: "GET" });
       return jsonResponse({ status: "ok" }, 200);
+    }
+    if (pathname === "/api/auth/osm/development/start") {
+      if (request.method !== "GET") return jsonResponse({ error: "method_not_allowed" }, 405, { Allow: "GET" });
+      return startOSMLogin(request, environment, "development");
+    }
+    if (pathname === "/api/auth/osm/development/callback") {
+      if (request.method !== "GET") return jsonResponse({ error: "method_not_allowed" }, 405, { Allow: "GET" });
+      return finishOSMLogin(request, environment, "development");
     }
     if (pathname === "/api/auth/osm/start") {
       if (request.method !== "GET") return jsonResponse({ error: "method_not_allowed" }, 405, { Allow: "GET" });
@@ -56,8 +69,8 @@ const worker = {
   },
 };
 
-async function startOSMLogin(request: Request, environment: WorkerEnvironment): Promise<Response> {
-  const configuration = getAuthConfiguration(environment);
+async function startOSMLogin(request: Request, environment: WorkerEnvironment, osmEnvironment: OSMEnvironment = "production"): Promise<Response> {
+  const configuration = getAuthConfiguration(environment, osmEnvironment);
   if (!configuration || !environment.DB) return authUnavailable();
   const requestUrl = new URL(request.url);
   if (requestUrl.origin !== new URL(configuration.redirectUri).origin) return jsonResponse({ error: "invalid_origin" }, 400);
@@ -66,11 +79,12 @@ async function startOSMLogin(request: Request, environment: WorkerEnvironment): 
     const transaction = await createPkceTransaction();
     const browserBinding = createOAuthSecret();
     const key = await importOAuthEncryptionKey(configuration.encryptionKey);
-    await storeOSMOAuthTransaction(environment.DB, { ...transaction, browserBinding, createdAt: Date.now() }, key);
+    await storeOSMOAuthTransaction(environment.DB, { ...transaction, browserBinding, createdAt: Date.now(), environment: osmEnvironment }, key);
     const authorizationUrl = buildOSMAuthorizationUrl({
       clientId: configuration.clientId,
       redirectUri: configuration.redirectUri,
       transaction,
+      environment: osmEnvironment,
     });
     return new Response(null, {
       status: 302,
@@ -86,8 +100,8 @@ async function startOSMLogin(request: Request, environment: WorkerEnvironment): 
   }
 }
 
-async function finishOSMLogin(request: Request, environment: WorkerEnvironment): Promise<Response> {
-  const configuration = getAuthConfiguration(environment);
+async function finishOSMLogin(request: Request, environment: WorkerEnvironment, osmEnvironment: OSMEnvironment = "production"): Promise<Response> {
+  const configuration = getAuthConfiguration(environment, osmEnvironment);
   if (!configuration || !environment.DB) return authUnavailable();
   const callbackUrl = new URL(request.url);
   if (callbackUrl.origin !== new URL(configuration.redirectUri).origin) return loginFailure(callbackUrl.protocol === "https:");
@@ -99,26 +113,40 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment):
     const key = await importOAuthEncryptionKey(configuration.encryptionKey);
     // Löschen vor dem Codeaustausch macht den Callback auch bei parallelen Requests einmalig.
     const transaction = await consumeOSMOAuthTransaction(environment.DB, states[0], browserBinding, Date.now(), key);
-    if (!transaction) return loginFailure(callbackUrl.protocol === "https:");
+    if (!transaction || transaction.environment !== osmEnvironment) return loginFailure(callbackUrl.protocol === "https:");
     const callback = validateOSMAuthorizationCallback(callbackUrl, states[0]);
     if (!callback.ok) return loginFailure(callbackUrl.protocol === "https:");
 
-    const identity = await exchangeOSMCodeForIdentity({
+    const exchangeInput = {
       code: callback.code,
       verifier: transaction.verifier,
       nonce: transaction.nonce,
       clientId: configuration.clientId,
       redirectUri: configuration.redirectUri,
-    });
+    };
+    const exchanged = osmEnvironment === "development"
+      ? { environment: "development" as const, identity: await exchangeOSMDevelopmentCodeForAccess(exchangeInput) }
+      : { environment: "production" as const, identity: await exchangeOSMCodeForIdentity(exchangeInput) };
     const sessionToken = createOAuthSecret();
     // Die alte Sitzung wird widerrufen, bevor der neue Sitzungstoken ausgegeben wird.
+    const now = Date.now();
     await rotateOSMSession(
       environment.DB,
       readCookie(request.headers.get("Cookie"), SESSION_COOKIE),
       sessionToken,
-      identity.subject,
-      Date.now(),
+      exchanged.identity.subject,
+      now,
+      exchanged.environment,
     );
+    if (exchanged.environment === "development") {
+      try {
+        const tokenExpiry = Math.min(exchanged.identity.expiresAt, now + OSM_SESSION_LIFETIME_MS);
+        await storeOSMDevelopmentToken(environment.DB, sessionToken, exchanged.identity.accessToken, tokenExpiry, now, key);
+      } catch (error) {
+        await deleteOSMSession(environment.DB, sessionToken);
+        throw error;
+      }
+    }
     const headers = new Headers({
       Location: "/",
       "Cache-Control": "no-store",
@@ -137,11 +165,13 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment):
 
 async function getSession(request: Request, environment: WorkerEnvironment): Promise<Response> {
   const token = readCookie(request.headers.get("Cookie"), SESSION_COOKIE);
-  const loginAvailable = await isOSMLoginAvailable(environment, new URL(request.url).origin);
-  if (!token || !environment.DB) return jsonResponse({ authenticated: false, loginAvailable }, 200);
+  const requestOrigin = new URL(request.url).origin;
+  const loginAvailable = await isOSMLoginAvailable(environment, requestOrigin);
+  const developmentLoginAvailable = await isOSMLoginAvailable(environment, requestOrigin, "development");
+  if (!token || !environment.DB) return jsonResponse({ authenticated: false, loginAvailable, developmentLoginAvailable, developmentSession: false }, 200);
   try {
     const session = await findOSMSession(environment.DB, token, Date.now());
-    return jsonResponse({ authenticated: session !== null, loginAvailable }, 200);
+    return jsonResponse({ authenticated: session !== null, loginAvailable, developmentLoginAvailable, developmentSession: session?.environment === "development" }, 200);
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
@@ -167,23 +197,35 @@ async function logout(request: Request, environment: WorkerEnvironment): Promise
   });
 }
 
-function getAuthConfiguration(environment: WorkerEnvironment): { clientId: string; redirectUri: string; encryptionKey: string } | null {
-  if (!environment.OSM_CLIENT_ID || !environment.OSM_REDIRECT_URI || !environment.OSM_OAUTH_ENCRYPTION_KEY) return null;
-  if (environment.OSM_CLIENT_ID.length > 256 || environment.OSM_CLIENT_ID.trim().length === 0) return null;
+function getAuthConfiguration(
+  environment: WorkerEnvironment,
+  osmEnvironment: OSMEnvironment = "production",
+): { clientId: string; redirectUri: string; encryptionKey: string } | null {
+  const development = osmEnvironment === "development";
+  if (development && environment.OSM_DEV_LOGIN_ENABLED !== "true") return null;
+  const clientId = development ? environment.OSM_DEV_CLIENT_ID : environment.OSM_CLIENT_ID;
+  const redirectValue = development ? environment.OSM_DEV_REDIRECT_URI : environment.OSM_REDIRECT_URI;
+  if (!clientId || !redirectValue || !environment.OSM_OAUTH_ENCRYPTION_KEY) return null;
+  if (clientId.length > 256 || clientId.trim().length === 0) return null;
   try {
-    const redirectUri = new URL(environment.OSM_REDIRECT_URI);
+    const redirectUri = new URL(redirectValue);
     const secureRedirect = redirectUri.protocol === "https:";
     const localRedirect = redirectUri.protocol === "http:" && redirectUri.hostname === "127.0.0.1";
-    if ((!secureRedirect && !localRedirect) || redirectUri.username || redirectUri.password || redirectUri.pathname !== "/api/auth/osm/callback" || redirectUri.search || redirectUri.hash) return null;
-    return { clientId: environment.OSM_CLIENT_ID, redirectUri: redirectUri.toString(), encryptionKey: environment.OSM_OAUTH_ENCRYPTION_KEY };
+    const expectedPath = development ? "/api/auth/osm/development/callback" : "/api/auth/osm/callback";
+    if ((!secureRedirect && !localRedirect) || redirectUri.username || redirectUri.password || redirectUri.pathname !== expectedPath || redirectUri.search || redirectUri.hash) return null;
+    return { clientId, redirectUri: redirectUri.toString(), encryptionKey: environment.OSM_OAUTH_ENCRYPTION_KEY };
   } catch {
     return null;
   }
 }
 
 /** Keep the UI login link hidden unless the same checks needed to start OAuth already pass. */
-async function isOSMLoginAvailable(environment: WorkerEnvironment, requestOrigin: string): Promise<boolean> {
-  const configuration = getAuthConfiguration(environment);
+async function isOSMLoginAvailable(
+  environment: WorkerEnvironment,
+  requestOrigin: string,
+  osmEnvironment: OSMEnvironment = "production",
+): Promise<boolean> {
+  const configuration = getAuthConfiguration(environment, osmEnvironment);
   if (!configuration || !environment.DB || new URL(configuration.redirectUri).origin !== requestOrigin) return false;
   try {
     await importOAuthEncryptionKey(configuration.encryptionKey);

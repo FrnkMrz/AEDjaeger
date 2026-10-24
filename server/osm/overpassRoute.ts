@@ -38,7 +38,7 @@ export async function handleOverpassSearch(
   const sessionToken = readCookie(request.headers.get("Cookie"), SESSION_COOKIE);
   if (!sessionToken) return jsonResponse({ error: "authentication_required" }, 401);
 
-  let session: { subject: string } | null;
+  let session: { subject: string; environment: "production" | "development" } | null;
   try {
     session = await findOSMSession(environment.DB, sessionToken, (dependencies.now ?? Date.now)());
   } catch {
@@ -70,7 +70,7 @@ export async function handleOverpassSearch(
 
   let cooldownEndsAt: number;
   try {
-    const reservation = await reserveOverpassSearchSlot(environment.DB, session.subject, now);
+    const reservation = await reserveOverpassSearchSlot(environment.DB, `${session.environment}:${session.subject}`, now);
     if (!reservation.reserved) return jsonResponse({ error: "search_rate_limited" }, 429, { "Retry-After": String(reservation.retryAfterSeconds) });
     cooldownEndsAt = reservation.nextAllowedAt;
   } catch {

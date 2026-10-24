@@ -1,5 +1,4 @@
-const OSM_AUTHORIZATION_ENDPOINT = "https://www.openstreetmap.org/oauth2/authorize";
-const OSM_LOGIN_SCOPE = "openid";
+import { getOSMProviderEndpoints, type OSMEnvironment } from "./osmProvider";
 const RANDOM_BYTES = 32;
 
 export type PkceTransaction = {
@@ -45,6 +44,7 @@ export function buildOSMAuthorizationUrl(input: {
   clientId: string;
   redirectUri: string;
   transaction: PkceTransaction;
+  environment?: OSMEnvironment;
 }): URL {
   if (typeof input.clientId !== "string" || input.clientId.trim().length === 0 || input.clientId.length > 256) {
     throw new Error("Die OSM-Anmeldung ist nicht korrekt konfiguriert.");
@@ -55,11 +55,13 @@ export function buildOSMAuthorizationUrl(input: {
     throw new Error("Ungültige OAuth-Transaktion.");
   }
 
-  const authorizationUrl = new URL(OSM_AUTHORIZATION_ENDPOINT);
+  const environment = input.environment ?? "production";
+  const provider = getOSMProviderEndpoints(environment);
+  const authorizationUrl = new URL(provider.authorization);
   authorizationUrl.searchParams.set("response_type", "code");
   authorizationUrl.searchParams.set("client_id", input.clientId);
   authorizationUrl.searchParams.set("redirect_uri", redirectUri);
-  authorizationUrl.searchParams.set("scope", OSM_LOGIN_SCOPE);
+  authorizationUrl.searchParams.set("scope", environment === "development" ? "openid write_api" : "openid");
   authorizationUrl.searchParams.set("state", input.transaction.state);
   authorizationUrl.searchParams.set("nonce", input.transaction.nonce);
   authorizationUrl.searchParams.set("code_challenge", input.transaction.challenge);
