@@ -2,7 +2,8 @@
 export type OSMSessionStatus = {
   authenticated: boolean;
   loginAvailable: boolean;
-  developmentLoginAvailable: boolean;\n  developmentSession: boolean;
+  developmentLoginAvailable: boolean;
+  developmentSession: boolean;
 };
 
 /** Fail closed when the Worker is unreachable or returns an unexpected response. */
