@@ -1,4 +1,5 @@
 import type { D1Database } from "./d1";
+import type { OSMEnvironment } from "../auth/osmProvider";
 
 const TRANSACTION_LIFETIME_MS = 10 * 60 * 1_000;
 const AES_GCM_IV_BYTES = 12;
@@ -6,9 +7,13 @@ const AES_GCM_IV_BYTES = 12;
 export type OSMOAuthTransactionPayload = {
   verifier: string;
   nonce: string;
+  environment: OSMEnvironment;
 };
 
-export type OSMOAuthTransactionInput = OSMOAuthTransactionPayload & {
+export type OSMOAuthTransactionInput = {
+  verifier: string;
+  nonce: string;
+  environment?: OSMEnvironment;
   state: string;
   browserBinding: string;
   createdAt: number;
@@ -36,7 +41,7 @@ export async function storeOSMOAuthTransaction(
     const bindingHash = await sha256Hex(input.browserBinding, cryptoApi);
     const iv = cryptoApi.getRandomValues(new Uint8Array(AES_GCM_IV_BYTES));
     const encrypted = await encryptPayload(
-      { verifier: input.verifier, nonce: input.nonce },
+      { verifier: input.verifier, nonce: input.nonce, environment: input.environment ?? "production" },
       iv,
       `${stateHash}.${bindingHash}`,
       encryptionKey,
@@ -138,6 +143,7 @@ function validateInput(input: OSMOAuthTransactionInput): void {
     !isOAuthToken(input.browserBinding) ||
     !isVerifier(input.verifier) ||
     !isOAuthToken(input.nonce) ||
+    (input.environment !== undefined && input.environment !== "production" && input.environment !== "development") ||
     !Number.isSafeInteger(input.createdAt) ||
     input.createdAt < 0 ||
     input.createdAt > Number.MAX_SAFE_INTEGER - TRANSACTION_LIFETIME_MS
@@ -149,7 +155,8 @@ function validateInput(input: OSMOAuthTransactionInput): void {
 function isPayload(value: unknown): value is OSMOAuthTransactionPayload {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const payload = value as Record<string, unknown>;
-  return isVerifier(payload.verifier) && isOAuthToken(payload.nonce);
+  return isVerifier(payload.verifier) && isOAuthToken(payload.nonce) &&
+    (payload.environment === undefined || payload.environment === "production" || payload.environment === "development");
 }
 
 function isOAuthToken(value: unknown): value is string {
