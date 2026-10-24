@@ -3,7 +3,7 @@ import type { D1Database, D1Result, D1Statement } from "../server/storage/d1";
 import { createOSMSession, deleteOSMSession, findOSMSession, OSM_SESSION_LIFETIME_MS, rotateOSMSession } from "../server/storage/osmSessions";
 
 function createSessionDatabase() {
-  const rows = new Map<string, { osm_subject: string; created_at: number; expires_at: number }>();
+  const rows = new Map<string, { osm_subject: string; osm_environment: "production" | "development"; created_at: number; expires_at: number }>();
   const database: D1Database = {
     prepare(query: string): D1Statement {
       let values: unknown[] = [];
@@ -15,7 +15,12 @@ function createSessionDatabase() {
             return { success: true, meta: { changes: 1 } } as D1Result<T>;
           }
           if (query.startsWith("INSERT INTO osm_sessions")) {
-            rows.set(String(values[0]), { osm_subject: String(values[1]), created_at: Number(values[2]), expires_at: Number(values[3]) });
+            rows.set(String(values[0]), {
+              osm_subject: String(values[1]),
+              osm_environment: values[2] as "production" | "development",
+              created_at: Number(values[3]),
+              expires_at: Number(values[4]),
+            });
             return { success: true, meta: { changes: 1 } } as D1Result<T>;
           }
           if (query.includes("DELETE FROM osm_sessions WHERE session_hash")) {
@@ -26,7 +31,9 @@ function createSessionDatabase() {
         },
         async first<T>() {
           const row = rows.get(String(values[0]));
-          return row && row.expires_at > Number(values[1]) ? { osm_subject: row.osm_subject } as T : null;
+          return row && row.expires_at > Number(values[1])
+            ? { osm_subject: row.osm_subject, osm_environment: row.osm_environment } as T
+            : null;
         },
       };
     },
@@ -35,7 +42,7 @@ function createSessionDatabase() {
 }
 
 describe("OSM session storage", () => {
-  it("stores only a hash of the browser token and enforces the server-side expiry", async () => {
+  it("stores provider namespace with a hashed browser token and enforces expiry", async () => {
     const { database, rows } = createSessionDatabase();
     const token = "a".repeat(43);
     const now = 1_800_000_000_000;
@@ -43,14 +50,32 @@ describe("OSM session storage", () => {
     await createOSMSession(database, token, "osm-user-42", now);
     const [storedHash, row] = [...rows.entries()][0];
     expect(storedHash).not.toBe(token);
-    expect(row).toEqual({ osm_subject: "osm-user-42", created_at: now, expires_at: now + OSM_SESSION_LIFETIME_MS });
-    await expect(findOSMSession(database, token, now + 1)).resolves.toEqual({ subject: "osm-user-42" });
+    expect(row).toEqual({
+      osm_subject: "osm-user-42",
+      osm_environment: "production",
+      created_at: now,
+      expires_at: now + OSM_SESSION_LIFETIME_MS,
+    });
+    await expect(findOSMSession(database, token, now + 1)).resolves.toEqual({ subject: "osm-user-42", environment: "production" });
     await expect(findOSMSession(database, token, now + OSM_SESSION_LIFETIME_MS)).resolves.toBeNull();
+  });
+
+  it("keeps matching subjects separate between production and development", async () => {
+    const { database } = createSessionDatabase();
+    const now = 1_800_000_000_000;
+    const productionToken = "b".repeat(43);
+    const developmentToken = "c".repeat(43);
+
+    await createOSMSession(database, productionToken, "same-osm-subject", now, "production");
+    await createOSMSession(database, developmentToken, "same-osm-subject", now, "development");
+
+    await expect(findOSMSession(database, productionToken, now + 1)).resolves.toEqual({ subject: "same-osm-subject", environment: "production" });
+    await expect(findOSMSession(database, developmentToken, now + 1)).resolves.toEqual({ subject: "same-osm-subject", environment: "development" });
   });
 
   it("revokes a valid session without storing or returning the raw token", async () => {
     const { database, rows } = createSessionDatabase();
-    const token = "b".repeat(43);
+    const token = "d".repeat(43);
     await createOSMSession(database, token, "osm-user-42", 1_800_000_000_000);
 
     await deleteOSMSession(database, token);
@@ -60,22 +85,23 @@ describe("OSM session storage", () => {
 
   it("revokes the previous browser session before storing its replacement", async () => {
     const { database, rows } = createSessionDatabase();
-    const oldToken = "c".repeat(43);
-    const newToken = "d".repeat(43);
+    const oldToken = "e".repeat(43);
+    const newToken = "f".repeat(43);
     const now = 1_800_000_000_000;
     await createOSMSession(database, oldToken, "old-osm-user", now - 1);
 
-    await rotateOSMSession(database, oldToken, newToken, "new-osm-user", now);
+    await rotateOSMSession(database, oldToken, newToken, "new-osm-user", now, "development");
 
     expect(rows.size).toBe(1);
     await expect(findOSMSession(database, oldToken, now)).resolves.toBeNull();
-    await expect(findOSMSession(database, newToken, now)).resolves.toEqual({ subject: "new-osm-user" });
+    await expect(findOSMSession(database, newToken, now)).resolves.toEqual({ subject: "new-osm-user", environment: "development" });
   });
 
-  it("rejects malformed tokens and subjects before database access", async () => {
+  it("rejects malformed tokens, subjects, and environments before database access", async () => {
     const database: D1Database = { prepare: () => { throw new Error("database should not be used"); } };
     await expect(createOSMSession(database, "short", "subject", 1)).rejects.toThrow("Ungültige");
     await expect(findOSMSession(database, "short", 1)).resolves.toBeNull();
     await expect(createOSMSession(database, "a".repeat(43), "", 1)).rejects.toThrow("Ungültige");
+    await expect(createOSMSession(database, "a".repeat(43), "subject", 1, "other" as "development")).rejects.toThrow("Ungültige");
   });
 });
