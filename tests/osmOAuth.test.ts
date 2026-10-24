@@ -51,6 +51,21 @@ describe("OSM OAuth PKCE building blocks", () => {
     expect(authorizationUrl.searchParams.get("code_challenge_method")).toBe("S256");
   });
 
+  it("sends development login only to the fixed OSM test server with write_api", async () => {
+    const transaction = await createPkceTransaction();
+    const authorizationUrl = buildOSMAuthorizationUrl({
+      clientId: "aedjaeger-dev-client",
+      redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback",
+      transaction,
+      environment: "development",
+    });
+
+    expect(authorizationUrl.origin).toBe("https://master.apis.dev.openstreetmap.org");
+    expect(authorizationUrl.pathname).toBe("/oauth2/authorize");
+    expect(authorizationUrl.searchParams.get("scope")).toBe("openid write_api");
+    expect(authorizationUrl.searchParams.get("redirect_uri")).toBe("https://aedjaeger.example/api/auth/osm/development/callback");
+  });
+
   it("rejects insecure redirect URLs and caller-controlled OAuth state", async () => {
     const transaction = await createPkceTransaction();
 
