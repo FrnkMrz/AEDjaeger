@@ -202,7 +202,7 @@ describe("protected image analysis route", () => {
   });
 
   it("reserves D1 budget before passing the image to GPT-6 Luna", async () => {
-    const { database, calls } = createDatabase();
+    const { database, calls, budgetIdentities } = createDatabase();
     const analyze = vi.fn(async () => {
       expect(calls.some((query) => query.includes("INSERT INTO analysis_budget_reservations"))).toBe(true);
       return observation;
