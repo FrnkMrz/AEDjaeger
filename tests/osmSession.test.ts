@@ -6,7 +6,8 @@ describe("OSM session status", () => {
     const status = await loadOSMSession(async () => Response.json({
       authenticated: false,
       loginAvailable: true,
-      developmentLoginAvailable: false,\n      developmentSession: true,
+      developmentLoginAvailable: false,
+      developmentSession: true,
     }));
 
     expect(status).toEqual({
