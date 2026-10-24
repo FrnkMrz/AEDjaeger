@@ -87,6 +87,19 @@ describe("OSM OpenID Connect verification", () => {
     });
   });
 
+  it("accepts an omitted scope field because the exact requested scope is unchanged", async () => {
+    const { fetcher } = await signedFixture({}, "development", { scope: undefined });
+    await expect(exchangeOSMDevelopmentCodeForAccess({
+      code: "one-time-code",
+      verifier: "verifier-value",
+      nonce,
+      clientId,
+      redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback",
+      now,
+      fetcher,
+    })).resolves.toMatchObject({ subject: "987654321", accessToken: "A".repeat(60) });
+  });
+
   it("rejects extra scopes from the OSM development authorization", async () => {
     const { fetcher } = await signedFixture({}, "development", { scope: "openid write_api read_prefs" });
     await expect(exchangeOSMDevelopmentCodeForAccess({
