@@ -265,5 +265,5 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isAccessToken(value: unknown): value is string {
-  return value.length > 0 && value.length <= MAX_ACCESS_TOKEN_LENGTH && /^[\x21-\x7E]+$/u.test(value);
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_ACCESS_TOKEN_LENGTH && /^[\x21-\x7E]+$/u.test(value);
 }
