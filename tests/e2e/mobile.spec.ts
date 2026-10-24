@@ -168,6 +168,16 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   await expect(page.getByRole("button", { name: "Neuen AED vorbereiten" })).toBeVisible();
   await expect(page.locator("#new-aed-position-map")).toBeVisible();
   await expect(page.locator(".position-map-attribution")).toContainText("OpenStreetMap contributors");
+  const markerCenter = await page.locator(".position-map-crosshair").evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+  });
+  const mapCenter = await page.locator("#new-aed-position-map").evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+  });
+  expect(markerCenter.x).toBeCloseTo(mapCenter.x, 0);
+  expect(markerCenter.y).toBeCloseTo(mapCenter.y, 0);
 
   await page.getByRole("button", { name: "Neuen AED vorbereiten" }).click();
   await expect(page.getByRole("heading", { name: "Vorschau für neuen AED" })).toBeVisible();
