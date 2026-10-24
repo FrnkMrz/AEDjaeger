@@ -3,9 +3,9 @@ import { endOSMSession, loadOSMSession } from "../src/auth/osmSession";
 
 describe("OSM session client", () => {
   it("accepts only the small public session status", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ authenticated: false, loginAvailable: true })));
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ authenticated: false, loginAvailable: true, developmentLoginAvailable: false })));
 
-    await expect(loadOSMSession(fetcher)).resolves.toEqual({ authenticated: false, loginAvailable: true });
+    await expect(loadOSMSession(fetcher)).resolves.toEqual({ authenticated: false, loginAvailable: true, developmentLoginAvailable: false });
     expect(fetcher).toHaveBeenCalledWith("/api/auth/session", {
       credentials: "same-origin",
       headers: { Accept: "application/json" },
