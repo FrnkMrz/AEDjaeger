@@ -24,7 +24,7 @@ function createDatabase(options: { authenticated?: boolean; cooldown?: boolean; 
         },
         async first<T>() {
           queries.push(query);
-          if (query.includes("FROM osm_sessions")) return (options.authenticated === false ? null : { osm_subject: "osm-user-7" }) as T | null;
+          if (query.includes("FROM osm_sessions")) return (options.authenticated === false ? null : { osm_subject: "osm-user-7", osm_environment: "production" }) as T | null;
           if (query.includes("overpass_upstream_cooldown")) return (upstreamCooldownUntil === undefined ? null : { next_allowed_at: upstreamCooldownUntil }) as T | null;
           if (query.includes("SELECT next_allowed_at")) return { next_allowed_at: options.nextAllowedAt ?? 31_000 } as T;
           return null;
