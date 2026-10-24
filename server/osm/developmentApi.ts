@@ -19,7 +19,7 @@ export function buildOSMDevelopmentApiUrl(environment: unknown, apiPath: string)
     apiPath.includes("\\") ||
     apiPath.includes("?") ||
     apiPath.includes("#") ||
-    /[\\u0000-\\u001f\\u007f]/u.test(apiPath) ||
+    /[\u0000-\u001f\u007f]/u.test(apiPath) ||
     apiPath.split("/").some((segment) => segment === "." || segment === "..")
   ) {
     throw new Error("Ungültiger Pfad zur OSM-Entwicklungs-API.");
