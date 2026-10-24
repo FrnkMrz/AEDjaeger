@@ -124,9 +124,9 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment, 
       clientId: configuration.clientId,
       redirectUri: configuration.redirectUri,
     };
-    const identity = osmEnvironment === "development"
-      ? await exchangeOSMDevelopmentCodeForAccess(exchangeInput)
-      : await exchangeOSMCodeForIdentity(exchangeInput);
+    const exchanged = osmEnvironment === "development"
+      ? { environment: "development" as const, identity: await exchangeOSMDevelopmentCodeForAccess(exchangeInput) }
+      : { environment: "production" as const, identity: await exchangeOSMCodeForIdentity(exchangeInput) };
     const sessionToken = createOAuthSecret();
     // Die alte Sitzung wird widerrufen, bevor der neue Sitzungstoken ausgegeben wird.
     const now = Date.now();
@@ -134,13 +134,13 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment, 
       environment.DB,
       readCookie(request.headers.get("Cookie"), SESSION_COOKIE),
       sessionToken,
-      identity.subject,
+      exchanged.identity.subject,
       now,
     );
-    if (osmEnvironment === "development") {
+    if (exchanged.environment === "development") {
       try {
-        const tokenExpiry = Math.min(identity.expiresAt, now + OSM_SESSION_LIFETIME_MS);
-        await storeOSMDevelopmentToken(environment.DB, sessionToken, identity.accessToken, tokenExpiry, now, key);
+        const tokenExpiry = Math.min(exchanged.identity.expiresAt, now + OSM_SESSION_LIFETIME_MS);
+        await storeOSMDevelopmentToken(environment.DB, sessionToken, exchanged.identity.accessToken, tokenExpiry, now, key);
       } catch (error) {
         await deleteOSMSession(environment.DB, sessionToken);
         throw error;
