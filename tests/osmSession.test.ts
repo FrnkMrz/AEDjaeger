@@ -14,6 +14,7 @@ describe("OSM session status", () => {
       authenticated: false,
       loginAvailable: true,
       developmentLoginAvailable: false,
+      developmentSession: true,
     });
   });
 
