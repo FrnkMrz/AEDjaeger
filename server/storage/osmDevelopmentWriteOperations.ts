@@ -7,9 +7,12 @@ export type OSMDevelopmentWriteOperation = {
   state: OSMDevelopmentWriteState;
   changeset_id: string | null;
   result_version: number | null;
+  result_node_id: string | null;
+  updated_at: number;
 };
 
 const OPERATION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1_000;
+export const STARTED_OPERATION_STALE_AFTER_MS = 2 * 60 * 1_000;
 
 /** Atomically reserves one write ID for this session before any external OSM request. */
 export async function reserveOSMDevelopmentWrite(
@@ -35,17 +38,115 @@ export async function reserveOSMDevelopmentWrite(
     if (!insert.success) throw new Error("D1 insert failed");
 
     const operation = await database.prepare(
-      `SELECT request_hash, state, changeset_id, result_version
+      `SELECT request_hash, state, changeset_id, result_version, result_node_id, updated_at
        FROM osm_development_write_operations
        WHERE session_hash = ? AND operation_id = ? AND expires_at > ?`,
     ).bind(sessionHash, operationId, now).first<OSMDevelopmentWriteOperation>();
     if (!operation || !isState(operation.state) || (operation.changeset_id !== null && !isPositiveIntegerString(operation.changeset_id))
-      || (operation.result_version !== null && (!Number.isSafeInteger(operation.result_version) || operation.result_version <= 0))) {
+      || (operation.result_version !== null && (!Number.isSafeInteger(operation.result_version) || operation.result_version <= 0))
+      || (operation.result_node_id !== null && !isPositiveIntegerString(operation.result_node_id))
+      || !isTimestamp(operation.updated_at)) {
       throw new Error("D1 read failed");
     }
     return { operation, created: insert.meta?.changes === 1 };
   } catch {
     throw new Error("Der OSM-Testvorgang konnte nicht sicher gespeichert werden.");
+  }
+}
+
+/**
+ * Keep an active pre-upload request from being mistaken for an abandoned one.
+ * This compare-and-set also stops a request whose lease was already expired.
+ */
+export async function touchStartedOSMDevelopmentWrite(
+  database: D1Database,
+  sessionHash: string,
+  operationId: string,
+  now: number,
+): Promise<boolean> {
+  try {
+    const result = await database.prepare(
+      `UPDATE osm_development_write_operations SET updated_at = ?
+       WHERE session_hash = ? AND operation_id = ? AND state = 'started' AND expires_at > ?`,
+    ).bind(now, sessionHash, operationId, now).run();
+    return result.success && result.meta?.changes === 1;
+  } catch {
+    throw new Error("Der OSM-Testvorgang konnte nicht sicher aktualisiert werden.");
+  }
+}
+
+/** End a pre-upload operation only after its lease expires; the CAS prevents racing a live request. */
+export async function failStaleStartedOSMDevelopmentWrite(
+  database: D1Database,
+  sessionHash: string,
+  operationId: string,
+  now: number,
+): Promise<boolean> {
+  try {
+    const result = await database.prepare(
+      `UPDATE osm_development_write_operations SET state = 'failed', updated_at = ?
+       WHERE session_hash = ? AND operation_id = ? AND state = 'started' AND updated_at <= ? AND expires_at > ?`,
+    ).bind(now, sessionHash, operationId, now - STARTED_OPERATION_STALE_AFTER_MS, now).run();
+    return result.success && result.meta?.changes === 1;
+  } catch {
+    throw new Error("Der OSM-Testvorgang konnte nicht sicher abgeschlossen werden.");
+  }
+}
+
+/** Retire an uncertain create only after OSM confirms its changeset is closed and empty. */
+export async function failEmptyUncertainOSMDevelopmentWrite(
+  database: D1Database,
+  input: { sessionHash: string; operationId: string; changesetId: string; now: number },
+): Promise<boolean> {
+  if (!isSha256(input.sessionHash) || !isUuid(input.operationId) || !isPositiveIntegerString(input.changesetId) || !isTimestamp(input.now)) {
+    throw new Error("Ungültiger OSM-Testvorgang.");
+  }
+  try {
+    const result = await database.prepare(
+      `UPDATE osm_development_write_operations SET state = 'failed', updated_at = ?
+       WHERE session_hash = ? AND operation_id = ? AND changeset_id = ? AND state IN ('uploading', 'uncertain') AND expires_at > ?`,
+    ).bind(input.now, input.sessionHash, input.operationId, input.changesetId, input.now).run();
+    return result.success && result.meta?.changes === 1;
+  } catch {
+    throw new Error("Der OSM-Testvorgang konnte nicht sicher abgeschlossen werden.");
+  }
+}
+
+/** Persist the changeset only if this request still owns the initial `started` operation. */
+export async function recordOSMDevelopmentChangeset(
+  database: D1Database,
+  input: { sessionHash: string; operationId: string; changesetId: string; now: number },
+): Promise<boolean> {
+  if (!isSha256(input.sessionHash) || !isUuid(input.operationId) || !isPositiveIntegerString(input.changesetId) || !isTimestamp(input.now)) {
+    throw new Error("Ungültiger OSM-Testvorgang.");
+  }
+  try {
+    const result = await database.prepare(
+      `UPDATE osm_development_write_operations SET state = 'changeset-created', changeset_id = ?, updated_at = ?
+       WHERE session_hash = ? AND operation_id = ? AND state = 'started' AND expires_at > ?`,
+    ).bind(input.changesetId, input.now, input.sessionHash, input.operationId, input.now).run();
+    return result.success && result.meta?.changes === 1;
+  } catch {
+    throw new Error("Der OSM-Testvorgang konnte nicht sicher aktualisiert werden.");
+  }
+}
+
+/** Store a terminal pre-upload outcome without overwriting a stale-operation failure. */
+export async function finishStartedOSMDevelopmentWrite(
+  database: D1Database,
+  input: { sessionHash: string; operationId: string; state: "conflict" | "failed"; now: number },
+): Promise<boolean> {
+  if (!isSha256(input.sessionHash) || !isUuid(input.operationId) || !isTimestamp(input.now)) {
+    throw new Error("Ungültiger OSM-Testvorgang.");
+  }
+  try {
+    const result = await database.prepare(
+      `UPDATE osm_development_write_operations SET state = ?, updated_at = ?
+       WHERE session_hash = ? AND operation_id = ? AND state = 'started' AND expires_at > ?`,
+    ).bind(input.state, input.now, input.sessionHash, input.operationId, input.now).run();
+    return result.success && result.meta?.changes === 1;
+  } catch {
+    throw new Error("Der OSM-Testvorgang konnte nicht sicher aktualisiert werden.");
   }
 }
 
@@ -77,20 +178,22 @@ export async function updateOSMDevelopmentWrite(
     now: number;
     changesetId?: string;
     resultVersion?: number;
+    resultNodeId?: string;
   },
 ): Promise<void> {
-  const { sessionHash, operationId, state, now, changesetId, resultVersion } = input;
+  const { sessionHash, operationId, state, now, changesetId, resultVersion, resultNodeId } = input;
   if (!isSha256(sessionHash) || !isUuid(operationId) || !isState(state) || !isTimestamp(now)
     || (changesetId !== undefined && !isPositiveIntegerString(changesetId))
-    || (resultVersion !== undefined && (!Number.isSafeInteger(resultVersion) || resultVersion <= 0))) {
+    || (resultVersion !== undefined && (!Number.isSafeInteger(resultVersion) || resultVersion <= 0))
+    || (resultNodeId !== undefined && !isPositiveIntegerString(resultNodeId))) {
     throw new Error("Ungültiger OSM-Testvorgang.");
   }
   try {
     const result = await database.prepare(
       `UPDATE osm_development_write_operations
-       SET state = ?, changeset_id = COALESCE(?, changeset_id), result_version = COALESCE(?, result_version), updated_at = ?
+       SET state = ?, changeset_id = COALESCE(?, changeset_id), result_version = COALESCE(?, result_version), result_node_id = COALESCE(?, result_node_id), updated_at = ?
        WHERE session_hash = ? AND operation_id = ?`,
-    ).bind(state, changesetId ?? null, resultVersion ?? null, now, sessionHash, operationId).run();
+    ).bind(state, changesetId ?? null, resultVersion ?? null, resultNodeId ?? null, now, sessionHash, operationId).run();
     if (!result.success || result.meta?.changes !== 1) throw new Error("D1 update failed");
   } catch {
     throw new Error("Der OSM-Testvorgang konnte nicht sicher aktualisiert werden.");

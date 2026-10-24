@@ -22,7 +22,7 @@ type SessionRow = { session_hash: string; osm_subject: string; osm_environment: 
 type TokenRow = { session_hash: string; token_iv: string; token_ciphertext: string; token_expires_at: number };
 type OperationRow = {
   session_hash: string; operation_id: string; request_hash: string; state: string;
-  changeset_id: string | null; result_version: number | null; expires_at: number;
+  changeset_id: string | null; result_version: number | null; result_node_id: string | null; updated_at: number; expires_at: number;
 };
 
 class MemoryD1 implements D1Database {
@@ -60,8 +60,8 @@ class MemoryD1 implements D1Database {
           const [sessionHash, id, time] = params as [string, string, number];
           const row = this.operations.get(`${sessionHash}:${id}`);
           if (!row || row.expires_at <= time) return null;
-          const { request_hash, state, changeset_id, result_version } = row;
-          return { request_hash, state, changeset_id, result_version } as T;
+          const { request_hash, state, changeset_id, result_version, result_node_id, updated_at } = row;
+          return { request_hash, state, changeset_id, result_version, result_node_id, updated_at } as T;
         }
         throw new Error(`Unexpected query: ${sql}`);
       },
@@ -90,7 +90,7 @@ class MemoryD1 implements D1Database {
           const [hash, id, requestHash, _created, _updated, expires] = params as [string, string, string, number, number, number];
           const key = `${hash}:${id}`;
           if (this.operations.has(key)) return { success: true, meta: { changes: 0 } };
-          this.operations.set(key, { session_hash: hash, operation_id: id, request_hash: requestHash, state: "started", changeset_id: null, result_version: null, expires_at: expires });
+          this.operations.set(key, { session_hash: hash, operation_id: id, request_hash: requestHash, state: "started", changeset_id: null, result_version: null, result_node_id: null, updated_at: _updated, expires_at: expires });
           return { success: true, meta: { changes: 1 } };
         }
         if (sql.includes("SET state = 'uploading'")) {
@@ -100,12 +100,14 @@ class MemoryD1 implements D1Database {
           row.state = "uploading"; return { success: true, meta: { changes: 1 } };
         }
         if (sql.includes("SET state = ?, changeset_id = COALESCE")) {
-          const [state, changesetId, resultVersion, _updated, hash, id] = params as [string, string | null, number | null, number, string, string];
+          const [state, changesetId, resultVersion, resultNodeId, _updated, hash, id] = params as [string, string | null, number | null, string | null, number, string, string];
           const row = this.operations.get(`${hash}:${id}`);
           if (!row) return { success: true, meta: { changes: 0 } };
           row.state = state;
           if (changesetId !== null) row.changeset_id = changesetId;
           if (resultVersion !== null) row.result_version = resultVersion;
+          if (resultNodeId !== null) row.result_node_id = resultNodeId;
+          row.updated_at = _updated;
           return { success: true, meta: { changes: 1 } };
         }
         throw new Error(`Unexpected query: ${sql}`);
@@ -136,8 +138,8 @@ class MemoryD1 implements D1Database {
       const [sessionHash, id, time] = params as [string, string, number];
       const row = this.operations.get(`${sessionHash}:${id}`);
       if (!row || row.expires_at <= time) return null;
-      const { request_hash, state, changeset_id, result_version } = row;
-      return { request_hash, state, changeset_id, result_version } as T;
+      const { request_hash, state, changeset_id, result_version, result_node_id, updated_at } = row;
+      return { request_hash, state, changeset_id, result_version, result_node_id, updated_at } as T;
     }
     throw new Error(`Unexpected query: ${sql}`);
   }
@@ -167,7 +169,7 @@ class MemoryD1 implements D1Database {
       const [hash, id, requestHash, _created, _updated, expires] = params as [string, string, string, number, number, number];
       const key = `${hash}:${id}`;
       if (this.operations.has(key)) return { success: true, meta: { changes: 0 } };
-      this.operations.set(key, { session_hash: hash, operation_id: id, request_hash: requestHash, state: "started", changeset_id: null, result_version: null, expires_at: expires });
+      this.operations.set(key, { session_hash: hash, operation_id: id, request_hash: requestHash, state: "started", changeset_id: null, result_version: null, result_node_id: null, updated_at: _updated, expires_at: expires });
       return { success: true, meta: { changes: 1 } };
     }
     if (sql.includes("SET state = 'uploading'")) {
@@ -177,12 +179,14 @@ class MemoryD1 implements D1Database {
       row.state = "uploading"; return { success: true, meta: { changes: 1 } };
     }
     if (sql.includes("SET state = ?, changeset_id = COALESCE")) {
-      const [state, changesetId, resultVersion, _updated, hash, id] = params as [string, string | null, number | null, number, string, string];
+      const [state, changesetId, resultVersion, resultNodeId, _updated, hash, id] = params as [string, string | null, number | null, string | null, number, string, string];
       const row = this.operations.get(`${hash}:${id}`);
       if (!row) return { success: true, meta: { changes: 0 } };
       row.state = state;
       if (changesetId !== null) row.changeset_id = changesetId;
       if (resultVersion !== null) row.result_version = resultVersion;
+      if (resultNodeId !== null) row.result_node_id = resultNodeId;
+      row.updated_at = _updated;
       return { success: true, meta: { changes: 1 } };
     }
     throw new Error(`Unexpected query: ${sql}`);

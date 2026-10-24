@@ -13,7 +13,7 @@ export function buildOSMDevelopmentApiUrl(environment: unknown, apiPath: string)
 
   // Keep the API surface to the exact calls used by the test writer. In
   // particular, no caller can turn an OSM token into a general-purpose proxy.
-  if (typeof apiPath !== "string" || !/^\/api\/0\.6\/(?:node\/[1-9]\d*\.json|changeset\/(?:create|[1-9]\d*(?:\/(?:close|upload))?))$/u.test(apiPath)) {
+  if (typeof apiPath !== "string" || !/^\/api\/0\.6\/(?:node\/[1-9]\d*\.json|map\.json|changeset\/(?:create|[1-9]\d*(?:\/(?:close|upload|download))?))$/u.test(apiPath)) {
     throw new Error("Ungültiger Pfad zur OSM-Entwicklungs-API.");
   }
 
@@ -27,13 +27,29 @@ export async function requestOSMDevelopmentApi(
   environment: unknown,
   apiPath: string,
   accessToken: string,
-  input: { method: "GET" | "PUT" | "POST"; body?: string; contentType?: "application/json" | "text/xml; charset=utf-8" },
+  input: {
+    method: "GET" | "PUT" | "POST";
+    body?: string;
+    contentType?: "application/json" | "text/xml; charset=utf-8";
+    bbox?: { west: number; south: number; east: number; north: number };
+  },
   fetcher: typeof fetch = fetch,
 ): Promise<Response> {
   if (typeof accessToken !== "string" || accessToken.length === 0 || accessToken.length > 8_192 || /[\r\n]/u.test(accessToken)) {
     throw new Error("Ungültiger OSM-Testzugriff.");
   }
   const url = buildOSMDevelopmentApiUrl(environment, apiPath);
+  if (input.bbox !== undefined) {
+    const { west, south, east, north } = input.bbox;
+    if (apiPath !== "/api/0.6/map.json" || ![west, south, east, north].every(Number.isFinite)
+      || west < -180 || east > 180 || south < -90 || north > 90 || west >= east || south >= north
+      || (east - west) * (north - south) > 0.25) {
+      throw new Error("Ungültiger OSM-Testserver-Kartenausschnitt.");
+    }
+    url.searchParams.set("bbox", `${west},${south},${east},${north}`);
+  } else if (apiPath === "/api/0.6/map.json") {
+    throw new Error("Für die OSM-Kartensuche ist ein begrenzter Ausschnitt erforderlich.");
+  }
   const headers = new Headers({ Authorization: `Bearer ${accessToken}`, Accept: "application/json, application/xml, text/plain" });
   if (input.body !== undefined) {
     headers.set("Content-Type", input.contentType ?? "text/xml; charset=utf-8");

@@ -1,6 +1,6 @@
 import "./styles.css";
 import { endOSMSession, loadOSMSession } from "./auth/osmSession";
-import { analysisResult, chooseCandidate, confirmationResult, recoveryResult, type CandidateId, type DemoScenario, type DevelopmentCheckRequest, type FlowState } from "./domain/workflow";
+import { analysisResult, chooseCandidate, confirmationResult, recoveryResult, type CandidateId, type DemoScenario, type DevelopmentWriteRequest, type FlowState } from "./domain/workflow";
 import { translate, translations, type Language, type TranslationKey } from "./i18n/translations";
 import { translateVision, type VisionMessageKey } from "./i18n/visionTranslations";
 import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservation, VisionClientError } from "./vision/analyzePhoto";
@@ -14,13 +14,13 @@ const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root element was not found.");
 
 const languageNames: Record<Language, string> = { de: "Deutsch", en: "English", pl: "Polski", ja: "日本語", fr: "Français", es: "Español" };
-const developmentWriteCopy: Record<Language, { action: string; retry: string; sending: string; complete: string; uncertain: string; conflict: string; failed: string; testOnly: string }> = {
-  de: { action: "Testserver: Prüfdatum speichern", retry: "Testserver: Status erneut prüfen", sending: "Testserver: Änderung wird gesendet…", complete: "Testserver: Vor-Ort-Prüfung gespeichert.", uncertain: "Testserver: Ergebnis unklar. Mit derselben Anfrage erneut prüfen; keine neue Änderung wird blind gesendet.", conflict: "Testserver: Der OSM-Eintrag wurde inzwischen geändert. Bitte Suche und Vorschau aktualisieren.", failed: "Testserver: Änderung fehlgeschlagen. Bitte Eintrag erneut prüfen.", testOnly: "Änderungen bleiben auf dem OSM-Testserver." },
-  en: { action: "Test server: Save visit date", retry: "Test server: Check status again", sending: "Test server: Sending update…", complete: "Test server: Visit confirmation saved.", uncertain: "Test server: Result is unclear. Check again using the same request; no new edit will be sent blindly.", conflict: "Test server: This OSM entry changed. Refresh the search and preview.", failed: "Test server: Update failed. Please check the entry again.", testOnly: "Changes stay on the OSM test server." },
-  pl: { action: "Serwer testowy: zapisz datę kontroli", retry: "Serwer testowy: sprawdź ponownie stan", sending: "Serwer testowy: wysyłanie zmiany…", complete: "Serwer testowy: zapisano potwierdzenie kontroli.", uncertain: "Serwer testowy: wynik jest niepewny. Sprawdź ponownie to samo żądanie; nie wyślemy w ciemno nowej zmiany.", conflict: "Serwer testowy: wpis OSM został zmieniony. Odśwież wyszukiwanie i podgląd.", failed: "Serwer testowy: nie udało się zapisać zmiany. Sprawdź ponownie wpis.", testOnly: "Zmiany pozostają na serwerze testowym OSM." },
-  ja: { action: "テストサーバー：確認日を保存", retry: "テストサーバー：状態を再確認", sending: "テストサーバー：変更を送信中…", complete: "テストサーバー：現地確認を保存しました。", uncertain: "テストサーバー：結果を確認できません。同じリクエストで再確認してください。新しい変更を無確認で送信しません。", conflict: "テストサーバー：OSMの項目が変更されています。検索とプレビューを更新してください。", failed: "テストサーバー：変更に失敗しました。項目を再確認してください。", testOnly: "変更はOSMテストサーバーにのみ保存されます。" },
-  fr: { action: "Serveur de test : enregistrer la date", retry: "Serveur de test : vérifier à nouveau", sending: "Serveur de test : envoi de la modification…", complete: "Serveur de test : visite confirmée.", uncertain: "Serveur de test : résultat incertain. Vérifiez à nouveau avec la même requête ; aucune nouvelle modification ne sera envoyée à l’aveugle.", conflict: "Serveur de test : cette fiche OSM a changé. Actualisez la recherche et l’aperçu.", failed: "Serveur de test : échec de la modification. Vérifiez à nouveau la fiche.", testOnly: "Les modifications restent sur le serveur de test OSM." },
-  es: { action: "Servidor de pruebas: guardar fecha", retry: "Servidor de pruebas: comprobar estado", sending: "Servidor de pruebas: enviando cambio…", complete: "Servidor de pruebas: visita confirmada.", uncertain: "Servidor de pruebas: resultado incierto. Comprueba de nuevo con la misma solicitud; no enviaremos otro cambio a ciegas.", conflict: "Servidor de pruebas: la ficha OSM ha cambiado. Actualiza la búsqueda y la vista previa.", failed: "Servidor de pruebas: no se pudo guardar. Comprueba de nuevo la ficha.", testOnly: "Los cambios solo se guardan en el servidor de pruebas de OSM." },
+const developmentWriteCopy: Record<Language, { action: string; createAction: string; retry: string; sending: string; complete: string; created: string; uncertain: string; conflict: string; failed: string; testOnly: string }> = {
+  de: { action: "Testserver: Prüfdatum speichern", createAction: "Testserver: AED eintragen", retry: "Testserver: Status erneut prüfen", sending: "Testserver: Änderung wird gesendet…", complete: "Testserver: Vor-Ort-Prüfung gespeichert.", created: "Testserver: Neuer AED wurde eingetragen.", uncertain: "Testserver: Ergebnis unklar. Mit derselben Anfrage erneut prüfen; keine neue Änderung wird blind gesendet.", conflict: "Testserver: In der Nähe gibt es einen AED oder der OSM-Eintrag änderte sich. Suche bitte erneut.", failed: "Testserver: Änderung fehlgeschlagen. Bitte Eintrag erneut prüfen.", testOnly: "Änderungen bleiben auf dem OSM-Testserver." },
+  en: { action: "Test server: Save visit date", createAction: "Test server: Add AED", retry: "Test server: Check status again", sending: "Test server: Sending update…", complete: "Test server: Visit confirmation saved.", created: "Test server: New AED added.", uncertain: "Test server: Result is unclear. Check again using the same request; no new edit will be sent blindly.", conflict: "Test server: An AED is nearby or the OSM entry changed. Search again.", failed: "Test server: Update failed. Please check the entry again.", testOnly: "Changes stay on the OSM test server." },
+  pl: { action: "Serwer testowy: zapisz datę kontroli", createAction: "Serwer testowy: dodaj AED", retry: "Serwer testowy: sprawdź ponownie stan", sending: "Serwer testowy: wysyłanie zmiany…", complete: "Serwer testowy: zapisano potwierdzenie kontroli.", created: "Serwer testowy: dodano nowy AED.", uncertain: "Serwer testowy: wynik jest niepewny. Sprawdź ponownie to samo żądanie; nie wyślemy w ciemno nowej zmiany.", conflict: "Serwer testowy: w pobliżu jest AED albo wpis OSM został zmieniony. Wyszukaj ponownie.", failed: "Serwer testowy: nie udało się zapisać zmiany. Sprawdź ponownie wpis.", testOnly: "Zmiany pozostają na serwerze testowym OSM." },
+  ja: { action: "テストサーバー：確認日を保存", createAction: "テストサーバー：AEDを登録", retry: "テストサーバー：状態を再確認", sending: "テストサーバー：変更を送信中…", complete: "テストサーバー：現地確認を保存しました。", created: "テストサーバー：新しいAEDを登録しました。", uncertain: "テストサーバー：結果を確認できません。同じリクエストで再確認してください。新しい変更を無確認で送信しません。", conflict: "テストサーバー：近くにAEDがあるか、OSMの項目が変更されています。再検索してください。", failed: "テストサーバー：変更に失敗しました。項目を再確認してください。", testOnly: "変更はOSMテストサーバーにのみ保存されます。" },
+  fr: { action: "Serveur de test : enregistrer la date", createAction: "Serveur de test : ajouter un DAE", retry: "Serveur de test : vérifier à nouveau", sending: "Serveur de test : envoi de la modification…", complete: "Serveur de test : visite confirmée.", created: "Serveur de test : nouveau DAE ajouté.", uncertain: "Serveur de test : résultat incertain. Vérifiez à nouveau avec la même requête ; aucune nouvelle modification ne sera envoyée à l’aveugle.", conflict: "Serveur de test : un DAE est proche ou la fiche OSM a changé. Relancez la recherche.", failed: "Serveur de test : échec de la modification. Vérifiez à nouveau la fiche.", testOnly: "Les modifications restent sur le serveur de test OSM." },
+  es: { action: "Servidor de pruebas: guardar fecha", createAction: "Servidor de pruebas: añadir DEA", retry: "Servidor de pruebas: comprobar estado", sending: "Servidor de pruebas: enviando cambio…", complete: "Servidor de pruebas: visita confirmada.", created: "Servidor de pruebas: se añadió un DEA.", uncertain: "Servidor de pruebas: resultado incierto. Comprueba de nuevo con la misma solicitud; no enviaremos otro cambio a ciegas.", conflict: "Servidor de pruebas: hay un DEA cerca o la ficha OSM ha cambiado. Vuelve a buscar.", failed: "Servidor de pruebas: no se pudo guardar. Comprueba de nuevo la ficha.", testOnly: "Los cambios solo se guardan en el servidor de pruebas de OSM." },
 };
 const scenarioKeys: Record<DemoScenario, TranslationKey> = {
   existing: "existingScenario", new: "newScenario", multiple: "multipleScenario", unclear: "unclearScenario", "search-error": "searchErrorScenario", "upload-unclear": "uploadErrorScenario",
@@ -30,8 +30,8 @@ let language = readLanguage();
 let scenario: DemoScenario = "existing";
 // Local fixture workflows stay hidden until the user explicitly opens the preview panel.
 let demoMode = false;
-const pendingDevelopmentCheck = readPendingDevelopmentCheck();
-let state: FlowState = pendingDevelopmentCheck ? { kind: "development-write-recovery", request: pendingDevelopmentCheck, writeStatus: "uncertain" } : { kind: "ready" };
+const pendingDevelopmentWrite = readPendingDevelopmentWrite();
+let state: FlowState = pendingDevelopmentWrite ? { kind: "development-write-recovery", request: pendingDevelopmentWrite, writeStatus: "uncertain" } : { kind: "ready" };
 type AccountState = "checking" | "not-configured" | "connection-error" | "login-error" | "signed-out" | "signed-in" | "logout-error";
 let accountState: AccountState = "checking";
 let productionLoginAvailable = false;
@@ -57,17 +57,33 @@ function readLanguage(): Language {
   return supportedLanguages.includes(deviceLanguage) ? deviceLanguage : "de";
 }
 
-function readPendingDevelopmentCheck(): DevelopmentCheckRequest | undefined {
+function readPendingDevelopmentWrite(): DevelopmentWriteRequest | undefined {
   try {
-    const raw = sessionStorage.getItem("aedjaeger-pending-osm-development-check");
+    let raw = sessionStorage.getItem("aedjaeger-pending-osm-development-write");
+    let legacyCheck = false;
+    if (!raw) {
+      raw = sessionStorage.getItem("aedjaeger-pending-osm-development-check");
+      legacyCheck = raw !== null;
+    }
     if (!raw) return undefined;
     const value: unknown = JSON.parse(raw);
     if (!isRecord(value) || typeof value.operationId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value.operationId)
-      || typeof value.target !== "string" || !/^node\/[1-9]\d{0,15}$/u.test(value.target)
-      || typeof value.candidateLabel !== "string" || value.candidateLabel.length > 255
-      || !Number.isSafeInteger(value.expectedVersion) || (value.expectedVersion as number) <= 0
-      || !(value.expectedCheckDate === null || isCalendarDate(value.expectedCheckDate)) || !isCalendarDate(value.observedOn)) return undefined;
-    return value as unknown as DevelopmentCheckRequest;
+      || typeof value.candidateLabel !== "string" || value.candidateLabel.length > 255 || !isCalendarDate(value.observedOn)) return undefined;
+    const kind = legacyCheck ? "check-date" : value.kind;
+    if (kind === "check-date" && typeof value.target === "string" && /^node\/[1-9]\d{0,15}$/u.test(value.target)
+      && Number.isSafeInteger(value.expectedVersion) && (value.expectedVersion as number) > 0
+      && (value.expectedCheckDate === null || isCalendarDate(value.expectedCheckDate))) {
+      const request = { ...value, kind: "check-date" } as unknown as DevelopmentWriteRequest;
+      if (legacyCheck) {
+        sessionStorage.setItem("aedjaeger-pending-osm-development-write", JSON.stringify(request));
+        sessionStorage.removeItem("aedjaeger-pending-osm-development-check");
+      }
+      return request;
+    }
+    if (kind === "create-node" && typeof value.latitude === "number" && Number.isFinite(value.latitude) && Math.abs(value.latitude) <= 90
+      && typeof value.longitude === "number" && Number.isFinite(value.longitude) && Math.abs(value.longitude) <= 180
+      && (value.locationDescription === null || typeof value.locationDescription === "string" && value.locationDescription.length <= 255)) return value as unknown as DevelopmentWriteRequest;
+    return undefined;
   } catch {
     return undefined;
   }
@@ -79,12 +95,12 @@ function isCalendarDate(value: unknown): value is string {
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
-function persistPendingDevelopmentCheck(request: DevelopmentCheckRequest): void {
-  sessionStorage.setItem("aedjaeger-pending-osm-development-check", JSON.stringify(request));
+function persistPendingDevelopmentWrite(request: DevelopmentWriteRequest): void {
+  sessionStorage.setItem("aedjaeger-pending-osm-development-write", JSON.stringify(request));
 }
 
 function clearPendingDevelopmentCheck(): void {
-  try { sessionStorage.removeItem("aedjaeger-pending-osm-development-check"); } catch { /* The server operation remains idempotent even if browser storage is unavailable. */ }
+  try { sessionStorage.removeItem("aedjaeger-pending-osm-development-write"); } catch { /* The server operation remains idempotent even if browser storage is unavailable. */ }
 }
 
 function t(key: TranslationKey, values?: Record<string, number | string>): string {
@@ -125,6 +141,7 @@ function getPhotoUrl(current: FlowState): string | undefined {
 
 function hasUnresolvedSave(current: FlowState): boolean {
   return current.kind === "vision-analyzing" || current.kind === "candidate-searching" || current.kind === "sending" || current.kind === "checking-status" || current.kind === "unclear-error"
+    || (current.kind === "new-aed-preview" && (current.writeStatus === "sending" || current.writeStatus === "uncertain"))
     || (current.kind === "osm-preview" && (current.writeStatus === "sending" || current.writeStatus === "uncertain"));
 }
 
@@ -205,7 +222,18 @@ function statusContent(): string {
       const content = state.result.kind === "ready"
         ? `<p>${tv("newPreviewCoordinates", { latitude, longitude })}</p><p><a href="${mapUrl}" target="_blank" rel="noopener noreferrer">${tv("newPreviewOpenMap")}</a></p><strong>${tv("newPreviewTags")}</strong><ul>${Object.entries(state.result.tags).map(([key, value]) => `<li><code>${escapeHtml(key)}=${escapeHtml(value)}</code></li>`).join("")}</ul><p>${tv("newPreviewCaution")}</p>`
         : `<p>${tv(state.result.reason === "position-not-confirmed" ? "newPositionRequired" : state.result.reason === "search-found-candidate" ? "newPreviewFoundCandidate" : "newPreviewSearchInvalid")}</p><p><a href="${mapUrl}" target="_blank" rel="noopener noreferrer">${tv("newPreviewOpenMap")}</a></p>`;
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("newPreviewTitle")}</h2>${content}<p class="simulation-note">${tv("previewNoWrite")}</p></div></div><button class="button button-quiet" data-action="back-to-search">${tv("previewBack")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      const copy = developmentWriteCopy[language];
+      const canCreate = developmentSession && developmentWriteAvailable && state.result.kind === "ready";
+      const statusCopy = state.writeStatus === "complete" ? copy.created : state.writeStatus ? copy[state.writeStatus] : "";
+      const writeStatus = state.writeStatus ? `<p role="status" class="simulation-note">${statusCopy}</p>` : "";
+      const writeAction = canCreate && !state.writeStatus
+        ? `<button class="button button-primary" data-action="create-development-node">${copy.createAction}</button>`
+        : state.writeStatus === "uncertain" && state.operationId
+          ? `<button class="button button-secondary" data-action="retry-development-write">${copy.retry}</button>`
+          : "";
+      const noWriteNotice = developmentSession ? copy.testOnly : tv("previewNoWrite");
+      const navigation = state.writeStatus === "sending" || state.writeStatus === "uncertain" ? "" : `<button class="button button-quiet" data-action="back-to-search">${tv("previewBack")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("newPreviewTitle")}</h2>${content}<p class="simulation-note">${noWriteNotice}</p>${writeStatus}</div></div>${writeAction}${navigation}`;
     }
     case "osm-preview": {
       const { result } = state;
@@ -220,7 +248,7 @@ function statusContent(): string {
       const writeAction = canWrite && !state.writeStatus
         ? `<button class="button button-primary" data-action="save-development-check">${copy.action}</button>`
         : state.writeStatus === "uncertain" && state.operationId
-          ? `<button class="button button-secondary" data-action="retry-development-check">${copy.retry}</button>`
+          ? `<button class="button button-secondary" data-action="retry-development-write">${copy.retry}</button>`
           : "";
       const noWriteNotice = developmentSession ? copy.testOnly : tv("previewNoWrite");
       const recoverableWrite = state.writeStatus === "sending" || state.writeStatus === "uncertain";
@@ -230,9 +258,13 @@ function statusContent(): string {
     case "development-write-recovery": {
       const copy = developmentWriteCopy[language];
       const retry = state.writeStatus === "uncertain"
-        ? `<button class="button button-secondary" data-action="retry-development-check">${copy.retry}</button>`
+        ? `<button class="button button-secondary" data-action="retry-development-write">${copy.retry}</button>`
         : "";
-      return `<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("previewTitle")}</h2><p>${tv("previewTarget", { target: escapeHtml(state.request.candidateLabel) })}</p><p><a href="https://www.openstreetmap.org/${escapeHtml(state.request.target)}" target="_blank" rel="noopener noreferrer">${escapeHtml(state.request.target)} ↗</a></p><p class="simulation-note" role="status">${copy[state.writeStatus]}</p></div></div>${retry}`;
+      const targetLink = state.request.kind === "check-date"
+        ? `<p><a href="https://www.openstreetmap.org/${escapeHtml(state.request.target)}" target="_blank" rel="noopener noreferrer">${escapeHtml(state.request.target)} ↗</a></p>`
+        : `<p>${state.request.latitude.toFixed(5)}, ${state.request.longitude.toFixed(5)}</p>`;
+      const recoveryMessage = state.request.kind === "create-node" && state.writeStatus === "complete" ? copy.created : copy[state.writeStatus];
+      return `<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("previewTitle")}</h2><p>${tv("previewTarget", { target: escapeHtml(state.request.candidateLabel) })}</p>${targetLink}<p class="simulation-note" role="status">${recoveryMessage}</p></div></div>${retry}`;
     }
     case "candidate-error": {
       const errorKey: Record<typeof state.reason, VisionMessageKey> = {
@@ -439,27 +471,26 @@ async function retryOSMSessionStatus(): Promise<void> {
   await refreshAccountState("next-action");
 }
 
-/** Sends one explicitly confirmed edit to the OSM test server and keeps its ID for safe retries. */
-async function submitDevelopmentCheck(
-  requestBody: DevelopmentCheckRequest,
-): Promise<void> {
+/** Sends one explicitly confirmed test-server edit; a stable operation ID protects uncertain retries. */
+async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Promise<void> {
   try {
-    const response = await fetch("/api/osm/development/check-date", {
+    const isCheckDate = requestBody.kind === "check-date";
+    const response = await fetch(isCheckDate ? "/api/osm/development/check-date" : "/api/osm/development/create-node", {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       cache: "no-store",
-      body: JSON.stringify({
-        operation_id: requestBody.operationId,
-        confirmed: true,
-        target: requestBody.target,
-        expected_version: requestBody.expectedVersion,
-        expected_check_date: requestBody.expectedCheckDate,
-        observed_on: requestBody.observedOn,
+      body: JSON.stringify(requestBody.kind === "check-date" ? {
+        operation_id: requestBody.operationId, confirmed: true, target: requestBody.target,
+        expected_version: requestBody.expectedVersion, expected_check_date: requestBody.expectedCheckDate, observed_on: requestBody.observedOn,
+      } : {
+        operation_id: requestBody.operationId, confirmed: true, latitude: requestBody.latitude, longitude: requestBody.longitude,
+        observed_on: requestBody.observedOn, location_description: requestBody.locationDescription,
       }),
     });
     const payload: unknown = await response.json();
-    const matchesCurrentRequest = (state.kind === "osm-preview" && state.operationId === requestBody.operationId)
+    const matchesCurrentRequest = (state.kind === "new-aed-preview" && state.operationId === requestBody.operationId)
+      || (state.kind === "osm-preview" && state.operationId === requestBody.operationId)
       || (state.kind === "development-write-recovery" && state.request.operationId === requestBody.operationId);
     if (!matchesCurrentRequest) return;
     if (response.ok && isDevelopmentWriteResponse(payload, "complete")) {
@@ -477,12 +508,15 @@ async function submitDevelopmentCheck(
   } catch {
     setDevelopmentWriteStatus(requestBody.operationId, "uncertain");
   }
-  if ((state.kind === "osm-preview" && state.operationId === requestBody.operationId)
+  if ((state.kind === "new-aed-preview" && state.operationId === requestBody.operationId)
+    || (state.kind === "osm-preview" && state.operationId === requestBody.operationId)
     || (state.kind === "development-write-recovery" && state.request.operationId === requestBody.operationId)) render(true);
 }
 
 function setDevelopmentWriteStatus(operationId: string, writeStatus: "uncertain" | "sending" | "complete" | "conflict" | "failed"): void {
-  if (state.kind === "osm-preview" && state.operationId === operationId) {
+  if (state.kind === "new-aed-preview" && state.operationId === operationId) {
+    state = { ...state, writeStatus };
+  } else if (state.kind === "osm-preview" && state.operationId === operationId) {
     state = { ...state, writeStatus };
   } else if (state.kind === "development-write-recovery" && state.request.operationId === operationId) {
     state = { ...state, writeStatus };
@@ -576,6 +610,7 @@ async function onPhotoSelected(event: Event): Promise<void> {
 
 function handleAction(action: string | undefined, source?: HTMLElement): void {
   if (action === "retake") {
+    if (hasUnresolvedSave(state)) return;
     clearTimers();
     releasePhoto();
     demoMode = false;
@@ -619,11 +654,34 @@ function handleAction(action: string | undefined, source?: HTMLElement): void {
     });
     state = { kind: "new-aed-preview", photoUrl: state.photoUrl, result, returnState: state };
   } else if (action === "back-to-search" && state.kind === "new-aed-preview") {
+    if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
     state = state.returnState;
+  } else if (action === "create-development-node" && state.kind === "new-aed-preview") {
+    if (!developmentSession || !developmentWriteAvailable || !crypto.randomUUID || state.result.kind !== "ready" || state.writeStatus) return;
+    const preview = state;
+    if (preview.result.kind !== "ready") return;
+    const operationId = crypto.randomUUID();
+    const request: DevelopmentWriteRequest = {
+      kind: "create-node", operationId,
+      candidateLabel: `${preview.result.position.latitude.toFixed(5)}, ${preview.result.position.longitude.toFixed(5)}`,
+      latitude: preview.result.position.latitude, longitude: preview.result.position.longitude,
+      observedOn: preview.result.tags.check_date, locationDescription: null,
+    };
+    try {
+      // Persist the exact confirmed proposal before network I/O so an interrupted request can be reconciled.
+      persistPendingDevelopmentWrite(request);
+    } catch {
+      state = { ...preview, operationId, writeStatus: "failed" };
+      render(true);
+      return;
+    }
+    state = { ...preview, operationId, writeStatus: "sending" };
+    render(true);
+    void submitDevelopmentWrite(request);
   } else if (action === "back-to-candidates" && state.kind === "osm-preview") {
     if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
     state = state.returnState;
-  } else if ((action === "save-development-check" || action === "retry-development-check") && state.kind === "osm-preview") {
+  } else if (action === "save-development-check" && state.kind === "osm-preview") {
     if (!developmentSession || !developmentWriteAvailable || !crypto.randomUUID || state.writeStatus === "sending" || state.writeStatus === "complete") return;
     const preview = state;
     const candidateId = preview.candidateId;
@@ -631,8 +689,8 @@ function handleAction(action: string | undefined, source?: HTMLElement): void {
     if (!candidate || candidate.osmType !== "node" || candidate.version === undefined || preview.result.kind !== "ready") return;
     const operationId = preview.operationId ?? crypto.randomUUID();
     const change = preview.result.changes[0];
-    const request: DevelopmentCheckRequest = {
-      operationId,
+    const request: DevelopmentWriteRequest = {
+      kind: "check-date", operationId,
       target: candidate.id,
       candidateLabel: preview.candidateLabel,
       expectedVersion: candidate.version,
@@ -641,7 +699,7 @@ function handleAction(action: string | undefined, source?: HTMLElement): void {
     };
     try {
       // Save the exact confirmed proposal before sending so a reload can safely check the same operation.
-      persistPendingDevelopmentCheck(request);
+      persistPendingDevelopmentWrite(request);
     } catch {
       state = { ...preview, operationId, writeStatus: "failed" };
       render(true);
@@ -649,13 +707,14 @@ function handleAction(action: string | undefined, source?: HTMLElement): void {
     }
     state = { ...preview, operationId, writeStatus: "sending" };
     render(true);
-    void submitDevelopmentCheck(request);
-  } else if (action === "retry-development-check" && state.kind === "development-write-recovery") {
+    void submitDevelopmentWrite(request);
+  } else if (action === "retry-development-write" && (state.kind === "development-write-recovery" || state.kind === "new-aed-preview" || state.kind === "osm-preview")) {
     if (!developmentSession || !developmentWriteAvailable || state.writeStatus !== "uncertain") return;
-    const request = state.request;
+    const request = state.kind === "development-write-recovery" ? state.request : readPendingDevelopmentWrite();
+    if (!request) return;
     state = { ...state, writeStatus: "sending" };
     render(true);
-    void submitDevelopmentCheck(request);
+    void submitDevelopmentWrite(request);
   } else if (action === "retry-live") {
     if (state.kind !== "vision-error" || (state.reason !== "session-unavailable" && state.reason !== "analysis-budget-unavailable") || !selectedPhotoFile) return;
     void runVisionAnalysis(state.photoUrl, selectedPhotoFile);

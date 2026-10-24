@@ -5,11 +5,12 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 ## [Unreleased]
 
 ### Added
+- Ergänzt eine standardmäßig abgeschaltete Neuanlage-Route für den OSM-Testserver. Sie prüft den kleinen Kartenbereich direkt vor dem Schreiben erneut auf AEDs, schreibt nur `emergency=defibrillator` und `check_date` sowie optional den bestätigten Standorttext und gleicht unklare Uploads über dasselbe Changeset ab. Eine Wiederaufnahme schließt den Changeset vor dem stabilen Abgleich; ein nachweislich leerer Changeset beendet den Vorgang als fehlgeschlagen, statt ihn endlos zu sperren. Veraltete Startvorgänge werden nach einer zweiminütigen Inaktivität atomar beendet; die mobile Vorschau verlangt einen expliziten Klick und produktives OSM bleibt technisch ausgeschlossen.
 - Ergänzt eine im Betreiberstandard abgeschaltete Schreibfunktion für „vor Ort noch vorhanden“ auf dem OSM-Testserver: nur nach konkreter Bestätigung, mit Versionsprüfung, Änderungen ausschließlich an `check_date` sowie gespeicherter Wiederherstellung bei unklarer Antwort. Die mobile Vorschau zeigt die Aktion nur für angemeldete Testserver-Sitzungen und versionierte AED-Knoten.
 - Ergänzt einen getrennt aktivierbaren OSM-Entwicklungslogin, der ausschließlich den festen OSM-Testserver anspricht, den angeforderten `write_api`-Zugriff serverseitig verschlüsselt an die App-Sitzung bindet und in der Oberfläche ausdrücklich als Testserver kennzeichnet.
 
 - Ergänzt eine verschiebbare OSM-Karte zur Prüfung und Korrektur des vorgeschlagenen AED-Standorts. Jede Kartenbewegung hebt die Standortbestätigung auf.
-- Ergänzt im Fotoablauf eine Vorschau für neue AED-Knoten. Eine Neuanlage wird nur nach vollständiger Suche und ausdrücklicher Bestätigung des angezeigten GPS-Punkts vorbereitet; gespeichert oder an OSM gesendet wird nichts.
+- Ergänzt im Fotoablauf eine Vorschau für neue AED-Knoten. Eine Neuanlage wird nur nach vollständiger Suche und ausdrücklicher Bestätigung des angezeigten GPS-Punkts vorbereitet. Der OSM-Schreibweg bleibt zusätzlich über die standardmäßig deaktivierte Entwicklungsserver-Option gesperrt.
 - Verbindet bestätigte AED-Knoten aus der Umgebungssuche mit einer lokalen Änderungsvorschau, die ausschließlich `check_date` enthält. Es wird weiterhin nichts an OpenStreetMap gesendet.
 
 ### Changed
@@ -22,8 +23,8 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Security
 
-- Ergänzt einen serverseitigen OSM-API-URL-Baustein, der nur bei exakt gesetzter Entwicklungsumgebung Anfragen an den festen OSM-Testserver zulässt und frei wählbare Hosts oder Pfad-Ausbrüche abweist. Eine Schreibroute ist damit noch nicht freigeschaltet.
-- Speichert OSM-Entwicklungstokens nur AES-GCM-verschlüsselt, an eine aktive App-Sitzung gebunden und mit Ablaufzeit in D1; die Migration löscht sie beim Widerruf der Sitzung automatisch. Die getrennte OAuth-Anmeldung kann diesen Speicher nutzen; eine OSM-Schreibroute ist weiterhin nicht aktiviert.
+- Ergänzt einen serverseitigen OSM-API-URL-Baustein, der nur bei exakt gesetzter Entwicklungsumgebung Anfragen an den festen OSM-Testserver zulässt und frei wählbare Hosts oder Pfad-Ausbrüche abweist. Auch die neuen Schreibwege verwenden ausschließlich diesen Baustein.
+- Speichert OSM-Entwicklungstokens nur AES-GCM-verschlüsselt, an eine aktive App-Sitzung gebunden und mit Ablaufzeit in D1; die Migration löscht sie beim Widerruf der Sitzung automatisch. Die getrennte OAuth-Anmeldung und die abgeschalteten Testserver-Schreibwege nutzen diesen Speicher.
 - Speichert bei OSM-Sitzungen den Anbieter (`production` oder `development`) mit, sodass gleichlautende Subjekte nicht zwischen Servern verwechselt werden. Bildanalyse-Freigaben nennen den Anbieter ausdrücklich; D1 verwendet eine getrennte, gehashte Kostenidentität. Testserver-Konten erhalten keine Produktionsfreigabe; die Live-Fotoanalyse setzt eigene Betreiberfreigaben und Kostenlimits voraus.
 - Begrenzt lesende Overpass-Abfragen pro angemeldetem OSM-Konto auf einen Aufruf pro 30 Sekunden; D1 speichert einen einweg-gehashten Kontoschlüssel, löscht abgelaufene Cooldowns bei der nächsten Suche und speichert weder Standort noch Suchergebnis.
 - Speichert eine von Overpass gemeldete Upstream-Sperre als globale Ablaufzeit in D1, damit kein anderes AEDjaeger-Konto den öffentlichen Dienst währenddessen erneut anfragt.
