@@ -138,6 +138,78 @@ test("a user-confirmed location search shows nearby candidates without writing t
   expect(searchRequests).toBe(1);
 });
 
+test("a new AED preview requires confirmed GPS position and a complete empty search", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/vision/analyze", async (route) => {
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ json: {
+      request_id: payload.request_id, model: "gpt-6-luna",
+      observation: { scene: "device_visible", device_count: 1, readable_text: [], manufacturer: null, model: null, location_clues: [], image_issues: [] },
+    } });
+  });
+  let searchRequests = 0;
+  const nonSearchOsmRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/api/osm/") && !request.url().includes("/api/osm/candidates/search")) {
+      nonSearchOsmRequests.push(request.url());
+    }
+  });
+  await page.route("**/api/osm/candidates/search", async (route) => {
+    searchRequests += 1;
+    await route.fulfill({ json: { status: "complete", coverage_radius_meters: 112, candidates: [] } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
+  await page.getByRole("button", { name: "AEDs in der Umgebung suchen" }).click();
+  await expect(page.getByRole("button", { name: "Neuen AED vorbereiten" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Neuen AED vorbereiten" }).click();
+  await expect(page.getByRole("heading", { name: "Vorschau für neuen AED" })).toBeVisible();
+  await expect(page.locator(".capture-content")).toContainText("Bestätige zuerst, dass der AED genau an diesem GPS-Punkt steht.");
+  await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
+  await page.getByRole("button", { name: "Zurück zu den Treffern" }).click();
+
+  await page.locator("#new-aed-position-confirmed").check();
+  await page.getByRole("button", { name: "Neuen AED vorbereiten" }).click();
+  await expect(page.getByRole("heading", { name: "Vorschau für neuen AED" })).toBeVisible();
+  await expect(page.locator(".capture-content")).toContainText("52.52000");
+  await expect(page.locator(".capture-content")).toContainText("emergency=defibrillator");
+  await expect(page.locator(".capture-content")).toContainText("check_date=");
+  await expect(page.getByRole("link", { name: "Position auf OpenStreetMap ansehen" })).toHaveAttribute("href", /openstreetmap\.org\/\?mlat=52\.52000/u);
+  await expect(page.locator(".capture-content")).toContainText("nichts gespeichert oder an OpenStreetMap gesendet");
+  await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
+  expect(searchRequests).toBe(1);
+  expect(nonSearchOsmRequests).toEqual([]);
+});
+
+test("a partial nearby search never offers a new AED preview", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true } }));
+  await page.route("**/api/vision/analyze", async (route) => {
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ json: {
+      request_id: payload.request_id, model: "gpt-6-luna",
+      observation: { scene: "device_visible", device_count: 1, readable_text: [], manufacturer: null, model: null, location_clues: [], image_issues: [] },
+    } });
+  });
+  let searchRequests = 0;
+  await page.route("**/api/osm/candidates/search", async (route) => {
+    searchRequests += 1;
+    await route.fulfill({ json: { status: "partial", coverage_radius_meters: 112, reason: "overpass-remark", candidates: [] } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
+  await page.getByRole("button", { name: "AEDs in der Umgebung suchen" }).click();
+  await expect(page.locator(".capture-content")).toContainText("Overpass-Suche war unvollständig");
+  await expect(page.getByRole("button", { name: "Neuen AED vorbereiten" })).toHaveCount(0);
+  expect(searchRequests).toBe(1);
+});
+
 test("denied location access does not send a nearby search request", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "geolocation", { value: {

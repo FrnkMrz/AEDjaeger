@@ -5,7 +5,7 @@ import { translate, translations, type Language, type TranslationKey } from "./i
 import { translateVision, type VisionMessageKey } from "./i18n/visionTranslations";
 import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservation, VisionClientError } from "./vision/analyzePhoto";
 import { assessCandidates } from "./domain/candidateMatch";
-import { previewExistingAedCheck } from "./domain/osmChangeProposal";
+import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
 import { CandidateSearchError, requestNearbyCandidates, type PhoneLocation } from "./osm/candidateSearch";
 import type { VisionObservation } from "./contracts/visionObservation";
 
@@ -129,13 +129,27 @@ function statusContent(): string {
       else if (assessment.kind === "new-entry-eligible") outcome = tv("searchNoMatch");
       else if (assessment.kind === "location-too-uncertain") outcome = tv("locationUncertain");
       else outcome = tv("searchFailedResult");
+      const newEntryAction = search.status === "complete" && assessment.kind === "new-entry-eligible"
+        ? `<div class="position-confirmation"><label for="new-aed-position-confirmed"><input id="new-aed-position-confirmed" type="checkbox" />${tv("newPositionConfirm", { latitude: state.location.latitude.toFixed(5), longitude: state.location.longitude.toFixed(5) })}</label><button class="button button-primary" data-action="preview-new-aed">${tv("newPreviewAction")}</button></div>`
+        : "";
       const retryWaitSeconds = state.retryAvailableAt === undefined ? 0 : Math.max(0, Math.ceil((state.retryAvailableAt - Date.now()) / 1000));
       const retry = search.status === "partial" || assessment.kind === "search-incomplete"
         ? retryWaitSeconds > 0
           ? `<p class="simulation-note search-wait" aria-live="off">${tv("searchWait", { seconds: retryWaitSeconds })}</p>`
           : `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`
         : "";
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p>${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}<p class="simulation-note">${tv("searchNoWrite")}</p></div></div>${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p>${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}<p class="simulation-note">${tv("searchNoWrite")}</p></div></div>${newEntryAction}${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+    }
+    case "new-aed-preview": {
+      const point = state.result.kind === "ready" ? state.result.position : state.returnState.location;
+      const latitude = point.latitude.toFixed(5);
+      const longitude = point.longitude.toFixed(5);
+      // Coordinates are numeric GPS values validated by the location and proposal boundaries.
+      const mapUrl = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=19/${latitude}/${longitude}`;
+      const content = state.result.kind === "ready"
+        ? `<p>${tv("newPreviewCoordinates", { latitude, longitude })}</p><p><a href="${mapUrl}" target="_blank" rel="noopener noreferrer">${tv("newPreviewOpenMap")}</a></p><strong>${tv("newPreviewTags")}</strong><ul>${Object.entries(state.result.tags).map(([key, value]) => `<li><code>${escapeHtml(key)}=${escapeHtml(value)}</code></li>`).join("")}</ul><p>${tv("newPreviewCaution")}</p>`
+        : `<p>${tv(state.result.reason === "position-not-confirmed" ? "newPositionRequired" : state.result.reason === "search-found-candidate" ? "newPreviewFoundCandidate" : "newPreviewSearchInvalid")}</p><p><a href="${mapUrl}" target="_blank" rel="noopener noreferrer">${tv("newPreviewOpenMap")}</a></p>`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("newPreviewTitle")}</h2>${content}<p class="simulation-note">${tv("previewNoWrite")}</p></div></div><button class="button button-quiet" data-action="back-to-search">${tv("previewBack")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     }
     case "osm-preview": {
       const { result } = state;
@@ -332,6 +346,7 @@ function focusCurrentState(): void {
     "candidate-searching": ".loading-row",
     "candidate-result": ".result-message h2",
     "osm-preview": ".result-message h2",
+    "new-aed-preview": ".result-message h2",
     "candidate-error": ".result-message h2",
     "vision-error": ".result-message h2",
     clarification: ".result-message h2",
@@ -426,6 +441,23 @@ function handleAction(action: string | undefined, source?: HTMLElement): void {
     const result = previewExistingAedCheck(candidate, true, new Date().toISOString().slice(0, 10));
     const candidateLabel = candidate.tags.name || candidate.tags["defibrillator:location"] || candidate.id;
     state = { kind: "osm-preview", photoUrl: state.photoUrl, candidateId, candidateLabel, result, returnState: state };
+  } else if (action === "preview-new-aed" && state.kind === "candidate-result") {
+    if (state.search.status !== "complete" || state.assessment.kind !== "new-entry-eligible") return;
+    const positionConfirmed = app!.querySelector<HTMLInputElement>("#new-aed-position-confirmed")?.checked === true;
+    const result = previewNewAed({
+      searchStatus: state.search.status,
+      assessmentKind: state.assessment.kind,
+      position: state.location,
+      searchCenter: state.location,
+      coverageRadiusMeters: state.search.coverageRadiusMeters,
+      nearbyRadiusMeters: 100,
+      searchCandidates: state.search.candidates,
+      positionConfirmed,
+      observedOn: new Date().toISOString().slice(0, 10),
+    });
+    state = { kind: "new-aed-preview", photoUrl: state.photoUrl, result, returnState: state };
+  } else if (action === "back-to-search" && state.kind === "new-aed-preview") {
+    state = state.returnState;
   } else if (action === "back-to-candidates" && state.kind === "osm-preview") {
     state = state.returnState;
   } else if (action === "retry-live") {
