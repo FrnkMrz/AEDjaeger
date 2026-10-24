@@ -556,7 +556,7 @@ test("the OSM login link stays hidden when the Worker has no OAuth setup", async
 
 test("an authenticated user can end the OSM session without exposing profile data", async ({ page }) => {
   let authenticated = true;
-  page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated, loginAvailable: true } }));
+  page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   page.route("**/api/auth/logout", async (route) => {
     expect(route.request().method()).toBe("POST");
     authenticated = false;
