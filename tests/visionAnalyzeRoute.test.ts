@@ -218,8 +218,31 @@ describe("protected image analysis route", () => {
     expect(await response.json()).toEqual({ request_id: "request_1234567890", model: "gpt-6-luna", observation });
     expect(analyze).toHaveBeenCalledWith({ bytes: imageBytes, contentType: "image/jpeg" }, "server-only-test-key");
     expect(calls.some((query) => query.includes("provider_started_at IS NULL"))).toBe(true);
-    expect(budgetIdentities).toEqual(["production:osm-test-user", "production:osm-test-user"]);
-    expect(budgetIdentities).toEqual(["production:osm-test-user", "production:osm-test-user"]);
+    expect(budgetIdentities).toHaveLength(2);
+    expect(budgetIdentities[0]).toMatch(/^[a-f0-9]{64}$/u);
+    expect(budgetIdentities[1]).toBe(budgetIdentities[0]);
+  });
+
+  it("keeps development analysis budgets separate for the same OSM subject", async () => {
+    const production = createDatabase({ environment: "production" });
+    const development = createDatabase({ environment: "development" });
+    const allowDevelopment = environment(development.database, {
+      AI_ANALYSIS_ALLOWED_OSM_SUBJECTS: "development:osm-test-user",
+    });
+    const response = await handleVisionAnalysis(analysisRequest(), allowDevelopment, { analyze: successfulAnalysis() });
+
+    expect(response.status).toBe(200);
+    expect(development.budgetIdentities).toHaveLength(2);
+    expect(development.budgetIdentities[0]).toMatch(/^[a-f0-9]{64}$/u);
+    expect(development.budgetIdentities[1]).toBe(development.budgetIdentities[0]);
+
+    const productionResponse = await handleVisionAnalysis(
+      analysisRequest({ body: JSON.stringify({ request_id: "request_2234567890", content_type: "image/jpeg", image_base64: btoa(String.fromCharCode(...imageBytes)) }) }),
+      environment(production.database),
+      { analyze: successfulAnalysis() },
+    );
+    expect(productionResponse.status).toBe(200);
+    expect(production.budgetIdentities[0]).not.toBe(development.budgetIdentities[0]);
   });
 
   it("never calls the provider when a reservation is denied or cannot be confirmed", async () => {
