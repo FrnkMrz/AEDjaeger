@@ -184,7 +184,8 @@ function statusContent(): string {
     case "ready":
       return `<div class="empty-illustration" aria-hidden="true"><span class="device-card"><span class="device-heart">♥</span><span class="device-zap">ϟ</span></span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>`;
     case "photo": {
-      const liveAction = accountState === "signed-in" && (!developmentSession || developmentWriteAvailable)
+      const liveAnalysisAvailable = accountState === "signed-in" && (!developmentSession || developmentWriteAvailable);
+      const liveAction = liveAnalysisAvailable
         ? `<button class="button button-primary" data-action="analyze-live">${icon("search")}<span>${tv("action")}</span></button>`
         : developmentSession
           ? `<p class="supporting-copy">${t("accountDevPhotoDisabled")}</p>`
@@ -192,7 +193,9 @@ function statusContent(): string {
             ? `<p class="supporting-copy">${t("liveUnavailable")}</p>`
             : `<p class="supporting-copy">${tv("signIn")}</p>`;
       const demoAction = demoMode || accountState !== "signed-in" ? `<button class="button button-secondary" data-action="analyze">${t("demoAnalyze")}</button>` : "";
-      return `${photoMarkup}<p class="supporting-copy">${tv("consent")}</p>${liveAction}${demoAction}<p class="simulation-note">${t("testPhotoNotice")}</p><button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
+      // Show provider consent only when a live analysis button is available; the local demo never sends the photo.
+      const liveConsent = liveAnalysisAvailable ? `<p class="supporting-copy">${tv("consent")}</p>` : "";
+      return `${photoMarkup}${liveConsent}${liveAction}${demoAction}<p class="simulation-note">${t("testPhotoNotice")}</p><button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
     }
     case "analyzing":
       return `${photoMarkup}${demoNotice()}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${t("demoRunning")}</span></div>`;
