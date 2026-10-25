@@ -5,6 +5,14 @@
   "compatibility_date": "2026-10-20",
   "workers_dev": true,
   "send_metrics": false,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": false
+    }
+  },
   // This binding name matches WorkerEnvironment.DB. Schema changes stay in migrations/.
   "d1_databases": [
     {

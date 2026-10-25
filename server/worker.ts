@@ -9,6 +9,7 @@ import { handleVisionAnalysis } from "./vision/analyzeRoute";
 import { handleOverpassSearch } from "./osm/overpassRoute";
 import { handleDevelopmentCheckDate } from "./osm/developmentWriteRoute";
 import { handleDevelopmentCreateNode } from "./osm/developmentCreateNodeRoute";
+import { handleTestDiagnostic } from "./testDiagnostics";
 
 type StaticAssets = { fetch(request: Request): Promise<Response> };
 type WorkerEnvironment = {
@@ -37,6 +38,7 @@ const worker = {
   async fetch(request: Request, environment: WorkerEnvironment): Promise<Response> {
     const { pathname } = new URL(request.url);
 
+    if (pathname === "/api/diagnostics") return handleTestDiagnostic(request);
     if (pathname === "/api/health") {
       if (request.method !== "GET") return jsonResponse({ error: "method_not_allowed" }, 405, { Allow: "GET" });
       return jsonResponse({ status: "ok" }, 200);

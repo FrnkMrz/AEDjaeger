@@ -15,6 +15,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Changed
 
+- Ergänzt eine geführte, klar gekennzeichnete Foto-Demo und eine freiwillige Diagnoseaufzeichnung für Testläufe. Die Logs enthalten nur feste Ereigniscodes und zufällige Lauf-IDs; automatische Request-Logs sind deaktiviert.
 - Aktualisiert Architektur-, Umsetzungs- und Pilotdokumentation nach dem ersten öffentlichen Workers-Free-Deployment. Hält URL, Health-Prüfung, migrierten D1-Stand und weiterhin abgeschaltete KI-/OSM-Funktionen fest.
 - Vereinheitlicht den App-Namen in allen Sprachen auf `AEDjaeger` ohne Umlaute.
 - Dokumentiert den festgelegten Produktnamen und die von Vitest unterstützten Node.js-Versionen in README und Paketmetadaten.

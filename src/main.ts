@@ -30,6 +30,8 @@ let language = readLanguage();
 let scenario: DemoScenario = "existing";
 // Local fixture workflows stay hidden until the user explicitly opens the preview panel.
 let demoMode = false;
+let diagnosticsEnabled = false;
+let diagnosticFlowId: string | undefined;
 const pendingDevelopmentWrite = readPendingDevelopmentWrite();
 let state: FlowState = pendingDevelopmentWrite ? { kind: "development-write-recovery", request: pendingDevelopmentWrite, writeStatus: "uncertain" } : { kind: "ready" };
 type AccountState = "checking" | "not-configured" | "connection-error" | "login-error" | "signed-out" | "signed-in" | "logout-error";
@@ -109,6 +111,27 @@ function t(key: TranslationKey, values?: Record<string, number | string>): strin
 }
 function tv(key: VisionMessageKey, values?: Record<string, number | string>): string { return translateVision(language, key, values); }
 
+type DiagnosticEvent =
+  | "test_run_started" | "photo_selected" | "demo_started" | "demo_result_shown" | "demo_confirmed"
+  | "live_flow_blocked" | "live_analysis_started" | "live_analysis_finished" | "live_analysis_failed"
+  | "nearby_search_started" | "nearby_search_finished";
+
+function recordDiagnostic(event: DiagnosticEvent): void {
+  if (!diagnosticsEnabled || !diagnosticFlowId) return;
+  void fetch("/api/diagnostics", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ event, flowId: diagnosticFlowId }),
+  }).catch(() => {
+    // Test guidance still works if diagnostics are unavailable.
+  });
+}
+
+function demoNotice(): string {
+  return demoMode ? `<p class="simulation-note" role="note">${t("testResultNotice")}</p>` : "";
+}
+
 function signInLinks(): string {
   const productionLink = productionLoginAvailable ? `<a class="account-button" id="osm-sign-in" href="/api/auth/osm/start">${t("accountSignIn")}</a>` : "";
   const developmentLink = developmentLoginAvailable ? `<a class="account-button" id="osm-dev-sign-in" href="/api/auth/osm/development/start">${t("accountDevSignIn")}</a><p class="simulation-note">${t("accountDevNotice")}</p>` : "";
@@ -155,10 +178,19 @@ function statusContent(): string {
   switch (state.kind) {
     case "ready":
       return `<div class="empty-illustration" aria-hidden="true"><span class="device-card"><span class="device-heart">♥</span><span class="device-zap">ϟ</span></span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>`;
-    case "photo":
-      return `${photoMarkup}<p class="supporting-copy">${tv("consent")}</p>${accountState === "signed-in" && (!developmentSession || developmentWriteAvailable) ? `<button class="button button-primary" data-action="analyze-live">${icon("search")}<span>${tv("action")}</span></button>` : developmentSession ? `<p class="supporting-copy">${t("accountDevPhotoDisabled")}</p>` : `<p class="supporting-copy">${tv("signIn")}</p>`}${demoMode ? `<button class="button button-secondary" data-action="analyze">${t("demoAnalyze")}</button>` : ""}<button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
+    case "photo": {
+      const liveAction = accountState === "signed-in" && (!developmentSession || developmentWriteAvailable)
+        ? `<button class="button button-primary" data-action="analyze-live">${icon("search")}<span>${tv("action")}</span></button>`
+        : developmentSession
+          ? `<p class="supporting-copy">${t("accountDevPhotoDisabled")}</p>`
+          : accountState === "not-configured"
+            ? `<p class="supporting-copy">${t("liveUnavailable")}</p>`
+            : `<p class="supporting-copy">${tv("signIn")}</p>`;
+      const demoAction = demoMode || accountState !== "signed-in" ? `<button class="button button-secondary" data-action="analyze">${t("demoAnalyze")}</button>` : "";
+      return `${photoMarkup}<p class="supporting-copy">${tv("consent")}</p>${liveAction}${demoAction}<p class="simulation-note">${t("testPhotoNotice")}</p><button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
+    }
     case "analyzing":
-      return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${t("checking")}</span></div>`;
+      return `${photoMarkup}${demoNotice()}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${t("demoRunning")}</span></div>`;
     case "vision-analyzing":
       return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv("progress")}</span></div>`;
     case "vision-result": {
@@ -292,19 +324,19 @@ function statusContent(): string {
       const retryButton = retryableBeforeProvider ? `<button class="button button-secondary" data-action="retry-live">${tv("retrySession")}</button>` : "";
       return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("errorTitle")}</h2><p>${tv(errorKey[state.reason])}</p>${retryNotice}</div></div>${retryButton}<button class="button button-quiet" data-action="reset">${tv("return")}</button>`;
     case "clarification":
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${t(state.reason === "multiple" ? "multipleTitle" : "signTitle")}</h2><p>${t(state.reason === "multiple" ? "multipleBody" : "signBody")}</p></div></div>${state.reason === "multiple" ? `<button class="button button-secondary" data-action="candidate-main-entrance">${t("candidateMainEntrance")}</button><button class="button button-secondary" data-action="candidate-sports-hall">${t("candidateSportsHall")}</button>` : ""}<button class="button button-quiet" data-action="retake">${t("clarifyAgain")}</button>`;
+      return `${photoMarkup}${demoNotice()}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${t(state.reason === "multiple" ? "multipleTitle" : "signTitle")}</h2><p>${t(state.reason === "multiple" ? "multipleBody" : "signBody")}</p></div></div>${state.reason === "multiple" ? `<button class="button button-secondary" data-action="candidate-main-entrance">${t("candidateMainEntrance")}</button><button class="button button-secondary" data-action="candidate-sports-hall">${t("candidateSportsHall")}</button>` : ""}<button class="button button-quiet" data-action="retake">${t("clarifyAgain")}</button>`;
     case "proposal":
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-good" aria-hidden="true">✓</span><div><p class="eyebrow">${t(state.candidateId === "main-entrance" ? "candidateMainEntrance" : state.candidateId === "sports-hall" ? "candidateSportsHall" : state.proposal === "existing" ? "existingDetail" : "newDetail")}</p><h2>${t(state.proposal === "existing" ? "existingTitle" : "newTitle")}</h2><p>${t(state.proposal === "existing" ? "existingBody" : "newBody")}</p></div></div><button class="button button-primary" data-action="confirm">${icon("check")}<span>${t(state.proposal === "existing" ? "confirmExisting" : "confirmNew")}</span></button><button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
+      return `${photoMarkup}${demoNotice()}<div class="result-message"><span class="status-icon status-good" aria-hidden="true">✓</span><div><p class="eyebrow">${t(state.candidateId === "main-entrance" ? "candidateMainEntrance" : state.candidateId === "sports-hall" ? "candidateSportsHall" : state.proposal === "existing" ? "existingDetail" : "newDetail")}</p><h2>${t(state.proposal === "existing" ? "existingTitle" : "newTitle")}</h2><p>${t(state.proposal === "existing" ? "existingBody" : "newBody")}</p></div></div><button class="button button-primary" data-action="confirm">${icon("check")}<span>${t(state.proposal === "existing" ? "confirmExisting" : "confirmNew")}</span></button><button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
     case "sending":
-      return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${t("sending")}</span></div>`;
+      return `${photoMarkup}${demoNotice()}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${t("sending")}</span></div>`;
     case "checking-status":
       return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${t("checkingStatus")}</span></div>`;
     case "saved":
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-good" aria-hidden="true">✓</span><div><h2>${t("savedTitle")}</h2><p>${t(state.proposal === "existing" ? "savedExisting" : "savedNew")}</p></div></div><p class="simulation-note">${t("savedBody")}</p><button class="button button-primary" data-action="reset">${t("startOver")}</button>`;
+      return `${photoMarkup}${demoNotice()}<div class="result-message"><span class="status-icon status-good" aria-hidden="true">✓</span><div><h2>${t("savedTitle")}</h2><p>${t(state.proposal === "existing" ? "savedExisting" : "savedNew")}</p></div></div><p class="simulation-note">${t("savedBody")}</p><button class="button button-primary" data-action="reset">${t("startOver")}</button>`;
     case "unclear-error":
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${t("unclearTitle")}</h2><p>${t("unclearBody")}</p></div></div><button class="button button-secondary" data-action="recover">${t("checkStatus")}</button>`;
+      return `${photoMarkup}${demoNotice()}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${t("unclearTitle")}</h2><p>${t("unclearBody")}</p></div></div><button class="button button-secondary" data-action="recover">${t("checkStatus")}</button>`;
     case "retryable-error":
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${t("retryTitle")}</h2><p>${t("retryBody")}</p></div></div><button class="button button-secondary" data-action="analyze">${t("retry")}</button><button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
+      return `${photoMarkup}${demoNotice()}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${t("retryTitle")}</h2><p>${t("retryBody")}</p></div></div><button class="button button-secondary" data-action="analyze">${t("retry")}</button><button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
   }
 }
 
@@ -331,7 +363,7 @@ function render(restoreFlowFocus = false): void {
         <section class="capture-card" aria-live="polite" aria-atomic="false">
           <div class="capture-content">${isReady ? `<div class="empty-illustration" aria-hidden="true"><span class="device-card"><span class="device-heart">♥</span><span class="device-zap">ϟ</span></span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>` : statusContent()}</div>
           ${isReady ? `<div class="capture-actions"><label class="button button-primary camera-label">${icon("camera")}<span>${t("camera")}</span><input id="camera-input" type="file" accept="image/*" capture="environment" /></label><label class="button button-secondary camera-label">${t("choosePhoto")}<input id="file-input" type="file" accept="image/*" /></label><p class="supporting-copy">${t("privacy")}</p></div>` : ""}
-          ${isReady ? `<details class="demo-panel"><summary>${t("demo")}</summary><label for="scenario">${t("scenario")}</label><select id="scenario">${(Object.keys(scenarioKeys) as DemoScenario[]).map((key) => `<option value="${key}" ${scenario === key ? "selected" : ""}>${t(scenarioKeys[key])}</option>`).join("")}</select></details>` : ""}
+          ${isReady ? `<details class="demo-panel"><summary>${t("demo")}</summary><h2>${t("testStepsTitle")}</h2><p>${t("testSteps")}</p><label for="scenario">${t("scenario")}</label><select id="scenario">${(Object.keys(scenarioKeys) as DemoScenario[]).map((key) => `<option value="${key}" ${scenario === key ? "selected" : ""}>${t(scenarioKeys[key])}</option>`).join("")}</select><label class="diagnostics-opt-in" for="diagnostics-enabled"><input id="diagnostics-enabled" type="checkbox" ${diagnosticsEnabled ? "checked" : ""}><span><strong>${t("testDiagnostics")}</strong><small>${t("testDiagnosticsPrivacy")}</small></span></label></details>` : ""}
         </section>
       </main>
       ${accountPanel()}
@@ -396,6 +428,11 @@ function render(restoreFlowFocus = false): void {
     // Choosing a fixture is itself an explicit request to use the local simulation.
     demoMode = true;
   });
+  document.querySelector<HTMLInputElement>("#diagnostics-enabled")?.addEventListener("change", (event) => {
+    diagnosticsEnabled = (event.currentTarget as HTMLInputElement).checked;
+    diagnosticFlowId = diagnosticsEnabled ? crypto.randomUUID() : undefined;
+    if (diagnosticsEnabled) recordDiagnostic("test_run_started");
+  });
   document.querySelector<HTMLInputElement>("#camera-input")?.addEventListener("change", onPhotoSelected);
   document.querySelector<HTMLInputElement>("#file-input")?.addEventListener("change", onPhotoSelected);
   document.querySelectorAll<HTMLElement>("[data-action]").forEach((button) => button.addEventListener("click", () => handleAction(button.dataset.action, button)));
@@ -440,6 +477,7 @@ async function refreshAccountState(focusSelector?: string): Promise<void> {
     developmentSession = status.developmentSession;
     developmentWriteAvailable = status.developmentWriteAvailable;
     accountState = status.authenticated ? "signed-in" : !productionLoginAvailable && !developmentLoginAvailable ? "not-configured" : failedOAuthReturn ? "login-error" : "signed-out";
+    if (state.kind === "photo" && accountState === "not-configured") recordDiagnostic("live_flow_blocked");
   } catch {
     // Local Vite previews and an unavailable Worker must not imply that an OSM session exists.
     accountState = "connection-error";
@@ -604,6 +642,8 @@ async function onPhotoSelected(event: Event): Promise<void> {
   demoMode = demoMode || (document.querySelector<HTMLDetailsElement>(".demo-panel")?.open ?? false);
   selectedPhotoFile = file;
   liveAnalysisRequestId = undefined;
+  recordDiagnostic("photo_selected");
+  if (accountState === "not-configured") recordDiagnostic("live_flow_blocked");
   state = { kind: "photo", photoUrl };
   render(true);
 }
@@ -618,14 +658,18 @@ function handleAction(action: string | undefined, source?: HTMLElement): void {
   } else if (action === "analyze") {
     const photoUrl = getPhotoUrl(state);
     if (!photoUrl || !(state.kind === "photo" || state.kind === "retryable-error")) return;
+    demoMode = true;
+    recordDiagnostic("demo_started");
     state = { kind: "analyzing", photoUrl };
     clearTimers();
     analysisTimer = window.setTimeout(() => {
       state = analysisResult(scenario, photoUrl);
+      recordDiagnostic("demo_result_shown");
       render(true);
     }, 700);
   } else if (action === "analyze-live") {
     if (state.kind !== "photo" || accountState !== "signed-in" || !selectedPhotoFile) return;
+    recordDiagnostic("live_analysis_started");
     void runVisionAnalysis(state.photoUrl, selectedPhotoFile);
   } else if (action === "search-nearby" && state.kind === "vision-result") {
     void runNearbySearch(state.photoUrl, state.observation);
@@ -724,6 +768,7 @@ function handleAction(action: string | undefined, source?: HTMLElement): void {
     clearTimers();
     saveTimer = window.setTimeout(() => {
       state = confirmationResult(scenario, photoUrl, proposal, candidateId);
+      recordDiagnostic("demo_confirmed");
       render(true);
     }, 650);
   } else if ((action === "candidate-main-entrance" || action === "candidate-sports-hall") && state.kind === "clarification") {
@@ -763,8 +808,10 @@ async function runVisionAnalysis(photoUrl: string, file: File): Promise<void> {
     const sanitizedImage = await preparePhotoForAnalysis(file);
     liveAnalysisRequestId ??= createVisionRequestId();
     const observation = await requestVisionObservation(sanitizedImage, fetch, liveAnalysisRequestId);
+    recordDiagnostic("live_analysis_finished");
     state = { kind: "vision-result", photoUrl, observation };
   } catch (error) {
+    recordDiagnostic("live_analysis_failed");
     const code = error instanceof VisionClientError ? error.code : "analysis_failed";
     // A 401 means the server no longer accepts this browser session, even if its last check passed.
     if (code === "authentication_required") accountState = "signed-out";
@@ -798,6 +845,7 @@ async function runNearbySearch(photoUrl: string, observation: VisionObservation)
   }
 
   state = { kind: "candidate-searching", photoUrl, observation };
+  recordDiagnostic("nearby_search_started");
   render(true);
   try {
     const location = await getPhoneLocation();
@@ -809,8 +857,10 @@ async function runNearbySearch(photoUrl: string, observation: VisionObservation)
       ? Date.now() + (search.retryAfterSeconds ?? 30) * 1_000
       : undefined;
     state = { kind: "candidate-result", photoUrl, observation, search, assessment, location, ...(retryAvailableAt === undefined ? {} : { retryAvailableAt }) };
+    recordDiagnostic("nearby_search_finished");
     if (retryAvailableAt !== undefined) scheduleSearchRetryCountdown(retryAvailableAt);
   } catch (error) {
+    recordDiagnostic("nearby_search_finished");
     const code = error instanceof CandidateSearchError ? error.code : "search_failed";
     if (code === "authentication_required") accountState = "signed-out";
     const reasons = {
