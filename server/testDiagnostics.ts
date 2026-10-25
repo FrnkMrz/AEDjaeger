@@ -2,6 +2,7 @@ const MAX_DIAGNOSTIC_BODY_BYTES = 512;
 
 const allowedEvents = [
   "test_run_started",
+  "test_run_abandoned",
   "photo_selected",
   "demo_started",
   "demo_result_shown",

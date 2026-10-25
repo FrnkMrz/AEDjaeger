@@ -112,7 +112,7 @@ function t(key: TranslationKey, values?: Record<string, number | string>): strin
 function tv(key: VisionMessageKey, values?: Record<string, number | string>): string { return translateVision(language, key, values); }
 
 type DiagnosticEvent =
-  | "test_run_started" | "photo_selected" | "demo_started" | "demo_result_shown" | "demo_confirmed"
+  | "test_run_started" | "test_run_abandoned" | "photo_selected" | "demo_started" | "demo_result_shown" | "demo_confirmed"
   | "live_flow_blocked" | "live_analysis_started" | "live_analysis_finished" | "live_analysis_failed"
   | "nearby_search_started" | "nearby_search_finished";
 
@@ -126,6 +126,11 @@ function recordDiagnostic(event: DiagnosticEvent): void {
   }).catch(() => {
     // Test guidance still works if diagnostics are unavailable.
   });
+}
+
+function clearDiagnosticConsent(): void {
+  diagnosticsEnabled = false;
+  diagnosticFlowId = undefined;
 }
 
 function demoNotice(): string {
@@ -651,6 +656,8 @@ async function onPhotoSelected(event: Event): Promise<void> {
 function handleAction(action: string | undefined, source?: HTMLElement): void {
   if (action === "retake") {
     if (hasUnresolvedSave(state)) return;
+    recordDiagnostic("test_run_abandoned");
+    clearDiagnosticConsent();
     clearTimers();
     releasePhoto();
     demoMode = false;
@@ -783,6 +790,7 @@ function handleAction(action: string | undefined, source?: HTMLElement): void {
       render(true);
     }, 650);
   } else if (action === "reset") {
+    clearDiagnosticConsent();
     clearTimers();
     releasePhoto();
     demoMode = false;

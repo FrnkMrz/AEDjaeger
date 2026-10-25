@@ -16,7 +16,7 @@ Die Demo wertet das Foto nicht aus. Sie zeigt das vorab ausgewählte Beispielsze
 
 Bei aktivierter Diagnose sendet die App nur feste Ereigniscodes und eine zufällige Lauf-ID. Die Logs enthalten keine Fotos, GPS-Koordinaten, OSM-Konto-IDs, URLs oder Tokens. Die Cloudflare-Einstellung schaltet automatische Request-Logs aus, damit insbesondere OAuth-Rücksprung-URLs nicht protokolliert werden.
 
-In Cloudflare: **Workers & Pages → AEDjaeger → Observability → Logs**. Nach `source = aedjaeger-test` filtern. Ereignisse derselben Ausführung haben dieselbe `flowId` und können über `occurredAt` zeitlich sortiert werden. Mögliche Ereignisse sind `test_run_started`, `photo_selected`, `live_flow_blocked`, `demo_started`, `demo_result_shown` und `demo_confirmed`. Bei einem Live-Aufruf gibt es zusätzlich `live_analysis_*` und `nearby_search_*`.
+In Cloudflare: **Workers & Pages → AEDjaeger → Observability → Logs**. Nach `source = aedjaeger-test` filtern. Ereignisse derselben Ausführung haben dieselbe `flowId` und können über `occurredAt` zeitlich sortiert werden. Mögliche Ereignisse sind `test_run_started`, `test_run_abandoned`, `photo_selected`, `live_flow_blocked`, `demo_started`, `demo_result_shown` und `demo_confirmed`. Zustimmung und Lauf-ID werden am Ende oder beim Verwerfen zurückgesetzt; für den nächsten Test ist eine neue Zustimmung nötig. Bei einem Live-Aufruf gibt es zusätzlich `live_analysis_*` und `nearby_search_*`.
 
 Im Workers-Free-Tarif sind Workers Logs laut Cloudflare derzeit bis zu 3 Tage verfügbar und bis zu 200.000 Logereignisse pro Tag enthalten. Die Daten werden nicht in AEDjaeger-D1 gespeichert. Die genaue Kontonutzung ist im Cloudflare-Dashboard sichtbar.
 
