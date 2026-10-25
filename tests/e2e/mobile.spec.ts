@@ -88,6 +88,26 @@ test("AI photo analysis requires sign-in and an explicit send action; its result
   expect(requests).toBe(1);
 });
 
+test("a demo-only photo screen does not claim to send the photo to OpenAI", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false } }));
+  let analysisRequests = 0;
+  await page.route("**/api/vision/analyze", async (route) => {
+    analysisRequests += 1;
+    await route.fulfill({ status: 500 });
+  });
+  await page.goto("/");
+  await page.getByText("Vorschau testen", { exact: true }).click();
+  await page.locator("#scenario").selectOption("existing");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+
+  await expect(page.locator(".capture-content")).toContainText("Der echte Foto-Test ist noch nicht freigeschaltet");
+  await expect(page.locator(".capture-content")).not.toContainText("an OpenAI gesendet");
+  await expect(page.locator(".capture-content")).toContainText("Die Demo zeigt das gewählte Beispielszenario und wertet dein Foto nicht aus");
+  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
+  await expect(page.getByRole("heading", { name: "AED gefunden" })).toBeVisible();
+  expect(analysisRequests).toBe(0);
+});
+
 test("diagnostic consent applies to one run and requires a fresh opt-in next time", async ({ page }) => {
   const diagnosticEvents: Array<{ event: string; flowId: string }> = [];
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false } }));
