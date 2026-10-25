@@ -88,6 +88,50 @@ test("AI photo analysis requires sign-in and an explicit send action; its result
   expect(requests).toBe(1);
 });
 
+test("diagnostic consent applies to one run and requires a fresh opt-in next time", async ({ page }) => {
+  const diagnosticEvents: Array<{ event: string; flowId: string }> = [];
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/diagnostics", async (route) => {
+    diagnosticEvents.push(route.request().postDataJSON() as { event: string; flowId: string });
+    await route.fulfill({ status: 204 });
+  });
+  await page.goto("/");
+  await page.getByText("Vorschau testen", { exact: true }).click();
+  await page.locator("#diagnostics-enabled").check();
+  await expect.poll(() => diagnosticEvents.filter(({ event }) => event === "test_run_started").length).toBe(1);
+  const firstFlowId = diagnosticEvents.find(({ event }) => event === "test_run_started")!.flowId;
+
+  await page.locator("#scenario").selectOption("existing");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
+  await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
+  await expect(page.getByRole("heading", { name: "Vorschau abgeschlossen" })).toBeVisible();
+  await expect.poll(() => diagnosticEvents.some(({ event }) => event === "demo_confirmed")).toBe(true);
+
+  await page.getByRole("button", { name: "Nächsten AED fotografieren" }).click();
+  await expect(page.locator("#diagnostics-enabled")).not.toBeChecked();
+  const eventCountAfterOptedInRun = diagnosticEvents.length;
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
+  await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
+  await expect(page.getByRole("heading", { name: "Vorschau abgeschlossen" })).toBeVisible();
+  expect(diagnosticEvents).toHaveLength(eventCountAfterOptedInRun);
+
+  await page.getByRole("button", { name: "Nächsten AED fotografieren" }).click();
+  await page.getByText("Vorschau testen", { exact: true }).click();
+  await page.locator("#diagnostics-enabled").check();
+  await expect.poll(() => diagnosticEvents.filter(({ event }) => event === "test_run_started").length).toBe(2);
+  const flowIds = diagnosticEvents.filter(({ event }) => event === "test_run_started").map(({ flowId }) => flowId);
+  expect(flowIds[1]).not.toBe(firstFlowId);
+
+  await page.locator("#scenario").selectOption("existing");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await expect.poll(() => diagnosticEvents.some(({ event, flowId }) => event === "photo_selected" && flowId === flowIds[1])).toBe(true);
+  await page.getByRole("button", { name: "Anderes Foto" }).click();
+  await expect(page.locator("#diagnostics-enabled")).not.toBeChecked();
+  await expect.poll(() => diagnosticEvents.some(({ event, flowId }) => event === "test_run_abandoned" && flowId === flowIds[1])).toBe(true);
+});
+
 test("a user-confirmed location search shows nearby candidates without writing to OSM", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });

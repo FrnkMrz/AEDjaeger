@@ -161,3 +161,10 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
 @media (max-width: 420px) { .position-picker-panel { padding: 11px; } .position-map { height: 225px; } }
 
 .position-map-privacy { margin: 0 0 9px; color: #65726a; font-size: 11px; line-height: 1.45; }
+.demo-panel h2 { margin: 14px 0 5px; color: var(--ink); font-size: 14px; }
+.demo-panel p { margin: 0 0 10px; line-height: 1.5; }
+.diagnostics-opt-in { display: flex !important; align-items: flex-start; gap: 10px; margin: 15px 0 0 !important; border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: #fff; cursor: pointer; }
+.diagnostics-opt-in input { width: 20px; height: 20px; flex: none; margin: 1px 0 0; accent-color: var(--green); }
+.diagnostics-opt-in span { display: grid; gap: 4px; }
+.diagnostics-opt-in strong { color: var(--ink); font-size: 12px; }
+.diagnostics-opt-in small { color: var(--muted); font-size: 11px; line-height: 1.45; }
