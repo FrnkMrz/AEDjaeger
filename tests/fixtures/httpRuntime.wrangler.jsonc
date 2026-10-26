@@ -1,0 +1,6 @@
+{
+  "name": "aedjaeger-local-http-test",
+  "main": "httpRuntimeWorker.ts",
+  "compatibility_date": "2026-10-20",
+  "send_metrics": false
+}

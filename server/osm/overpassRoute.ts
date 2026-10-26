@@ -1,3 +1,4 @@
+import { fetchWithoutRedirects } from "../http/fetchWithoutRedirects";
 import { findOSMSession } from "../storage/osmSessions";
 import type { D1Database } from "../storage/d1";
 import { extendOverpassUpstreamCooldown, getOverpassUpstreamCooldownSeconds, reserveOverpassSearchSlot } from "../storage/overpassCooldown";
@@ -96,7 +97,7 @@ export async function handleOverpassSearch(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const response = await (dependencies.fetch ?? fetch)(OVERPASS_ENDPOINT, {
+    const response = await fetchWithoutRedirects(OVERPASS_ENDPOINT, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -104,9 +105,8 @@ export async function handleOverpassSearch(
         "User-Agent": OVERPASS_USER_AGENT,
       },
       body: `data=${encodeURIComponent(query)}`,
-      redirect: "error",
       signal: controller.signal,
-    });
+    }, dependencies.fetch ?? fetch);
 
     if (response.status === 429 || response.status === 406) {
       const responseTime = (dependencies.now ?? Date.now)();

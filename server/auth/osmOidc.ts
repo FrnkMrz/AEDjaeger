@@ -1,5 +1,6 @@
 import { OSM_SESSION_LIFETIME_MS } from "../storage/osmSessions";
 import { getOSMProviderEndpoints, type OSMEnvironment } from "./osmProvider";
+import { ExternalRedirectError, fetchWithoutRedirects } from "../http/fetchWithoutRedirects";
 
 const MAX_PROVIDER_RESPONSE_BYTES = 64 * 1024;
 const MAX_ACCESS_TOKEN_LENGTH = 8_192;
@@ -144,14 +145,14 @@ async function exchangeCode(
 
   let response: Response;
   try {
-    response = await fetcher(endpoints.token, {
+    response = await fetchWithoutRedirects(endpoints.token, {
       method: "POST",
-      redirect: "error",
       signal: AbortSignal.timeout(10_000),
       headers: tokenHeaders,
       body: tokenBody,
-    });
-  } catch {
+    }, fetcher);
+  } catch (error) {
+    if (error instanceof ExternalRedirectError) throw new OSMOAuthDiagnosticError("token_endpoint_rejected", error.httpStatus);
     throw new OSMOAuthDiagnosticError("token_endpoint_unreachable");
   }
 
@@ -168,14 +169,13 @@ async function exchangeCode(
   let jwksResponse: Response;
   let jwks: unknown;
   try {
-    jwksResponse = await fetcher(endpoints.jwks, {
+    jwksResponse = await fetchWithoutRedirects(endpoints.jwks, {
       headers: { Accept: "application/json" },
-      redirect: "error",
       signal: AbortSignal.timeout(10_000),
-    });
+    }, fetcher);
     jwks = await readJson(jwksResponse);
-  } catch {
-    throw new OSMOAuthDiagnosticError("identity_keys_unavailable");
+  } catch (error) {
+    throw new OSMOAuthDiagnosticError("identity_keys_unavailable", error instanceof ExternalRedirectError ? error.httpStatus : undefined);
   }
   if (!jwksResponse.ok || !isRecord(jwks) || !Array.isArray(jwks.keys)) {
     throw new OSMOAuthDiagnosticError("identity_keys_unavailable", jwksResponse.status);
@@ -193,12 +193,12 @@ async function exchangeCode(
 async function loadDiscovery(fetcher: Fetcher, endpoints: ReturnType<typeof getOSMProviderEndpoints>): Promise<OSMDiscoveryDocument> {
   let response: Response;
   try {
-    response = await fetcher(endpoints.discovery, {
+    response = await fetchWithoutRedirects(endpoints.discovery, {
       headers: { Accept: "application/json" },
-      redirect: "error",
       signal: AbortSignal.timeout(10_000),
-    });
-  } catch {
+    }, fetcher);
+  } catch (error) {
+    if (error instanceof ExternalRedirectError) throw new OSMOAuthDiagnosticError("provider_discovery_http_error", error.httpStatus);
     throw new OSMOAuthDiagnosticError("provider_discovery_unreachable");
   }
   if (!response.ok) {
