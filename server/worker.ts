@@ -121,26 +121,17 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment, 
   const configuration = getAuthConfiguration(environment, osmEnvironment);
   if (!configuration || !environment.DB) return authUnavailable();
   const callbackUrl = new URL(request.url);
-  if (callbackUrl.origin !== new URL(configuration.redirectUri).origin) {
-    logOSMOAuthCallbackFailure(osmEnvironment, "invalid_origin");
-    return loginFailure(callbackUrl.protocol === "https:");
-  }
+  if (callbackUrl.origin !== new URL(configuration.redirectUri).origin) return loginFailure(callbackUrl.protocol === "https:");
   const states = callbackUrl.searchParams.getAll("state");
   const browserBinding = readCookie(request.headers.get("Cookie"), AUTH_COOKIE);
-  if (states.length !== 1 || !browserBinding) {
-    logOSMOAuthCallbackFailure(osmEnvironment, "missing_state_or_browser_binding");
-    return loginFailure(callbackUrl.protocol === "https:");
-  }
+  if (states.length !== 1 || !browserBinding) return loginFailure(callbackUrl.protocol === "https:");
 
   let stage = "consume_transaction";
   try {
     const key = await importOAuthEncryptionKey(configuration.encryptionKey);
     // Löschen vor dem Codeaustausch macht den Callback auch bei parallelen Requests einmalig.
     const transaction = await consumeOSMOAuthTransaction(environment.DB, states[0], browserBinding, Date.now(), key);
-    if (!transaction || transaction.environment !== osmEnvironment) {
-      logOSMOAuthCallbackFailure(osmEnvironment, "transaction_missing_or_environment_mismatch");
-      return loginFailure(callbackUrl.protocol === "https:");
-    }
+    if (!transaction || transaction.environment !== osmEnvironment) return loginFailure(callbackUrl.protocol === "https:");
     stage = "validate_callback";
     const callback = validateOSMAuthorizationCallback(callbackUrl, states[0]);
     if (!callback.ok) {
