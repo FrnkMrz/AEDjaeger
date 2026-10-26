@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exchangeOSMCodeForIdentity, exchangeOSMDevelopmentCodeForAccess } from "../server/auth/osmOidc";
+import { exchangeOSMCodeForIdentity, exchangeOSMDevelopmentCodeForAccess, OSMOAuthDiagnosticError } from "../server/auth/osmOidc";
 
 const clientId = "aedjaeger-client";
 const clientSecret = "aedjaeger-test-secret";
@@ -137,6 +137,42 @@ describe("OSM OpenID Connect verification", () => {
       now,
       fetcher,
     })).rejects.toThrow("nicht korrekt konfiguriert");
+  });
+
+  it("classifies token-endpoint rejection without exposing provider error text", async () => {
+    const origin = "https://master.apis.dev.openstreetmap.org";
+    const providerDescription = `private-detail-${clientSecret}`;
+    const fetcher = async (input: RequestInfo | URL): Promise<Response> => {
+      if (String(input) === `${origin}/.well-known/openid-configuration`) {
+        return Response.json({
+          issuer: origin,
+          token_endpoint: `${origin}/oauth2/token`,
+          jwks_uri: `${origin}/oauth2/discovery/keys`,
+          id_token_signing_alg_values_supported: ["RS256"],
+        });
+      }
+      return Response.json({ error: "invalid_client", error_description: providerDescription }, { status: 401 });
+    };
+
+    let failure: unknown;
+    try {
+      await exchangeOSMDevelopmentCodeForAccess({
+        code: "one-time-code",
+        verifier: "verifier-value",
+        nonce,
+        clientId,
+        clientSecret,
+        redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback",
+        fetcher,
+      });
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(OSMOAuthDiagnosticError);
+    expect(failure).toMatchObject({ diagnosticCode: "token_endpoint_rejected", httpStatus: 401 });
+    expect((failure as Error).message).not.toContain(providerDescription);
+    expect((failure as Error).message).not.toContain(clientSecret);
   });
 
   it.each([

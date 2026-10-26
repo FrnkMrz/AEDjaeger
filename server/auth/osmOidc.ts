@@ -23,6 +23,27 @@ type OSMDiscoveryDocument = {
 };
 type TokenResponse = Record<string, unknown> & { id_token: string };
 
+export type OSMOAuthDiagnosticCode =
+  | "provider_discovery_failed"
+  | "token_endpoint_unreachable"
+  | "token_endpoint_rejected"
+  | "identity_keys_unavailable"
+  | "identity_token_invalid"
+  | "development_scope_invalid"
+  | "development_access_token_invalid";
+
+/** Safe, bounded details for server logs; provider bodies and credentials stay private. */
+export class OSMOAuthDiagnosticError extends Error {
+  constructor(
+    readonly diagnosticCode: OSMOAuthDiagnosticCode,
+    readonly httpStatus?: number,
+    message = "Die OpenStreetMap-Anmeldung konnte nicht abgeschlossen werden.",
+  ) {
+    super(message);
+    this.name = "OSMOAuthDiagnosticError";
+  }
+}
+
 /** Production login only verifies identity and never returns its access token. */
 export async function exchangeOSMCodeForIdentity(input: {
   code: string;
@@ -58,15 +79,13 @@ export async function exchangeOSMDevelopmentCodeForAccess(input: {
     ? tokenResponse.scope.split(/\s+/u).filter(Boolean)
     : tokenResponse.scope === undefined ? ["openid", "write_api"] : [];
   const uniqueScopes = new Set(scopes);
-  if (
-    typeof tokenResponse.access_token !== "string" ||
-    !isAccessToken(tokenResponse.access_token) ||
-    tokenResponse.token_type !== "Bearer" ||
-    !uniqueScopes.has("openid") ||
-    !uniqueScopes.has("write_api") ||
-    [...uniqueScopes].some((scope) => scope !== "openid" && scope !== "write_api")
-  ) {
-    throw new Error("Die OSM-Testanmeldung hat nicht den erwarteten Zugriff erteilt.");
+  const accessToken = tokenResponse.access_token;
+  if (typeof accessToken !== "string" || !isAccessToken(accessToken) || tokenResponse.token_type !== "Bearer") {
+    throw new OSMOAuthDiagnosticError("development_access_token_invalid", undefined, "Die OSM-Testanmeldung hat nicht den erwarteten Zugriff erteilt.");
+  }
+  if (!uniqueScopes.has("openid") || !uniqueScopes.has("write_api") ||
+    [...uniqueScopes].some((scope) => scope !== "openid" && scope !== "write_api")) {
+    throw new OSMOAuthDiagnosticError("development_scope_invalid", undefined, "Die OSM-Testanmeldung hat nicht den erwarteten Zugriff erteilt.");
   }
 
   const now = input.now ?? Date.now();
@@ -80,7 +99,7 @@ export async function exchangeOSMDevelopmentCodeForAccess(input: {
     throw new Error("Die OSM-Testanmeldung hat eine ungültige Tokenlaufzeit geliefert.");
   }
 
-  return { subject, accessToken: tokenResponse.access_token, expiresAt };
+  return { subject, accessToken, expiresAt };
 }
 
 async function exchangeCode(
@@ -120,40 +139,67 @@ async function exchangeCode(
     tokenBody.set("client_id", input.clientId);
   }
 
-  const response = await fetcher(endpoints.token, {
-    method: "POST",
-    redirect: "error",
-    signal: AbortSignal.timeout(10_000),
-    headers: tokenHeaders,
-    body: tokenBody,
-  });
+  let response: Response;
+  try {
+    response = await fetcher(endpoints.token, {
+      method: "POST",
+      redirect: "error",
+      signal: AbortSignal.timeout(10_000),
+      headers: tokenHeaders,
+      body: tokenBody,
+    });
+  } catch {
+    throw new OSMOAuthDiagnosticError("token_endpoint_unreachable");
+  }
 
-  const tokenResponse = await readJson(response);
+  let tokenResponse: unknown;
+  try {
+    tokenResponse = await readJson(response);
+  } catch {
+    throw new OSMOAuthDiagnosticError("token_endpoint_rejected", response.status);
+  }
   if (!response.ok || !isRecord(tokenResponse) || typeof tokenResponse.id_token !== "string") {
-    throw new Error("Die OpenStreetMap-Anmeldung konnte nicht abgeschlossen werden.");
+    throw new OSMOAuthDiagnosticError("token_endpoint_rejected", response.status);
   }
 
-  const jwksResponse = await fetcher(endpoints.jwks, {
-    headers: { Accept: "application/json" },
-    redirect: "error",
-    signal: AbortSignal.timeout(10_000),
-  });
-  const jwks = await readJson(jwksResponse);
+  let jwksResponse: Response;
+  let jwks: unknown;
+  try {
+    jwksResponse = await fetcher(endpoints.jwks, {
+      headers: { Accept: "application/json" },
+      redirect: "error",
+      signal: AbortSignal.timeout(10_000),
+    });
+    jwks = await readJson(jwksResponse);
+  } catch {
+    throw new OSMOAuthDiagnosticError("identity_keys_unavailable");
+  }
   if (!jwksResponse.ok || !isRecord(jwks) || !Array.isArray(jwks.keys)) {
-    throw new Error("Die OpenStreetMap-Anmeldung konnte nicht geprüft werden.");
+    throw new OSMOAuthDiagnosticError("identity_keys_unavailable", jwksResponse.status);
   }
 
-  const subject = await verifyIdToken(tokenResponse.id_token, jwks.keys, input, discovery, endpoints.issuer, cryptoApi);
+  let subject: string;
+  try {
+    subject = await verifyIdToken(tokenResponse.id_token, jwks.keys, input, discovery, endpoints.issuer, cryptoApi);
+  } catch {
+    throw new OSMOAuthDiagnosticError("identity_token_invalid");
+  }
   return { subject, tokenResponse: tokenResponse as TokenResponse };
 }
 
 async function loadDiscovery(fetcher: Fetcher, endpoints: ReturnType<typeof getOSMProviderEndpoints>): Promise<OSMDiscoveryDocument> {
-  const response = await fetcher(endpoints.discovery, {
-    headers: { Accept: "application/json" },
-    redirect: "error",
-    signal: AbortSignal.timeout(10_000),
-  });
-  const discovery = await readJson(response);
+  let response: Response;
+  let discovery: unknown;
+  try {
+    response = await fetcher(endpoints.discovery, {
+      headers: { Accept: "application/json" },
+      redirect: "error",
+      signal: AbortSignal.timeout(10_000),
+    });
+    discovery = await readJson(response);
+  } catch {
+    throw new OSMOAuthDiagnosticError("provider_discovery_failed");
+  }
   if (
     !response.ok ||
     !isRecord(discovery) ||
@@ -163,7 +209,7 @@ async function loadDiscovery(fetcher: Fetcher, endpoints: ReturnType<typeof getO
     !Array.isArray(discovery.id_token_signing_alg_values_supported) ||
     !discovery.id_token_signing_alg_values_supported.includes("RS256")
   ) {
-    throw new Error("Die OpenStreetMap-Anmeldung konnte nicht geprüft werden.");
+    throw new OSMOAuthDiagnosticError("provider_discovery_failed", response.status);
   }
   return discovery;
 }
