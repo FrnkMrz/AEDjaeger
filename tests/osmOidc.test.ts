@@ -231,6 +231,38 @@ describe("OSM OpenID Connect verification", () => {
       clientId,
       redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
       fetcher,
-    })).rejects.toThrow();
+    })).rejects.toMatchObject({ diagnosticCode: "provider_discovery_invalid_metadata", httpStatus: 200 });
+  });
+
+  it("distinguishes an unreachable discovery endpoint from an invalid HTTP response", async () => {
+    const unreachable = async (): Promise<Response> => { throw new TypeError("network details must not escape"); };
+    await expect(exchangeOSMCodeForIdentity({
+      code: "code",
+      verifier: "verifier-value",
+      nonce,
+      clientId,
+      redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
+      fetcher: unreachable,
+    })).rejects.toMatchObject({ diagnosticCode: "provider_discovery_unreachable" });
+
+    const blockedResponse = async (): Promise<Response> => new Response("private block page detail", {
+      status: 403,
+      headers: { "Content-Type": "text/html" },
+    });
+    let failure: unknown;
+    try {
+      await exchangeOSMCodeForIdentity({
+        code: "code",
+        verifier: "verifier-value",
+        nonce,
+        clientId,
+        redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
+        fetcher: blockedResponse,
+      });
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toMatchObject({ diagnosticCode: "provider_discovery_http_error", httpStatus: 403 });
+    expect((failure as Error).message).not.toContain("private block page detail");
   });
 });
