@@ -4,6 +4,8 @@
   "main": "server/worker.ts",
   "compatibility_date": "2026-10-20",
   "workers_dev": true,
+  // Pilot OAuth flags and endpoints are managed as dashboard vars; keep them during code deployments.
+  "keep_vars": true,
   "send_metrics": false,
   "observability": {
     "enabled": true,

@@ -130,7 +130,7 @@ evals/              rechtmäßig nutzbare Bildfälle und Bewertungsregeln
 
 ## Betrieb so klein wie möglich halten
 
-GitHub Actions prüft Änderungen; ein zusammenhängendes Release veröffentlicht UI und API. Für Prototyp und kleinen Pilot zuerst Cloudflare Workers Free und die bereitgestellte `workers.dev`-Adresse verwenden. Workers Paid (mindestens 5 USD pro Monat) und eine eigene Domain sind spätere Optionen, falls ein konkreter Bedarf entsteht. Vor größerem öffentlichen Start die Domain festlegen, da ein späterer Wechsel Installation, Sitzungen und lokal gespeicherte Entwürfe beeinflusst.
+GitHub Actions prüft Änderungen; ein zusammenhängendes Release veröffentlicht UI und API. Wrangler ist mit `keep_vars` konfiguriert, damit separat im Cloudflare-Dashboard gepflegte Pilotvariablen wie OAuth-Client-ID, Callback und Abschalter bei einem Code-Deployment erhalten bleiben. Secrets bleiben separat serverseitig gespeichert. Für Prototyp und kleinen Pilot zuerst Cloudflare Workers Free und die bereitgestellte `workers.dev`-Adresse verwenden. Workers Paid (mindestens 5 USD pro Monat) und eine eigene Domain sind spätere Optionen, falls ein konkreter Bedarf entsteht. Vor größerem öffentlichen Start die Domain festlegen, da ein späterer Wechsel Installation, Sitzungen und lokal gespeicherte Entwürfe beeinflusst.
 
 Nur wenige Betriebswerte erfassen: Analysezeiten, Fehlerarten, Budgetverbrauch, unklare Uploads und App-/Modellversion. Keine Bewegungsprofile und keine dauerhaft gespeicherten Fotos. Ein Fehlerhinweis kann eine Vorgangsnummer enthalten, damit der Agent den technischen Status prüfen kann, ohne das Bild erneut zu veröffentlichen.
 
