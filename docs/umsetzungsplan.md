@@ -1,6 +1,6 @@
 # Umsetzung durch einen AI-Agenten
 
-Stand: 26.10.2026. Ergänzung zum [Architekturentwurf](architektur.md). Die Phasen ordnen die Umsetzung in überprüfbare Etappen. GPT-6 Luna ist als erstes Bildmodell gewählt und mit drei Testfotos explorativ geprüft. Die PWA und API sind unter [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev) veröffentlicht. OSM-Dev-Login ist konfiguriert und freigegeben, aber nach zwei OSM-Zustimmungen noch nicht erfolgreich zurückgekehrt; diese Diagnosekorrektur soll den nächsten Versuch anhand datensparsamer Fehlercodes auswertbar machen. KI-Analyse und OSM-Schreibwege bleiben abgeschaltet.
+Stand: 26.10.2026. Ergänzung zum [Architekturentwurf](architektur.md). Die Phasen ordnen die Umsetzung in überprüfbare Etappen. GPT-6 Luna ist als erstes Bildmodell gewählt und mit drei Testfotos explorativ geprüft. Die PWA und API sind unter [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev) veröffentlicht. OSM-Dev-Login ist konfiguriert und freigegeben, aber nach zwei OSM-Zustimmungen noch nicht erfolgreich zurückgekehrt. Die Diagnose zeigte `provider_discovery_failed` beim OSM-Discovery-Abruf; diese Folgekorrektur trennt Netzwerk-, HTTP-, Inhalts- und Metadatenfehler für den nächsten Versuch. KI-Analyse und OSM-Schreibwege bleiben abgeschaltet.
 
 ## Reihenfolge und aktueller Stand
 

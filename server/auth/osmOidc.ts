@@ -24,7 +24,10 @@ type OSMDiscoveryDocument = {
 type TokenResponse = Record<string, unknown> & { id_token: string };
 
 export type OSMOAuthDiagnosticCode =
-  | "provider_discovery_failed"
+  | "provider_discovery_unreachable"
+  | "provider_discovery_http_error"
+  | "provider_discovery_invalid_response"
+  | "provider_discovery_invalid_metadata"
   | "token_endpoint_unreachable"
   | "token_endpoint_rejected"
   | "identity_keys_unavailable"
@@ -189,19 +192,28 @@ async function exchangeCode(
 
 async function loadDiscovery(fetcher: Fetcher, endpoints: ReturnType<typeof getOSMProviderEndpoints>): Promise<OSMDiscoveryDocument> {
   let response: Response;
-  let discovery: unknown;
   try {
     response = await fetcher(endpoints.discovery, {
       headers: { Accept: "application/json" },
       redirect: "error",
       signal: AbortSignal.timeout(10_000),
     });
+  } catch {
+    throw new OSMOAuthDiagnosticError("provider_discovery_unreachable");
+  }
+  if (!response.ok) {
+    throw new OSMOAuthDiagnosticError("provider_discovery_http_error", response.status);
+  }
+
+  let discovery: unknown;
+  try {
     discovery = await readJson(response);
   } catch {
-    throw new OSMOAuthDiagnosticError("provider_discovery_failed");
+    // Status allein hilft zu erkennen, ob der Testserver z. B. statt JSON eine
+    // HTML-Sperrseite geliefert hat. Der Antwortinhalt selbst bleibt vertraulich.
+    throw new OSMOAuthDiagnosticError("provider_discovery_invalid_response", response.status);
   }
   if (
-    !response.ok ||
     !isRecord(discovery) ||
     discovery.issuer !== endpoints.issuer ||
     discovery.token_endpoint !== endpoints.token ||
@@ -209,7 +221,7 @@ async function loadDiscovery(fetcher: Fetcher, endpoints: ReturnType<typeof getO
     !Array.isArray(discovery.id_token_signing_alg_values_supported) ||
     !discovery.id_token_signing_alg_values_supported.includes("RS256")
   ) {
-    throw new OSMOAuthDiagnosticError("provider_discovery_failed", response.status);
+    throw new OSMOAuthDiagnosticError("provider_discovery_invalid_metadata", response.status);
   }
   return discovery;
 }
