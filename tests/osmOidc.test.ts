@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { exchangeOSMCodeForIdentity, exchangeOSMDevelopmentCodeForAccess } from "../server/auth/osmOidc";
 
 const clientId = "aedjaeger-client";
+const clientSecret = "aedjaeger-test-secret";
 const nonce = "expected-nonce";
 const now = 1_800_000_000_000;
 
@@ -44,7 +45,15 @@ async function signedFixture(claimOverrides: Record<string, unknown> = {}, envir
     }
     if (url === `${origin}/oauth2/token`) {
       expect(init?.method).toBe("POST");
-      expect(String(init?.body)).toContain("code_verifier=verifier-value");
+      const body = String(init?.body);
+      expect(body).toContain("code_verifier=verifier-value");
+      if (environment === "development") {
+        const formEncode = (value: string): string => new URLSearchParams({ value }).toString().slice("value=".length);
+        expect(new Headers(init?.headers).get("Authorization")).toBe(`Basic ${btoa(`${formEncode(clientId)}:${formEncode(clientSecret)}`)}`);
+        expect(body).not.toContain("client_secret");
+      } else {
+        expect(new Headers(init?.headers).get("Authorization")).toBeNull();
+      }
       return Response.json({ id_token: token, access_token: "A".repeat(60), token_type: "Bearer", ...(environment === "development" ? { scope: "openid write_api" } : {}), ...tokenOverrides });
     }
     if (url === `${origin}/oauth2/discovery/keys`) {
@@ -77,6 +86,7 @@ describe("OSM OpenID Connect verification", () => {
       verifier: "verifier-value",
       nonce,
       clientId,
+      clientSecret,
       redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback",
       now,
       fetcher,
@@ -94,6 +104,7 @@ describe("OSM OpenID Connect verification", () => {
       verifier: "verifier-value",
       nonce,
       clientId,
+      clientSecret,
       redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback",
       now,
       fetcher,
@@ -107,10 +118,25 @@ describe("OSM OpenID Connect verification", () => {
       verifier: "verifier-value",
       nonce,
       clientId,
+      clientSecret,
       redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback",
       now,
       fetcher,
     })).rejects.toThrow("erwarteten Zugriff");
+  });
+
+  it("rejects development code exchange without a server-side client secret", async () => {
+    const { fetcher } = await signedFixture({}, "development");
+    await expect(exchangeOSMDevelopmentCodeForAccess({
+      code: "one-time-code",
+      verifier: "verifier-value",
+      nonce,
+      clientId,
+      clientSecret: "",
+      redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback",
+      now,
+      fetcher,
+    })).rejects.toThrow("nicht korrekt konfiguriert");
   });
 
   it.each([

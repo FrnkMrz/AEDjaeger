@@ -26,6 +26,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Security
 
+- Ergänzt die vom OSM-Entwicklungsserver verlangte `client_secret_basic`-Authentifizierung zusätzlich zu PKCE. Das Dev-Login bleibt ohne `OSM_DEV_CLIENT_SECRET` als serverseitiges Cloudflare-Secret nicht verfügbar; das Geheimnis wird weder in der Browser-App noch in Logs oder im Repository verwendet.
 - Ergänzt einen serverseitigen OSM-API-URL-Baustein, der nur bei exakt gesetzter Entwicklungsumgebung Anfragen an den festen OSM-Testserver zulässt und frei wählbare Hosts oder Pfad-Ausbrüche abweist. Auch die neuen Schreibwege verwenden ausschließlich diesen Baustein.
 - Speichert OSM-Entwicklungstokens nur AES-GCM-verschlüsselt, an eine aktive App-Sitzung gebunden und mit Ablaufzeit in D1; die Migration löscht sie beim Widerruf der Sitzung automatisch. Die getrennte OAuth-Anmeldung und die abgeschalteten Testserver-Schreibwege nutzen diesen Speicher.
 - Speichert bei OSM-Sitzungen den Anbieter (`production` oder `development`) mit, sodass gleichlautende Subjekte nicht zwischen Servern verwechselt werden. Bildanalyse-Freigaben nennen den Anbieter ausdrücklich; D1 verwendet eine getrennte, gehashte Kostenidentität. Testserver-Konten erhalten keine Produktionsfreigabe; die Live-Fotoanalyse setzt eigene Betreiberfreigaben und Kostenlimits voraus.
