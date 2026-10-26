@@ -1,5 +1,5 @@
 import { buildOSMAuthorizationUrl, createOAuthSecret, createPkceTransaction, importOAuthEncryptionKey, validateOSMAuthorizationCallback } from "./auth/osmOAuth";
-import { exchangeOSMCodeForIdentity, exchangeOSMDevelopmentCodeForAccess } from "./auth/osmOidc";
+import { exchangeOSMCodeForIdentity, exchangeOSMDevelopmentCodeForAccess, OSMOAuthDiagnosticError } from "./auth/osmOidc";
 import type { OSMEnvironment } from "./auth/osmProvider";
 import type { D1Database } from "./storage/d1";
 import { consumeOSMOAuthTransaction, storeOSMOAuthTransaction } from "./storage/osmOAuthTransactions";
@@ -121,19 +121,34 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment, 
   const configuration = getAuthConfiguration(environment, osmEnvironment);
   if (!configuration || !environment.DB) return authUnavailable();
   const callbackUrl = new URL(request.url);
-  if (callbackUrl.origin !== new URL(configuration.redirectUri).origin) return loginFailure(callbackUrl.protocol === "https:");
+  if (callbackUrl.origin !== new URL(configuration.redirectUri).origin) {
+    logOSMOAuthCallbackFailure(osmEnvironment, "invalid_origin");
+    return loginFailure(callbackUrl.protocol === "https:");
+  }
   const states = callbackUrl.searchParams.getAll("state");
   const browserBinding = readCookie(request.headers.get("Cookie"), AUTH_COOKIE);
-  if (states.length !== 1 || !browserBinding) return loginFailure(callbackUrl.protocol === "https:");
+  if (states.length !== 1 || !browserBinding) {
+    logOSMOAuthCallbackFailure(osmEnvironment, "missing_state_or_browser_binding");
+    return loginFailure(callbackUrl.protocol === "https:");
+  }
 
+  let stage = "consume_transaction";
   try {
     const key = await importOAuthEncryptionKey(configuration.encryptionKey);
     // Löschen vor dem Codeaustausch macht den Callback auch bei parallelen Requests einmalig.
     const transaction = await consumeOSMOAuthTransaction(environment.DB, states[0], browserBinding, Date.now(), key);
-    if (!transaction || transaction.environment !== osmEnvironment) return loginFailure(callbackUrl.protocol === "https:");
+    if (!transaction || transaction.environment !== osmEnvironment) {
+      logOSMOAuthCallbackFailure(osmEnvironment, "transaction_missing_or_environment_mismatch");
+      return loginFailure(callbackUrl.protocol === "https:");
+    }
+    stage = "validate_callback";
     const callback = validateOSMAuthorizationCallback(callbackUrl, states[0]);
-    if (!callback.ok) return loginFailure(callbackUrl.protocol === "https:");
+    if (!callback.ok) {
+      logOSMOAuthCallbackFailure(osmEnvironment, "provider_callback_rejected");
+      return loginFailure(callbackUrl.protocol === "https:");
+    }
 
+    stage = "exchange_code";
     const exchangeInput = {
       code: callback.code,
       verifier: transaction.verifier,
@@ -147,6 +162,7 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment, 
           identity: await exchangeOSMDevelopmentCodeForAccess({ ...exchangeInput, clientSecret: configuration.clientSecret }),
         }
       : { environment: "production" as const, identity: await exchangeOSMCodeForIdentity(exchangeInput) };
+    stage = "rotate_session";
     const sessionToken = createOAuthSecret();
     // Die alte Sitzung wird widerrufen, bevor der neue Sitzungstoken ausgegeben wird.
     const now = Date.now();
@@ -159,6 +175,7 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment, 
       exchanged.environment,
     );
     if (exchanged.environment === "development") {
+      stage = "store_development_token";
       try {
         const tokenExpiry = Math.min(exchanged.identity.expiresAt, now + OSM_SESSION_LIFETIME_MS);
         await storeOSMDevelopmentToken(environment.DB, sessionToken, exchanged.identity.accessToken, tokenExpiry, now, key);
@@ -178,7 +195,10 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment, 
       status: 303,
       headers,
     });
-  } catch {
+  } catch (error) {
+    // Nur feste Fehlercodes und Phasen protokollieren. OAuth-Codes, Cookies,
+    // Tokens, Providerantworten und Kontodaten bleiben aus den Logs heraus.
+    logOSMOAuthCallbackFailure(osmEnvironment, stage, error);
     return loginFailure(callbackUrl.protocol === "https:");
   }
 }
@@ -287,6 +307,18 @@ function loginFailure(secure: boolean): Response {
   return new Response(null, {
     status: 303,
     headers,
+  });
+}
+
+function logOSMOAuthCallbackFailure(environment: OSMEnvironment, stage: string, error?: unknown): void {
+  const diagnostic = error instanceof OSMOAuthDiagnosticError
+    ? { diagnosticCode: error.diagnosticCode, ...(error.httpStatus ? { httpStatus: error.httpStatus } : {}) }
+    : error === undefined ? {} : { diagnosticCode: "unexpected_error" };
+  console.error("OSM OAuth callback failed", {
+    event: "osm_oauth_callback_failed",
+    provider: environment,
+    stage,
+    ...diagnostic,
   });
 }
 

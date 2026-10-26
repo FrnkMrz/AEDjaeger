@@ -26,6 +26,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Security
 
+- Ergänzt datensparsame OSM-OAuth-Fehlerdiagnosen: Worker-Logs enthalten nur Anbieter, feste Ablaufphase, begrenzten Fehlercode und optional HTTP-Status. OAuth-Codes, Cookies, Tokens, Secrets, IP-Adressen und Antworttexte des Providers werden nicht protokolliert.
 - Ergänzt die vom OSM-Entwicklungsserver verlangte `client_secret_basic`-Authentifizierung zusätzlich zu PKCE. Das Dev-Login bleibt ohne `OSM_DEV_CLIENT_SECRET` als serverseitiges Cloudflare-Secret nicht verfügbar; das Geheimnis wird weder in der Browser-App noch in Logs oder im Repository verwendet.
 - Ergänzt einen serverseitigen OSM-API-URL-Baustein, der nur bei exakt gesetzter Entwicklungsumgebung Anfragen an den festen OSM-Testserver zulässt und frei wählbare Hosts oder Pfad-Ausbrüche abweist. Auch die neuen Schreibwege verwenden ausschließlich diesen Baustein.
 - Speichert OSM-Entwicklungstokens nur AES-GCM-verschlüsselt, an eine aktive App-Sitzung gebunden und mit Ablaufzeit in D1; die Migration löscht sie beim Widerruf der Sitzung automatisch. Die getrennte OAuth-Anmeldung und die abgeschalteten Testserver-Schreibwege nutzen diesen Speicher.
