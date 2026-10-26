@@ -3,6 +3,7 @@ import { getOSMProviderEndpoints, type OSMEnvironment } from "./osmProvider";
 
 const MAX_PROVIDER_RESPONSE_BYTES = 64 * 1024;
 const MAX_ACCESS_TOKEN_LENGTH = 8_192;
+const MAX_CLIENT_SECRET_LENGTH = 1_024;
 
 export type OSMIdentityToken = {
   subject: string;
@@ -46,6 +47,7 @@ export async function exchangeOSMDevelopmentCodeForAccess(input: {
   verifier: string;
   nonce: string;
   clientId: string;
+  clientSecret: string;
   redirectUri: string;
   now?: number;
   fetcher?: Fetcher;
@@ -87,6 +89,7 @@ async function exchangeCode(
     verifier: string;
     nonce: string;
     clientId: string;
+    clientSecret?: string;
     redirectUri: string;
     now?: number;
     fetcher?: Fetcher;
@@ -98,18 +101,31 @@ async function exchangeCode(
   const cryptoApi = input.cryptoApi ?? crypto;
   const endpoints = getOSMProviderEndpoints(environment);
   const discovery = await loadDiscovery(fetcher, endpoints);
+  const tokenBody = new URLSearchParams({
+    grant_type: "authorization_code",
+    code: input.code,
+    redirect_uri: input.redirectUri,
+    code_verifier: input.verifier,
+  });
+  const tokenHeaders = new Headers({ "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" });
+
+  if (environment === "development") {
+    if (!isOAuthClientSecret(input.clientSecret)) throw new Error("Die OSM-Testanmeldung ist nicht korrekt konfiguriert.");
+    // Der OSM-Testserver verlangt client_secret_basic zusätzlich zu PKCE.
+    // Beide Werte werden nur für diesen HTTPS-Tokenaustausch verwendet und
+    // bleiben serverseitig; der Browser erhält weder Secret noch Access-Token.
+    tokenHeaders.set("Authorization", `Basic ${encodeBasicCredentials(input.clientId, input.clientSecret)}`);
+  } else {
+    // Der bestehende Produktionspfad nutzt weiterhin seine bisherige Anmeldung.
+    tokenBody.set("client_id", input.clientId);
+  }
+
   const response = await fetcher(endpoints.token, {
     method: "POST",
     redirect: "error",
     signal: AbortSignal.timeout(10_000),
-    headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code: input.code,
-      client_id: input.clientId,
-      redirect_uri: input.redirectUri,
-      code_verifier: input.verifier,
-    }),
+    headers: tokenHeaders,
+    body: tokenBody,
   });
 
   const tokenResponse = await readJson(response);
@@ -266,4 +282,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isAccessToken(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= MAX_ACCESS_TOKEN_LENGTH && /^[\x21-\x7E]+$/u.test(value);
+}
+
+function isOAuthClientSecret(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_CLIENT_SECRET_LENGTH;
+}
+
+/** OAuth 2 form-encodes each credential before HTTP Basic base64 encoding. */
+function encodeBasicCredentials(clientId: string, clientSecret: string): string {
+  const formEncode = (value: string): string => new URLSearchParams({ value }).toString().slice("value=".length);
+  return btoa(`${formEncode(clientId)}:${formEncode(clientSecret)}`);
 }

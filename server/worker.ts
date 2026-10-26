@@ -19,6 +19,7 @@ type WorkerEnvironment = {
   OSM_REDIRECT_URI?: string;
   OSM_DEV_LOGIN_ENABLED?: string;
   OSM_DEV_CLIENT_ID?: string;
+  OSM_DEV_CLIENT_SECRET?: string;
   OSM_DEV_REDIRECT_URI?: string;
   OSM_DEV_WRITES_ENABLED?: string;
   OSM_OAUTH_ENCRYPTION_KEY?: string;
@@ -29,6 +30,15 @@ type WorkerEnvironment = {
   AI_ANALYSIS_USER_DAILY_LIMIT_MICROS?: string;
   AI_ANALYSIS_GLOBAL_DAILY_LIMIT_MICROS?: string;
 };
+
+type OSMAuthConfiguration = {
+  clientId: string;
+  redirectUri: string;
+  encryptionKey: string;
+} & (
+  | { provider: "production" }
+  | { provider: "development"; clientSecret: string }
+);
 
 const AUTH_COOKIE = "aedjaeger_osm_auth";
 const SESSION_COOKIE = "aedjaeger_osm_session";
@@ -131,8 +141,11 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment, 
       clientId: configuration.clientId,
       redirectUri: configuration.redirectUri,
     };
-    const exchanged = osmEnvironment === "development"
-      ? { environment: "development" as const, identity: await exchangeOSMDevelopmentCodeForAccess(exchangeInput) }
+    const exchanged = configuration.provider === "development"
+      ? {
+          environment: "development" as const,
+          identity: await exchangeOSMDevelopmentCodeForAccess({ ...exchangeInput, clientSecret: configuration.clientSecret }),
+        }
       : { environment: "production" as const, identity: await exchangeOSMCodeForIdentity(exchangeInput) };
     const sessionToken = createOAuthSecret();
     // Die alte Sitzung wird widerrufen, bevor der neue Sitzungstoken ausgegeben wird.
@@ -208,12 +221,14 @@ async function logout(request: Request, environment: WorkerEnvironment): Promise
 function getAuthConfiguration(
   environment: WorkerEnvironment,
   osmEnvironment: OSMEnvironment = "production",
-): { clientId: string; redirectUri: string; encryptionKey: string } | null {
+): OSMAuthConfiguration | null {
   const development = osmEnvironment === "development";
   if (development && environment.OSM_DEV_LOGIN_ENABLED !== "true") return null;
   const clientId = development ? environment.OSM_DEV_CLIENT_ID : environment.OSM_CLIENT_ID;
   const redirectValue = development ? environment.OSM_DEV_REDIRECT_URI : environment.OSM_REDIRECT_URI;
   if (!clientId || !redirectValue || !environment.OSM_OAUTH_ENCRYPTION_KEY) return null;
+  const clientSecret = development ? environment.OSM_DEV_CLIENT_SECRET : undefined;
+  if (development && !clientSecret) return null;
   if (clientId.length > 256 || clientId.trim().length === 0) return null;
   try {
     const redirectUri = new URL(redirectValue);
@@ -221,7 +236,10 @@ function getAuthConfiguration(
     const localRedirect = redirectUri.protocol === "http:" && redirectUri.hostname === "127.0.0.1";
     const expectedPath = development ? "/api/auth/osm/development/callback" : "/api/auth/osm/callback";
     if ((!secureRedirect && !localRedirect) || redirectUri.username || redirectUri.password || redirectUri.pathname !== expectedPath || redirectUri.search || redirectUri.hash) return null;
-    return { clientId, redirectUri: redirectUri.toString(), encryptionKey: environment.OSM_OAUTH_ENCRYPTION_KEY };
+    const common = { clientId, redirectUri: redirectUri.toString(), encryptionKey: environment.OSM_OAUTH_ENCRYPTION_KEY };
+    return development
+      ? { ...common, provider: "development", clientSecret: clientSecret! }
+      : { ...common, provider: "production" };
   } catch {
     return null;
   }

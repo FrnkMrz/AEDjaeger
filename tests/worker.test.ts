@@ -128,6 +128,7 @@ describe("Cloudflare Worker shell", () => {
       DB: database,
       OSM_DEV_LOGIN_ENABLED: "true",
       OSM_DEV_CLIENT_ID: "aedjaeger-dev-client",
+      OSM_DEV_CLIENT_SECRET: "aedjaeger-test-secret",
       OSM_DEV_REDIRECT_URI: "https://aedjaeger.example/api/auth/osm/development/callback",
       OSM_OAUTH_ENCRYPTION_KEY: encryptionKey,
     };
@@ -151,12 +152,19 @@ describe("Cloudflare Worker shell", () => {
       DB: {} as D1Database,
       OSM_DEV_LOGIN_ENABLED: "true",
       OSM_DEV_CLIENT_ID: "aedjaeger-dev-client",
+      OSM_DEV_CLIENT_SECRET: "aedjaeger-test-secret",
       OSM_DEV_REDIRECT_URI: "https://aedjaeger.example/api/auth/osm/development/callback",
       OSM_OAUTH_ENCRYPTION_KEY: encryptionKey,
     };
 
     const configured = await worker.fetch(new Request("https://aedjaeger.example/api/auth/session"), env);
     expect(await configured.json()).toEqual({ authenticated: false, loginAvailable: false, developmentLoginAvailable: true, developmentSession: false, developmentWriteAvailable: false });
+
+    const missingSecret = await worker.fetch(
+      new Request("https://aedjaeger.example/api/auth/session"),
+      { ...env, OSM_DEV_CLIENT_SECRET: undefined },
+    );
+    expect(await missingSecret.json()).toEqual({ authenticated: false, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false, developmentWriteAvailable: false });
 
     const otherOrigin = await worker.fetch(new Request("https://other.example/api/auth/session"), env);
     expect(await otherOrigin.json()).toEqual({ authenticated: false, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false, developmentWriteAvailable: false });
