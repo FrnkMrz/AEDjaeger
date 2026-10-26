@@ -1,7 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { buildOSMDevelopmentApiUrl, OSM_DEVELOPMENT_SERVER_ORIGIN } from "../server/osm/developmentApi";
+import { buildOSMDevelopmentApiUrl, OSM_DEVELOPMENT_SERVER_ORIGIN, requestOSMDevelopmentApi } from "../server/osm/developmentApi";
 
 describe("OSM development API boundary", () => {
+  it("rejects a redirect without forwarding the test token or XML body", async () => {
+    const calls: string[] = [];
+    const fetcher = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      calls.push(String(input));
+      expect(init?.redirect).toBe("manual");
+      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer fixture-token");
+      expect(init?.body).toBe("<osm />");
+      return new Response(null, { status: 307, headers: { Location: "https://www.openstreetmap.org/api/0.6/changeset/create" } });
+    };
+    await expect(requestOSMDevelopmentApi("development", "/api/0.6/changeset/create", "fixture-token", {
+      method: "PUT", body: "<osm />",
+    }, fetcher)).rejects.toThrow("Weiterleitungen");
+    expect(calls).toEqual([`${OSM_DEVELOPMENT_SERVER_ORIGIN}/api/0.6/changeset/create`]);
+  });
+
   it("builds URLs only on the official OSM development instance", () => {
     const url = buildOSMDevelopmentApiUrl("development", "/api/0.6/changeset/create");
 

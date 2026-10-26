@@ -1,3 +1,5 @@
+import { fetchWithoutRedirects } from "../http/fetchWithoutRedirects";
+
 /**
  * OSM write tests must be isolated from the production editing API.
  *
@@ -54,11 +56,10 @@ export async function requestOSMDevelopmentApi(
   if (input.body !== undefined) {
     headers.set("Content-Type", input.contentType ?? "text/xml; charset=utf-8");
   }
-  return fetcher(url, {
+  return fetchWithoutRedirects(url, {
     method: input.method,
     headers,
     ...(input.body !== undefined ? { body: input.body } : {}),
-    redirect: "error",
     cache: "no-store",
-  });
+  }, fetcher);
 }

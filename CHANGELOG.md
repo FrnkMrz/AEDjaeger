@@ -74,6 +74,8 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Verbindet Overpass-Ergebnisse mit der konservativen Kandidatenbewertung; nur vollständige, ausreichend abgedeckte Suchen können einen Neuanlagevorschlag ermöglichen.
 
 ### Fixed
+- Repariert den vor jeder OSM-Discovery-Anfrage auftretenden Cloudflare-Laufzeitfehler durch den nicht unterstützten Modus `redirect: "error"`. OSM-Login, Testserver-API und Overpass verwenden nun `manual` und lehnen Weiterleitungen ausdrücklich ab; ein lokaler workerd-HTTP-Test prüft dies ohne echte OSM- oder KI-Aufrufe auch in CI.
+
 - Resume an ambiguously committed budget reservation before provider startup, while an atomic D1 claim prevents duplicate provider calls and unclear claim outcomes keep the photo without offering an unsafe retry.
 
 - Trennt den ausdrücklich gestarteten lokalen Demoablauf sichtbar von der echten KI-Bildanalyse.

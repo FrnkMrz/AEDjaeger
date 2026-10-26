@@ -90,6 +90,7 @@ describe("protected Overpass candidate search", () => {
     const { database } = createDatabase();
     const overpass = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(input).toBe("https://overpass-api.de/api/interpreter");
+      expect(init?.redirect).toBe("manual");
       expect(new Headers(init?.headers).get("User-Agent")).toContain("AEDjaeger");
       const query = new URLSearchParams(String(init?.body)).get("data");
       expect(query).toContain("around:150,52.52,13.405");
@@ -139,6 +140,15 @@ describe("protected Overpass candidate search", () => {
 
     expect(response.status).toBe(502);
     expect(response.headers.get("Retry-After")).toBe("30");
+  });
+
+  it("does not treat an Overpass redirect as a successful empty search", async () => {
+    const { database } = createDatabase();
+    const overpass = vi.fn(async () => new Response(null, { status: 307, headers: { Location: "https://attacker.example" } }));
+    const response = await handleOverpassSearch(searchRequest(), { DB: database }, { fetch: overpass, now: () => 1_000 });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ error: "overpass_unavailable" });
+    expect(overpass).toHaveBeenCalledOnce();
   });
 
   it("subtracts time spent waiting for Overpass from Retry-After", async () => {

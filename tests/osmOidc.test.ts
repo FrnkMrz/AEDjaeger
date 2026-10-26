@@ -34,6 +34,7 @@ async function signedFixture(claimOverrides: Record<string, unknown> = {}, envir
     .replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
   const token = `${signingInput}.${encodedSignature}`;
   const fetcher = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    expect(init?.redirect).toBe("manual");
     const url = String(input);
     if (url === `${origin}/.well-known/openid-configuration`) {
       return Response.json({
@@ -65,6 +66,19 @@ async function signedFixture(claimOverrides: Record<string, unknown> = {}, envir
 }
 
 describe("OSM OpenID Connect verification", () => {
+  it("rejects a discovery redirect without requesting its destination", async () => {
+    const calls: string[] = [];
+    const fetcher = async (input: RequestInfo | URL): Promise<Response> => {
+      calls.push(String(input));
+      return new Response("private redirect body", { status: 302, headers: { Location: "https://attacker.example" } });
+    };
+    await expect(exchangeOSMCodeForIdentity({
+      code: "one-time-code", verifier: "verifier-value", nonce, clientId,
+      redirectUri: "https://aedjaeger.example/api/auth/osm/callback", fetcher,
+    })).rejects.toMatchObject({ diagnosticCode: "provider_discovery_http_error", httpStatus: 302 });
+    expect(calls).toEqual(["https://www.openstreetmap.org/.well-known/openid-configuration"]);
+  });
+
   it("exchanges the code and accepts a correctly signed, bound identity token", async () => {
     const { fetcher } = await signedFixture();
 
@@ -77,6 +91,25 @@ describe("OSM OpenID Connect verification", () => {
       now,
       fetcher,
     })).resolves.toEqual({ subject: "987654321" });
+  });
+
+  it.each([
+    ["/oauth2/token", "token_endpoint_rejected"],
+    ["/oauth2/discovery/keys", "identity_keys_unavailable"],
+  ])("refuses a redirect from %s during development login", async (path, diagnosticCode) => {
+    const { fetcher } = await signedFixture({}, "development");
+    const calls: string[] = [];
+    const redirectingFetcher = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      calls.push(String(input));
+      return new URL(String(input)).pathname === path
+        ? new Response(null, { status: 307, headers: { Location: "https://attacker.example" } })
+        : fetcher(input, init);
+    };
+    await expect(exchangeOSMDevelopmentCodeForAccess({
+      code: "one-time-code", verifier: "verifier-value", nonce, clientId, clientSecret,
+      redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback", now, fetcher: redirectingFetcher,
+    })).rejects.toMatchObject({ diagnosticCode, httpStatus: 307 });
+    expect(calls.every((url) => new URL(url).origin === "https://master.apis.dev.openstreetmap.org")).toBe(true);
   });
 
   it("exchanges development authorization only against the fixed test issuer and accepts write_api", async () => {
