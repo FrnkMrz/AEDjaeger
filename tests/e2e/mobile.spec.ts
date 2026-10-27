@@ -88,6 +88,38 @@ test("AI photo analysis requires sign-in and an explicit send action; its result
   expect(requests).toBe(1);
 });
 
+test("a development login can run read-only AI analysis while OSM writes remain disabled", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
+    authenticated: true, loginAvailable: false, developmentLoginAvailable: true,
+    developmentSession: true, developmentWriteAvailable: false,
+  } }));
+  let analysisRequests = 0;
+  let osmWriteRequests = 0;
+  await page.route("**/api/vision/analyze", async (route) => {
+    analysisRequests += 1;
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ json: {
+      request_id: payload.request_id, model: "gpt-6-luna",
+      observation: { scene: "device_visible", device_count: 1, readable_text: ["AED"], manufacturer: null, model: null, location_clues: [], image_issues: [] },
+    } });
+  });
+  await page.route("**/api/osm/development/**", async (route) => {
+    osmWriteRequests += 1;
+    await route.fulfill({ status: 403, json: { error: "writes_disabled" } });
+  });
+
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  const analyzeButton = page.getByRole("button", { name: "Foto an OpenAI senden" });
+  await expect(analyzeButton).toBeVisible();
+  await expect(page.locator(".capture-content")).toContainText("OpenStreetMap wird dabei nicht geändert");
+  await analyzeButton.click();
+  await expect(page.getByRole("heading", { name: "KI-Bildbeobachtung" })).toBeVisible();
+  await expect(page.locator(".capture-content")).toContainText("Es wurde nichts in OpenStreetMap geändert");
+  expect(analysisRequests).toBe(1);
+  expect(osmWriteRequests).toBe(0);
+});
+
 test("a demo-only photo screen does not claim to send the photo to OpenAI", async ({ page }) => {
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false } }));
   let analysisRequests = 0;
