@@ -14,6 +14,8 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Verbindet bestätigte AED-Knoten aus der Umgebungssuche mit einer lokalen Änderungsvorschau, die ausschließlich `check_date` enthält. Es wird weiterhin nichts an OpenStreetMap gesendet.
 
 ### Changed
+- Konfiguriert Wrangler so, dass Dashboard-Variablen für den Dev-Login bei Code-Deployments erhalten bleiben; Secrets bleiben weiterhin separat serverseitig gespeichert.
+
 
 - Zeigt den OpenAI-Fotoeinwilligungstext nur, wenn die Live-Analyse verfügbar ist; die lokale Demo behauptet dadurch nicht mehr, ein Foto zu senden.
 - Ergänzt eine geführte, klar gekennzeichnete Foto-Demo und eine freiwillige Diagnoseaufzeichnung für Testläufe. Die Logs enthalten nur feste Ereigniscodes und zufällige Lauf-IDs; automatische Request-Logs sind deaktiviert.
