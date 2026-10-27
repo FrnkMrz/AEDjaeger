@@ -184,14 +184,14 @@ function statusContent(): string {
     case "ready":
       return `<div class="empty-illustration" aria-hidden="true"><span class="device-card"><span class="device-heart">♥</span><span class="device-zap">ϟ</span></span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>`;
     case "photo": {
-      const liveAnalysisAvailable = accountState === "signed-in" && (!developmentSession || developmentWriteAvailable);
+      // AI analysis is read-only and has its own server-side allowlist and budget.
+      // Keep it available to an authenticated Dev account even while OSM writes stay off.
+      const liveAnalysisAvailable = accountState === "signed-in";
       const liveAction = liveAnalysisAvailable
         ? `<button class="button button-primary" data-action="analyze-live">${icon("search")}<span>${tv("action")}</span></button>`
-        : developmentSession
-          ? `<p class="supporting-copy">${t("accountDevPhotoDisabled")}</p>`
-          : accountState === "not-configured"
-            ? `<p class="supporting-copy">${t("liveUnavailable")}</p>`
-            : `<p class="supporting-copy">${tv("signIn")}</p>`;
+        : accountState === "not-configured"
+          ? `<p class="supporting-copy">${t("liveUnavailable")}</p>`
+          : `<p class="supporting-copy">${tv("signIn")}</p>`;
       const demoAction = demoMode || accountState !== "signed-in" ? `<button class="button button-secondary" data-action="analyze">${t("demoAnalyze")}</button>` : "";
       // Show provider consent only when a live analysis button is available; the local demo never sends the photo.
       const liveConsent = liveAnalysisAvailable ? `<p class="supporting-copy">${tv("consent")}</p>` : "";

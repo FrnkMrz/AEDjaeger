@@ -14,6 +14,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Verbindet bestätigte AED-Knoten aus der Umgebungssuche mit einer lokalen Änderungsvorschau, die ausschließlich `check_date` enthält. Es wird weiterhin nichts an OpenStreetMap gesendet.
 
 ### Changed
+- Ermöglicht angemeldeten OSM-Dev-Konten die ausdrücklich ausgelöste, budgetbegrenzte KI-Bildanalyse auch dann, wenn OSM-Schreibzugriffe ausgeschaltet sind. Speichern bleibt weiterhin separat gesperrt.
 - Konfiguriert Wrangler so, dass Dashboard-Variablen für den Dev-Login bei Code-Deployments erhalten bleiben; Secrets bleiben weiterhin separat serverseitig gespeichert.
 
 
