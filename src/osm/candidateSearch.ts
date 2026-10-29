@@ -7,7 +7,7 @@ export class CandidateSearchError extends Error {
   }
 }
 
-export interface PhoneLocation {
+export interface SearchLocation {
   latitude: number;
   longitude: number;
   accuracyMeters: number;
@@ -19,7 +19,7 @@ const MAX_RETRY_AFTER_SECONDS = 7 * 24 * 60 * 60;
 
 /** Send only the location needed for one read-only nearby query; never persist it. */
 export async function requestNearbyCandidates(
-  location: PhoneLocation,
+  location: SearchLocation,
   fetcher: typeof fetch = fetch,
 ): Promise<OverpassSearchResult> {
   // Do not send a precise location that the server must reject as too uncertain.

@@ -2,7 +2,7 @@ import { assessOverpassResponse } from "./assessOverpassResponse";
 import type { CandidateAssessment, LocationEstimate, MatchPolicy } from "./candidateMatch";
 import type { VisionObservation } from "../contracts/visionObservation";
 import type { OverpassSearchResult } from "../osm/overpassSearch";
-import type { PhoneLocation } from "../osm/candidateSearch";
+import type { SearchLocation } from "../osm/candidateSearch";
 import type { ExistingCheckDatePreview, NewAedPreview, ProposalResult } from "./osmChangeProposal";
 
 export type DemoScenario = "existing" | "new" | "multiple" | "unclear" | "search-error" | "upload-unclear";
@@ -15,7 +15,7 @@ export type CandidateResultState = {
   observation: VisionObservation;
   search: OverpassSearchResult;
   assessment: CandidateAssessment;
-  location: PhoneLocation;
+  location: SearchLocation;
   retryAvailableAt?: number;
 };
 
@@ -33,6 +33,7 @@ export type FlowState =
   | { kind: "analyzing"; photoUrl: string }
   | { kind: "vision-analyzing"; photoUrl: string }
   | { kind: "vision-result"; photoUrl: string; observation: VisionObservation }
+  | { kind: "location-choice"; photoUrl: string; observation: VisionObservation }
   | { kind: "candidate-searching"; photoUrl: string; observation: VisionObservation }
   | CandidateResultState
   | { kind: "new-aed-preview"; photoUrl: string; result: ProposalResult<NewAedPreview>; returnState: CandidateResultState; writeStatus?: "sending" | "complete" | "uncertain" | "conflict" | "failed"; operationId?: string }
