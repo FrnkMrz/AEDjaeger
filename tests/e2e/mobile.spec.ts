@@ -1,6 +1,14 @@
 import { expect, test } from "@playwright/test";
+import exifr from "exifr";
 
 const languageCodes = ["de", "en", "pl", "ja", "fr", "es"];
+
+async function beginNearbySearch(page: import("@playwright/test").Page): Promise<void> {
+  await page.getByRole("button", { name: "AEDs in der Umgebung suchen" }).click();
+  // Photos without EXIF GPS require a separate, explicit choice before reading phone location.
+  const usePhoneLocation = page.locator('[data-action="use-phone-location"]');
+  if (await usePhoneLocation.isVisible()) await usePhoneLocation.click();
+}
 
 test("the information roadmap fits a narrow phone screen in all six languages", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 720 });
@@ -212,7 +220,7 @@ test("a user-confirmed location search shows nearby candidates without writing t
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
-  await page.getByRole("button", { name: "AEDs in der Umgebung suchen" }).click();
+  await beginNearbySearch(page);
 
   await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
   await expect(page.locator(".candidate-list")).toContainText("Rathaus");
@@ -232,6 +240,64 @@ test("a user-confirmed location search shows nearby candidates without writing t
   await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
   await expect(page.locator("[data-action='back-to-candidates']")).toBeVisible();
   expect(searchRequests).toBe(1);
+});
+
+test("a geotagged photo supplies the nearby search location and its GPS is stripped before AI upload", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  let analyzedImageGps: unknown;
+  await page.route("**/api/vision/analyze", async (route) => {
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    const binary = atob(String(payload.image_base64));
+    analyzedImageGps = await exifr.gps(Uint8Array.from(binary, (character) => character.charCodeAt(0)));
+    await route.fulfill({ json: {
+      request_id: payload.request_id, model: "gpt-6-luna",
+      observation: { scene: "device_visible", device_count: 1, readable_text: ["AED"], manufacturer: null, model: null, location_clues: [], image_issues: [] },
+    } });
+  });
+  let searchLocation: Record<string, unknown> | undefined;
+  await page.route("**/api/osm/candidates/search", async (route) => {
+    searchLocation = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
+  await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
+  await expect(page.getByRole("heading", { name: "KI-Bildbeobachtung" })).toBeVisible();
+  await page.getByRole("button", { name: "AEDs in der Umgebung suchen" }).click();
+  await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
+
+  expect(searchLocation?.latitude).toBeCloseTo(52.52, 5);
+  expect(searchLocation?.longitude).toBeCloseTo(13.405, 5);
+  expect(searchLocation?.accuracy_meters).toBe(100);
+  expect(analyzedImageGps).toBeUndefined();
+  await expect(page.locator(".capture-content")).toContainText("Standort aus dem Foto verwendet");
+});
+
+test("a photo without GPS does not silently search the phone location", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/vision/analyze", async (route) => {
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ json: { request_id: payload.request_id, model: "gpt-6-luna", observation: { scene: "device_visible", device_count: 1, readable_text: ["AED"], manufacturer: null, model: null, location_clues: [], image_issues: [] } } });
+  });
+  let searchRequests = 0;
+  await page.route("**/api/osm/candidates/search", async (route) => {
+    searchRequests += 1;
+    await route.fulfill({ json: { status: "complete", coverage_radius_meters: 112, candidates: [] } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
+  await page.getByRole("button", { name: "AEDs in der Umgebung suchen" }).click();
+  await expect(page.getByText(/Dieses Foto enthält keine GPS-Koordinaten/u)).toBeVisible();
+  await expect(page.locator("[data-action='use-phone-location']")).toBeVisible();
+  expect(searchRequests).toBe(0);
+
+  await page.locator("[data-action='use-phone-location']").click();
+  await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
+  expect(searchRequests).toBe(1);
+  await expect(page.locator(".capture-content")).toContainText("Handy-Standort verwendet");
 });
 
 test("the development-session preview sends one explicitly confirmed, versioned check-date update", async ({ page, context }) => {
@@ -262,7 +328,7 @@ test("the development-session preview sends one explicitly confirmed, versioned 
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.locator('[data-action="analyze-live"]').click();
-  await page.getByRole("button", { name: "AEDs in der Umgebung suchen" }).click();
+  await beginNearbySearch(page);
   await page.getByRole("button", { name: "Als noch vorhanden bestätigen" }).click();
   await expect(page.getByRole("button", { name: "Testserver: Prüfdatum speichern" })).toBeVisible();
   await page.getByRole("button", { name: "Testserver: Prüfdatum speichern" }).click();
@@ -303,7 +369,7 @@ test("an uncertain test-server response survives reload and retries with the sam
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.locator('[data-action="analyze-live"]').click();
-  await page.getByRole("button", { name: "AEDs in der Umgebung suchen" }).click();
+  await beginNearbySearch(page);
   await page.getByRole("button", { name: "Als noch vorhanden bestätigen" }).click();
   await page.getByRole("button", { name: "Testserver: Prüfdatum speichern" }).click();
   await expect(page.getByRole("status")).toContainText("Ergebnis unklar");
@@ -341,7 +407,7 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
-  await page.getByRole("button", { name: "AEDs in der Umgebung suchen" }).click();
+  await beginNearbySearch(page);
   await expect(page.getByRole("button", { name: "Neuen AED vorbereiten" })).toBeVisible();
   await expect(page.locator("#new-aed-position-map")).toBeVisible();
   await expect(page.locator(".position-map-attribution")).toContainText("OpenStreetMap contributors");
@@ -434,7 +500,7 @@ test("a partial nearby search never offers a new AED preview", async ({ page, co
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
-  await page.getByRole("button", { name: "AEDs in der Umgebung suchen" }).click();
+  await beginNearbySearch(page);
   await expect(page.locator(".capture-content")).toContainText("Overpass-Suche war unvollständig");
   await expect(page.getByRole("button", { name: "Neuen AED vorbereiten" })).toHaveCount(0);
   expect(searchRequests).toBe(1);
@@ -464,7 +530,7 @@ test("denied location access does not send a nearby search request", async ({ pa
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
-  await page.getByRole("button", { name: "AEDs in der Umgebung suchen" }).click();
+  await beginNearbySearch(page);
 
   await expect(page.locator(".capture-content")).toContainText("Standortzugriff wurde abgelehnt");
   expect(searchRequests).toBe(0);
@@ -485,7 +551,7 @@ test("an expired OSM session does not offer a search retry that cannot work", as
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
-  await page.getByRole("button", { name: "AEDs in der Umgebung suchen" }).click();
+  await beginNearbySearch(page);
 
   await expect(page.locator(".capture-content")).toContainText("Die OpenStreetMap-Anmeldung fehlt oder ist abgelaufen");
   await expect(page.getByRole("button", { name: "Standort und AEDs erneut suchen" })).toHaveCount(0);
@@ -525,7 +591,7 @@ test("an incomplete search cannot suggest a new AED and offers a retry", async (
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
-  await page.getByRole("button", { name: "AEDs in der Umgebung suchen" }).click();
+  await beginNearbySearch(page);
 
   await expect(page.locator(".capture-content")).toContainText("Die Overpass-Suche war unvollständig");
   await expect(page.locator(".candidate-list")).toContainText("Bahnhof");
@@ -549,7 +615,7 @@ test("an incomplete search cannot suggest a new AED and offers a retry", async (
   expect(searchRequests).toBe(4);
 });
 
-test("an imprecise location is not sent to the nearby search endpoint", async ({ page, context }) => {
+test("an imprecise phone fix is not sent and retry acquires a fresh location", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 150 });
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
@@ -563,15 +629,21 @@ test("an imprecise location is not sent to the nearby search endpoint", async ({
   let searchRequests = 0;
   await page.route("**/api/osm/candidates/search", async (route) => {
     searchRequests += 1;
+    expect(route.request().postDataJSON()).toMatchObject({ latitude: 52.52, longitude: 13.405, accuracy_meters: 15 });
     await route.fulfill({ json: { status: "complete", coverage_radius_meters: 250, candidates: [] } });
   });
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
-  await page.getByRole("button", { name: "AEDs in der Umgebung suchen" }).click();
+  await beginNearbySearch(page);
 
   await expect(page.locator(".capture-content")).toContainText("Der Standort ist zu ungenau");
   expect(searchRequests).toBe(0);
+
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 15 });
+  await page.getByRole("button", { name: "Standort und AEDs erneut suchen" }).click();
+  await expect(page.locator(".capture-content")).toContainText("Die vollständige Suche fand im abgedeckten Bereich keinen AED");
+  expect(searchRequests).toBe(1);
 });
 
 test("the brand link cannot discard a photo while its AI request is in flight", async ({ page }) => {
@@ -725,12 +797,12 @@ test("the AI result remains readable on a narrow phone in all six languages", as
   await page.goto("/");
 
   const languages = [
-    { code: "de", send: "Foto an OpenAI senden", result: "KI-Bildbeobachtung", discard: "Foto verwerfen" },
-    { code: "en", send: "Send photo to OpenAI", result: "AI image observation", discard: "Discard photo" },
-    { code: "pl", send: "Wyślij zdjęcie do OpenAI", result: "Obserwacja AI", discard: "Odrzuć zdjęcie" },
-    { code: "ja", send: "写真をOpenAIに送信", result: "AIによる画像の観察", discard: "写真を破棄" },
-    { code: "fr", send: "Envoyer la photo à OpenAI", result: "Observation de l’image par l’IA", discard: "Supprimer la photo" },
-    { code: "es", send: "Enviar foto a OpenAI", result: "Observación de imagen de IA", discard: "Descartar foto" },
+    { code: "de", send: "Foto an OpenAI senden", result: "KI-Bildbeobachtung", discard: "Foto verwerfen", missingGps: "Dieses Foto enthält keine GPS-Koordinaten" },
+    { code: "en", send: "Send photo to OpenAI", result: "AI image observation", discard: "Discard photo", missingGps: "This photo has no GPS coordinates" },
+    { code: "pl", send: "Wyślij zdjęcie do OpenAI", result: "Obserwacja AI", discard: "Odrzuć zdjęcie", missingGps: "To zdjęcie nie zawiera współrzędnych GPS" },
+    { code: "ja", send: "写真をOpenAIに送信", result: "AIによる画像の観察", discard: "写真を破棄", missingGps: "この写真にはGPS座標がありません" },
+    { code: "fr", send: "Envoyer la photo à OpenAI", result: "Observation de l’image par l’IA", discard: "Supprimer la photo", missingGps: "Cette photo ne contient pas de coordonnées GPS" },
+    { code: "es", send: "Enviar foto a OpenAI", result: "Observación de imagen de IA", discard: "Descartar foto", missingGps: "Esta foto no contiene coordenadas GPS" },
   ];
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   for (const language of languages) {
@@ -738,6 +810,10 @@ test("the AI result remains readable on a narrow phone in all six languages", as
     await page.getByRole("button", { name: language.send }).click();
     await expect(page.getByRole("heading", { name: language.result })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `horizontal page overflow in ${language.code}`).toBeLessThanOrEqual(320);
+    await page.locator('[data-action="search-nearby"]').click();
+    await expect(page.locator(".capture-content")).toContainText(language.missingGps);
+    await expect(page.locator('[data-action="use-phone-location"]')).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `horizontal location-choice overflow in ${language.code}`).toBeLessThanOrEqual(320);
     await page.getByRole("button", { name: language.discard }).click();
     if (language.code !== "es") await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   }

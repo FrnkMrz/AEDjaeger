@@ -4,10 +4,11 @@ import { analysisResult, chooseCandidate, confirmationResult, recoveryResult, ty
 import { translate, translations, type Language, type TranslationKey } from "./i18n/translations";
 import { translateVision, type VisionMessageKey } from "./i18n/visionTranslations";
 import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservation, VisionClientError } from "./vision/analyzePhoto";
+import { readPhotoLocation } from "./vision/photoLocation";
 import { assessCandidates } from "./domain/candidateMatch";
 import { createPositionPicker, type Coordinate } from "./map/positionPicker";
 import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
-import { CandidateSearchError, requestNearbyCandidates, type PhoneLocation } from "./osm/candidateSearch";
+import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } from "./osm/candidateSearch";
 import type { VisionObservation } from "./contracts/visionObservation";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -45,6 +46,9 @@ let analysisTimer: number | undefined;
 let saveTimer: number | undefined;
 let searchRetryTimer: number | undefined;
 let selectedPhotoFile: File | undefined;
+let selectedPhotoLocation: SearchLocation | undefined;
+let activeSearchLocation: SearchLocation | undefined;
+let activeSearchLocationSource: "photo" | "phone" | undefined;
 // Keep a stable ID while this photo is active; the server uses it to avoid double reservations after retries.
 let liveAnalysisRequestId: string | undefined;
 let photoSelectionVersion = 0;
@@ -212,10 +216,13 @@ function statusContent(): string {
         observation.manufacturer ? `<p><strong>${tv("manufacturer")}:</strong> ${escapeHtml(observation.manufacturer)}</p>` : "",
         observation.model ? `<p><strong>${tv("model")}:</strong> ${escapeHtml(observation.model)}</p>` : "",
       ].join("");
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("resultTitle")}</h2><p>${tv("sceneLabel")}: ${tv(sceneKey[observation.scene])}</p><p>${tv("count", { count: observation.device_count })}</p><strong>${tv("readableText")}</strong><ul>${visibleText}</ul>${details}<p class="simulation-note">${tv("notOsm")}</p></div></div><p class="supporting-copy">${tv("searchConsent")}</p><button class="button button-primary" data-action="search-nearby">${icon("search")}<span>${tv("searchAction")}</span></button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      const locationCopy = selectedPhotoLocation ? "searchConsentPhoto" : "searchConsentFallback";
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("resultTitle")}</h2><p>${tv("sceneLabel")}: ${tv(sceneKey[observation.scene])}</p><p>${tv("count", { count: observation.device_count })}</p><strong>${tv("readableText")}</strong><ul>${visibleText}</ul>${details}<p class="simulation-note">${tv("notOsm")}</p></div></div><p class="supporting-copy">${tv(locationCopy)}</p><button class="button button-primary" data-action="search-nearby">${icon("search")}<span>${tv("searchAction")}</span></button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     }
+    case "location-choice":
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${tv("photoLocationMissing")}</p></div></div><button class="button button-primary" data-action="use-phone-location">${tv("usePhoneLocation")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     case "candidate-searching":
-      return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv("searchProgress")}</span></div>`;
+      return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv(activeSearchLocationSource === "photo" ? "searchProgressPhoto" : "searchProgressPhone")}</span></div>`;
     case "candidate-result": {
       const { assessment, search } = state;
       const candidatesToShow: Array<{ candidate: typeof search.candidates[number]; distanceMeters?: number }> = [];
@@ -251,7 +258,8 @@ function statusContent(): string {
           ? `<p class="simulation-note search-wait" aria-live="off">${tv("searchWait", { seconds: retryWaitSeconds })}</p>`
           : `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`
         : "";
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p>${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}<p class="simulation-note">${tv("searchNoWrite")}</p></div></div>${newEntryAction}${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      const locationSource = activeSearchLocationSource === "photo" ? "locationSourcePhoto" : "locationSourcePhone";
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p><p class="supporting-copy">${tv(locationSource)}</p>${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}<p class="simulation-note">${tv("searchNoWrite")}</p></div></div>${newEntryAction}${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     }
     case "new-aed-preview": {
       const point = state.result.kind === "ready" ? state.result.position : state.returnState.location;
@@ -317,7 +325,8 @@ function statusContent(): string {
         : retryWaitSeconds > 0
           ? `<p class="simulation-note search-wait" aria-live="off">${tv("searchWait", { seconds: retryWaitSeconds })}</p>`
           : `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`;
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("searchTitle")}</h2><p>${tv(errorKey[state.reason])}</p></div></div>${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      const locationSource = activeSearchLocationSource === "photo" ? "locationSourcePhoto" : "locationSourcePhone";
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("searchTitle")}</h2><p>${tv(errorKey[state.reason])}</p><p class="supporting-copy">${tv(locationSource)}</p></div></div>${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     }
     case "vision-error":
       const errorKey: Record<typeof state.reason, VisionMessageKey> = {
@@ -584,6 +593,7 @@ function focusCurrentState(): void {
     analyzing: ".loading-row",
     "vision-analyzing": ".loading-row",
     "vision-result": ".result-message h2",
+    "location-choice": ".result-message h2",
     "candidate-searching": ".loading-row",
     "candidate-result": ".result-message h2",
     "osm-preview": ".result-message h2",
@@ -625,10 +635,13 @@ async function onPhotoSelected(event: Event): Promise<void> {
 
   // A MIME type is only a browser hint. Decode the actual bytes before offering an AED workflow.
   const photoUrl = URL.createObjectURL(file);
+  let photoLocation: SearchLocation | undefined;
   try {
     const image = new Image();
     image.src = photoUrl;
     await image.decode();
+    // Extract only the GPS pair while the original file is local; the AI copy is re-encoded later.
+    photoLocation = await readPhotoLocation(file);
   } catch {
     URL.revokeObjectURL(photoUrl);
     if (selectionVersion === photoSelectionVersion) {
@@ -649,6 +662,9 @@ async function onPhotoSelected(event: Event): Promise<void> {
   // The open disclosure is an explicit user choice; carry that preview mode into this photo.
   demoMode = demoMode || (document.querySelector<HTMLDetailsElement>(".demo-panel")?.open ?? false);
   selectedPhotoFile = file;
+  selectedPhotoLocation = photoLocation;
+  activeSearchLocation = undefined;
+  activeSearchLocationSource = undefined;
   liveAnalysisRequestId = undefined;
   recordDiagnostic("photo_selected");
   if (accountState === "not-configured") recordDiagnostic("live_flow_blocked");
@@ -682,9 +698,22 @@ function handleAction(action: string | undefined, source?: HTMLElement): void {
     recordDiagnostic("live_analysis_started");
     void runVisionAnalysis(state.photoUrl, selectedPhotoFile);
   } else if (action === "search-nearby" && state.kind === "vision-result") {
+    if (selectedPhotoLocation) {
+      activeSearchLocation = selectedPhotoLocation;
+      activeSearchLocationSource = "photo";
+      void runNearbySearch(state.photoUrl, state.observation, selectedPhotoLocation);
+    } else {
+      state = { kind: "location-choice", photoUrl: state.photoUrl, observation: state.observation };
+      render(true);
+    }
+  } else if (action === "use-phone-location" && state.kind === "location-choice") {
+    activeSearchLocation = undefined;
+    activeSearchLocationSource = "phone";
     void runNearbySearch(state.photoUrl, state.observation);
   } else if (action === "retry-search" && (state.kind === "candidate-error" || (state.kind === "candidate-result" && (state.search.status === "partial" || state.assessment.kind === "search-incomplete")))) {
-    void runNearbySearch(state.photoUrl, state.observation);
+    // A photo's embedded point is fixed, but a phone GPS fix can improve after the user moves.
+    const retryLocation = activeSearchLocationSource === "photo" ? activeSearchLocation : undefined;
+    void runNearbySearch(state.photoUrl, state.observation, retryLocation);
   } else if (action === "preview-candidate" && state.kind === "candidate-result") {
     const candidateId = source?.dataset.candidateId;
     const candidate = state.search.candidates.find((item) => item.id === candidateId);
@@ -845,7 +874,7 @@ async function runVisionAnalysis(photoUrl: string, file: File): Promise<void> {
   render(true);
 }
 
-async function runNearbySearch(photoUrl: string, observation: VisionObservation): Promise<void> {
+async function runNearbySearch(photoUrl: string, observation: VisionObservation, providedLocation?: SearchLocation): Promise<void> {
   newAedPositionOverride = undefined;
   if (searchRetryTimer) window.clearTimeout(searchRetryTimer);
   searchRetryTimer = undefined;
@@ -859,7 +888,8 @@ async function runNearbySearch(photoUrl: string, observation: VisionObservation)
   recordDiagnostic("nearby_search_started");
   render(true);
   try {
-    const location = await getPhoneLocation();
+    const location = providedLocation ?? await getPhoneLocation();
+    activeSearchLocation = location;
     const search = await requestNearbyCandidates(location);
     const assessment = assessCandidates(location, search, { nearbyRadiusMeters: 100, maximumAccuracyMeters: 100 });
     // Keep coordinates only in the active in-memory photo flow so a later preview can stay tied to
@@ -911,7 +941,7 @@ function scheduleSearchRetryCountdown(retryAvailableAt: number): void {
   searchRetryTimer = window.setTimeout(() => scheduleSearchRetryCountdown(retryAvailableAt), Math.min(1_000, retryAvailableAt - Date.now()));
 }
 
-function getPhoneLocation(): Promise<PhoneLocation> {
+function getPhoneLocation(): Promise<SearchLocation> {
   if (!navigator.geolocation) return Promise.reject(new CandidateSearchError("location_unavailable"));
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
@@ -927,6 +957,9 @@ function releasePhoto(): void {
   const photoUrl = getPhotoUrl(state);
   if (photoUrl?.startsWith("blob:")) URL.revokeObjectURL(photoUrl);
   selectedPhotoFile = undefined;
+  selectedPhotoLocation = undefined;
+  activeSearchLocation = undefined;
+  activeSearchLocationSource = undefined;
   liveAnalysisRequestId = undefined;
 }
 
