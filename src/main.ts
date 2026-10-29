@@ -711,7 +711,9 @@ function handleAction(action: string | undefined, source?: HTMLElement): void {
     activeSearchLocationSource = "phone";
     void runNearbySearch(state.photoUrl, state.observation);
   } else if (action === "retry-search" && (state.kind === "candidate-error" || (state.kind === "candidate-result" && (state.search.status === "partial" || state.assessment.kind === "search-incomplete")))) {
-    void runNearbySearch(state.photoUrl, state.observation, activeSearchLocation);
+    // A photo's embedded point is fixed, but a phone GPS fix can improve after the user moves.
+    const retryLocation = activeSearchLocationSource === "photo" ? activeSearchLocation : undefined;
+    void runNearbySearch(state.photoUrl, state.observation, retryLocation);
   } else if (action === "preview-candidate" && state.kind === "candidate-result") {
     const candidateId = source?.dataset.candidateId;
     const candidate = state.search.candidates.find((item) => item.id === candidateId);

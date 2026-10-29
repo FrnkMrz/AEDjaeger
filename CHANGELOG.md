@@ -15,7 +15,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Changed
 
-- Umgebungssuche verwendet GPS-Koordinaten aus dem Foto, wenn vorhanden. Ohne Foto-GPS wird der Handy-Standort erst nach ausdrücklicher Auswahl verwendet. EXIF-Daten bleiben lokal und werden nicht an die KI gesendet.
+- Umgebungssuche verwendet GPS-Koordinaten aus dem Foto, wenn vorhanden. Ohne Foto-GPS wird der Handy-Standort erst nach ausdrücklicher Auswahl verwendet. EXIF-Daten bleiben lokal und werden nicht an die KI gesendet. Bei ungenauem Handy-GPS fragt ein erneuter Versuch die aktuelle Position erneut ab.
 - Ermöglicht angemeldeten OSM-Dev-Konten die ausdrücklich ausgelöste, budgetbegrenzte KI-Bildanalyse auch dann, wenn OSM-Schreibzugriffe ausgeschaltet sind. Speichern bleibt weiterhin separat gesperrt.
 - Konfiguriert Wrangler so, dass Dashboard-Variablen für den Dev-Login bei Code-Deployments erhalten bleiben; Secrets bleiben weiterhin separat serverseitig gespeichert.
 

@@ -615,7 +615,7 @@ test("an incomplete search cannot suggest a new AED and offers a retry", async (
   expect(searchRequests).toBe(4);
 });
 
-test("an imprecise location is not sent to the nearby search endpoint", async ({ page, context }) => {
+test("an imprecise phone fix is not sent and retry acquires a fresh location", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 150 });
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
@@ -629,6 +629,7 @@ test("an imprecise location is not sent to the nearby search endpoint", async ({
   let searchRequests = 0;
   await page.route("**/api/osm/candidates/search", async (route) => {
     searchRequests += 1;
+    expect(route.request().postDataJSON()).toMatchObject({ latitude: 52.52, longitude: 13.405, accuracy_meters: 15 });
     await route.fulfill({ json: { status: "complete", coverage_radius_meters: 250, candidates: [] } });
   });
   await page.goto("/");
@@ -638,6 +639,11 @@ test("an imprecise location is not sent to the nearby search endpoint", async ({
 
   await expect(page.locator(".capture-content")).toContainText("Der Standort ist zu ungenau");
   expect(searchRequests).toBe(0);
+
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 15 });
+  await page.getByRole("button", { name: "Standort und AEDs erneut suchen" }).click();
+  await expect(page.locator(".capture-content")).toContainText("Die vollständige Suche fand im abgedeckten Bereich keinen AED");
+  expect(searchRequests).toBe(1);
 });
 
 test("the brand link cannot discard a photo while its AI request is in flight", async ({ page }) => {
