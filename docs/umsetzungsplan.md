@@ -2,6 +2,12 @@
 
 Stand: 26.10.2026. Ergänzung zum [Architekturentwurf](architektur.md). Die Phasen ordnen die Umsetzung in überprüfbare Etappen. GPT-6 Luna ist als erstes Bildmodell gewählt und mit drei Testfotos explorativ geprüft. Die PWA und API sind unter [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev) veröffentlicht. OSM-Dev-Login ist konfiguriert und freigegeben, aber noch nicht erfolgreich zurückgekehrt. Der Fehler ist lokal und in einer isolierten Cloudflare-Preview reproduziert: Workers wirft für `redirect: "error"` einen TypeError, bevor OSM erreicht wird. Mit `manual` liefert dieselbe Discovery-URL HTTP 200. Die vorbereitete Korrektur verwendet `manual` mit ausdrücklicher 3xx-Ablehnung und ergänzt einen lokalen Runtime-Test in CI; der vollständige Dev-Login ist nach Merge und Bereitstellung zu prüfen. KI-Analyse und OSM-Schreibwege bleiben abgeschaltet.
 
+## Veröffentlichung auf Cloudflare
+
+Die CI prüft Pull Requests und Commits auf `main`. Ein Merge allein veröffentlicht die App nicht. Für einen Deploy muss ein Betreiber in GitHub Actions den Workflow **CI** auf `main` manuell starten und `deploy_to_workers` bestätigen. Die Bereitstellung wartet zunächst auf die erfolgreiche CI, baut und prüft den Worker erneut und ruft anschließend `wrangler deploy` auf. Der Deploy-Job nutzt die GitHub-Umgebung `production`, ist serialisiert und veröffentlicht ausschließlich die bestehende `workers.dev`-Adresse; er führt keine D1-Migrationen aus und ändert keine OSM-Daten.
+
+Vor dem ersten Lauf muss in den Repository-Einstellungen die GitHub-Umgebung `production` angelegt werden. Als erforderliche Reviewerin ist `@FrnkMrz` einzutragen; „Prevent self-review“ bleibt aus, damit der Kontoinhaber den eigenen Deploy freigeben kann. Die Umgebung sollte nur `main` als Deployment-Branch erlauben. Danach in dieser Umgebung das Secret `CLOUDFLARE_API_TOKEN` und die Variable `CLOUDFLARE_ACCOUNT_ID` hinterlegen. Das Cloudflare-Token soll nach Cloudflares Vorlage **Edit Cloudflare Workers** erstellt und auf das AEDjaeger-Konto beschränkt werden. Tokenwerte gehören ausschließlich in GitHub Environment Secrets, niemals in Issues, Chat, Workflow-Dateien oder Logs.
+
 ## Reihenfolge und aktueller Stand
 
 | Schritt | Ergebnis | Status |

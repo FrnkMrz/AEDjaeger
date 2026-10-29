@@ -11,6 +11,7 @@
     "dev:worker": "npm run build && node scripts/run-wrangler.mjs dev",
     "build": "tsc --noEmit && vite build && node scripts/check-precache.mjs",
     "worker:check": "node scripts/run-wrangler.mjs check",
+    "worker:deploy": "node scripts/run-wrangler.mjs deploy",
     "test:worker-http": "node scripts/check-worker-http.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",
