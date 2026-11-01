@@ -27,6 +27,16 @@ export interface VisionObservation {
   image_issues: (typeof IMAGE_ISSUES)[number][];
 }
 
+/**
+ * A recognisable AED cabinet counts as an AED sighting even when the device itself
+ * is hidden. Visible-device count is descriptive only and must not gate the flow.
+ */
+export function isAedRecognized(observation: Pick<VisionObservation, "scene">): boolean {
+  return observation.scene === "device_visible"
+    || observation.scene === "enclosure_visible"
+    || observation.scene === "multiple_devices";
+}
+
 export type VisionObservationParseResult =
   | { ok: true; value: VisionObservation }
   | { ok: false; reason: "invalid-shape" };

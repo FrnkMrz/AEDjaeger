@@ -86,6 +86,8 @@ describe("server-side GPT-6 Luna vision adapter", () => {
     expect(body.text.format.schema.properties.location_clues.maxItems).toBe(3);
     expect(body.text.format.schema.properties.location_clues.items.maxLength).toBe(40);
     expect(body.text.format.schema.properties.location_clues.items.pattern).toBe("\\S");
+    expect(body.input[0].content).toContain("ein als AED-Gehäuse erkennbarer Kasten, auch wenn das Gerät darin nicht sichtbar ist");
+    expect(body.input[0].content).toContain("eine eindeutig leere Halterung");
     expect(body.input[1].content[1].type).toBe("input_image");
   });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseVisionObservation } from "../src/contracts/visionObservation";
+import { isAedRecognized, parseVisionObservation } from "../src/contracts/visionObservation";
 
 const validObservation = {
   scene: "device_visible",
@@ -10,6 +10,22 @@ const validObservation = {
   location_clues: ["Neben dem Haupteingang"],
   image_issues: ["glare"],
 };
+
+describe("AED recognition decision", () => {
+  it.each(["device_visible", "enclosure_visible", "multiple_devices"] as const)(
+    "treats %s as a positive AED sighting regardless of visible device count",
+    (scene) => {
+      expect(isAedRecognized({ scene })).toBe(true);
+    },
+  );
+
+  it.each(["sign_only", "empty_holder", "other_object", "unclear"] as const)(
+    "does not treat %s as a confirmed AED sighting",
+    (scene) => {
+      expect(isAedRecognized({ scene })).toBe(false);
+    },
+  );
+});
 
 describe("parseVisionObservation", () => {
   it("accepts bounded structured observations and preserves readable Unicode text", () => {

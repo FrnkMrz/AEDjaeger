@@ -9,7 +9,7 @@ import { assessCandidates } from "./domain/candidateMatch";
 import { createPositionPicker, type Coordinate } from "./map/positionPicker";
 import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
 import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } from "./osm/candidateSearch";
-import type { VisionObservation } from "./contracts/visionObservation";
+import { isAedRecognized, type VisionObservation } from "./contracts/visionObservation";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root element was not found.");
@@ -207,17 +207,17 @@ function statusContent(): string {
       return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv("progress")}</span></div>`;
     case "vision-result": {
       const observation = state.observation;
-      const sceneKey: Record<typeof observation.scene, VisionMessageKey> = {
-        device_visible: "device", enclosure_visible: "enclosure", sign_only: "sign",
-        empty_holder: "emptyHolder", multiple_devices: "multiple", other_object: "other", unclear: "unclear",
-      };
-      const visibleText = observation.readable_text.length ? observation.readable_text.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : `<li>${tv("noText")}</li>`;
-      const details = [
-        observation.manufacturer ? `<p><strong>${tv("manufacturer")}:</strong> ${escapeHtml(observation.manufacturer)}</p>` : "",
-        observation.model ? `<p><strong>${tv("model")}:</strong> ${escapeHtml(observation.model)}</p>` : "",
-      ].join("");
+      const recognized = isAedRecognized(observation);
+      const unclear = observation.scene === "unclear";
+      const title = recognized ? "aedRecognized" : unclear ? "aedUnclear" : "aedNotRecognized";
+      const explanation = recognized ? "aedRecognizedBody" : unclear ? "aedUnclearBody" : "aedNotRecognizedBody";
+      if (!recognized) {
+        // A sign, empty holder, unrelated object or uncertain image must never lead to a map edit.
+        return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">${unclear ? "?" : "!"}</span><div><h2>${tv(title)}</h2><p>${tv(explanation)}</p><p class="simulation-note">${tv("notOsm")}</p></div></div><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      }
+
       const locationCopy = selectedPhotoLocation ? "searchConsentPhoto" : "searchConsentFallback";
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("resultTitle")}</h2><p>${tv("sceneLabel")}: ${tv(sceneKey[observation.scene])}</p><p>${tv("count", { count: observation.device_count })}</p><strong>${tv("readableText")}</strong><ul>${visibleText}</ul>${details}<p class="simulation-note">${tv("notOsm")}</p></div></div><p class="supporting-copy">${tv(locationCopy)}</p><button class="button button-primary" data-action="search-nearby">${icon("search")}<span>${tv("searchAction")}</span></button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-good" aria-hidden="true">✓</span><div><h2>${tv(title)}</h2><p>${tv(explanation)}</p><p class="simulation-note">${tv("notOsm")}</p></div></div><p class="supporting-copy">${tv(locationCopy)}</p><button class="button button-primary" data-action="search-nearby">${icon("search")}<span>${tv("searchAction")}</span></button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     }
     case "location-choice":
       return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${tv("photoLocationMissing")}</p></div></div><button class="button button-primary" data-action="use-phone-location">${tv("usePhoneLocation")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;

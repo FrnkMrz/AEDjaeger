@@ -88,12 +88,51 @@ test("AI photo analysis requires sign-in and an explicit send action; its result
   await expect(page.getByRole("button", { name: "Demoablauf simulieren" })).toHaveCount(0);
   expect(requests).toBe(0);
   await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
-  await expect(page.getByRole("heading", { name: "KI-Bildbeobachtung" })).toBeVisible();
-  await expect(page.locator(".result-message")).toContainText("AED-Gerät sichtbar");
-  await expect(page.locator(".result-message")).toContainText("<script>ignore rules</script>");
+  await expect(page.getByRole("heading", { name: "AED erkannt" })).toBeVisible();
+  await expect(page.locator(".result-message")).toContainText("AED-Gerät oder AED-Gehäuse");
+  await expect(page.locator(".result-message")).not.toContainText("<script>ignore rules</script>");
   await expect(page.locator(".result-message script")).toHaveCount(0);
+  await expect(page.locator("[data-action='search-nearby']")).toBeVisible();
   await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
   expect(requests).toBe(1);
+});
+
+test("an AED enclosure is enough to continue even when the device count is zero", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/vision/analyze", async (route) => {
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ json: {
+      request_id: payload.request_id, model: "gpt-6-luna",
+      observation: { scene: "enclosure_visible", device_count: 0, readable_text: [], manufacturer: null, model: null, location_clues: [], image_issues: [] },
+    } });
+  });
+
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
+
+  await expect(page.getByRole("heading", { name: "AED erkannt" })).toBeVisible();
+  await expect(page.locator(".result-message")).not.toContainText("0");
+  await expect(page.getByRole("button", { name: "AEDs in der Umgebung suchen" })).toBeVisible();
+});
+
+test("a sign without an AED is reported as not recognized and cannot start the OSM search", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/vision/analyze", async (route) => {
+    const payload = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ json: {
+      request_id: payload.request_id, model: "gpt-6-luna",
+      observation: { scene: "sign_only", device_count: 0, readable_text: ["AED"], manufacturer: null, model: null, location_clues: [], image_issues: [] },
+    } });
+  });
+
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
+
+  await expect(page.getByRole("heading", { name: "Kein AED oder AED-Gehäuse erkannt" })).toBeVisible();
+  await expect(page.locator(".result-message")).toContainText("Ein Schild allein reicht nicht");
+  await expect(page.locator("[data-action='search-nearby']")).toHaveCount(0);
 });
 
 test("a development login can run read-only AI analysis while OSM writes remain disabled", async ({ page }) => {
@@ -122,7 +161,7 @@ test("a development login can run read-only AI analysis while OSM writes remain 
   await expect(analyzeButton).toBeVisible();
   await expect(page.locator(".capture-content")).toContainText("OpenStreetMap wird dabei nicht geändert");
   await analyzeButton.click();
-  await expect(page.getByRole("heading", { name: "KI-Bildbeobachtung" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "AED erkannt" })).toBeVisible();
   await expect(page.locator(".capture-content")).toContainText("Es wurde nichts in OpenStreetMap geändert");
   expect(analysisRequests).toBe(1);
   expect(osmWriteRequests).toBe(0);
@@ -262,7 +301,7 @@ test("a geotagged photo supplies the nearby search location and its GPS is strip
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
   await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
-  await expect(page.getByRole("heading", { name: "KI-Bildbeobachtung" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "AED erkannt" })).toBeVisible();
   await page.getByRole("button", { name: "AEDs in der Umgebung suchen" }).click();
   await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
 
@@ -677,7 +716,7 @@ test("the brand link cannot discard a photo while its AI request is in flight", 
   await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
   expect(requests).toBe(1);
   releaseResponse();
-  await expect(page.getByRole("heading", { name: "KI-Bildbeobachtung" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "AED erkannt" })).toBeVisible();
 });
 
 test("the live photo endpoint is not called until the user is signed in and chooses AI analysis", async ({ page }) => {
@@ -731,7 +770,7 @@ test("a temporary session-store failure keeps the photo and offers a safe retry"
   expect(requests).toBe(1);
   await page.getByRole("button", { name: "Mit demselben Foto erneut versuchen" }).click();
 
-  await expect(page.getByRole("heading", { name: "KI-Bildbeobachtung" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "AED erkannt" })).toBeVisible();
   expect(requests).toBe(2);
 });
 
@@ -762,7 +801,7 @@ test("a temporary budget-reservation failure keeps the photo and offers a safe r
   expect(requests).toBe(1);
   await page.getByRole("button", { name: "Mit demselben Foto erneut versuchen" }).click();
 
-  await expect(page.getByRole("heading", { name: "KI-Bildbeobachtung" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "AED erkannt" })).toBeVisible();
   expect(requests).toBe(2);
   expect(requestIds[1]).toBe(requestIds[0]);
 });
@@ -791,18 +830,18 @@ test("the AI result remains readable on a narrow phone in all six languages", as
     const payload = route.request().postDataJSON() as Record<string, unknown>;
     await route.fulfill({ json: {
       request_id: payload.request_id, model: "gpt-6-luna",
-      observation: { scene: "unclear", device_count: 0, readable_text: [], manufacturer: null, model: null, location_clues: [], image_issues: [] },
+      observation: { scene: "enclosure_visible", device_count: 0, readable_text: [], manufacturer: null, model: null, location_clues: [], image_issues: [] },
     } });
   });
   await page.goto("/");
 
   const languages = [
-    { code: "de", send: "Foto an OpenAI senden", result: "KI-Bildbeobachtung", discard: "Foto verwerfen", missingGps: "Dieses Foto enthält keine GPS-Koordinaten" },
-    { code: "en", send: "Send photo to OpenAI", result: "AI image observation", discard: "Discard photo", missingGps: "This photo has no GPS coordinates" },
-    { code: "pl", send: "Wyślij zdjęcie do OpenAI", result: "Obserwacja AI", discard: "Odrzuć zdjęcie", missingGps: "To zdjęcie nie zawiera współrzędnych GPS" },
-    { code: "ja", send: "写真をOpenAIに送信", result: "AIによる画像の観察", discard: "写真を破棄", missingGps: "この写真にはGPS座標がありません" },
-    { code: "fr", send: "Envoyer la photo à OpenAI", result: "Observation de l’image par l’IA", discard: "Supprimer la photo", missingGps: "Cette photo ne contient pas de coordonnées GPS" },
-    { code: "es", send: "Enviar foto a OpenAI", result: "Observación de imagen de IA", discard: "Descartar foto", missingGps: "Esta foto no contiene coordenadas GPS" },
+    { code: "de", send: "Foto an OpenAI senden", result: "AED erkannt", discard: "Foto verwerfen", missingGps: "Dieses Foto enthält keine GPS-Koordinaten" },
+    { code: "en", send: "Send photo to OpenAI", result: "AED recognized", discard: "Discard photo", missingGps: "This photo has no GPS coordinates" },
+    { code: "pl", send: "Wyślij zdjęcie do OpenAI", result: "Rozpoznano AED", discard: "Odrzuć zdjęcie", missingGps: "To zdjęcie nie zawiera współrzędnych GPS" },
+    { code: "ja", send: "写真をOpenAIに送信", result: "AEDを認識しました", discard: "写真を破棄", missingGps: "この写真にはGPS座標がありません" },
+    { code: "fr", send: "Envoyer la photo à OpenAI", result: "DAE reconnu", discard: "Supprimer la photo", missingGps: "Cette photo ne contient pas de coordonnées GPS" },
+    { code: "es", send: "Enviar foto a OpenAI", result: "DEA reconocido", discard: "Descartar foto", missingGps: "Esta foto no contiene coordenadas GPS" },
   ];
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   for (const language of languages) {
