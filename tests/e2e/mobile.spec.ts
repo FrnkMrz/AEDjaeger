@@ -750,6 +750,7 @@ test("an expired server session is shown as signed out after a 401", async ({ pa
   await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
 
   await expect(page.getByRole("heading", { name: "AEDjaeger braucht dein OpenStreetMap-Konto" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "AEDjaeger braucht dein OpenStreetMap-Konto" })).toBeFocused();
   await expect(page.locator("#camera-input, #file-input")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toBeVisible();
 });

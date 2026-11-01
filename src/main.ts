@@ -175,7 +175,7 @@ function loginEntry(): string {
   return `<section class="login-card" aria-labelledby="login-title">
     <div class="empty-illustration" aria-hidden="true"><span class="device-card"><span class="device-heart">♥</span><span class="device-zap">ϟ</span></span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>
     <p class="hero-kicker"><span></span>${t("eyebrow")}</p>
-    <h1 id="login-title">${t("accountGateTitle")}</h1>
+    <h1 id="login-title" tabindex="-1">${t("accountGateTitle")}</h1>
     <p class="login-intro">${t("accountGateIntro")}</p>
     <p class="login-requirement">${t("accountRequired")}</p>
     ${status ? `<div class="login-status-wrap">${status}</div>` : ""}
