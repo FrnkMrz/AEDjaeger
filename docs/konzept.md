@@ -24,7 +24,7 @@ Ein heutiges Foto bestätigt nicht automatisch die bisherigen Zugangszeiten oder
 
 ## Noch nicht eingetragen
 
-Die App bereitet den neuen Eintrag aus Position und Foto vor. Die KI soll erkennen, ob das Gerät sichtbar ist, und klar lesbare Angaben übernehmen, beispielsweise Hersteller, Modell oder eine Beschriftung zum Standort. Diese Erkennungsleistung muss an echten Fotos erprobt werden.
+Die App bereitet den neuen Eintrag aus Position und Foto vor. Als AED erkannt werden sowohl das sichtbare Gerät als auch ein eindeutig erkennbares AED-Gehäuse; das Gerät muss im Gehäuse nicht sichtbar sein. Die KI kann zusätzlich klar lesbare Angaben übernehmen, beispielsweise Hersteller, Modell oder eine Beschriftung zum Standort. Die Zahl sichtbarer Geräte darf die positive Erkennung eines Gehäuses nicht aufheben. Diese Erkennungsleistung muss an echten Fotos erprobt werden.
 
 Fehlen entscheidende Angaben, fragt die App gezielt nach, zum Beispiel „Wo im Gebäude?“ oder bei unsicherer Position „Wo hängt der AED?“. Eine kleine Karte erscheint nur, wenn die Lage geklärt werden muss oder der Benutzer sie korrigieren möchte. Optionale Angaben dürfen fehlen; es gibt keinen Fragenkatalog zum vollständigen Ausfüllen.
 
@@ -35,7 +35,7 @@ Fehlen entscheidende Angaben, fragt die App gezielt nach, zum Beispiel „Wo im 
 | Ein bestehender AED passt eindeutig | Vorhandensein mit einem Tippen bestätigen. |
 | Erfolgreiche Umgebungssuche, kein passender Eintrag | Neuanlage vorbereiten; nur entscheidende Lücken klären. |
 | Mehrere plausible Einträge | Kurze Auswahl: „Welcher ist es?“ mit unterscheidbaren Standortangaben. |
-| Nur ein Wegweiser oder ein geschlossener, nicht einsehbarer Kasten erkennbar | Nachfragen, ob das Gerät tatsächlich vorhanden ist; kein automatischer Existenznachweis. |
+| Nur ein Wegweiser oder eine eindeutig leere Halterung erkennbar | Kein AED erkannt; um ein direktes Foto des Geräts oder Gehäuses bitten. Ein eindeutig erkennbares AED-Gehäuse zählt als positive Erkennung, auch wenn das Gerät darin nicht sichtbar ist. |
 | Bild unscharf oder Erkennung unsicher | „Bitte noch ein Foto“ statt geratenen Daten. |
 | OSM-Abfrage fehlgeschlagen | Erneut versuchen; ein Fehler bedeutet nicht, dass noch kein Eintrag existiert. |
 | Upload fehlgeschlagen oder Ergebnis unklar | Aufnahme erhalten, Serverzustand prüfen und Doppelanlage vermeiden. |

@@ -98,8 +98,9 @@ export async function analyzeAedPhoto(
               "Leite weder Standort, Zugänglichkeit, Öffnungszeiten noch Funktionsfähigkeit ab. " +
               "Erstelle keine OSM-Tags und schlage keine Kartenänderung vor. Markiere Unsicherheit. " +
               "scene ist genau einer dieser Werte: device_visible (ein AED-Gerät sichtbar), " +
-              "enclosure_visible (AED-Gehäuse, Gerät nicht sichtbar), sign_only (nur ein AED-Hinweis), " +
-              "empty_holder (leere Halterung), multiple_devices (mehrere Geräte), other_object (anderer Gegenstand) " +
+              "enclosure_visible (ein als AED-Gehäuse erkennbarer Kasten, auch wenn das Gerät darin nicht sichtbar ist), " +
+              "sign_only (nur ein AED-Hinweis), empty_holder (eine eindeutig leere Halterung), " +
+              "multiple_devices (mehrere Geräte), other_object (anderer Gegenstand) " +
               "oder unclear. Zähle nur sichtbare Geräte; trenne Hersteller und Modell nur bei klarer Beschriftung. " +
               "Nenne höchstens vier kurze, nicht leere Textfragmente, Hersteller und Modell knapp sowie höchstens drei " +
               "kurze Lagehinweise. Verwende für Hersteller und Modell null, wenn keine lesbare Angabe sichtbar ist; " +
