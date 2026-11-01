@@ -95,6 +95,22 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
 .account-panel p { margin: 4px 0 0; line-height: 1.45; }
 .account-button { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #dbe7dd; border-radius: 10px; padding: 7px 11px; color: #27523d; background: #f5f8f4; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
 .account-button:focus-visible { outline: 3px solid #176b4b; outline-offset: 2px; }
+.login-main { display: grid; flex: 1; place-items: center; padding: 30px 0 42px; }
+.login-card { width: 100%; border: 1px solid #e5e9e3; border-radius: 26px; padding: clamp(22px, 6vw, 38px); background: #fff; box-shadow: 0 16px 42px #24372b0a, 0 2px 8px #24372b06; text-align: center; }
+.login-card .empty-illustration { margin-bottom: 19px; }
+.login-card .hero-kicker { margin-bottom: 12px; }
+.login-card h1 { max-width: 440px; margin: 0 auto 12px; font-size: clamp(25px, 7vw, 34px); }
+.login-intro { max-width: 410px; margin: 0 auto 13px; color: #626d66; font-size: 15px; line-height: 1.55; }
+.login-requirement { max-width: 410px; margin: 0 auto 19px; color: #52645a; font-size: 13px; line-height: 1.5; }
+.login-actions { display: grid; gap: 9px; margin: 0 auto 15px; }
+.account-sign-in { width: 100%; min-height: 50px; }
+.login-status-wrap { margin: 0 0 13px; border-radius: 12px; padding: 11px 12px; color: #6c5b22; background: #fff8e4; }
+.login-status { margin: 0; font-size: 13px; line-height: 1.5; }
+.account-create { border-top: 1px solid #edf0ec; padding-top: 15px; }
+.account-create-link { min-height: 46px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #dbe7dd; border-radius: 12px; padding: 10px 15px; color: #27523d; background: #f5f8f4; font-size: 14px; font-weight: 700; text-decoration: none; }
+.account-create-link:focus-visible { outline: 3px solid #176b4b; outline-offset: 2px; }
+.account-create-help, .login-credentials-note { max-width: 410px; margin: 9px auto 0; color: #68746d; font-size: 12px; line-height: 1.5; }
+.login-credentials-note { margin-top: 15px; }
 .footer-symbol { color: #75a184; font-size: 16px; }
 .demo-badge { margin-left: 3px; border: 1px solid #dce4dc; border-radius: 5px; padding: 2px 5px; color: #626d66; font-size: 9px; font-weight: 700; letter-spacing: .06em; }
 .info-dialog { width: min(540px, calc(100% - 28px)); max-width: none; max-height: min(86dvh, 780px); overflow: hidden; border: 1px solid #e0e8df; border-radius: 24px; padding: 0; color: var(--ink); background: #fff; box-shadow: 0 24px 80px #14251b35; }
