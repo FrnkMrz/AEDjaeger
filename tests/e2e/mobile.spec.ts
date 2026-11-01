@@ -893,6 +893,30 @@ test("an authenticated user can end the OSM session without exposing profile dat
   await expect(signIn).toBeFocused();
 });
 
+test("a failed logout keeps a retry action until the OSM session has ended", async ({ page }) => {
+  let authenticated = true;
+  let logoutAttempts = 0;
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/auth/logout", async (route) => {
+    logoutAttempts += 1;
+    if (logoutAttempts === 1) {
+      await route.fulfill({ status: 503, json: { error: "temporarily_unavailable" } });
+      return;
+    }
+    authenticated = false;
+    await route.fulfill({ status: 204 });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Abmelden" }).click();
+  await expect(page.locator(".login-card")).toContainText("Abmeldung fehlgeschlagen. Bitte prüfe deine Verbindung.");
+  const retryLogout = page.locator("#osm-sign-out");
+  await expect(retryLogout).toBeVisible();
+  await retryLogout.click();
+  await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toBeVisible();
+  expect(logoutAttempts).toBe(2);
+});
+
 test("a failed OAuth return shows a localized retry message and removes the callback marker", async ({ page }) => {
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   await page.goto("/?login=error");

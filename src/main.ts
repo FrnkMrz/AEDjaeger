@@ -163,8 +163,13 @@ function loginEntry(): string {
     status = `<p class="login-status" role="status">${t("accountUnavailable")}</p>`;
   } else {
     if (accountState === "login-error") status = `<p class="login-status" role="alert">${t("accountLoginError")}</p>`;
-    if (accountState === "logout-error") status = `<p class="login-status" role="alert">${t("accountSignOutError")}</p>`;
-    actions = signInLinks();
+    if (accountState === "logout-error") {
+      status = `<p class="login-status" role="alert">${t("accountSignOutError")}</p>`;
+      // Keep logout retryable if the server may still hold the user's session.
+      actions = `<button class="button button-secondary account-sign-in" id="osm-sign-out" type="button">${t("accountSignOut")}</button>`;
+    } else {
+      actions = signInLinks();
+    }
   }
 
   return `<section class="login-card" aria-labelledby="login-title">
