@@ -6,6 +6,7 @@ Stand: 27.10.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto
 
 - Die App ist als mobile PWA mit gemeinsam gehosteter Oberfläche und API auf Cloudflare vorgesehen. Der öffentliche Pilot-Worker ist unter [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev) erreichbar; API-Funktionen bleiben bis zu ihrer sicheren Konfiguration abgeschaltet.
 - Vor dem AED wird ein Foto aufgenommen. Die KI prüft, ob ein AED zu sehen ist, und liest nur klar erkennbare Angaben aus.
+- Eine gültige OpenStreetMap-Anmeldung ist Voraussetzung für jede Arbeitsfunktion. Ohne Sitzung wird nur die Einstiegsseite mit Konto-Erstellung und OSM-Anmeldung gezeigt; Kamera, Fotos, Demo, KI, Standort und Suche bleiben gesperrt.
 - Der Standort wird mit bestehenden OpenStreetMap-Einträgen abgeglichen. Ein passender Treffer wird als „noch vorhanden“ bestätigt; ohne Treffer wird ein neuer Eintrag vorbereitet.
 - Im eindeutigen Fall genügt eine kurze Bestätigung für den OSM-Schreibvorgang.
 - Die erste Version soll Deutsch, Englisch, Polnisch, Japanisch, Französisch und Spanisch unterstützen.

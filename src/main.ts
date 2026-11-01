@@ -142,9 +142,42 @@ function demoNotice(): string {
 }
 
 function signInLinks(): string {
-  const productionLink = productionLoginAvailable ? `<a class="account-button" id="osm-sign-in" href="/api/auth/osm/start">${t("accountSignIn")}</a>` : "";
-  const developmentLink = developmentLoginAvailable ? `<a class="account-button" id="osm-dev-sign-in" href="/api/auth/osm/development/start">${t("accountDevSignIn")}</a><p class="simulation-note">${t("accountDevNotice")}</p>` : "";
+  const productionLink = productionLoginAvailable ? `<a class="button button-primary account-sign-in" id="osm-sign-in" href="/api/auth/osm/start">${t("accountSignIn")}</a>` : "";
+  const developmentLink = developmentLoginAvailable ? `<a class="button button-secondary account-sign-in" id="osm-dev-sign-in" href="/api/auth/osm/development/start">${t("accountDevSignIn")}</a><p class="simulation-note">${t("accountDevNotice")}</p>` : "";
   return `${productionLink}${developmentLink}`;
+}
+
+/** Die OSM-Anmeldung ist Voraussetzung für alle Arbeitsfunktionen der App. */
+function loginEntry(): string {
+  const registerLink = `<a class="account-create-link" href="https://www.openstreetmap.org/user/new" target="_blank" rel="noopener noreferrer">${t("accountCreate")}</a>`;
+  const createHelp = `<p class="account-create-help">${t("accountCreateHelp")}</p>`;
+  let status = "";
+  let actions = "";
+
+  if (accountState === "checking") {
+    status = `<p class="login-status" role="status" aria-live="polite">${t("accountChecking")}</p>`;
+  } else if (accountState === "connection-error") {
+    status = `<p class="login-status" role="alert">${t("accountConnectionError")}</p>`;
+    actions = `<button class="button button-secondary account-sign-in" id="osm-session-retry" type="button">${t("accountRetry")}</button>`;
+  } else if (accountState === "not-configured") {
+    status = `<p class="login-status" role="status">${t("accountUnavailable")}</p>`;
+  } else {
+    if (accountState === "login-error") status = `<p class="login-status" role="alert">${t("accountLoginError")}</p>`;
+    if (accountState === "logout-error") status = `<p class="login-status" role="alert">${t("accountSignOutError")}</p>`;
+    actions = signInLinks();
+  }
+
+  return `<section class="login-card" aria-labelledby="login-title">
+    <div class="empty-illustration" aria-hidden="true"><span class="device-card"><span class="device-heart">♥</span><span class="device-zap">ϟ</span></span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>
+    <p class="hero-kicker"><span></span>${t("eyebrow")}</p>
+    <h1 id="login-title">${t("accountGateTitle")}</h1>
+    <p class="login-intro">${t("accountGateIntro")}</p>
+    <p class="login-requirement">${t("accountRequired")}</p>
+    ${status ? `<div class="login-status-wrap">${status}</div>` : ""}
+    ${actions ? `<div class="login-actions">${actions}</div>` : ""}
+    <div class="account-create">${registerLink}${createHelp}</div>
+    <p class="login-credentials-note">${t("accountCredentialsNote")}</p>
+  </section>`;
 }
 
 function accountPanel(): string {
@@ -369,21 +402,21 @@ function icon(kind: "camera" | "search" | "check"): string {
 function render(restoreFlowFocus = false): void {
   activePositionPicker?.destroy();
   activePositionPicker = undefined;
+  const authenticated = accountState === "signed-in";
   const isReady = state.kind === "ready";
   document.documentElement.lang = language;
   document.title = `${t("appName")} · ${t("tagline")}`;
   app!.innerHTML = `
     <div class="page-shell">
       <header class="topbar"><a class="brand" href="/" aria-label="${t("appName")}" ${hasUnresolvedSave(state) ? 'aria-disabled="true"' : ""}><span class="brand-mark">${icon("check")}</span><span>${t("appName")}</span></a><div class="topbar-actions"><button class="info-link" id="open-info" type="button"><span class="info-mark" aria-hidden="true">i</span><span>${t("aboutButton")}</span></button><label class="language-picker"><span class="sr-only">${t("language")}</span><select id="language" aria-label="${t("language")}">${supportedLanguages.map((code) => `<option value="${code}" ${language === code ? "selected" : ""}>${languageNames[code]}</option>`).join("")}</select><span class="language-globe" aria-hidden="true">◎</span></label></div></header>
-      <main>
+      ${authenticated ? `<main>
         <section class="hero ${isReady ? "" : "hero-compact"}"><div class="hero-kicker"><span></span>${t("eyebrow")}</div><h1>${isReady ? t("title") : state.kind === "analyzing" || state.kind === "vision-analyzing" || state.kind === "sending" ? t("checking") : t("tagline")}</h1>${isReady ? `<p>${t("intro")}</p>` : ""}</section>
         <section class="capture-card" aria-live="polite" aria-atomic="false">
           <div class="capture-content">${isReady ? `<div class="empty-illustration" aria-hidden="true"><span class="device-card"><span class="device-heart">♥</span><span class="device-zap">ϟ</span></span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>` : statusContent()}</div>
           ${isReady ? `<div class="capture-actions"><label class="button button-primary camera-label">${icon("camera")}<span>${t("camera")}</span><input id="camera-input" type="file" accept="image/*" capture="environment" /></label><label class="button button-secondary camera-label">${t("choosePhoto")}<input id="file-input" type="file" accept="image/*" /></label><p class="supporting-copy">${t("privacy")}</p></div>` : ""}
           ${isReady ? `<details class="demo-panel"><summary>${t("demo")}</summary><h2>${t("testStepsTitle")}</h2><p>${t("testSteps")}</p><label for="scenario">${t("scenario")}</label><select id="scenario">${(Object.keys(scenarioKeys) as DemoScenario[]).map((key) => `<option value="${key}" ${scenario === key ? "selected" : ""}>${t(scenarioKeys[key])}</option>`).join("")}</select><label class="diagnostics-opt-in" for="diagnostics-enabled"><input id="diagnostics-enabled" type="checkbox" ${diagnosticsEnabled ? "checked" : ""}><span><strong>${t("testDiagnostics")}</strong><small>${t("testDiagnosticsPrivacy")}</small></span></label></details>` : ""}
         </section>
-      </main>
-      ${accountPanel()}
+      </main>${accountPanel()}` : `<main class="login-main">${loginEntry()}</main>`}
       <footer><span class="footer-symbol" aria-hidden="true">✳</span><span>${t("sourceNote")}</span><span class="demo-badge">DEMO</span></footer>
       <dialog class="info-dialog" id="info-dialog" aria-labelledby="info-title" aria-describedby="info-intro">
         <div class="info-dialog-content">
@@ -499,30 +532,35 @@ async function refreshAccountState(focusSelector?: string): Promise<void> {
     // Local Vite previews and an unavailable Worker must not imply that an OSM session exists.
     accountState = "connection-error";
   }
-  const nextActionSelector = accountState === "connection-error" ? "#osm-session-retry"
-    : accountState === "signed-in" ? "#osm-sign-out"
-      : accountState === "signed-out" || accountState === "login-error" ? "#osm-sign-in"
-        : ".account-panel";
-  updateAccountPanel(focusSelector === "next-action" ? nextActionSelector : focusSelector);
-  // A photo may be selected while the initial session check is still running.
-  if (state.kind === "photo") render();
+  // Rendering the whole app here enforces the gate after sign-in, expiry, and logout.
+  render();
+  if (focusSelector === "next-action") {
+    const nextActionSelector = accountState === "connection-error" ? "#osm-session-retry"
+      : accountState === "signed-in" ? "#osm-sign-out"
+        : accountState === "signed-out" || accountState === "login-error" ? "#osm-sign-in"
+          : "#login-title";
+    app!.querySelector<HTMLElement>(nextActionSelector)?.focus();
+  } else if (focusSelector) {
+    app!.querySelector<HTMLElement>(focusSelector)?.focus();
+  }
 }
 
 async function signOutFromOSM(): Promise<void> {
   accountState = "checking";
-  updateAccountPanel(".account-panel");
+  render();
   try {
     await endOSMSession();
     await refreshAccountState("next-action");
   } catch {
     accountState = "logout-error";
-    updateAccountPanel("#osm-sign-out");
+    render();
+    app!.querySelector<HTMLElement>("#login-title")?.focus();
   }
 }
 
 async function retryOSMSessionStatus(): Promise<void> {
   accountState = "checking";
-  updateAccountPanel(".account-panel");
+  render();
   await refreshAccountState("next-action");
 }
 
@@ -587,6 +625,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function focusCurrentState(): void {
+  if (accountState !== "signed-in") {
+    const loginControl = app!.querySelector<HTMLElement>("#osm-session-retry, #osm-sign-in, #login-title");
+    loginControl?.focus();
+    return;
+  }
   const focusTargets: Record<FlowState["kind"], string> = {
     ready: "#camera-input",
     photo: accountState === "signed-in" ? '[data-action="analyze-live"]' : '[data-action="retake"]',
