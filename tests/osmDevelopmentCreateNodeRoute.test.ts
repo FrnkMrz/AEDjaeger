@@ -4,6 +4,7 @@ import { createOSMSession } from "../server/storage/osmSessions";
 import { storeOSMDevelopmentToken } from "../server/storage/osmDevelopmentTokens";
 import { importOAuthEncryptionKey } from "../server/auth/osmOAuth";
 import { handleDevelopmentCreateNode } from "../server/osm/developmentCreateNodeRoute";
+import { hashOSMDevelopmentWriteValue } from "../server/storage/osmDevelopmentWriteOperations";
 
 const now = Date.UTC(2026, 9, 24, 12);
 const cookieToken = "s".repeat(43);
@@ -230,6 +231,34 @@ describe("OSM development node creation", () => {
     expect(retry.status).toBe(200);
     expect(await retry.json()).toEqual({ status: "complete", node_id: "456", version: 1 });
     expect(api.uploadCount).toBe(1);
+  });
+
+  it("reconciles an older pending create when a retry includes an empty reviewed-candidate list", async () => {
+    const DB = await setupDatabase();
+    const sessionHash = await hashOSMDevelopmentWriteValue(cookieToken);
+    const legacyRequestHash = await hashOSMDevelopmentWriteValue(JSON.stringify(input));
+    DB.operations.set(`${sessionHash}:${operationId}`, {
+      session_hash: sessionHash,
+      operation_id: operationId,
+      request_hash: legacyRequestHash,
+      state: "uncertain",
+      changeset_id: "77",
+      result_version: null,
+      result_node_id: null,
+      updated_at: now,
+      expires_at: now + 60_000,
+    });
+    const api = makeFetch();
+
+    const retry = await handleDevelopmentCreateNode(
+      makeRequest({ ...input, confirmed_different_candidate_ids: [] }),
+      { ...environment, DB },
+      { now: () => now, fetch: api.fetcher },
+    );
+
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toEqual({ status: "complete", node_id: "456", version: 1 });
+    expect(api.uploadCount).toBe(0);
   });
 
   it("closes and reconciles an empty changeset before releasing a lost upload", async () => {

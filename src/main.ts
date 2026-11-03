@@ -798,7 +798,11 @@ function handleAction(action: string | undefined, source?: HTMLElement): void {
       coverageRadiusMeters: state.search.coverageRadiusMeters,
       nearbyRadiusMeters: 100,
       searchCandidates: state.search.candidates,
-      confirmedDifferentCandidateIds: state.noneOfTheseConfirmed ? state.search.candidates.map((candidate) => candidate.id) : [],
+      // Only reject AEDs the review panel actually showed. Other search results
+      // remain in the duplicate check, especially if the map point is moved.
+      confirmedDifferentCandidateIds: state.noneOfTheseConfirmed && state.assessment.kind === "candidate-review"
+        ? state.assessment.candidates.map((candidate) => candidate.id)
+        : [],
       positionConfirmed,
       observedOn: new Date().toISOString().slice(0, 10),
     });

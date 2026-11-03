@@ -91,7 +91,7 @@ describe("OSM change previews", () => {
       assessmentKind: "candidate-review",
       searchCandidates: candidates,
       confirmedDifferentCandidateIds: [candidates[0]!.id],
-    })).toEqual({ kind: "blocked", reason: "search-not-clear" });
+    })).toEqual({ kind: "blocked", reason: "search-found-candidate" });
   });
 
   it.each([
@@ -134,6 +134,28 @@ describe("OSM change previews", () => {
         position: { latitude: 52.52135, longitude: 13.405 },
         tags: { emergency: "defibrillator" },
       }],
+    })).toEqual({ kind: "blocked", reason: "search-found-candidate" });
+  });
+
+  it("keeps undisplayed search results in the duplicate check after the map point moves", () => {
+    const displayed = {
+      ...nodeCandidate,
+      coordinateQuality: "exact" as const,
+      position: { latitude: 52.52, longitude: 13.405 },
+    };
+    const undisplayed = {
+      ...nodeCandidate,
+      id: "node/456",
+      coordinateQuality: "exact" as const,
+      position: { latitude: 52.52, longitude: 13.4067 },
+    };
+    expect(previewNewAed({
+      ...newAedInput,
+      position: { latitude: 52.52, longitude: 13.406 },
+      coverageRadiusMeters: 250,
+      assessmentKind: "candidate-review",
+      searchCandidates: [displayed, undisplayed],
+      confirmedDifferentCandidateIds: [displayed.id],
     })).toEqual({ kind: "blocked", reason: "search-found-candidate" });
   });
 

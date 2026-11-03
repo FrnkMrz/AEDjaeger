@@ -74,7 +74,7 @@ export async function handleDevelopmentCreateNode(
     if (!storedToken) return jsonResponse({ error: "development_token_unavailable" }, 401);
     token = storedToken;
     sessionHash = await hashOSMDevelopmentWriteValue(sessionToken, dependencies.crypto);
-    requestHash = await hashOSMDevelopmentWriteValue(JSON.stringify(input), dependencies.crypto);
+    requestHash = await hashOSMDevelopmentWriteValue(serializeCreateRequestForHash(input), dependencies.crypto);
   } catch {
     return jsonResponse({ error: "development_write_unavailable" }, 503);
   }
@@ -381,6 +381,19 @@ function parseRequest(bytes: Uint8Array, now: number): CreateRequest {
     location_description: typeof value.location_description === "string" ? value.location_description.trim() : null,
     confirmed_different_candidate_ids: (value.confirmed_different_candidate_ids ?? []) as string[],
   } as CreateRequest;
+}
+
+/**
+ * Keep the pre-review request hash when the reviewed-candidate list is empty.
+ * That lets an in-flight create from an older deployment be reconciled with a
+ * retry from this version instead of being mistaken for a different operation.
+ */
+function serializeCreateRequestForHash(input: CreateRequest): string {
+  if (input.confirmed_different_candidate_ids.length > 0) return JSON.stringify(input);
+  const legacyCompatibleInput = Object.fromEntries(
+    Object.entries(input).filter(([key]) => key !== "confirmed_different_candidate_ids"),
+  );
+  return JSON.stringify(legacyCompatibleInput);
 }
 
 function isCalendarDate(value: unknown): value is string { if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false; const date = new Date(`${value}T00:00:00.000Z`); return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value; }

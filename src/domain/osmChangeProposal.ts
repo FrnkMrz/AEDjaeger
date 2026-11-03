@@ -112,11 +112,12 @@ export function previewNewAed(
   },
 ): ProposalResult<NewAedPreview> {
   const confirmedDifferentIds = new Set(input.confirmedDifferentCandidateIds ?? []);
-  const allCandidatesExplicitlyRejected = input.searchCandidates.length > 0
-    && input.searchCandidates.every((candidate) => confirmedDifferentIds.has(candidate.id))
-    && confirmedDifferentIds.size === input.searchCandidates.length;
+  // Only IDs from the visible candidate-review list should be passed here. Keep
+  // every other search result in the duplicate check in case the map point moves.
+  const confirmedIdsAreValid = confirmedDifferentIds.size === (input.confirmedDifferentCandidateIds ?? []).length
+    && [...confirmedDifferentIds].every((id) => input.searchCandidates.some((candidate) => candidate.id === id));
   const allowedAssessment = input.assessmentKind === "new-entry-eligible"
-    || input.assessmentKind === "candidate-review" && allCandidatesExplicitlyRejected;
+    || input.assessmentKind === "candidate-review" && confirmedDifferentIds.size > 0 && confirmedIdsAreValid;
   if (input.searchStatus !== "complete" || !allowedAssessment) {
     return { kind: "blocked", reason: "search-not-clear" };
   }
