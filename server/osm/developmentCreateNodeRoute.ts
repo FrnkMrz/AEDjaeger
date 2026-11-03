@@ -30,6 +30,7 @@ type CreateRequest = {
   longitude: number;
   observed_on: string;
   location_description: string | null;
+  confirmed_different_candidate_ids: string[];
 };
 /** Creates one confirmed AED node, using only the fixed OSM development API. */
 export async function handleDevelopmentCreateNode(
@@ -181,7 +182,13 @@ async function findNearbyAed(input: CreateRequest, token: string, fetcher: typeo
       || (element.tags !== undefined && !isStringRecord(element.tags))) {
       throw new Error("Invalid OSM map element");
     }
-    if (isStringRecord(element.tags) && element.tags.emergency === "defibrillator") return true;
+    if (isStringRecord(element.tags) && element.tags.emergency === "defibrillator") {
+      if (!isNumericId(typeof element.id === "number" ? String(element.id) : undefined)) return true;
+      const candidateId = `${element.type}/${element.id}`;
+      // Only nearby AEDs the person explicitly reviewed as different are exempt.
+      // Any newly appeared or unreviewed AED still blocks creation.
+      if (!input.confirmed_different_candidate_ids.includes(candidateId)) return true;
+    }
   }
   return false;
 }
@@ -352,17 +359,28 @@ function isPositiveIntString(value: string | undefined): value is string { retur
 function parseRequest(bytes: Uint8Array, now: number): CreateRequest {
   let value: unknown;
   try { value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); } catch { throw new Error("Invalid JSON"); }
-  if (!isRecord(value) || Object.keys(value).sort().join(",") !== "confirmed,latitude,location_description,longitude,observed_on,operation_id"
+  const expectedKeys = "confirmed,latitude,location_description,longitude,observed_on,operation_id";
+  const expectedKeysWithReviewedCandidates = `confirmed,confirmed_different_candidate_ids,latitude,location_description,longitude,observed_on,operation_id`;
+  const keys = isRecord(value) ? Object.keys(value).sort().join(",") : "";
+  if (!isRecord(value) || (keys !== expectedKeys && keys !== expectedKeysWithReviewedCandidates)
     || value.confirmed !== true || typeof value.operation_id !== "string"
     || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value.operation_id)
     || typeof value.latitude !== "number" || !Number.isFinite(value.latitude) || value.latitude < -90 || value.latitude > 90
     || typeof value.longitude !== "number" || !Number.isFinite(value.longitude) || value.longitude < -180 || value.longitude > 180
     || !isCalendarDate(value.observed_on) || Math.abs(Date.parse(`${value.observed_on}T12:00:00.000Z`) - now) > 24 * 60 * 60 * 1_000
     || !(value.location_description === null || (typeof value.location_description === "string" && value.location_description.trim().length > 0
-      && value.location_description.trim().length <= 160 && !/[\u0000-\u001f\u007f]/u.test(value.location_description)))) {
+      && value.location_description.trim().length <= 160 && !/[\u0000-\u001f\u007f]/u.test(value.location_description)))
+    || value.confirmed_different_candidate_ids !== undefined && (!Array.isArray(value.confirmed_different_candidate_ids)
+      || value.confirmed_different_candidate_ids.length > 100
+      || value.confirmed_different_candidate_ids.some((id) => typeof id !== "string" || !/^(node|way|relation)\/[1-9]\d{0,15}$/u.test(id))
+      || new Set(value.confirmed_different_candidate_ids).size !== value.confirmed_different_candidate_ids.length)) {
     throw new Error("Invalid request");
   }
-  return { ...value, location_description: typeof value.location_description === "string" ? value.location_description.trim() : null } as CreateRequest;
+  return {
+    ...value,
+    location_description: typeof value.location_description === "string" ? value.location_description.trim() : null,
+    confirmed_different_candidate_ids: (value.confirmed_different_candidate_ids ?? []) as string[],
+  } as CreateRequest;
 }
 
 function isCalendarDate(value: unknown): value is string { if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false; const date = new Date(`${value}T00:00:00.000Z`); return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value; }

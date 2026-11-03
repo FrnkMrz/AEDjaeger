@@ -5,6 +5,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 ## [Unreleased]
 
 ### Added
+- Ergänzt nach einer vollständigen Umgebungssuche den ausdrücklichen Weg „Keiner davon ist der fotografierte AED“. Erst nach dieser Prüfung lassen sich Standort auf der Karte bestätigen und eine Neuanlage vorbereiten; der OSM-Testserver prüft vor dem Schreiben erneut und blockiert alle nicht ausdrücklich geprüften AEDs.
 - Ergänzt eine mehrsprachige OSM-Einstiegsseite mit Konto-Erstellungslink. Ohne bestätigte OSM-Sitzung bleiben Fotoaufnahme, Fotoauswahl, Demo, KI-Analyse und Umgebungssuche ausgeblendet; Passwortdaten werden ausschließlich auf der OSM-Seite eingegeben.
 
 ### Fixed

@@ -129,7 +129,7 @@ function makeRequest(body: unknown = input): Request {
   });
 }
 
-function makeFetch(options: { nearbyAed?: boolean; loseUploadResponse?: boolean; invalidMap?: boolean; emptyChangeset?: boolean } = {}) {
+function makeFetch(options: { nearbyAed?: boolean; nearbyAedId?: number; loseUploadResponse?: boolean; invalidMap?: boolean; emptyChangeset?: boolean } = {}) {
   let loseUploadResponse = options.loseUploadResponse ?? false;
   let uploadCount = 0;
   const calls: Array<{ url: string; method: string; body?: string }> = [];
@@ -138,7 +138,7 @@ function makeFetch(options: { nearbyAed?: boolean; loseUploadResponse?: boolean;
     calls.push({ url, method, body });
     if (url.includes("/api/0.6/map.json?bbox=")) return Response.json(options.invalidMap
       ? { version: "0.6", elements: [{ error: "incomplete map response" }] }
-      : { version: "0.6", elements: [{ type: "node", id: 1 }, ...(options.nearbyAed ? [{ type: "node", id: 2, tags: { emergency: "defibrillator" } }] : [])] });
+      : { version: "0.6", elements: [{ type: "node", id: 1 }, ...(options.nearbyAed ? [{ type: "node", id: options.nearbyAedId ?? 2, tags: { emergency: "defibrillator" } }] : [])] });
     if (url.endsWith("/changeset/create")) return new Response("77", { status: 200 });
     if (url.endsWith("/changeset/77/upload")) {
       uploadCount += 1;
@@ -176,6 +176,21 @@ describe("OSM development node creation", () => {
   it("blocks creation if the fresh OSM map contains any nearby AED object", async () => {
     const DB = await setupDatabase(); const api = makeFetch({ nearbyAed: true });
     const response = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "nearby_aed_found" });
+    expect(api.calls.some((call) => call.url.endsWith("/changeset/create"))).toBe(false);
+  });
+
+  it("allows only the exact nearby AEDs explicitly reviewed as different", async () => {
+    const DB = await setupDatabase(); const api = makeFetch({ nearbyAed: true });
+    const response = await handleDevelopmentCreateNode(makeRequest({ ...input, confirmed_different_candidate_ids: ["node/2"] }), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    expect(response.status).toBe(200);
+    expect(api.calls.some((call) => call.url.endsWith("/upload"))).toBe(true);
+  });
+
+  it("still blocks an AED that appeared after the person reviewed the search results", async () => {
+    const DB = await setupDatabase(); const api = makeFetch({ nearbyAed: true, nearbyAedId: 3 });
+    const response = await handleDevelopmentCreateNode(makeRequest({ ...input, confirmed_different_candidate_ids: ["node/2"] }), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "nearby_aed_found" });
     expect(api.calls.some((call) => call.url.endsWith("/changeset/create"))).toBe(false);

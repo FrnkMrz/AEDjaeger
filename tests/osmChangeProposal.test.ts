@@ -59,7 +59,39 @@ describe("OSM change previews", () => {
         check_date: "2026-10-23",
         "defibrillator:location": "Eingang rechts",
       },
+      confirmedDifferentCandidateIds: [],
     });
+  });
+
+  it("allows a new preview after the person explicitly rejects every nearby candidate", () => {
+    const candidate = {
+      ...nodeCandidate,
+      coordinateQuality: "exact" as const,
+      position: { latitude: 52.52001, longitude: 13.40501 },
+    };
+    expect(previewNewAed({
+      ...newAedInput,
+      assessmentKind: "candidate-review",
+      searchCandidates: [candidate],
+      confirmedDifferentCandidateIds: [candidate.id],
+    })).toMatchObject({
+      kind: "ready",
+      operation: "create-node",
+      confirmedDifferentCandidateIds: [candidate.id],
+    });
+  });
+
+  it("does not allow a new preview if any nearby candidate was not explicitly rejected", () => {
+    const candidates = [
+      { ...nodeCandidate, coordinateQuality: "exact" as const, position: { latitude: 52.52, longitude: 13.405 } },
+      { ...nodeCandidate, id: "node/456", coordinateQuality: "exact" as const, position: { latitude: 52.52001, longitude: 13.40501 } },
+    ];
+    expect(previewNewAed({
+      ...newAedInput,
+      assessmentKind: "candidate-review",
+      searchCandidates: candidates,
+      confirmedDifferentCandidateIds: [candidates[0]!.id],
+    })).toEqual({ kind: "blocked", reason: "search-not-clear" });
   });
 
   it.each([

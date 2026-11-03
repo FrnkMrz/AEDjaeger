@@ -19,6 +19,7 @@ export interface NewAedPreview {
   operation: "create-node";
   position: Coordinate;
   tags: Readonly<Record<string, string>>;
+  confirmedDifferentCandidateIds: string[];
 }
 
 export type ProposalError =
@@ -103,12 +104,20 @@ export function previewNewAed(
     coverageRadiusMeters: number;
     nearbyRadiusMeters: number;
     searchCandidates: ReadonlyArray<OverpassCandidate>;
+    /** IDs the person explicitly reviewed and rejected as a match to the photographed AED. */
+    confirmedDifferentCandidateIds?: ReadonlyArray<string>;
     positionConfirmed: boolean;
     observedOn: string;
     locationDescription?: string;
   },
 ): ProposalResult<NewAedPreview> {
-  if (input.searchStatus !== "complete" || input.assessmentKind !== "new-entry-eligible") {
+  const confirmedDifferentIds = new Set(input.confirmedDifferentCandidateIds ?? []);
+  const allCandidatesExplicitlyRejected = input.searchCandidates.length > 0
+    && input.searchCandidates.every((candidate) => confirmedDifferentIds.has(candidate.id))
+    && confirmedDifferentIds.size === input.searchCandidates.length;
+  const allowedAssessment = input.assessmentKind === "new-entry-eligible"
+    || input.assessmentKind === "candidate-review" && allCandidatesExplicitlyRejected;
+  if (input.searchStatus !== "complete" || !allowedAssessment) {
     return { kind: "blocked", reason: "search-not-clear" };
   }
   if (!isValidDate(input.observedOn)) return { kind: "blocked", reason: "invalid-date" };
@@ -136,7 +145,9 @@ export function previewNewAed(
     {
       status: "complete",
       coverageRadiusMeters: input.coverageRadiusMeters,
-      candidates: [...input.searchCandidates],
+      // The person has just confirmed these exact nearby objects are different AEDs.
+      // The server independently re-reads OSM before writing and checks for new objects.
+      candidates: input.searchCandidates.filter((candidate) => !confirmedDifferentIds.has(candidate.id)),
     },
     { nearbyRadiusMeters: input.nearbyRadiusMeters, maximumAccuracyMeters: 0 },
   );
@@ -170,5 +181,6 @@ export function previewNewAed(
     operation: "create-node",
     position: { latitude: input.position.latitude, longitude: input.position.longitude },
     tags,
+    confirmedDifferentCandidateIds: [...confirmedDifferentIds],
   };
 }
