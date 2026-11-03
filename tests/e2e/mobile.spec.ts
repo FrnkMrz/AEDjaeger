@@ -558,6 +558,7 @@ test("a reviewed nearby AED can be rejected before preparing a separate new entr
   await page.getByRole("button", { name: "Foto an OpenAI senden" }).click();
   await beginNearbySearch(page);
   await expect(page.getByRole("button", { name: "Als noch vorhanden bestätigen" })).toBeVisible();
+  await expect(page.locator(".capture-content")).toContainText("Zwei AEDs stehen selten so nah.");
   await page.getByRole("button", { name: "Keiner davon ist der fotografierte AED" }).click();
   await expect(page.locator("#new-aed-position-map")).toBeVisible();
   await page.locator("#new-aed-position-confirmed").check();
