@@ -59,7 +59,39 @@ describe("OSM change previews", () => {
         check_date: "2026-10-23",
         "defibrillator:location": "Eingang rechts",
       },
+      confirmedDifferentCandidateIds: [],
     });
+  });
+
+  it("allows a new preview after the person explicitly rejects every nearby candidate", () => {
+    const candidate = {
+      ...nodeCandidate,
+      coordinateQuality: "exact" as const,
+      position: { latitude: 52.52001, longitude: 13.40501 },
+    };
+    expect(previewNewAed({
+      ...newAedInput,
+      assessmentKind: "candidate-review",
+      searchCandidates: [candidate],
+      confirmedDifferentCandidateIds: [candidate.id],
+    })).toMatchObject({
+      kind: "ready",
+      operation: "create-node",
+      confirmedDifferentCandidateIds: [candidate.id],
+    });
+  });
+
+  it("does not allow a new preview if any nearby candidate was not explicitly rejected", () => {
+    const candidates = [
+      { ...nodeCandidate, coordinateQuality: "exact" as const, position: { latitude: 52.52, longitude: 13.405 } },
+      { ...nodeCandidate, id: "node/456", coordinateQuality: "exact" as const, position: { latitude: 52.52001, longitude: 13.40501 } },
+    ];
+    expect(previewNewAed({
+      ...newAedInput,
+      assessmentKind: "candidate-review",
+      searchCandidates: candidates,
+      confirmedDifferentCandidateIds: [candidates[0]!.id],
+    })).toEqual({ kind: "blocked", reason: "search-found-candidate" });
   });
 
   it.each([
@@ -102,6 +134,28 @@ describe("OSM change previews", () => {
         position: { latitude: 52.52135, longitude: 13.405 },
         tags: { emergency: "defibrillator" },
       }],
+    })).toEqual({ kind: "blocked", reason: "search-found-candidate" });
+  });
+
+  it("keeps undisplayed search results in the duplicate check after the map point moves", () => {
+    const displayed = {
+      ...nodeCandidate,
+      coordinateQuality: "exact" as const,
+      position: { latitude: 52.52, longitude: 13.405 },
+    };
+    const undisplayed = {
+      ...nodeCandidate,
+      id: "node/456",
+      coordinateQuality: "exact" as const,
+      position: { latitude: 52.52, longitude: 13.4067 },
+    };
+    expect(previewNewAed({
+      ...newAedInput,
+      position: { latitude: 52.52, longitude: 13.406 },
+      coverageRadiusMeters: 250,
+      assessmentKind: "candidate-review",
+      searchCandidates: [displayed, undisplayed],
+      confirmedDifferentCandidateIds: [displayed.id],
     })).toEqual({ kind: "blocked", reason: "search-found-candidate" });
   });
 

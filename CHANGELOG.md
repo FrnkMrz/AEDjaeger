@@ -5,6 +5,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 ## [Unreleased]
 
 ### Added
+- Ergänzt nach einer vollständigen Umgebungssuche den ausdrücklichen, als seltene Ausnahme gekennzeichneten Weg „Keiner davon ist der fotografierte AED“. Erst nach sorgfältiger Einzelprüfung aller angezeigten nahen Treffer lassen sich Standort auf der Karte bestätigen und eine Neuanlage vorbereiten; nicht angezeigte Treffer bleiben in der Dublettenprüfung. Ältere laufende Uploads können nach einem Update sicher abgeglichen werden.
 - Ergänzt eine mehrsprachige OSM-Einstiegsseite mit Konto-Erstellungslink. Ohne bestätigte OSM-Sitzung bleiben Fotoaufnahme, Fotoauswahl, Demo, KI-Analyse und Umgebungssuche ausgeblendet; Passwortdaten werden ausschließlich auf der OSM-Seite eingegeben.
 
 ### Fixed

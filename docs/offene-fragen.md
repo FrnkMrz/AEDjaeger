@@ -8,6 +8,7 @@ Stand: 27.10.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto
 - Vor dem AED wird ein Foto aufgenommen. Die KI prüft, ob ein AED zu sehen ist, und liest nur klar erkennbare Angaben aus.
 - Eine gültige OpenStreetMap-Anmeldung ist Voraussetzung für jede Arbeitsfunktion. Ohne Sitzung wird nur die Einstiegsseite mit Konto-Erstellung und OSM-Anmeldung gezeigt; Kamera, Fotos, Demo, KI, Standort und Suche bleiben gesperrt.
 - Der Standort wird mit bestehenden OpenStreetMap-Einträgen abgeglichen. Ein passender Treffer wird als „noch vorhanden“ bestätigt; ohne Treffer wird ein neuer Eintrag vorbereitet.
+- Werden nahe AEDs gefunden, kann die Person jetzt ausdrücklich bestätigen, dass keiner davon das fotografierte Gerät ist. Nach einer vollständigen Suche führt das zur Standortkarte; der Testserver prüft vor einer Neuanlage erneut auf inzwischen erschienene oder nicht geprüfte AEDs. Eine echte OSM-Testserver-Schreibprobe steht noch aus.
 - Im eindeutigen Fall genügt eine kurze Bestätigung für den OSM-Schreibvorgang.
 - Die erste Version soll Deutsch, Englisch, Polnisch, Japanisch, Französisch und Spanisch unterstützen.
 - Im Pilot wird Gamification nur intern gezählt: erfolgreiche Vor-Ort-Prüfungen nach bestätigtem OSM-Vorgang. Es gibt keine sichtbare Anzeige und keine Teilfunktion. Teilen wird frühestens nach dem Pilot neu bewertet.

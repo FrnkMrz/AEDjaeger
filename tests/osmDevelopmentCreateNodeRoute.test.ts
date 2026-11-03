@@ -4,6 +4,7 @@ import { createOSMSession } from "../server/storage/osmSessions";
 import { storeOSMDevelopmentToken } from "../server/storage/osmDevelopmentTokens";
 import { importOAuthEncryptionKey } from "../server/auth/osmOAuth";
 import { handleDevelopmentCreateNode } from "../server/osm/developmentCreateNodeRoute";
+import { hashOSMDevelopmentWriteValue } from "../server/storage/osmDevelopmentWriteOperations";
 
 const now = Date.UTC(2026, 9, 24, 12);
 const cookieToken = "s".repeat(43);
@@ -129,7 +130,7 @@ function makeRequest(body: unknown = input): Request {
   });
 }
 
-function makeFetch(options: { nearbyAed?: boolean; loseUploadResponse?: boolean; invalidMap?: boolean; emptyChangeset?: boolean } = {}) {
+function makeFetch(options: { nearbyAed?: boolean; nearbyAedId?: number; loseUploadResponse?: boolean; invalidMap?: boolean; emptyChangeset?: boolean } = {}) {
   let loseUploadResponse = options.loseUploadResponse ?? false;
   let uploadCount = 0;
   const calls: Array<{ url: string; method: string; body?: string }> = [];
@@ -138,7 +139,7 @@ function makeFetch(options: { nearbyAed?: boolean; loseUploadResponse?: boolean;
     calls.push({ url, method, body });
     if (url.includes("/api/0.6/map.json?bbox=")) return Response.json(options.invalidMap
       ? { version: "0.6", elements: [{ error: "incomplete map response" }] }
-      : { version: "0.6", elements: [{ type: "node", id: 1 }, ...(options.nearbyAed ? [{ type: "node", id: 2, tags: { emergency: "defibrillator" } }] : [])] });
+      : { version: "0.6", elements: [{ type: "node", id: 1 }, ...(options.nearbyAed ? [{ type: "node", id: options.nearbyAedId ?? 2, tags: { emergency: "defibrillator" } }] : [])] });
     if (url.endsWith("/changeset/create")) return new Response("77", { status: 200 });
     if (url.endsWith("/changeset/77/upload")) {
       uploadCount += 1;
@@ -181,6 +182,21 @@ describe("OSM development node creation", () => {
     expect(api.calls.some((call) => call.url.endsWith("/changeset/create"))).toBe(false);
   });
 
+  it("allows only the exact nearby AEDs explicitly reviewed as different", async () => {
+    const DB = await setupDatabase(); const api = makeFetch({ nearbyAed: true });
+    const response = await handleDevelopmentCreateNode(makeRequest({ ...input, confirmed_different_candidate_ids: ["node/2"] }), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    expect(response.status).toBe(200);
+    expect(api.calls.some((call) => call.url.endsWith("/upload"))).toBe(true);
+  });
+
+  it("still blocks an AED that appeared after the person reviewed the search results", async () => {
+    const DB = await setupDatabase(); const api = makeFetch({ nearbyAed: true, nearbyAedId: 3 });
+    const response = await handleDevelopmentCreateNode(makeRequest({ ...input, confirmed_different_candidate_ids: ["node/2"] }), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "nearby_aed_found" });
+    expect(api.calls.some((call) => call.url.endsWith("/changeset/create"))).toBe(false);
+  });
+
   it("fails closed when the fresh map response is incomplete", async () => {
     const DB = await setupDatabase(); const api = makeFetch({ invalidMap: true });
     const response = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
@@ -215,6 +231,34 @@ describe("OSM development node creation", () => {
     expect(retry.status).toBe(200);
     expect(await retry.json()).toEqual({ status: "complete", node_id: "456", version: 1 });
     expect(api.uploadCount).toBe(1);
+  });
+
+  it("reconciles an older pending create when a retry includes an empty reviewed-candidate list", async () => {
+    const DB = await setupDatabase();
+    const sessionHash = await hashOSMDevelopmentWriteValue(cookieToken);
+    const legacyRequestHash = await hashOSMDevelopmentWriteValue(JSON.stringify(input));
+    DB.operations.set(`${sessionHash}:${operationId}`, {
+      session_hash: sessionHash,
+      operation_id: operationId,
+      request_hash: legacyRequestHash,
+      state: "uncertain",
+      changeset_id: "77",
+      result_version: null,
+      result_node_id: null,
+      updated_at: now,
+      expires_at: now + 60_000,
+    });
+    const api = makeFetch();
+
+    const retry = await handleDevelopmentCreateNode(
+      makeRequest({ ...input, confirmed_different_candidate_ids: [] }),
+      { ...environment, DB },
+      { now: () => now, fetch: api.fetcher },
+    );
+
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toEqual({ status: "complete", node_id: "456", version: 1 });
+    expect(api.uploadCount).toBe(0);
   });
 
   it("closes and reconciles an empty changeset before releasing a lost upload", async () => {

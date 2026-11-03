@@ -16,6 +16,8 @@ export type CandidateResultState = {
   search: OverpassSearchResult;
   assessment: CandidateAssessment;
   location: SearchLocation;
+  /** Explicitly records that the person reviewed all nearby entries and none is this AED. */
+  noneOfTheseConfirmed?: boolean;
   retryAvailableAt?: number;
 };
 
@@ -24,7 +26,7 @@ export type DevelopmentWriteRequest = {
   candidateLabel: string;
 } & (
   | { kind: "check-date"; target: string; expectedVersion: number; expectedCheckDate: string | null; observedOn: string }
-  | { kind: "create-node"; latitude: number; longitude: number; observedOn: string; locationDescription: string | null }
+  | { kind: "create-node"; latitude: number; longitude: number; observedOn: string; locationDescription: string | null; confirmedDifferentCandidateIds: string[] }
 );
 
 export type FlowState =

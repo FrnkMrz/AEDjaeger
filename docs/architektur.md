@@ -187,7 +187,7 @@ Erst nach erfolgreicher Suche im relevanten Bereich darf eine Neuanlage angebote
 
 - Eindeutig plausibler Kandidat ohne Widerspruch: Standortbeschreibung in der Bestätigung zeigen.
 - Mehrere plausible Kandidaten: eine kurze, unterscheidbare Auswahl anbieten.
-- Kein plausibler Kandidat nach vollständiger Suche: Neuanlage samt Standortvorschau.
+- Passt nach vollständiger Suche keiner der angezeigten Kandidaten zum Foto, darf die Neuanlage trotz naher Treffer nur als seltene, ausdrücklich bestätigte Ausnahme angeboten werden: jeden Treffer einzeln als anderes Gerät bestätigen lassen, dann Neuanlage samt Standortvorschau anbieten. Eine erneute Serverprüfung muss inzwischen hinzugekommene oder nicht geprüfte AEDs weiterhin blockieren.
 - Unklare Lage oder widersprüchliche Hinweise: eine passende Rückfrage oder Entwurf.
 - Ein bereits vorhandener AED wird nicht wegen einer abweichenden Handyposition verschoben.
 - Ungewöhnliche OSM-Objekte, etwa als Gebäude erfasste AEDs, nicht automatisch in Knoten umwandeln. Vorerst gesondert behandeln.

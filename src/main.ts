@@ -88,7 +88,13 @@ function readPendingDevelopmentWrite(): DevelopmentWriteRequest | undefined {
     }
     if (kind === "create-node" && typeof value.latitude === "number" && Number.isFinite(value.latitude) && Math.abs(value.latitude) <= 90
       && typeof value.longitude === "number" && Number.isFinite(value.longitude) && Math.abs(value.longitude) <= 180
-      && (value.locationDescription === null || typeof value.locationDescription === "string" && value.locationDescription.length <= 255)) return value as unknown as DevelopmentWriteRequest;
+      && (value.locationDescription === null || typeof value.locationDescription === "string" && value.locationDescription.length <= 255)) {
+      const confirmedIds = value.confirmedDifferentCandidateIds ?? [];
+      if (!Array.isArray(confirmedIds) || confirmedIds.length > 100
+        || confirmedIds.some((id) => typeof id !== "string" || !/^(node|way|relation)\/[1-9]\d{0,15}$/u.test(id))
+        || new Set(confirmedIds).size !== confirmedIds.length) return undefined;
+      return { ...value, confirmedDifferentCandidateIds: confirmedIds } as unknown as DevelopmentWriteRequest;
+    }
     return undefined;
   } catch {
     return undefined;
@@ -287,9 +293,14 @@ function statusContent(): string {
       else if (assessment.kind === "location-too-uncertain") outcome = tv("locationUncertain");
       else outcome = tv("searchFailedResult");
       const selectedPosition = newAedPositionOverride ?? state.location;
-      const newEntryAction = search.status === "complete" && assessment.kind === "new-entry-eligible"
+      const mayPrepareNewEntry = search.status === "complete"
+        && (assessment.kind === "new-entry-eligible" || assessment.kind === "candidate-review" && state.noneOfTheseConfirmed);
+      const newEntryAction = mayPrepareNewEntry
         ? `<section class="position-picker-panel" aria-labelledby="new-aed-position-title"><h3 id="new-aed-position-title">${tv("newPositionMapLabel")}</h3><p class="position-picker-help">${tv("newPositionMapHelp")}</p><p class="position-map-privacy">${tv("newPositionMapPrivacy")}</p><div id="new-aed-position-map" class="position-map" role="application" tabindex="0" aria-label="${tv("newPositionMapLabel")}"></div><p class="position-map-coordinates" id="new-aed-position-coordinates" aria-live="polite">${tv("newPreviewCoordinates", { latitude: selectedPosition.latitude.toFixed(5), longitude: selectedPosition.longitude.toFixed(5) })}</p><div class="position-confirmation"><label for="new-aed-position-confirmed"><input id="new-aed-position-confirmed" type="checkbox" /><span id="new-aed-position-label">${tv("newPositionConfirm", { latitude: selectedPosition.latitude.toFixed(5), longitude: selectedPosition.longitude.toFixed(5) })}</span></label><button class="button button-primary" data-action="preview-new-aed">${tv("newPreviewAction")}</button></div></section>`
         : "";
+      const rejectNearbyCandidates = search.status === "complete" && assessment.kind === "candidate-review" && !state.noneOfTheseConfirmed
+        ? `<p class="supporting-copy">${tv("noneMatchHelp")}</p><button class="button button-secondary" data-action="none-of-these">${tv("noneMatchAction")}</button>`
+        : state.noneOfTheseConfirmed ? `<p class="supporting-copy">${tv("noneMatchHelp")}</p>` : "";
       const retryWaitSeconds = state.retryAvailableAt === undefined ? 0 : Math.max(0, Math.ceil((state.retryAvailableAt - Date.now()) / 1000));
       const retry = search.status === "partial" || assessment.kind === "search-incomplete"
         ? retryWaitSeconds > 0
@@ -297,7 +308,7 @@ function statusContent(): string {
           : `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`
         : "";
       const locationSource = activeSearchLocationSource === "photo" ? "locationSourcePhoto" : "locationSourcePhone";
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p><p class="supporting-copy">${tv(locationSource)}</p>${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}<p class="simulation-note">${tv("searchNoWrite")}</p></div></div>${newEntryAction}${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p><p class="supporting-copy">${tv(locationSource)}</p>${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}<p class="simulation-note">${tv("searchNoWrite")}</p></div></div>${rejectNearbyCandidates}${newEntryAction}${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     }
     case "new-aed-preview": {
       const point = state.result.kind === "ready" ? state.result.position : state.returnState.location;
@@ -306,7 +317,7 @@ function statusContent(): string {
       // Coordinates are numeric GPS values validated by the location and proposal boundaries.
       const mapUrl = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=19/${latitude}/${longitude}`;
       const content = state.result.kind === "ready"
-        ? `<p>${tv("newPreviewCoordinates", { latitude, longitude })}</p><p><a href="${mapUrl}" target="_blank" rel="noopener noreferrer">${tv("newPreviewOpenMap")}</a></p><strong>${tv("newPreviewTags")}</strong><ul>${Object.entries(state.result.tags).map(([key, value]) => `<li><code>${escapeHtml(key)}=${escapeHtml(value)}</code></li>`).join("")}</ul><p>${tv("newPreviewCaution")}</p>`
+        ? `<p>${tv("newPreviewCoordinates", { latitude, longitude })}</p><p><a href="${mapUrl}" target="_blank" rel="noopener noreferrer">${tv("newPreviewOpenMap")}</a></p><strong>${tv("newPreviewTags")}</strong><ul>${Object.entries(state.result.tags).map(([key, value]) => `<li><code>${escapeHtml(key)}=${escapeHtml(value)}</code></li>`).join("")}</ul><p>${state.result.confirmedDifferentCandidateIds.length > 0 ? tv("newPreviewReviewedCandidates") : tv("newPreviewCaution")}</p>`
         : `<p>${tv(state.result.reason === "position-not-confirmed" ? "newPositionRequired" : state.result.reason === "search-found-candidate" ? "newPreviewFoundCandidate" : "newPreviewSearchInvalid")}</p><p><a href="${mapUrl}" target="_blank" rel="noopener noreferrer">${tv("newPreviewOpenMap")}</a></p>`;
       const copy = developmentWriteCopy[language];
       const canCreate = developmentSession && developmentWriteAvailable && state.result.kind === "ready";
@@ -439,7 +450,8 @@ function render(restoreFlowFocus = false): void {
       </dialog>
     </div>`;
 
-  if (state.kind === "candidate-result" && state.search.status === "complete" && state.assessment.kind === "new-entry-eligible") {
+  if (state.kind === "candidate-result" && state.search.status === "complete"
+    && (state.assessment.kind === "new-entry-eligible" || state.assessment.kind === "candidate-review" && state.noneOfTheseConfirmed)) {
     const mapContainer = app!.querySelector<HTMLDivElement>("#new-aed-position-map");
     if (mapContainer) {
       activePositionPicker = createPositionPicker(mapContainer, newAedPositionOverride ?? state.location, {
@@ -584,6 +596,7 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
       } : {
         operation_id: requestBody.operationId, confirmed: true, latitude: requestBody.latitude, longitude: requestBody.longitude,
         observed_on: requestBody.observedOn, location_description: requestBody.locationDescription,
+        confirmed_different_candidate_ids: requestBody.confirmedDifferentCandidateIds,
       }),
     });
     const payload: unknown = await response.json();
@@ -769,8 +782,13 @@ function handleAction(action: string | undefined, source?: HTMLElement): void {
     const result = previewExistingAedCheck(candidate, true, new Date().toISOString().slice(0, 10));
     const candidateLabel = candidate.tags.name || candidate.tags["defibrillator:location"] || candidate.id;
     state = { kind: "osm-preview", photoUrl: state.photoUrl, candidateId, candidateLabel, result, returnState: state };
+  } else if (action === "none-of-these" && state.kind === "candidate-result" && state.search.status === "complete" && state.assessment.kind === "candidate-review") {
+    // The person explicitly rejects each displayed nearby AED as the photographed device.
+    // A corrected map point and a fresh server-side OSM check are still required before upload.
+    newAedPositionOverride = undefined;
+    state = { ...state, noneOfTheseConfirmed: true };
   } else if (action === "preview-new-aed" && state.kind === "candidate-result") {
-    if (state.search.status !== "complete" || state.assessment.kind !== "new-entry-eligible") return;
+    if (state.search.status !== "complete" || (state.assessment.kind !== "new-entry-eligible" && !(state.assessment.kind === "candidate-review" && state.noneOfTheseConfirmed))) return;
     const positionConfirmed = app!.querySelector<HTMLInputElement>("#new-aed-position-confirmed")?.checked === true;
     const result = previewNewAed({
       searchStatus: state.search.status,
@@ -780,6 +798,11 @@ function handleAction(action: string | undefined, source?: HTMLElement): void {
       coverageRadiusMeters: state.search.coverageRadiusMeters,
       nearbyRadiusMeters: 100,
       searchCandidates: state.search.candidates,
+      // Only reject AEDs the review panel actually showed. Other search results
+      // remain in the duplicate check, especially if the map point is moved.
+      confirmedDifferentCandidateIds: state.noneOfTheseConfirmed && state.assessment.kind === "candidate-review"
+        ? state.assessment.candidates.map((candidate) => candidate.id)
+        : [],
       positionConfirmed,
       observedOn: new Date().toISOString().slice(0, 10),
     });
@@ -797,6 +820,7 @@ function handleAction(action: string | undefined, source?: HTMLElement): void {
       candidateLabel: `${preview.result.position.latitude.toFixed(5)}, ${preview.result.position.longitude.toFixed(5)}`,
       latitude: preview.result.position.latitude, longitude: preview.result.position.longitude,
       observedOn: preview.result.tags.check_date, locationDescription: null,
+      confirmedDifferentCandidateIds: preview.result.confirmedDifferentCandidateIds,
     };
     try {
       // Persist the exact confirmed proposal before network I/O so an interrupted request can be reconciled.
