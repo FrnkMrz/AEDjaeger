@@ -23,6 +23,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Changed
 
+- Dokumentiert die neue Entwicklungsrichtung für den Pilot: lokale Sichtbestätigung, regionale AED-Daten aus OpenFireMap und direkte OSM-Prüfung beim Bearbeiten. Der Übergabeplan beschreibt den vorgesehenen Ausbau ohne OpenAI und Overpass.
 - Vereinfacht das KI-Ergebnis zu „AED erkannt“ oder „Kein AED oder AED-Gehäuse erkannt“. Ein erkennbares AED-Gehäuse zählt auch ohne sichtbares Gerät als positiver Fund; ein bloßes Schild, eine leere Halterung oder ein unklarer Fall führt nicht zur Umgebungssuche.
 - Umgebungssuche verwendet GPS-Koordinaten aus dem Foto, wenn vorhanden. Ohne Foto-GPS wird der Handy-Standort erst nach ausdrücklicher Auswahl verwendet. EXIF-Daten bleiben lokal und werden nicht an die KI gesendet. Bei ungenauem Handy-GPS fragt ein erneuter Versuch die aktuelle Position erneut ab.
 - Ermöglicht angemeldeten OSM-Dev-Konten die ausdrücklich ausgelöste, budgetbegrenzte KI-Bildanalyse auch dann, wenn OSM-Schreibzugriffe ausgeschaltet sind. Speichern bleibt weiterhin separat gesperrt.

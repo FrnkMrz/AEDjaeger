@@ -1,5 +1,7 @@
 # Entscheidungen und nächste Schritte
 
+**Aktueller Auftrag:** [Pilot ohne OpenAI und Overpass](umbau-ohne-openai-und-overpass.md). Offen sind die Abnahme des Datenexports, der echte Testserver-Schreibtest nach Freigabe und die Qualitätsprüfung einer späteren lokalen Erkennung. Die bisherigen Anbieter- und Budgetfragen weiter unten sind historisch.
+
 Stand: 8.11.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto → prüfen → vorhandenen AED kurz bestätigen oder neuen AED eintragen.** GPT-6 Luna ist als erstes Bildmodell gewählt. Der OSM-Dev-Login wurde erfolgreich abgeschlossen und die App hat das gezeigte AED-Gehäuse als AED beobachtet. OSM-Schreibzugriffe bleiben ausgeschaltet. Zwei echte, lesende Umgebungssuchen mit Foto-GPS schlugen mit einer allgemeinen Verfügbarkeitsmeldung fehl; kein Standort oder Ergebnis wurde gespeichert und es gab keine OSM-Änderung. Dieser PR ergänzt sichere Diagnose-Logs, damit der nächste Versuch zwischen Overpass-, D1- und Worker-Fehlern unterscheiden kann. Der veröffentlichte Worker und die D1-Pilotdatenbank bleiben aktiv.
 
 ## Festgelegt

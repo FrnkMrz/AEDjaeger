@@ -1,5 +1,7 @@
 # Produktkonzept: Foto machen, AED eintragen oder bestätigen
 
+Die [aktuelle Umbauentscheidung](umbau-ohne-openai-und-overpass.md) ersetzt die unten beschriebene externe KI-Anfrage. Das Foto bleibt der Einstieg. Im ersten Pilot bestätigt die Person selbst, was sie vor Ort gesehen hat.
+
 Stand: 19.10.2026. Die Produktrichtung wurde vom Projektinitiator konkretisiert. Für den ersten API-Prototyp ist GPT-6 Luna festgelegt; die Erkennung wurde bislang nur explorativ mit drei positiven Testfotos geprüft.
 
 ## Oberstes Ziel: absolute Einfachheit

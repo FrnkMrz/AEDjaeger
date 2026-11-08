@@ -4,15 +4,15 @@
 
 Baue eine sehr einfache, mobile PWA für die Erfassung und Vor-Ort-Bestätigung von AEDs in OpenStreetMap. Der Hauptablauf lautet: **AED fotografieren → Foto und Umgebung prüfen → vorhandenen AED kurz als noch vorhanden bestätigen oder einen neuen Eintrag vorbereiten → speichern**. Stelle nur Fragen, deren Antwort für Erkennung, Zuordnung oder einen korrekten OSM-Eintrag erforderlich ist.
 
-Das Repository befindet sich noch in der Recherche- und Konzeptphase. Lies vor Implementierungsaufträgen die relevanten Abschnitte in `docs/architektur.md`, `docs/konzept.md`, `docs/osm.md` und `docs/umsetzungsplan.md`. Die Dokumente beschreiben Vorschläge und offene Punkte; prüfe sie gegen die neueste Nutzerentscheidung, bevor du Annahmen in Code verwandelst.
+Lies vor Implementierungsaufträgen die relevanten Abschnitte in `docs/architektur.md`, `docs/konzept.md`, `docs/osm.md` und `docs/umsetzungsplan.md`. Für den Umbau hat `docs/umbau-ohne-openai-und-overpass.md` Vorrang vor älteren Beschreibungen der Fotoanalyse und Umgebungssuche.
 
 ## Entscheidungen und Umfang
 
 - Oberfläche und API sind für Cloudflare Workers mit Static Assets vorgesehen. Starte Prototyp und kleinen Pilot mit Workers Free und der `workers.dev`-Adresse. Aktiviere keinen Paid-Tarif, kaufe keine Domain und füge keine kostenpflichtigen Dienste hinzu, ohne dass der Nutzer dies ausdrücklich beauftragt.
 - Die erste Version unterstützt Deutsch, Englisch, Polnisch, Japanisch, Französisch und Spanisch. Keine sichtbaren, unübersetzten Platzhaltertexte in diesen Sprachen ausliefern.
 - Im Pilot bleibt Gamification für Nutzende unsichtbar. Intern dürfen nur erfolgreiche Vor-Ort-Prüfungen nach bestätigtem OSM-Vorgang gezählt werden. Keine Punkteanzeige, Rangliste, öffentliche Fortschrittskarte oder Teilen-Funktion ohne neue Produktentscheidung.
-- Ein App-API-Zugang wird getrennt von Chat-Abos behandelt. Die ChatGPT- und Gemini-Abos des Nutzers sind kein API-Schlüssel oder API-Guthaben für die laufende App.
-- Für die erste Bildanalyse ist OpenAI GPT-6 Luna (`gpt-6-luna`) festgelegt. Kein höheres OpenAI-Modell für AEDjaeger verwenden; Modellwechsel erfordern eine ausdrückliche neue Produktentscheidung.
+- Der Zielbetrieb von AEDjaeger kommt ohne OpenAI und Overpass aus. Fotos bleiben auf dem Gerät. Der Pilot beginnt mit einer kurzen Sichtbestätigung durch die Person vor Ort. Eine spätere automatische Fotoerkennung wird ausschließlich auf dem Gerät ausgeführt und braucht eine eigene Abnahme.
+- Die Umgebungssuche nutzt einen regionalen AED-Datenbestand aus der OpenFireMap-Pipeline. Die offizielle OSM-Bearbeitungs-API dient zur aktuellen Prüfung konkreter Bearbeitungen und zum bestätigten Speichern. Foto, Suche und Schreiben müssen auch ohne Modell funktionieren.
 - Die Anwendung heißt in allen Sprachen „AEDjaeger“. Der Name wird ohne Umlaute geschrieben; Domain und Lizenz bleiben offen.
 
 ## Sicherheit und Daten

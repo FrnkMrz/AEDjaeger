@@ -1,5 +1,7 @@
 # OSM-Datenmodell und technische Grundlagen
 
+Die folgende Dokumentation beschreibt unter anderem die bisherige Overpass-Anbindung. Für die neue Umgebungssuche und die direkte OSM-Prüfung gilt der [Umbauplan](umbau-ohne-openai-und-overpass.md).
+
 Stand: 17.10.2026. Fachliche Grundlage: [deutsche Tagging-Seite](https://wiki.openstreetmap.org/wiki/DE:Tag:emergency=defibrillator) und [englische Tagging-Seite](https://wiki.openstreetmap.org/wiki/Tag:emergency=defibrillator). Die UI-Zuordnung ist unser Entwurf.
 
 ## Mögliche Datenfelder im Hintergrund
