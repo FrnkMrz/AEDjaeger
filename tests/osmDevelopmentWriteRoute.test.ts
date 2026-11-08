@@ -263,6 +263,16 @@ describe("OSM development check-date writer", () => {
     expect(calls.filter((call) => call.url.endsWith("/upload"))).toHaveLength(1);
   });
 
+  it("uses a fresh targeted OSM node read when the static AED index has no version", async () => {
+    const DB = await setupDatabase();
+    const { fetcher, calls } = makeFetch();
+    const { expected_version: _ignored, ...versionlessRequest } = requestBody;
+    const response = await handleDevelopmentCheckDate(makeRequest(versionlessRequest), { ...environment, DB }, { now: () => now, fetch: fetcher });
+    expect(response.status).toBe(200);
+    expect(calls[0].url).toMatch(/\/api\/0\.6\/node\/42\.json$/u);
+    expect(calls.find((call) => call.url.endsWith("/upload"))?.body).toContain('<tag k="check_date" v="2026-10-24"/>');
+  });
+
   it("writes a confirmed historical observation date from an older photo", async () => {
     const DB = await setupDatabase();
     const historicalDate = "2026-10-21";

@@ -1,5 +1,5 @@
 import { assessCandidates, distanceMeters, type Coordinate } from "./candidateMatch";
-import type { OverpassCandidate } from "../osm/overpassSearch";
+import type { NearbyAedCandidate } from "../osm/candidateTypes";
 
 export interface TagChange {
   key: string;
@@ -57,7 +57,7 @@ function isValidPosition(value: Coordinate): boolean {
  * exact OSM candidate. Keeping the patch to one tag protects every other mapper's data.
  */
 export function previewExistingAedCheck(
-  candidate: Pick<OverpassCandidate, "id" | "osmType" | "tags">,
+  candidate: Pick<NearbyAedCandidate, "id" | "osmType" | "tags">,
   confirmedPresent: boolean,
   observedOn: string,
 ): ProposalResult<ExistingCheckDatePreview> {
@@ -93,7 +93,7 @@ export function previewExistingAedCheck(
 /**
  * Produces a local preview for a new AED node only when search completed cleanly,
  * no candidate was eligible, and the person confirmed the proposed map point.
- * Vision output is intentionally not accepted as an input to this function.
+ * Only current search data and the person's explicit confirmations are accepted here.
  */
 export function previewNewAed(
   input: {
@@ -103,7 +103,7 @@ export function previewNewAed(
     searchCenter: Coordinate;
     coverageRadiusMeters: number;
     nearbyRadiusMeters: number;
-    searchCandidates: ReadonlyArray<OverpassCandidate>;
+    searchCandidates: ReadonlyArray<NearbyAedCandidate>;
     /** IDs the person explicitly reviewed and rejected as a match to the photographed AED. */
     confirmedDifferentCandidateIds?: ReadonlyArray<string>;
     positionConfirmed: boolean;

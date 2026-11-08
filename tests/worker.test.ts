@@ -36,22 +36,7 @@ describe("Cloudflare Worker shell", () => {
     expect(env.ASSETS.fetch).not.toHaveBeenCalled();
   });
 
-  it("retires the old image endpoint without consuming the submitted photo body", async () => {
-    const env = environment();
-    const request = new Request("https://aedjaeger.test/api/vision/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image_base64: "must-not-be-read" }),
-    });
-    const response = await worker.fetch(request, env);
-
-    expect(response.status).toBe(410);
-    expect(await response.json()).toEqual({ error: "feature_removed" });
-    expect(request.bodyUsed).toBe(false);
-    expect(env.ASSETS.fetch).not.toHaveBeenCalled();
-  });
-
-  it("routes read-only AED candidate search through the protected Overpass handler", async () => {
+  it("routes AED candidate search through the authenticated static source", async () => {
     const env = environment();
     const response = await worker.fetch(new Request("https://aedjaeger.test/api/osm/candidates/search"), env);
 

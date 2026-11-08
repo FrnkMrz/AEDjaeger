@@ -1,6 +1,6 @@
 # Entscheidungen und nächste Schritte
 
-Stand: 8.11.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto → Sichtbarkeit selbst bestätigen → regionalen AED-Datenbestand prüfen → vorhandenen AED bestätigen oder neuen Eintrag vorbereiten.** Der Pilot verzichtet auf OpenAI und alle anderen externen Bilddienste; Foto und EXIF bleiben lokal. GPS aus dem Foto hat Vorrang. Ohne Foto-GPS wird Handy-GPS oder eine Kartenposition nur nach ausdrücklicher Auswahl genutzt. GPT-6-Luna- und Overpass-Überlegungen weiter unten sind historische Entscheidungen und durch den aktuellen Umbau überholt. OSM-Schreibzugriffe bleiben ausgeschaltet.
+Stand: 8.11.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto → Sichtbarkeit selbst bestätigen → regionalen AED-Datenbestand prüfen → vorhandenen AED bestätigen oder neuen Eintrag vorbereiten.** Der Pilot verzichtet auf OpenAI und alle anderen externen Bilddienste; Foto und EXIF bleiben lokal. GPS aus dem Foto hat Vorrang. Ohne Foto-GPS wird Handy-GPS oder eine Kartenposition nur nach ausdrücklicher Auswahl genutzt. Frühere OpenAI- und Overpass-Überlegungen sind historische Dokumentation und durch den aktuellen Pilotentscheid überholt. OSM-Schreibzugriffe bleiben ausgeschaltet.
 
 ## Festgelegt
 
@@ -19,7 +19,7 @@ Stand: 8.11.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto 
 ## Nächste praktische Prüfungen
 
 1. Phase 1 (PR #47) auf Android und iPhone prüfen: manuelle Sichtbestätigung, lokales Foto-GPS, ausdrückliche Standortwahl bei fehlendem GPS und Datum bei alten oder datumsfreien Kamera- wie Galerieaufnahmen. Die App verlangt in diesen Fällen eine ausdrückliche Datumsbestätigung. Der Server nimmt vergangene bestätigte Beobachtungsdaten an, weist ungültige und zukünftige Daten ab.
-2. Phase 2: regionalen AED-Datenbestand aus der OpenFireMap-Pipeline mit explizitem, unabhängigem Coverage-Nachweis ausliefern. Fehlt der Nachweis, muss die Suche `unavailable` statt „keine AEDs“ melden. Danach konsumiert AEDjaeger den Snapshot; die laufende Suche darf nicht von Overpass abhängen. Die offizielle OSM-API dient gezielter Aktualitäts-/Versionsprüfung und bestätigtem Schreiben.
+2. Der AEDjaeger-Consumer für den OpenFireMap-Snapshot ist im aktuellen Branch implementiert. Noch offen ist die getrennte Prüfung, dass Pipeline-PR #63 den Feed unter dem festen Vertrag veröffentlicht und die Region `dachlilu` mit vollständiger Coverage und akzeptablem Alter enthält. Der Consumer stoppt bei `unavailable`, stale, schema mismatch oder incomplete coverage; es gibt keinen Overpass-Fallback. Die offizielle OSM-API dient vor bestätigtem Testserver-Schreiben nur dem gezielten Frische-/Versionscheck des konkreten Objekts.
 3. Den Abgleich mit simulierten Kandidaten testen: keine Treffer, eindeutiger Treffer, mehrere nahe Treffer, unvollständiger regionaler Bestand, veralteter Snapshot und offline/Netzabbruch. Ein unvollständiger oder veralteter Datenstand darf keine Neuanlage als sicher darstellen.
 4. Erst nach erfolgreicher Suche mit einer vollständigen regionalen Datenquelle die Vorschau und anschließend separat freigegebene OSM-Dev-Schreibwege prüfen. Produktives OSM bleibt in Tests ausgeschlossen.
 
@@ -29,7 +29,7 @@ Für einen echten Login muss eine **separate OAuth-Anwendung auf dem OSM-Entwick
 
 ## Noch zu entscheiden
 
-- Welches Update-Intervall und welches maximale Alter des regionalen AED-Datenbestands sind für einen Pilot akzeptabel? Ein Snapshot muss Alter und Abdeckungsstatus liefern, damit AEDjaeger bei veralteten oder unvollständigen Daten sicher stoppt.
+- Kann die Pipeline die deklarierte Feed-Altersgrenze (derzeit `max_source_age_hours`, maximal 48 Stunden) dauerhaft einhalten und den Coverage-Nachweis für `dachlilu` zuverlässig erzeugen? AEDjaeger stoppt andernfalls geschlossen; ein Live-Feed-Check steht noch aus.
 - Welcher eng begrenzte OSM-API-Abgleich ist für gezielte Versionsprüfung und den späteren bestätigten Schreibvorgang nötig? Er darf keine flächige Ersatzsuche werden.
 - `OSM_DEV_WRITES_ENABLED` bleibt aus. Vor einem echten Testserver-Schreibvorgang braucht es eine separate ausdrückliche Freigabe und einen konkreten Vorschlag.
 - Vor einem Testserver-Schreiben muss die Standortbestätigung auf dem Mobilgerät nochmals geprüft werden; die Korrektur erfolgt über die verschiebbare Karte.

@@ -5,7 +5,7 @@ import type { D1Database } from "./storage/d1";
 import { consumeOSMOAuthTransaction, storeOSMOAuthTransaction } from "./storage/osmOAuthTransactions";
 import { deleteOSMSession, findOSMSession, rotateOSMSession, OSM_SESSION_LIFETIME_MS } from "./storage/osmSessions";
 import { storeOSMDevelopmentToken } from "./storage/osmDevelopmentTokens";
-import { handleOverpassSearch } from "./osm/overpassRoute";
+import { handleStaticCandidateSearch } from "./osm/staticCandidateSearchRoute";
 import { handleDevelopmentCheckDate } from "./osm/developmentWriteRoute";
 import { handleDevelopmentCreateNode } from "./osm/developmentCreateNodeRoute";
 import { handleTestDiagnostic } from "./testDiagnostics";
@@ -70,7 +70,7 @@ const worker = {
       if (request.method !== "POST") return jsonResponse({ error: "method_not_allowed" }, 405, { Allow: "POST" });
       return logout(request, environment);
     }
-    if (pathname === "/api/osm/candidates/search") return handleOverpassSearch(request, environment);
+    if (pathname === "/api/osm/candidates/search") return handleStaticCandidateSearch(request, environment);
     if (pathname === "/api/osm/development/check-date") return handleDevelopmentCheckDate(request, environment);
     if (pathname === "/api/osm/development/create-node") return handleDevelopmentCreateNode(request, environment);
     // Older installed PWAs may still call this endpoint. Retire it without parsing or consuming

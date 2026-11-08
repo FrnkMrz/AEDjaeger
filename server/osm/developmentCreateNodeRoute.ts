@@ -161,7 +161,7 @@ export async function handleDevelopmentCreateNode(
 }
 
 async function findNearbyAed(input: CreateRequest, token: string, fetcher: typeof fetch): Promise<boolean> {
-  // The browser's earlier Overpass result is useful for the UI but is not trusted
+  // The browser's earlier versioned AED-index result is useful for the UI but is not trusted
   // to authorize a create. Re-read one small authoritative OSM API box here.
   const latitudePadding = 0.001;
   const longitudePadding = Math.min(0.01, 0.0015 / Math.max(0.1, Math.cos(input.latitude * Math.PI / 180)));

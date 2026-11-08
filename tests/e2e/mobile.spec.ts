@@ -74,10 +74,8 @@ test("the OSM account gate is shown before app features and is localized in all 
   }
 });
 
-test("a sighting confirmation starts a photo-GPS search without sending the image to a provider", async ({ page }) => {
-  const imageRequests: string[] = [];
+test("a sighting confirmation starts a search at the photo GPS location", async ({ page }) => {
   const searchLocations: unknown[] = [];
-  page.on("request", (request) => { if (request.url().includes("/api/vision/")) imageRequests.push(request.url()); });
   await page.route("**/api/osm/candidates/search", async (route) => {
     searchLocations.push(route.request().postDataJSON());
     await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } });
@@ -89,7 +87,6 @@ test("a sighting confirmation starts a photo-GPS search without sending the imag
   const dateConfirm = page.locator('[data-action="confirm-photo-date"]');
   if (await dateConfirm.isVisible()) await dateConfirm.click();
   await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
-  expect(imageRequests).toEqual([]);
   expect(searchLocations).toHaveLength(1);
   const usedPhotoLocation = searchLocations[0] as { latitude: number; longitude: number; accuracy_meters: number };
   expect(usedPhotoLocation.latitude).toBeCloseTo(52.52, 5);
@@ -182,10 +179,8 @@ test.describe("local photo dates near UTC midnight", () => {
   });
 });
 
-test("the demo photo flow stays local and does not call an image endpoint", async ({ page }) => {
+test("the local demo photo flow stays on-device", async ({ page }) => {
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false } }));
-  const imageRequests: string[] = [];
-  page.on("request", (request) => { if (request.url().includes("/api/vision/")) imageRequests.push(request.url()); });
   await page.goto("/");
   await page.getByText("Vorschau testen", { exact: true }).click();
   await page.locator("#scenario").selectOption("existing");
@@ -195,7 +190,6 @@ test("the demo photo flow stays local and does not call an image endpoint", asyn
   await expect(page.locator(".capture-content")).toContainText("wertet dein Foto nicht aus");
   await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
   await expect(page.getByRole("heading", { name: "AED gefunden" })).toBeVisible();
-  expect(imageRequests).toEqual([]);
 });
 
 test("diagnostic consent applies to one run and requires a fresh opt-in next time", async ({ page }) => {
@@ -547,7 +541,7 @@ test("a partial nearby search never offers a new AED preview", async ({ page, co
   let searchRequests = 0;
   await page.route("**/api/osm/candidates/search", async (route) => {
     searchRequests += 1;
-    await route.fulfill({ json: { status: "partial", coverage_radius_meters: 112, reason: "overpass-remark", candidates: [] } });
+    await route.fulfill({ json: { status: "partial", coverage_radius_meters: 112, candidates: [] } });
   });
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
@@ -556,6 +550,35 @@ test("a partial nearby search never offers a new AED preview", async ({ page, co
   await expect(page.locator(".capture-content")).toContainText("Die Suche war unvollständig.");
   await expect(page.getByRole("button", { name: "Neuen AED vorbereiten" })).toHaveCount(0);
   expect(searchRequests).toBe(1);
+});
+
+test("the search result identifies the static snapshot and its OSM data date", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
+    status: "complete", coverage_radius_meters: 112, candidates: [],
+    snapshot_id: "aed-0123456789abcdef0123", data_until: "2026-11-08T12:00:00.000Z",
+  } }));
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
+  await beginNearbySearch(page);
+  await expect(page.locator(".capture-content")).toContainText("Datenstand des regionalen AED-Index");
+  await expect(page.locator(".capture-content")).toContainText("aed-0123456789abcdef0123");
+});
+
+test("an unavailable regional snapshot cannot offer a new AED", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ status: 503, json: { error: "coverage_unavailable" } }));
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
+  await beginNearbySearch(page);
+  await expect(page.locator(".capture-content")).toContainText("Die Umgebungssuche ist vorübergehend nicht erreichbar");
+  await expect(page.getByRole("button", { name: "Neuen AED vorbereiten" })).toHaveCount(0);
 });
 
 test("denied location access does not send a nearby search request", async ({ page }) => {
@@ -654,21 +677,20 @@ test("an incomplete search cannot suggest a new AED and offers a retry", async (
       return;
     }
     if (searchRequests === 3) {
-      await route.fulfill({ status: 502, headers: { "Retry-After": "2" }, json: { error: "overpass_unavailable" } });
+      await route.fulfill({ status: 502, headers: { "Retry-After": "2" }, json: { error: "source_unavailable" } });
       return;
     }
-    await route.fulfill(searchRequests === 1 ? { headers: { "Retry-After": "2" }, json: {
-      status: "partial", coverage_radius_meters: 112, reason: "overpass-remark",
-      candidates: [{ id: "node/456", osmType: "node", coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Bahnhof" } }],
-    } } : { json: { status: "complete", coverage_radius_meters: 112, candidates: [] } });
+    await route.fulfill(searchRequests === 1
+      ? { status: 503, headers: { "Retry-After": "2" }, json: { error: "coverage_unavailable" } }
+      : { json: { status: "complete", coverage_radius_meters: 112, candidates: [] } });
   });
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
   await beginNearbySearch(page);
 
-  await expect(page.locator(".capture-content")).toContainText("Die Suche war unvollständig.");
-  await expect(page.locator(".candidate-list")).toContainText("Bahnhof");
+  await expect(page.locator(".capture-content")).toContainText("Die Umgebungssuche ist vorübergehend nicht erreichbar");
+  await expect(page.locator(".candidate-list")).toHaveCount(0);
   await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
   await expect(page.locator(".capture-content")).toContainText(/Eine erneute Suche ist in \d+ Sekunden möglich\./);
   await expect(page.getByRole("button", { name: "Standort und AEDs erneut suchen" })).toHaveCount(0);

@@ -1,6 +1,6 @@
-import { assessOverpassResponse } from "./assessOverpassResponse";
+import { assessCandidateSearch } from "./assessCandidateSearch";
 import type { CandidateAssessment, LocationEstimate, MatchPolicy } from "./candidateMatch";
-import type { OverpassSearchResult } from "../osm/overpassSearch";
+import type { CandidateSearchResult } from "../osm/candidateTypes";
 import type { SearchLocation } from "../osm/candidateSearch";
 import type { ExistingCheckDatePreview, NewAedPreview, ProposalResult } from "./osmChangeProposal";
 
@@ -11,7 +11,7 @@ export type CandidateId = "main-entrance" | "sports-hall";
 export type CandidateResultState = {
   kind: "candidate-result";
   photoUrl: string;
-  search: OverpassSearchResult;
+  search: CandidateSearchResult;
   assessment: CandidateAssessment;
   location: SearchLocation;
   /** Explicitly records that the person reviewed all nearby entries and none is this AED. */
@@ -23,7 +23,7 @@ export type DevelopmentWriteRequest = {
   operationId: string;
   candidateLabel: string;
 } & (
-  | { kind: "check-date"; target: string; expectedVersion: number; expectedCheckDate: string | null; observedOn: string }
+  | { kind: "check-date"; target: string; expectedVersion?: number; expectedCheckDate: string | null; observedOn: string }
   | { kind: "create-node"; latitude: number; longitude: number; observedOn: string; locationDescription: string | null; confirmedDifferentCandidateIds: string[] }
 );
 
@@ -58,38 +58,25 @@ const demoMatchPolicy: MatchPolicy = {
   maximumAccuracyMeters: 100,
 };
 
-// These fixed fixtures exercise the real normalizer and matcher without making a network request.
-const demoSearchResponses = {
-  existing: {
-    elements: [{
-      type: "node",
-      id: 154,
-      lat: 52.52001,
-      lon: 13.40501,
-      tags: { emergency: "defibrillator" },
-    }],
-  },
-  new: { elements: [] },
-  multiple: {
-    elements: [
-      {
-        type: "node",
-        id: 154,
-        lat: 52.52001,
-        lon: 13.40501,
-        tags: { emergency: "defibrillator" },
-      },
-      {
-        type: "node",
-        id: 256,
-        lat: 52.51999,
-        lon: 13.40499,
-        tags: { emergency: "defibrillator" },
-      },
-    ],
-  },
-  "search-error": { elements: [], remark: "Demo: search response is incomplete." },
-} as const;
+// Fixed candidates model the dedicated AED feed. Classification comes from the
+// feed contract, so these fixtures do not invent an emergency tag absent from its allowlist.
+function demoCandidate(id: string, latitude: number, longitude: number, name: string) {
+  return {
+    id, osmType: "node" as const, coordinateQuality: "exact" as const,
+    position: { latitude, longitude }, tags: { name },
+  };
+}
+const demoSearchResponses: Record<DemoScenario, CandidateSearchResult> = {
+  existing: { status: "complete", coverageRadiusMeters: 110, candidates: [demoCandidate("node/154", 52.52001, 13.40501, "Demo AED am Haupteingang")] },
+  new: { status: "complete", coverageRadiusMeters: 110, candidates: [] },
+  multiple: { status: "complete", coverageRadiusMeters: 110, candidates: [
+    demoCandidate("node/154", 52.52001, 13.40501, "Demo AED Haupteingang"),
+    demoCandidate("node/256", 52.51999, 13.40499, "Demo AED Sporthalle"),
+  ] },
+  unclear: { status: "complete", coverageRadiusMeters: 110, candidates: [] },
+  "search-error": { status: "failed", coverageRadiusMeters: 0, candidates: [], reason: "coverage-unavailable" },
+  "upload-unclear": { status: "complete", coverageRadiusMeters: 110, candidates: [demoCandidate("node/154", 52.52001, 13.40501, "Demo AED am Haupteingang")] },
+};
 
 function mapCandidateAssessment(
   assessment: CandidateAssessment,
@@ -108,7 +95,7 @@ function mapCandidateAssessment(
   }
 }
 
-// Demo scenarios pass fixtures through the same response validation and matcher used by Overpass.
+// Demo scenarios use the same conservative matcher as live static-feed results.
 export function analysisResult(
   scenario: DemoScenario,
   photoUrl: string,
@@ -117,9 +104,8 @@ export function analysisResult(
     return { kind: "clarification", photoUrl, reason: "sign-only" };
   }
 
-  const searchScenario = scenario === "upload-unclear" ? "existing" : scenario;
-  const payload = demoSearchResponses[searchScenario as keyof typeof demoSearchResponses];
-  const { assessment } = assessOverpassResponse(demoLocation, payload, 110, demoMatchPolicy);
+  const search = demoSearchResponses[scenario];
+  const { assessment } = assessCandidateSearch(demoLocation, search, demoMatchPolicy);
   return mapCandidateAssessment(assessment, photoUrl);
 }
 

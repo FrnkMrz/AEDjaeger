@@ -4,7 +4,7 @@ import { analysisResult, chooseCandidate, confirmationResult, recoveryResult, ty
 import { translate, translations, type Language, type TranslationKey } from "./i18n/translations";
 import { translateFlow, type FlowMessageKey } from "./i18n/flowTranslations";
 import { readPhotoDate, readPhotoLocation } from "./vision/photoLocation";
-import { assessCandidates } from "./domain/candidateMatch";
+import { assessCandidateSearch } from "./domain/assessCandidateSearch";
 import { createPositionPicker, type Coordinate } from "./map/positionPicker";
 import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
 import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } from "./osm/candidateSearch";
@@ -78,7 +78,7 @@ function readPendingDevelopmentWrite(): DevelopmentWriteRequest | undefined {
       || typeof value.candidateLabel !== "string" || value.candidateLabel.length > 255 || !isCalendarDate(value.observedOn)) return undefined;
     const kind = legacyCheck ? "check-date" : value.kind;
     if (kind === "check-date" && typeof value.target === "string" && /^node\/[1-9]\d{0,15}$/u.test(value.target)
-      && Number.isSafeInteger(value.expectedVersion) && (value.expectedVersion as number) > 0
+      && (value.expectedVersion === undefined || Number.isSafeInteger(value.expectedVersion) && (value.expectedVersion as number) > 0)
       && (value.expectedCheckDate === null || isCalendarDate(value.expectedCheckDate))) {
       const request = { ...value, kind: "check-date" } as unknown as DevelopmentWriteRequest;
       if (legacyCheck) {
@@ -115,6 +115,12 @@ function t(key: TranslationKey, values?: Record<string, number | string>): strin
   return values ? translated.replace(/\{(\w+)\}/gu, (_, name: string) => String(values[name] ?? "")) : translated;
 }
 function tv(key: FlowMessageKey, values?: Record<string, number | string>): string { return translateFlow(language, key, values); }
+function formatFeedDate(value: string): string {
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime())
+    ? new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(parsed)
+    : value;
+}
 
 type DiagnosticEvent =
   | "test_run_started" | "test_run_abandoned" | "photo_selected" | "demo_started" | "demo_result_shown" | "demo_confirmed"
@@ -292,7 +298,10 @@ function statusContent(): string {
           : `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`
         : "";
       const locationSource = activeSearchLocationSource === "photo" ? "locationSourcePhoto" : activeSearchLocationSource === "map" ? "locationSourceMap" : "locationSourcePhone";
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p><p class="supporting-copy">${tv(locationSource)}</p>${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}<p class="simulation-note">${tv("searchNoWrite")}</p></div></div>${rejectNearbyCandidates}${newEntryAction}${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      const snapshotStatus = search.dataUntil
+        ? `<p class="supporting-copy">${tv("searchDataUntil", { date: formatFeedDate(search.dataUntil), snapshot: escapeHtml(search.snapshotId ?? "") })}</p>`
+        : "";
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p><p class="supporting-copy">${tv(locationSource)}</p>${snapshotStatus}${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}<p class="simulation-note">${tv("searchNoWrite")}</p></div></div>${rejectNearbyCandidates}${newEntryAction}${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     }
     case "new-aed-preview": {
       const point = state.result.kind === "ready" ? state.result.position : state.returnState.location;
@@ -320,7 +329,7 @@ function statusContent(): string {
       const { result } = state;
       const candidateId = state.candidateId;
       const candidate = state.returnState.search.candidates.find((item) => item.id === candidateId);
-      const canWrite = developmentSession && developmentWriteAvailable && candidate?.osmType === "node" && candidate.version !== undefined && result.kind === "ready";
+      const canWrite = developmentSession && developmentWriteAvailable && candidate?.osmType === "node" && result.kind === "ready";
       const content = result.kind === "ready"
         ? `<p><strong>${tv("previewCheckDate")}</strong></p><p>${tv("previewOldDate", { date: escapeHtml(result.changes[0].before ?? tv("previewNoDate")) })}</p><p>${tv("previewNewDate", { date: result.changes[0].after })}</p>`
         : `<p>${tv("previewUnsupported")}</p>`;
@@ -863,14 +872,14 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     const preview = state;
     const candidateId = preview.candidateId;
     const candidate = preview.returnState.search.candidates.find((item) => item.id === candidateId);
-    if (!candidate || candidate.osmType !== "node" || candidate.version === undefined || preview.result.kind !== "ready") return;
+    if (!candidate || candidate.osmType !== "node" || preview.result.kind !== "ready") return;
     const operationId = preview.operationId ?? crypto.randomUUID();
     const change = preview.result.changes[0];
     const request: DevelopmentWriteRequest = {
       kind: "check-date", operationId,
       target: candidate.id,
       candidateLabel: preview.candidateLabel,
-      expectedVersion: candidate.version,
+      ...(candidate.version === undefined ? {} : { expectedVersion: candidate.version }),
       expectedCheckDate: change.before,
       observedOn: change.after,
     };
@@ -948,7 +957,7 @@ async function runNearbySearch(photoUrl: string, providedLocation?: SearchLocati
     const location = providedLocation ?? await getPhoneLocation();
     activeSearchLocation = location;
     const search = await requestNearbyCandidates(location);
-    const assessment = assessCandidates(location, search, { nearbyRadiusMeters: 100, maximumAccuracyMeters: 100 });
+    const { assessment } = assessCandidateSearch(location, search, { nearbyRadiusMeters: 100, maximumAccuracyMeters: 100 });
     // Keep coordinates only in the active in-memory photo flow so a later preview can stay tied to
     // the exact search location. They are discarded when the photo is replaced and never persisted.
     const retryAvailableAt = search.status === "partial"
@@ -967,14 +976,12 @@ async function runNearbySearch(photoUrl: string, providedLocation?: SearchLocati
       location_too_uncertain: "location-uncertain",
       authentication_required: "sign-in",
       search_rate_limited: "rate-limited",
-      overpass_rate_limited: "rate-limited",
+      source_unavailable: "service-unavailable",
+      source_timeout: "service-unavailable",
+      coverage_unavailable: "service-unavailable",
       search_unavailable: "service-unavailable",
       session_unavailable: "service-unavailable",
-      overpass_unavailable: "service-unavailable",
-      overpass_timeout: "service-unavailable",
       network_error: "service-unavailable",
-      overpass_invalid_response: "invalid-response",
-      overpass_response_too_large: "invalid-response",
       invalid_response: "invalid-response",
       search_failed: "failed",
     } as const;
