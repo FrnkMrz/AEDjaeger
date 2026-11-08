@@ -20,6 +20,8 @@ export type OverpassRouteEnvironment = { DB?: D1Database };
 type Dependencies = {
   fetch?: typeof fetch;
   now?: () => number;
+  createDiagnosticId?: () => string;
+  logDiagnostic?: (event: Readonly<Record<string, string | number>>) => void;
 };
 
 /** Authenticated, read-only lookup with a fixed Overpass endpoint and bounded query. */
@@ -27,6 +29,44 @@ export async function handleOverpassSearch(
   request: Request,
   environment: OverpassRouteEnvironment,
   dependencies: Dependencies = {},
+): Promise<Response> {
+  const diagnosticId = (dependencies.createDiagnosticId ?? (() => crypto.randomUUID()))();
+  const startedAt = Date.now();
+  let response: Response;
+
+  try {
+    response = await handleOverpassSearchRequest(request, environment, dependencies);
+  } catch {
+    // Unexpected errors are deliberately reduced to a fixed code. Exception text can
+    // contain request data, provider responses, or implementation details.
+    response = jsonResponse({ error: "search_unavailable" }, 500);
+  }
+
+  response.headers.set("X-AEDjaeger-Diagnostic-Id", diagnosticId);
+  const failure = await readSafeFailure(response);
+  if (failure) {
+    const event = {
+      event: "overpass_search_failure",
+      diagnostic_id: diagnosticId,
+      http_status: response.status,
+      failure_code: failure.code,
+      ...(failure.upstreamStatus === undefined ? {} : { upstream_status: failure.upstreamStatus }),
+      duration_ms: Math.max(0, Date.now() - startedAt),
+    };
+    try {
+      (dependencies.logDiagnostic ?? ((entry) => console.error(entry)))(event);
+    } catch {
+      // Observability must never change the API response or search outcome.
+    }
+  }
+
+  return response;
+}
+
+async function handleOverpassSearchRequest(
+  request: Request,
+  environment: OverpassRouteEnvironment,
+  dependencies: Dependencies,
 ): Promise<Response> {
   if (request.method !== "POST") return jsonResponse({ error: "method_not_allowed" }, 405, { Allow: "POST" });
   const requestUrl = new URL(request.url);
@@ -113,40 +153,105 @@ export async function handleOverpassSearch(
       const upstreamWait = Math.max(30, parseRetryAfter(response.headers.get("Retry-After"), responseTime));
       try {
         const globalWait = await extendOverpassUpstreamCooldown(environment.DB!, responseTime, upstreamWait);
-        return jsonResponse({ error: "overpass_rate_limited" }, 503, retryHeaders(globalWait));
+        return jsonResponse({ error: "overpass_rate_limited" }, 503, {
+          ...retryHeaders(globalWait),
+          "X-AEDjaeger-Upstream-Status": String(response.status),
+        });
       } catch {
-        return jsonResponse({ error: "search_unavailable" }, 503, retryHeaders(upstreamWait));
+        return jsonResponse({ error: "search_unavailable" }, 503, {
+          ...retryHeaders(upstreamWait),
+          "X-AEDjaeger-Upstream-Status": String(response.status),
+        });
       }
     }
-    if (!response.ok) return jsonResponse({ error: "overpass_unavailable" }, 502, retryHeaders());
+    if (!response.ok) return jsonResponse({ error: "overpass_unavailable" }, 502, {
+      ...retryHeaders(),
+      "X-AEDjaeger-Upstream-Status": String(response.status),
+    });
 
     let payloadBytes: Uint8Array;
     try {
       payloadBytes = await readLimitedBody(response, MAX_RESPONSE_BYTES);
     } catch {
-      return jsonResponse({ error: "overpass_response_too_large" }, 502, retryHeaders());
+      return jsonResponse({ error: "overpass_response_too_large" }, 502, {
+        ...retryHeaders(),
+        "X-AEDjaeger-Upstream-Status": String(response.status),
+      });
     }
 
     let payload: unknown;
     try {
       payload = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(payloadBytes));
     } catch {
-      return jsonResponse({ error: "overpass_invalid_response" }, 502, retryHeaders());
+      return jsonResponse({ error: "overpass_invalid_response" }, 502, {
+        ...retryHeaders(),
+        "X-AEDjaeger-Upstream-Status": String(response.status),
+      });
     }
 
     const result = normalizeOverpassResponse(payload, coverageRadiusMeters);
-    if (result.status === "failed") return jsonResponse({ error: "overpass_invalid_response" }, 502, retryHeaders());
+    if (result.status === "failed") return jsonResponse({ error: "overpass_invalid_response" }, 502, {
+      ...retryHeaders(),
+      "X-AEDjaeger-Upstream-Status": String(response.status),
+    });
     return jsonResponse({
       status: result.status,
       candidates: result.candidates,
       coverage_radius_meters: result.coverageRadiusMeters,
       ...(result.reason ? { reason: result.reason } : {}),
-    }, 200, retryHeaders());
+    }, 200, {
+      ...retryHeaders(),
+      ...(result.status === "partial" ? { "X-AEDjaeger-Search-Status": "partial" } : {}),
+    });
   } catch {
     return jsonResponse({ error: controller.signal.aborted ? "overpass_timeout" : "overpass_unavailable" }, controller.signal.aborted ? 504 : 502, retryHeaders());
   } finally {
     clearTimeout(timeout);
   }
+}
+
+const SAFE_FAILURE_CODES = new Set([
+  "method_not_allowed",
+  "invalid_origin",
+  "search_unavailable",
+  "unsupported_media_type",
+  "authentication_required",
+  "session_unavailable",
+  "request_too_large",
+  "invalid_request",
+  "location_too_uncertain",
+  "search_rate_limited",
+  "overpass_rate_limited",
+  "overpass_unavailable",
+  "overpass_response_too_large",
+  "overpass_invalid_response",
+  "overpass_timeout",
+]);
+
+/** Extract only fixed diagnostic labels; never log upstream bodies or search data. */
+async function readSafeFailure(response: Response): Promise<{ code: string; upstreamStatus?: number } | null> {
+  if (response.status < 400) {
+    const searchStatus = response.headers.get("X-AEDjaeger-Search-Status");
+    response.headers.delete("X-AEDjaeger-Search-Status");
+    if (searchStatus === "partial") return { code: "partial_search" };
+    return null;
+  }
+
+  let code = "http_error";
+  try {
+    const payload: unknown = await response.clone().json();
+    if (typeof payload === "object" && payload !== null && !Array.isArray(payload)) {
+      const candidate = (payload as Record<string, unknown>).error;
+      if (typeof candidate === "string" && SAFE_FAILURE_CODES.has(candidate)) code = candidate;
+    }
+  } catch {
+    // Keep a fixed fallback if an unexpected response body is not JSON.
+  }
+
+  const rawStatus = response.headers.get("X-AEDjaeger-Upstream-Status");
+  const upstreamStatus = rawStatus !== null && /^\d{3}$/u.test(rawStatus) ? Number(rawStatus) : undefined;
+  response.headers.delete("X-AEDjaeger-Upstream-Status");
+  return { code, ...(upstreamStatus === undefined ? {} : { upstreamStatus }) };
 }
 
 function parseRetryAfter(value: string | null, now: number): number {

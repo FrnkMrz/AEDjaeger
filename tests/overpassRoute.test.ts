@@ -142,6 +142,87 @@ describe("protected Overpass candidate search", () => {
     expect(response.headers.get("Retry-After")).toBe("30");
   });
 
+  it("logs a correlatable Overpass failure without request coordinates or upstream text", async () => {
+    const { database } = createDatabase();
+    const diagnostics: Array<Record<string, string | number>> = [];
+    const response = await handleOverpassSearch(searchRequest(), { DB: database }, {
+      fetch: async () => new Response("private upstream response", { status: 503 }),
+      createDiagnosticId: () => "diagnostic-test-id",
+      logDiagnostic: (entry) => diagnostics.push({ ...entry }),
+    });
+
+    expect(response.status).toBe(502);
+    expect(response.headers.get("X-AEDjaeger-Diagnostic-Id")).toBe("diagnostic-test-id");
+    expect(response.headers.has("X-AEDjaeger-Upstream-Status")).toBe(false);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toMatchObject({
+      event: "overpass_search_failure",
+      diagnostic_id: "diagnostic-test-id",
+      http_status: 502,
+      failure_code: "overpass_unavailable",
+      upstream_status: 503,
+    });
+    const serialized = JSON.stringify(diagnostics[0]);
+    expect(serialized).not.toContain("52.52");
+    expect(serialized).not.toContain("13.405");
+    expect(serialized).not.toContain("private upstream response");
+  });
+
+  it("records incomplete Overpass responses as partial without logging candidates", async () => {
+    const { database } = createDatabase();
+    const diagnostics: Array<Record<string, string | number>> = [];
+    const response = await handleOverpassSearch(searchRequest(), { DB: database }, {
+      fetch: async () => new Response(JSON.stringify({
+        elements: [{ type: "node", id: 123, lat: 52.52, lon: 13.405, tags: { emergency: "defibrillator", name: "Private place label" } }],
+        remark: "upstream detail",
+      }), { status: 200 }),
+      createDiagnosticId: () => "partial-test-id",
+      logDiagnostic: (entry) => diagnostics.push({ ...entry }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.has("X-AEDjaeger-Search-Status")).toBe(false);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toMatchObject({
+      diagnostic_id: "partial-test-id",
+      http_status: 200,
+      failure_code: "partial_search",
+    });
+    expect(JSON.stringify(diagnostics[0])).not.toContain("Private place label");
+    expect(JSON.stringify(diagnostics[0])).not.toContain("52.52");
+  });
+
+  it("does not log successful complete searches", async () => {
+    const { database } = createDatabase();
+    const logDiagnostic = vi.fn();
+    const response = await handleOverpassSearch(searchRequest(), { DB: database }, {
+      fetch: async () => noCandidates(),
+      logDiagnostic,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("X-AEDjaeger-Diagnostic-Id")).toBeTruthy();
+    expect(logDiagnostic).not.toHaveBeenCalled();
+  });
+
+  it("distinguishes D1 failures without exposing exception text", async () => {
+    const { database } = createDatabase({ d1Failure: true });
+    const diagnostics: Array<Record<string, string | number>> = [];
+    const response = await handleOverpassSearch(searchRequest(), { DB: database }, {
+      createDiagnosticId: () => "d1-test-id",
+      logDiagnostic: (entry) => diagnostics.push({ ...entry }),
+    });
+
+    expect(response.status).toBe(503);
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toMatchObject({
+      diagnostic_id: "d1-test-id",
+      http_status: 503,
+      failure_code: "search_unavailable",
+    });
+    expect(JSON.stringify(diagnostics[0])).not.toContain("private D1 diagnostic");
+  });
+
   it("does not treat an Overpass redirect as a successful empty search", async () => {
     const { database } = createDatabase();
     const overpass = vi.fn(async () => new Response(null, { status: 307, headers: { Location: "https://attacker.example" } }));
