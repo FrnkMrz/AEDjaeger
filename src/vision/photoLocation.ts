@@ -31,7 +31,7 @@ export async function readPhotoLocation(file: File, readGps: GpsReader = gps): P
   }
 }
 
-/** Read only the capture date locally; it is used to prevent an old gallery photo from silently becoming today's check. */
+/** Read only the capture date locally; it prevents an old or undated photo from silently becoming today's check. */
 export async function readPhotoDate(file: File): Promise<string | undefined> {
   try {
     const metadata = await exifr.parse(file, ["DateTimeOriginal"]);

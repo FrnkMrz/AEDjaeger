@@ -124,6 +124,41 @@ test("an older gallery photo requires an explicit observation date before search
   await expect(page.locator(".capture-content")).toContainText("Neu: 2025-10-20");
 });
 
+test("a camera input photo with an old EXIF date requires confirmation", async ({ page }) => {
+  let searchRequests = 0;
+  await page.route("**/api/osm/candidates/search", async (route) => {
+    searchRequests += 1;
+    await route.fulfill({ json: { status: "complete", coverage_radius_meters: 112, candidates: [] } });
+  });
+  await page.goto("/");
+  await page.locator("#camera-input").setInputFiles("tests/fixtures/photo-old-date.jpg");
+  await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
+  await expect(page.getByRole("heading", { name: "Wann hast du den AED gesehen?" })).toBeVisible();
+  await expect(page.locator("#photo-observed-on")).toHaveValue("2024-10-20");
+  expect(searchRequests).toBe(0);
+  await page.locator("#photo-observed-on").fill(new Date().toISOString().slice(0, 10));
+  await page.locator('[data-action="confirm-photo-date"]').click();
+  await expect(page.getByRole("heading", { name: "Standort für die Suche wählen" })).toBeVisible();
+  expect(searchRequests).toBe(0);
+});
+
+test("a camera input photo without EXIF date requires explicit observation-date confirmation", async ({ page }) => {
+  let searchRequests = 0;
+  await page.route("**/api/osm/candidates/search", async (route) => {
+    searchRequests += 1;
+    await route.fulfill({ json: { status: "complete", coverage_radius_meters: 112, candidates: [] } });
+  });
+  await page.goto("/");
+  await page.locator("#camera-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
+  await expect(page.getByRole("heading", { name: "Wann hast du den AED gesehen?" })).toBeVisible();
+  await expect(page.locator("#photo-observed-on")).toHaveValue(new Date().toISOString().slice(0, 10));
+  expect(searchRequests).toBe(0);
+  await page.locator('[data-action="confirm-photo-date"]').click();
+  await expect(page.getByRole("heading", { name: "Standort für die Suche wählen" })).toBeVisible();
+  expect(searchRequests).toBe(0);
+});
+
 test("the demo photo flow stays local and does not call an image endpoint", async ({ page }) => {
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false } }));
   const imageRequests: string[] = [];

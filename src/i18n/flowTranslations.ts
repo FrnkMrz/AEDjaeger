@@ -5,7 +5,7 @@ const messages = {
   de: {
     sightingConfirm: "AED oder Gehäuse gesehen – weiter",
     photoDateTitle: "Wann hast du den AED gesehen?",
-    photoDateHelp: "Dieses Galeriefoto ist älter oder enthält kein Aufnahmedatum. Das Prüfdatum darf nicht stillschweigend auf heute gesetzt werden.",
+    photoDateHelp: "Das Foto hat kein Aufnahmedatum oder sein Datum weicht von heute ab. Bestätige den tatsächlichen Tag der Vor-Ort-Sichtung.",
     photoDateLabel: "Datum der Vor-Ort-Beobachtung",
     photoDateConfirm: "Datum bestätigen und fortfahren",
     photoStaysLocal: "Das Foto bleibt auf deinem Gerät und wird nicht an einen Bilddienst gesendet.",
@@ -73,7 +73,7 @@ const messages = {
   en: {
     sightingConfirm: "I see an AED or its cabinet — continue",
     photoDateTitle: "When did you see the AED?",
-    photoDateHelp: "This gallery photo is older or has no capture date. The check date must not silently default to today.",
+    photoDateHelp: "The photo has no capture date or its date is not today. Confirm the actual date you saw the AED on site.",
     photoDateLabel: "Date of the on-site observation",
     photoDateConfirm: "Confirm date and continue",
     photoStaysLocal: "Your photo stays on this device and is not sent to an image service.",
@@ -141,7 +141,7 @@ const messages = {
   pl: {
     sightingConfirm: "Widzę AED lub jego obudowę — dalej",
     photoDateTitle: "Kiedy widziano AED?",
-    photoDateHelp: "To starsze zdjęcie z galerii albo nie ma daty wykonania. Data kontroli nie może po cichu zmienić się na dzisiejszą.",
+    photoDateHelp: "Zdjęcie nie ma daty wykonania albo jego data jest inna niż dzisiejsza. Potwierdź rzeczywisty dzień obserwacji na miejscu.",
     photoDateLabel: "Data obserwacji na miejscu",
     photoDateConfirm: "Potwierdź datę i kontynuuj",
     photoStaysLocal: "Zdjęcie pozostaje na tym urządzeniu i nie jest wysyłane do usługi obrazów.",
@@ -209,7 +209,7 @@ const messages = {
   ja: {
     sightingConfirm: "AEDまたは収納ケースを確認しました — 続行",
     photoDateTitle: "AEDを確認したのはいつですか？",
-    photoDateHelp: "この写真は古いか、撮影日がありません。確認日は自動的に今日に設定できません。",
+    photoDateHelp: "写真に撮影日がないか、撮影日が今日ではありません。現地でAEDを確認した実際の日付を選んでください。",
     photoDateLabel: "現地で確認した日",
     photoDateConfirm: "日付を確認して続行",
     photoStaysLocal: "写真はこの端末に残り、画像サービスには送信されません。",
@@ -277,7 +277,7 @@ const messages = {
   fr: {
     sightingConfirm: "Je vois un DAE ou son boîtier — continuer",
     photoDateTitle: "Quand avez-vous vu le DAE ?",
-    photoDateHelp: "Cette photo de la galerie est ancienne ou sans date de prise de vue. La date de vérification ne doit pas devenir automatiquement aujourd’hui.",
+    photoDateHelp: "La photo n’a pas de date de prise de vue ou sa date diffère d’aujourd’hui. Confirmez la date réelle de votre observation sur place.",
     photoDateLabel: "Date de l’observation sur place",
     photoDateConfirm: "Confirmer la date et continuer",
     photoStaysLocal: "La photo reste sur cet appareil et n’est pas envoyée à un service d’images.",
@@ -345,7 +345,7 @@ const messages = {
   es: {
     sightingConfirm: "Veo un DEA o su armario — continuar",
     photoDateTitle: "¿Cuándo viste el DEA?",
-    photoDateHelp: "Esta foto de la galería es antigua o no tiene fecha. La fecha de revisión no debe cambiarse a hoy automáticamente.",
+    photoDateHelp: "La foto no tiene fecha o su fecha no es la de hoy. Confirma el día real en que viste el DEA en el lugar.",
     photoDateLabel: "Fecha de la observación en el lugar",
     photoDateConfirm: "Confirmar fecha y continuar",
     photoStaysLocal: "La foto permanece en este dispositivo y no se envía a un servicio de imágenes.",

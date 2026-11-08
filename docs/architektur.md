@@ -206,7 +206,7 @@ Vollständige Vermeidung zeitgleicher Neuanlagen durch verschiedene externe OSM-
 
 **Korrektur zur früheren Sammlung:** Die aktuelle OSM-Dokumentation beschreibt `check_date=YYYY-MM-DD` ausdrücklich auch für die zuletzt überprüfte Existenz eines Objekts. Für „noch vorhanden“ empfehlen wir deshalb diesen Tag. Andere Angaben bleiben unverändert; Änderungen an Zugangszeiten brauchen eine eigene Beobachtung. [OSM: check_date](https://wiki.openstreetmap.org/wiki/Key:check_date)
 
-Bei derselben Bestätigung am gleichen Tag ist kein erneuter identischer Upload nötig. Ein älteres Offline-Foto darf ein neueres Prüfdatum nicht zurücksetzen. Verwendet wird das bestätigte Beobachtungsdatum, nicht automatisch das spätere Uploaddatum. Ein aus der Galerie gewähltes Foto belegt weder eine heutige Aufnahme noch den aktuellen Standort; der Ersatzweg muss Datum und Ort klären.
+Bei derselben Bestätigung am gleichen Tag ist kein erneuter identischer Upload nötig. Ein älteres Offline-Foto darf ein neueres Prüfdatum nicht zurücksetzen. Verwendet wird das bestätigte Beobachtungsdatum, nicht automatisch das spätere Uploaddatum. Ein Foto ohne EXIF-Aufnahmedatum oder mit einem Datum ungleich heute belegt weder eine heutige Aufnahme noch den aktuellen Standort; vor Suche oder Prüfdatum muss die Person Beobachtungsdatum und Ort bestätigen.
 
 Ein sichtbares Gerät oder eine bewusste Vor-Ort-Bestätigung ist erforderlich. Ein geschlossener und nicht einsehbarer Kasten allein genügt nicht. Die App spricht stets von „vorhanden“, nicht von „gewartet“, „funktionsfähig“ oder „jederzeit zugänglich“.
 

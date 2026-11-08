@@ -18,7 +18,7 @@ Stand: 8.11.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto 
 
 ## Nächste praktische Prüfungen
 
-1. Phase 1 auf Android und iPhone prüfen: manuelle Sichtbestätigung, lokales Foto-GPS, ausdrückliche Standortwahl bei fehlendem GPS und Datum bei alten oder datumsfreien Galerieaufnahmen. Kameraaufnahme gilt als heutige Aufnahme; Galerieaufnahmen ohne zuverlässiges EXIF-Datum benötigen eine ausdrückliche Datumsbestätigung.
+1. Phase 1 auf Android und iPhone prüfen: manuelle Sichtbestätigung, lokales Foto-GPS, ausdrückliche Standortwahl bei fehlendem GPS und Datum bei alten oder datumsfreien Kamera- wie Galerieaufnahmen. Bei fehlendem EXIF-Aufnahmedatum oder einem Datum ungleich heute wird vor Suche oder Prüfdatum eine ausdrückliche Datumsbestätigung verlangt.
 2. Phase 2 planen und umsetzen: regionalen AED-Datenbestand aus der OpenFireMap-Pipeline ausliefern und in AEDjaeger konsumieren. Die laufende Suche darf nicht von Overpass abhängen. Die offizielle OSM-API wird nur für gezielte Aktualitäts-/Versionsprüfung und bestätigtes Schreiben eingesetzt.
 3. Den Abgleich mit simulierten Kandidaten testen: keine Treffer, eindeutiger Treffer, mehrere nahe Treffer, unvollständiger regionaler Bestand, veralteter Snapshot und offline/Netzabbruch. Ein unvollständiger oder veralteter Datenstand darf keine Neuanlage als sicher darstellen.
 4. Erst nach erfolgreicher Suche mit einer vollständigen regionalen Datenquelle die Vorschau und anschließend separat freigegebene OSM-Dev-Schreibwege prüfen. Produktives OSM bleibt in Tests ausgeschlossen.

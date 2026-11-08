@@ -46,7 +46,7 @@ let saveTimer: number | undefined;
 let searchRetryTimer: number | undefined;
 let selectedPhotoLocation: SearchLocation | undefined;
 let observedOn = new Date().toISOString().slice(0, 10);
-let galleryPhotoRequiresDateConfirmation = false;
+let photoDateRequiresConfirmation = false;
 let activeSearchLocation: SearchLocation | undefined;
 let activeSearchLocationSource: "photo" | "phone" | "map" | undefined;
 // Keep a stable ID while this photo is active; the server uses it to avoid double reservations after retries.
@@ -701,12 +701,14 @@ async function onPhotoSelected(event: Event): Promise<void> {
   // A MIME type is only a browser hint. Decode the actual bytes before offering an AED workflow.
   const photoUrl = URL.createObjectURL(file);
   let photoLocation: SearchLocation | undefined;
+  let photoDate: string | undefined;
   try {
     const image = new Image();
     image.src = photoUrl;
     await image.decode();
-    // Extract only the GPS pair while the original file is local; the AI copy is re-encoded later.
+    // Read only GPS and capture date locally; neither metadata nor image leaves the device.
     photoLocation = await readPhotoLocation(file);
+    photoDate = await readPhotoDate(file);
   } catch {
     URL.revokeObjectURL(photoUrl);
     if (selectionVersion === photoSelectionVersion) {
@@ -727,10 +729,9 @@ async function onPhotoSelected(event: Event): Promise<void> {
   // The open disclosure is an explicit user choice; carry that preview mode into this photo.
   demoMode = demoMode || (document.querySelector<HTMLDetailsElement>(".demo-panel")?.open ?? false);
   selectedPhotoLocation = photoLocation;
-  const isCameraCapture = input.id === "camera-input";
-  const photoDate = isCameraCapture ? new Date().toISOString().slice(0, 10) : await readPhotoDate(file);
-  observedOn = photoDate ?? new Date().toISOString().slice(0, 10);
-  galleryPhotoRequiresDateConfirmation = !isCameraCapture && (!photoDate || photoDate !== new Date().toISOString().slice(0, 10));
+  const today = new Date().toISOString().slice(0, 10);
+  observedOn = photoDate ?? today;
+  photoDateRequiresConfirmation = photoDate === undefined || photoDate !== today;
   activeSearchLocation = undefined;
   activeSearchLocationSource = undefined;
   mapLocationOverride = undefined;
@@ -764,7 +765,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
   } else if (action === "confirm-sighting" && state.kind === "photo" && accountState === "signed-in") {
     // This is a human sighting confirmation only. It neither claims an automatic recognition
     // result nor permits an OSM edit; the separate OSM proposal and confirmation remain later.
-    if (galleryPhotoRequiresDateConfirmation) {
+    if (photoDateRequiresConfirmation) {
       state = { kind: "photo-date", photoUrl: state.photoUrl, suggestedDate: observedOn };
       render(true);
     } else continueAfterSighting(state.photoUrl);
@@ -772,7 +773,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     const dateInput = app!.querySelector<HTMLInputElement>("#photo-observed-on");
     if (!dateInput || !isValidObservedDate(dateInput.value)) return;
     observedOn = dateInput.value;
-    galleryPhotoRequiresDateConfirmation = false;
+    photoDateRequiresConfirmation = false;
     continueAfterSighting(state.photoUrl);
   } else if (action === "use-phone-location" && state.kind === "location-choice") {
     activeSearchLocation = undefined;
@@ -1037,7 +1038,7 @@ function releasePhoto(): void {
   const photoUrl = getPhotoUrl(state);
   if (photoUrl?.startsWith("blob:")) URL.revokeObjectURL(photoUrl);
   selectedPhotoLocation = undefined;
-  galleryPhotoRequiresDateConfirmation = false;
+  photoDateRequiresConfirmation = false;
   observedOn = new Date().toISOString().slice(0, 10);
   activeSearchLocation = undefined;
   activeSearchLocationSource = undefined;
