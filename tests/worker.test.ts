@@ -36,13 +36,18 @@ describe("Cloudflare Worker shell", () => {
     expect(env.ASSETS.fetch).not.toHaveBeenCalled();
   });
 
-  it("routes protected image analysis through the Worker and rejects non-POST requests", async () => {
+  it("retires the old image endpoint without consuming the submitted photo body", async () => {
     const env = environment();
-    const response = await worker.fetch(new Request("https://aedjaeger.test/api/vision/analyze"), env);
+    const request = new Request("https://aedjaeger.test/api/vision/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image_base64: "must-not-be-read" }),
+    });
+    const response = await worker.fetch(request, env);
 
-    expect(response.status).toBe(405);
-    expect(response.headers.get("Allow")).toBe("POST");
-    expect(await response.json()).toEqual({ error: "method_not_allowed" });
+    expect(response.status).toBe(410);
+    expect(await response.json()).toEqual({ error: "feature_removed" });
+    expect(request.bodyUsed).toBe(false);
     expect(env.ASSETS.fetch).not.toHaveBeenCalled();
   });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { translations } from "../src/i18n/translations";
-import { translateVision } from "../src/i18n/visionTranslations";
+import { translateFlow, type FlowMessageKey } from "../src/i18n/flowTranslations";
 
 describe("first-version UI languages", () => {
   it("includes all six requested languages", () => {
@@ -13,19 +13,17 @@ describe("first-version UI languages", () => {
     }
   });
 
-  it("keeps every visible flow message translated", () => {
+  it("keeps all photo and search flow copy complete in all six languages", () => {
     const keys = Object.keys(translations.de) as Array<keyof typeof translations.de>;
+    const flowKeys = Object.keys(translations.de).length > 0
+      ? ["sightingConfirm", "photoDateTitle", "photoDateHelp", "photoDateLabel", "photoDateConfirm", "photoStaysLocal", "locationTitle", "photoLocationMissing", "usePhoneLocation", "chooseMapLocation", "mapLocationHelp", "mapLocationCoordinates", "locationSourcePhoto", "locationSourcePhone", "locationSourceMap", "searchAction", "searchProgress", "searchTitle", "searchPartial", "searchFound", "searchNoMatch", "searchNoWrite", "searchFailedResult", "distance", "locationUnavailable", "locationDenied", "locationUncertain", "searchRateLimited", "searchUnavailable", "searchFailed", "errorInvalidResponse", "errorSignIn", "selectCandidate", "noneMatchAction", "noneMatchHelp", "previewTitle", "previewTarget", "previewCheckDate", "previewOldDate", "previewNewDate", "previewNoDate", "previewUnsupported", "previewUnsupportedShort", "previewNoWrite", "previewBack", "newPreviewAction", "newPreviewTitle", "newPositionConfirm", "newPositionRequired", "newPreviewCoordinates", "newPreviewOpenMap", "newPreviewTags", "newPreviewReviewedCandidates", "newPreviewCaution", "newPreviewFoundCandidate", "newPreviewSearchInvalid", "newPositionMapLabel", "newPositionMapHelp", "newPositionMapPrivacy", "newPositionMapTileError", "newPositionMapZoomIn", "newPositionMapZoomOut", "searchRetry", "searchWait", "return"] as FlowMessageKey[]
+      : [];
+
     for (const language of Object.keys(translations) as Array<keyof typeof translations>) {
       for (const key of keys) expect(translations[language][key].trim(), `${language}.${key}`).not.toBe("");
       expect(Object.keys(translations[language]).sort()).toEqual([...keys].sort());
-    }
-  });
-
-  it("keeps the optional AI consent and result messages translated in all six languages", () => {
-    const keys = ["consent", "action", "signIn", "progress", "resultTitle", "aedRecognized", "aedRecognizedBody", "aedNotRecognized", "aedNotRecognizedBody", "aedUnclear", "aedUnclearBody", "sceneLabel", "device", "enclosure", "sign", "emptyHolder", "multiple", "other", "unclear", "count", "readableText", "manufacturer", "model", "notOsm", "errorTitle", "errorSignIn", "errorNotAllowed", "errorBudget", "errorUnavailable", "errorInvalidImage", "errorFailed", "errorInvalidResponse", "noAutoRetry", "return", "searchConsent", "searchAction", "searchProgress", "searchTitle", "searchPartial", "searchFound", "searchNoMatch", "searchNoWrite", "searchFailedResult", "distance", "locationUnavailable", "locationDenied", "locationUncertain", "searchRateLimited", "searchUnavailable", "searchFailed", "searchRetry", "searchWait", "selectCandidate", "noneMatchAction", "noneMatchHelp", "newPreviewAction", "newPreviewTitle", "newPositionConfirm", "newPositionRequired", "newPreviewCoordinates", "newPreviewOpenMap", "newPreviewTags", "newPreviewCaution", "newPreviewReviewedCandidates", "newPreviewFoundCandidate", "newPreviewSearchInvalid", "newPositionMapLabel", "newPositionMapHelp", "newPositionMapPrivacy", "newPositionMapTileError", "newPositionMapZoomIn", "newPositionMapZoomOut"] as const;
-    for (const language of Object.keys(translations) as Array<keyof typeof translations>) {
-      for (const key of keys) expect(translateVision(language, key).trim(), `${language}.${key}`).not.toBe("");
-      expect(translateVision(language, "count", { count: 2 })).not.toContain("{count}");
+      for (const key of flowKeys) expect(translateFlow(language, key).trim(), `${language}.${key}`).not.toBe("");
+      expect(translateFlow(language, "searchFound", { count: 2 })).not.toContain("{count}");
     }
   });
 });

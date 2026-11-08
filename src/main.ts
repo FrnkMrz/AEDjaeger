@@ -2,14 +2,12 @@ import "./styles.css";
 import { endOSMSession, loadOSMSession } from "./auth/osmSession";
 import { analysisResult, chooseCandidate, confirmationResult, recoveryResult, type CandidateId, type DemoScenario, type DevelopmentWriteRequest, type FlowState } from "./domain/workflow";
 import { translate, translations, type Language, type TranslationKey } from "./i18n/translations";
-import { translateVision, type VisionMessageKey } from "./i18n/visionTranslations";
-import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservation, VisionClientError } from "./vision/analyzePhoto";
-import { readPhotoLocation } from "./vision/photoLocation";
+import { translateFlow, type FlowMessageKey } from "./i18n/flowTranslations";
+import { readPhotoDate, readPhotoLocation } from "./vision/photoLocation";
 import { assessCandidates } from "./domain/candidateMatch";
 import { createPositionPicker, type Coordinate } from "./map/positionPicker";
 import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
 import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } from "./osm/candidateSearch";
-import { isAedRecognized, type VisionObservation } from "./contracts/visionObservation";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root element was not found.");
@@ -45,16 +43,17 @@ let oauthReturnFailed = new URLSearchParams(window.location.search).get("login")
 let analysisTimer: number | undefined;
 let saveTimer: number | undefined;
 let searchRetryTimer: number | undefined;
-let selectedPhotoFile: File | undefined;
 let selectedPhotoLocation: SearchLocation | undefined;
+let observedOn = new Date().toISOString().slice(0, 10);
+let galleryPhotoRequiresDateConfirmation = false;
 let activeSearchLocation: SearchLocation | undefined;
-let activeSearchLocationSource: "photo" | "phone" | undefined;
+let activeSearchLocationSource: "photo" | "phone" | "map" | undefined;
 // Keep a stable ID while this photo is active; the server uses it to avoid double reservations after retries.
-let liveAnalysisRequestId: string | undefined;
 let photoSelectionVersion = 0;
 let photoSelectionPending = false;
 let activePositionPicker: { destroy(): void } | undefined;
 let newAedPositionOverride: Coordinate | undefined;
+let mapLocationOverride: Coordinate | undefined;
 
 function readLanguage(): Language {
   const saved = localStorage.getItem("aedjaeger-language");
@@ -119,11 +118,11 @@ function t(key: TranslationKey, values?: Record<string, number | string>): strin
   const translated = translate(language, key);
   return values ? translated.replace(/\{(\w+)\}/gu, (_, name: string) => String(values[name] ?? "")) : translated;
 }
-function tv(key: VisionMessageKey, values?: Record<string, number | string>): string { return translateVision(language, key, values); }
+function tv(key: FlowMessageKey, values?: Record<string, number | string>): string { return translateFlow(language, key, values); }
 
 type DiagnosticEvent =
   | "test_run_started" | "test_run_abandoned" | "photo_selected" | "demo_started" | "demo_result_shown" | "demo_confirmed"
-  | "live_flow_blocked" | "live_analysis_started" | "live_analysis_finished" | "live_analysis_failed"
+  | "live_flow_blocked" | "sighting_confirmed"
   | "nearby_search_started" | "nearby_search_finished";
 
 function recordDiagnostic(event: DiagnosticEvent): void {
@@ -216,7 +215,7 @@ function getPhotoUrl(current: FlowState): string | undefined {
 }
 
 function hasUnresolvedSave(current: FlowState): boolean {
-  return current.kind === "vision-analyzing" || current.kind === "candidate-searching" || current.kind === "sending" || current.kind === "checking-status" || current.kind === "unclear-error"
+  return current.kind === "candidate-searching" || current.kind === "sending" || current.kind === "checking-status" || current.kind === "unclear-error"
     || (current.kind === "new-aed-preview" && (current.writeStatus === "sending" || current.writeStatus === "uncertain"))
     || (current.kind === "osm-preview" && (current.writeStatus === "sending" || current.writeStatus === "uncertain"));
 }
@@ -232,41 +231,26 @@ function statusContent(): string {
     case "ready":
       return `<div class="empty-illustration" aria-hidden="true"><span class="device-card"><span class="device-heart">♥</span><span class="device-zap">ϟ</span></span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>`;
     case "photo": {
-      // AI analysis is read-only and has its own server-side allowlist and budget.
-      // Keep it available to an authenticated Dev account even while OSM writes stay off.
-      const liveAnalysisAvailable = accountState === "signed-in";
-      const liveAction = liveAnalysisAvailable
-        ? `<button class="button button-primary" data-action="analyze-live">${icon("search")}<span>${tv("action")}</span></button>`
-        : accountState === "not-configured"
-          ? `<p class="supporting-copy">${t("liveUnavailable")}</p>`
-          : `<p class="supporting-copy">${tv("signIn")}</p>`;
-      const demoAction = demoMode || accountState !== "signed-in" ? `<button class="button button-secondary" data-action="analyze">${t("demoAnalyze")}</button>` : "";
-      // Show provider consent only when a live analysis button is available; the local demo never sends the photo.
-      const liveConsent = liveAnalysisAvailable ? `<p class="supporting-copy">${tv("consent")}</p>` : "";
-      return `${photoMarkup}${liveConsent}${liveAction}${demoAction}<p class="simulation-note">${t("testPhotoNotice")}</p><button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
+      // The first pilot deliberately relies on the person's on-site confirmation, not a model.
+      // The image and its remaining metadata stay in this browser; only selected coordinates
+      // leave it later when the person explicitly starts a location search.
+      const photoAction = demoMode
+        ? `<button class="button button-primary" data-action="analyze">${t("demoAnalyze")}</button>`
+        : `<button class="button button-primary" data-action="confirm-sighting">${tv("sightingConfirm")}</button>`;
+      return `${photoMarkup}${photoAction}<p class="supporting-copy">${tv("photoStaysLocal")}</p>${demoMode ? `<p class="simulation-note">${t("testPhotoNotice")}</p>` : ""}<button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
     }
+    case "photo-date":
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("photoDateTitle")}</h2><p>${tv("photoDateHelp")}</p><label for="photo-observed-on">${tv("photoDateLabel")}</label><input id="photo-observed-on" type="date" value="${escapeHtml(state.suggestedDate)}" max="${new Date().toISOString().slice(0, 10)}" /></div></div><button class="button button-primary" data-action="confirm-photo-date">${tv("photoDateConfirm")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     case "analyzing":
       return `${photoMarkup}${demoNotice()}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${t("demoRunning")}</span></div>`;
-    case "vision-analyzing":
-      return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv("progress")}</span></div>`;
-    case "vision-result": {
-      const observation = state.observation;
-      const recognized = isAedRecognized(observation);
-      const unclear = observation.scene === "unclear";
-      const title = recognized ? "aedRecognized" : unclear ? "aedUnclear" : "aedNotRecognized";
-      const explanation = recognized ? "aedRecognizedBody" : unclear ? "aedUnclearBody" : "aedNotRecognizedBody";
-      if (!recognized) {
-        // A sign, empty holder, unrelated object or uncertain image must never lead to a map edit.
-        return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">${unclear ? "?" : "!"}</span><div><h2>${tv(title)}</h2><p>${tv(explanation)}</p><p class="simulation-note">${tv("notOsm")}</p></div></div><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-      }
-
-      const locationCopy = selectedPhotoLocation ? "searchConsentPhoto" : "searchConsentFallback";
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-good" aria-hidden="true">✓</span><div><h2>${tv(title)}</h2><p>${tv(explanation)}</p><p class="simulation-note">${tv("notOsm")}</p></div></div><p class="supporting-copy">${tv(locationCopy)}</p><button class="button button-primary" data-action="search-nearby">${icon("search")}<span>${tv("searchAction")}</span></button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-    }
     case "location-choice":
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${tv("photoLocationMissing")}</p></div></div><button class="button button-primary" data-action="use-phone-location">${tv("usePhoneLocation")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("locationTitle")}</h2><p>${tv("photoLocationMissing")}</p></div></div><button class="button button-primary" data-action="use-phone-location">${tv("usePhoneLocation")}</button><button class="button button-secondary" data-action="choose-map-location">${tv("chooseMapLocation")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+    case "location-map": {
+      const selectedPosition = mapLocationOverride ?? state.center;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">◎</span><div><h2>${tv("chooseMapLocation")}</h2><p>${tv("mapLocationHelp")}</p></div></div><div id="search-location-map" class="position-map" role="application" tabindex="0" aria-label="${tv("chooseMapLocation")}"></div><p class="position-map-coordinates" id="search-location-coordinates" aria-live="polite">${tv("mapLocationCoordinates", { latitude: selectedPosition.latitude.toFixed(5), longitude: selectedPosition.longitude.toFixed(5) })}</p><button class="button button-primary" data-action="confirm-map-location">${tv("searchAction")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+    }
     case "candidate-searching":
-      return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv(activeSearchLocationSource === "photo" ? "searchProgressPhoto" : "searchProgressPhone")}</span></div>`;
+      return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv("searchProgress")}</span></div>`;
     case "candidate-result": {
       const { assessment, search } = state;
       const candidatesToShow: Array<{ candidate: typeof search.candidates[number]; distanceMeters?: number }> = [];
@@ -307,7 +291,7 @@ function statusContent(): string {
           ? `<p class="simulation-note search-wait" aria-live="off">${tv("searchWait", { seconds: retryWaitSeconds })}</p>`
           : `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`
         : "";
-      const locationSource = activeSearchLocationSource === "photo" ? "locationSourcePhoto" : "locationSourcePhone";
+      const locationSource = activeSearchLocationSource === "photo" ? "locationSourcePhoto" : activeSearchLocationSource === "map" ? "locationSourceMap" : "locationSourcePhone";
       return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p><p class="supporting-copy">${tv(locationSource)}</p>${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}<p class="simulation-note">${tv("searchNoWrite")}</p></div></div>${rejectNearbyCandidates}${newEntryAction}${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     }
     case "new-aed-preview": {
@@ -364,7 +348,7 @@ function statusContent(): string {
       return `<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("previewTitle")}</h2><p>${tv("previewTarget", { target: escapeHtml(state.request.candidateLabel) })}</p>${targetLink}<p class="simulation-note" role="status">${recoveryMessage}</p></div></div>${retry}`;
     }
     case "candidate-error": {
-      const errorKey: Record<typeof state.reason, VisionMessageKey> = {
+      const errorKey: Record<typeof state.reason, FlowMessageKey> = {
         "location-unavailable": "locationUnavailable", "location-denied": "locationDenied", "location-uncertain": "locationUncertain",
         "sign-in": "errorSignIn", "rate-limited": "searchRateLimited", "service-unavailable": "searchUnavailable", failed: "searchFailed", "invalid-response": "errorInvalidResponse",
       };
@@ -374,21 +358,9 @@ function statusContent(): string {
         : retryWaitSeconds > 0
           ? `<p class="simulation-note search-wait" aria-live="off">${tv("searchWait", { seconds: retryWaitSeconds })}</p>`
           : `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`;
-      const locationSource = activeSearchLocationSource === "photo" ? "locationSourcePhoto" : "locationSourcePhone";
+      const locationSource = activeSearchLocationSource === "photo" ? "locationSourcePhoto" : activeSearchLocationSource === "map" ? "locationSourceMap" : "locationSourcePhone";
       return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("searchTitle")}</h2><p>${tv(errorKey[state.reason])}</p><p class="supporting-copy">${tv(locationSource)}</p></div></div>${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     }
-    case "vision-error":
-      const errorKey: Record<typeof state.reason, VisionMessageKey> = {
-        "sign-in": "errorSignIn", "not-allowed": "errorNotAllowed", budget: "errorBudget", unavailable: "errorUnavailable",
-        "session-unavailable": "errorSessionUnavailable",
-        "analysis-budget-unavailable": "errorBudgetUnavailable",
-        "analysis-claim-uncertain": "errorClaimUncertain",
-        "invalid-image": "errorInvalidImage", failed: "errorFailed", "invalid-response": "errorInvalidResponse",
-      };
-      const retryNotice = state.reason === "failed" || state.reason === "invalid-response" ? `<p class="simulation-note">${tv("noAutoRetry")}</p>` : "";
-      const retryableBeforeProvider = state.reason === "session-unavailable" || state.reason === "analysis-budget-unavailable";
-      const retryButton = retryableBeforeProvider ? `<button class="button button-secondary" data-action="retry-live">${tv("retrySession")}</button>` : "";
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("errorTitle")}</h2><p>${tv(errorKey[state.reason])}</p>${retryNotice}</div></div>${retryButton}<button class="button button-quiet" data-action="reset">${tv("return")}</button>`;
     case "clarification":
       return `${photoMarkup}${demoNotice()}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${t(state.reason === "multiple" ? "multipleTitle" : "signTitle")}</h2><p>${t(state.reason === "multiple" ? "multipleBody" : "signBody")}</p></div></div>${state.reason === "multiple" ? `<button class="button button-secondary" data-action="candidate-main-entrance">${t("candidateMainEntrance")}</button><button class="button button-secondary" data-action="candidate-sports-hall">${t("candidateSportsHall")}</button>` : ""}<button class="button button-quiet" data-action="retake">${t("clarifyAgain")}</button>`;
     case "proposal":
@@ -426,7 +398,7 @@ function render(restoreFlowFocus = false): void {
     <div class="page-shell">
       <header class="topbar"><a class="brand" href="/" aria-label="${t("appName")}" ${hasUnresolvedSave(state) ? 'aria-disabled="true"' : ""}><span class="brand-mark">${icon("check")}</span><span>${t("appName")}</span></a><div class="topbar-actions"><button class="info-link" id="open-info" type="button"><span class="info-mark" aria-hidden="true">i</span><span>${t("aboutButton")}</span></button><label class="language-picker"><span class="sr-only">${t("language")}</span><select id="language" aria-label="${t("language")}">${supportedLanguages.map((code) => `<option value="${code}" ${language === code ? "selected" : ""}>${languageNames[code]}</option>`).join("")}</select><span class="language-globe" aria-hidden="true">◎</span></label></div></header>
       ${authenticated ? `<main>
-        <section class="hero ${isReady ? "" : "hero-compact"}"><div class="hero-kicker"><span></span>${t("eyebrow")}</div><h1>${isReady ? t("title") : state.kind === "analyzing" || state.kind === "vision-analyzing" || state.kind === "sending" ? t("checking") : t("tagline")}</h1>${isReady ? `<p>${t("intro")}</p>` : ""}</section>
+        <section class="hero ${isReady ? "" : "hero-compact"}"><div class="hero-kicker"><span></span>${t("eyebrow")}</div><h1>${isReady ? t("title") : state.kind === "analyzing" || state.kind === "candidate-searching" || state.kind === "sending" ? t("checking") : t("tagline")}</h1>${isReady ? `<p>${t("intro")}</p>` : ""}</section>
         <section class="capture-card" aria-live="polite" aria-atomic="false">
           <div class="capture-content">${isReady ? `<div class="empty-illustration" aria-hidden="true"><span class="device-card"><span class="device-heart">♥</span><span class="device-zap">ϟ</span></span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>` : statusContent()}</div>
           ${isReady ? `<div class="capture-actions"><label class="button button-primary camera-label">${icon("camera")}<span>${t("camera")}</span><input id="camera-input" type="file" accept="image/*" capture="environment" /></label><label class="button button-secondary camera-label">${t("choosePhoto")}<input id="file-input" type="file" accept="image/*" /></label><p class="supporting-copy">${t("privacy")}</p></div>` : ""}
@@ -449,6 +421,23 @@ function render(restoreFlowFocus = false): void {
         </div>
       </dialog>
     </div>`;
+
+  if (state.kind === "location-map") {
+    const mapContainer = app!.querySelector<HTMLDivElement>("#search-location-map");
+    if (mapContainer) {
+      activePositionPicker = createPositionPicker(mapContainer, mapLocationOverride ?? state.center, {
+        mapLabel: tv("chooseMapLocation"),
+        zoomInLabel: tv("newPositionMapZoomIn"),
+        zoomOutLabel: tv("newPositionMapZoomOut"),
+        tileErrorLabel: tv("newPositionMapTileError"),
+        onPositionChange(position) {
+          mapLocationOverride = position;
+          const coordinates = app!.querySelector<HTMLParagraphElement>("#search-location-coordinates");
+          if (coordinates) coordinates.textContent = tv("mapLocationCoordinates", { latitude: position.latitude.toFixed(5), longitude: position.longitude.toFixed(5) });
+        },
+      });
+    }
+  }
 
   if (state.kind === "candidate-result" && state.search.status === "complete"
     && (state.assessment.kind === "new-entry-eligible" || state.assessment.kind === "candidate-review" && state.noneOfTheseConfirmed)) {
@@ -650,18 +639,17 @@ function focusCurrentState(): void {
   }
   const focusTargets: Record<FlowState["kind"], string> = {
     ready: "#camera-input",
-    photo: accountState === "signed-in" ? '[data-action="analyze-live"]' : '[data-action="retake"]',
+    photo: '[data-action="confirm-sighting"]',
+    "photo-date": "#photo-observed-on",
     analyzing: ".loading-row",
-    "vision-analyzing": ".loading-row",
-    "vision-result": ".result-message h2",
     "location-choice": ".result-message h2",
+    "location-map": ".result-message h2",
     "candidate-searching": ".loading-row",
     "candidate-result": ".result-message h2",
     "osm-preview": ".result-message h2",
     "development-write-recovery": ".result-message h2",
     "new-aed-preview": ".result-message h2",
     "candidate-error": ".result-message h2",
-    "vision-error": ".result-message h2",
     clarification: ".result-message h2",
     proposal: '[data-action="confirm"]',
     sending: ".loading-row",
@@ -722,18 +710,21 @@ async function onPhotoSelected(event: Event): Promise<void> {
   releasePhoto();
   // The open disclosure is an explicit user choice; carry that preview mode into this photo.
   demoMode = demoMode || (document.querySelector<HTMLDetailsElement>(".demo-panel")?.open ?? false);
-  selectedPhotoFile = file;
   selectedPhotoLocation = photoLocation;
+  const isCameraCapture = input.id === "camera-input";
+  const photoDate = isCameraCapture ? new Date().toISOString().slice(0, 10) : await readPhotoDate(file);
+  observedOn = photoDate ?? new Date().toISOString().slice(0, 10);
+  galleryPhotoRequiresDateConfirmation = !isCameraCapture && (!photoDate || photoDate !== new Date().toISOString().slice(0, 10));
   activeSearchLocation = undefined;
   activeSearchLocationSource = undefined;
-  liveAnalysisRequestId = undefined;
+  mapLocationOverride = undefined;
   recordDiagnostic("photo_selected");
   if (accountState === "not-configured") recordDiagnostic("live_flow_blocked");
   state = { kind: "photo", photoUrl };
   render(true);
 }
 
-function handleAction(action: string | undefined, source?: HTMLElement): void {
+async function handleAction(action: string | undefined, source?: HTMLElement): Promise<void> {
   if (action === "retake") {
     if (hasUnresolvedSave(state)) return;
     recordDiagnostic("test_run_abandoned");
@@ -754,32 +745,51 @@ function handleAction(action: string | undefined, source?: HTMLElement): void {
       recordDiagnostic("demo_result_shown");
       render(true);
     }, 700);
-  } else if (action === "analyze-live") {
-    if (state.kind !== "photo" || accountState !== "signed-in" || !selectedPhotoFile) return;
-    recordDiagnostic("live_analysis_started");
-    void runVisionAnalysis(state.photoUrl, selectedPhotoFile);
-  } else if (action === "search-nearby" && state.kind === "vision-result") {
-    if (selectedPhotoLocation) {
-      activeSearchLocation = selectedPhotoLocation;
-      activeSearchLocationSource = "photo";
-      void runNearbySearch(state.photoUrl, state.observation, selectedPhotoLocation);
-    } else {
-      state = { kind: "location-choice", photoUrl: state.photoUrl, observation: state.observation };
+  } else if (action === "confirm-sighting" && state.kind === "photo" && accountState === "signed-in") {
+    // This is a human sighting confirmation only. It neither claims an automatic recognition
+    // result nor permits an OSM edit; the separate OSM proposal and confirmation remain later.
+    if (galleryPhotoRequiresDateConfirmation) {
+      state = { kind: "photo-date", photoUrl: state.photoUrl, suggestedDate: observedOn };
       render(true);
-    }
+    } else continueAfterSighting(state.photoUrl);
+  } else if (action === "confirm-photo-date" && state.kind === "photo-date" && accountState === "signed-in") {
+    const dateInput = app!.querySelector<HTMLInputElement>("#photo-observed-on");
+    if (!dateInput || !isValidObservedDate(dateInput.value)) return;
+    observedOn = dateInput.value;
+    galleryPhotoRequiresDateConfirmation = false;
+    continueAfterSighting(state.photoUrl);
   } else if (action === "use-phone-location" && state.kind === "location-choice") {
     activeSearchLocation = undefined;
     activeSearchLocationSource = "phone";
-    void runNearbySearch(state.photoUrl, state.observation);
+    void runNearbySearch(state.photoUrl);
+  } else if (action === "choose-map-location" && state.kind === "location-choice") {
+    // A user must explicitly choose this action before the browser asks for location access.
+    try {
+      const center = await getPhoneLocation();
+      mapLocationOverride = center;
+      activeSearchLocationSource = "map";
+      state = { kind: "location-map", photoUrl: state.photoUrl, center };
+    } catch (error) {
+      const code = error instanceof CandidateSearchError ? error.code : "location_unavailable";
+      state = { kind: "candidate-error", photoUrl: state.photoUrl, reason: code === "location_denied" ? "location-denied" : "location-unavailable" };
+    }
+  } else if (action === "confirm-map-location" && state.kind === "location-map") {
+    const position = mapLocationOverride ?? state.center;
+    activeSearchLocationSource = "map";
+    void runNearbySearch(state.photoUrl, { ...position, accuracyMeters: 100 });
   } else if (action === "retry-search" && (state.kind === "candidate-error" || (state.kind === "candidate-result" && (state.search.status === "partial" || state.assessment.kind === "search-incomplete")))) {
     // A photo's embedded point is fixed, but a phone GPS fix can improve after the user moves.
-    const retryLocation = activeSearchLocationSource === "photo" ? activeSearchLocation : undefined;
-    void runNearbySearch(state.photoUrl, state.observation, retryLocation);
+    // A chosen photo/map point is stable across retries. Phone GPS is deliberately reacquired
+    // because the user may have moved since the previous attempt.
+    const retryLocation = activeSearchLocationSource === "photo" || activeSearchLocationSource === "map"
+      ? activeSearchLocation
+      : undefined;
+    void runNearbySearch(state.photoUrl, retryLocation);
   } else if (action === "preview-candidate" && state.kind === "candidate-result") {
     const candidateId = source?.dataset.candidateId;
     const candidate = state.search.candidates.find((item) => item.id === candidateId);
     if (!candidate || !candidateId) return;
-    const result = previewExistingAedCheck(candidate, true, new Date().toISOString().slice(0, 10));
+    const result = previewExistingAedCheck(candidate, true, observedOn);
     const candidateLabel = candidate.tags.name || candidate.tags["defibrillator:location"] || candidate.id;
     state = { kind: "osm-preview", photoUrl: state.photoUrl, candidateId, candidateLabel, result, returnState: state };
   } else if (action === "none-of-these" && state.kind === "candidate-result" && state.search.status === "complete" && state.assessment.kind === "candidate-review") {
@@ -804,7 +814,7 @@ function handleAction(action: string | undefined, source?: HTMLElement): void {
         ? state.assessment.candidates.map((candidate) => candidate.id)
         : [],
       positionConfirmed,
-      observedOn: new Date().toISOString().slice(0, 10),
+      observedOn,
     });
     state = { kind: "new-aed-preview", photoUrl: state.photoUrl, result, returnState: state };
   } else if (action === "back-to-search" && state.kind === "new-aed-preview") {
@@ -870,9 +880,6 @@ function handleAction(action: string | undefined, source?: HTMLElement): void {
     state = { ...state, writeStatus: "sending" };
     render(true);
     void submitDevelopmentWrite(request);
-  } else if (action === "retry-live") {
-    if (state.kind !== "vision-error" || (state.reason !== "session-unavailable" && state.reason !== "analysis-budget-unavailable") || !selectedPhotoFile) return;
-    void runVisionAnalysis(state.photoUrl, selectedPhotoFile);
   } else if (action === "confirm" && state.kind === "proposal") {
     const { photoUrl, proposal, candidateId } = state;
     state = { kind: "sending", photoUrl, proposal, candidateId };
@@ -912,41 +919,7 @@ function clearTimers(): void {
   searchRetryTimer = undefined;
 }
 
-async function runVisionAnalysis(photoUrl: string, file: File): Promise<void> {
-  // The button is the user's explicit choice to send this single photo to the protected API.
-  state = { kind: "vision-analyzing", photoUrl };
-  render(true);
-  try {
-    const sanitizedImage = await preparePhotoForAnalysis(file);
-    liveAnalysisRequestId ??= createVisionRequestId();
-    const observation = await requestVisionObservation(sanitizedImage, fetch, liveAnalysisRequestId);
-    recordDiagnostic("live_analysis_finished");
-    state = { kind: "vision-result", photoUrl, observation };
-  } catch (error) {
-    recordDiagnostic("live_analysis_failed");
-    const code = error instanceof VisionClientError ? error.code : "analysis_failed";
-    // A 401 means the server no longer accepts this browser session, even if its last check passed.
-    if (code === "authentication_required") accountState = "signed-out";
-    const reasons = {
-      authentication_required: "sign-in",
-      analysis_not_allowed: "not-allowed",
-      analysis_budget_exceeded: "budget",
-      analysis_unavailable: "unavailable",
-      session_unavailable: "session-unavailable",
-      analysis_budget_unavailable: "analysis-budget-unavailable",
-      analysis_claim_uncertain: "analysis-claim-uncertain",
-      invalid_image: "invalid-image",
-      image_too_large: "invalid-image",
-      image_processing_failed: "invalid-image",
-      analysis_failed: "failed",
-      invalid_response: "invalid-response",
-    } as const;
-    state = { kind: "vision-error", photoUrl, reason: reasons[code] };
-  }
-  render(true);
-}
-
-async function runNearbySearch(photoUrl: string, observation: VisionObservation, providedLocation?: SearchLocation): Promise<void> {
+async function runNearbySearch(photoUrl: string, providedLocation?: SearchLocation): Promise<void> {
   newAedPositionOverride = undefined;
   if (searchRetryTimer) window.clearTimeout(searchRetryTimer);
   searchRetryTimer = undefined;
@@ -956,7 +929,7 @@ async function runNearbySearch(photoUrl: string, observation: VisionObservation,
     return;
   }
 
-  state = { kind: "candidate-searching", photoUrl, observation };
+  state = { kind: "candidate-searching", photoUrl };
   recordDiagnostic("nearby_search_started");
   render(true);
   try {
@@ -969,7 +942,7 @@ async function runNearbySearch(photoUrl: string, observation: VisionObservation,
     const retryAvailableAt = search.status === "partial"
       ? Date.now() + (search.retryAfterSeconds ?? 30) * 1_000
       : undefined;
-    state = { kind: "candidate-result", photoUrl, observation, search, assessment, location, ...(retryAvailableAt === undefined ? {} : { retryAvailableAt }) };
+    state = { kind: "candidate-result", photoUrl, search, assessment, location, ...(retryAvailableAt === undefined ? {} : { retryAvailableAt }) };
     recordDiagnostic("nearby_search_finished");
     if (retryAvailableAt !== undefined) scheduleSearchRetryCountdown(retryAvailableAt);
   } catch (error) {
@@ -995,7 +968,7 @@ async function runNearbySearch(photoUrl: string, observation: VisionObservation,
     } as const;
     const retryAfterSeconds = error instanceof CandidateSearchError ? error.retryAfterSeconds : undefined;
     const retryAvailableAt = retryAfterSeconds === undefined ? undefined : Date.now() + retryAfterSeconds * 1_000;
-    state = { kind: "candidate-error", photoUrl, observation, reason: reasons[code as keyof typeof reasons] ?? "failed", ...(retryAvailableAt === undefined ? {} : { retryAvailableAt }) };
+    state = { kind: "candidate-error", photoUrl, reason: reasons[code as keyof typeof reasons] ?? "failed", ...(retryAvailableAt === undefined ? {} : { retryAvailableAt }) };
     if (retryAvailableAt !== undefined) scheduleSearchRetryCountdown(retryAvailableAt);
   }
   render(true);
@@ -1024,15 +997,35 @@ function getPhoneLocation(): Promise<SearchLocation> {
   });
 }
 
+function continueAfterSighting(photoUrl: string): void {
+  recordDiagnostic("sighting_confirmed");
+  if (selectedPhotoLocation) {
+    activeSearchLocation = selectedPhotoLocation;
+    activeSearchLocationSource = "photo";
+    void runNearbySearch(photoUrl, selectedPhotoLocation);
+  } else {
+    state = { kind: "location-choice", photoUrl };
+    render(true);
+  }
+}
+
+function isValidObservedDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+    && value <= new Date().toISOString().slice(0, 10);
+}
+
 function releasePhoto(): void {
   newAedPositionOverride = undefined;
   const photoUrl = getPhotoUrl(state);
   if (photoUrl?.startsWith("blob:")) URL.revokeObjectURL(photoUrl);
-  selectedPhotoFile = undefined;
   selectedPhotoLocation = undefined;
+  galleryPhotoRequiresDateConfirmation = false;
+  observedOn = new Date().toISOString().slice(0, 10);
   activeSearchLocation = undefined;
   activeSearchLocationSource = undefined;
-  liveAnalysisRequestId = undefined;
+  mapLocationOverride = undefined;
 }
 
 render();

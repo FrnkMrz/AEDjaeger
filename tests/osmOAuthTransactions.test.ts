@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { D1Database, D1Result, D1Statement } from "../server/storage/analysisBudget";
+import type { D1Database, D1Result, D1Statement } from "../server/storage/d1";
 import {
   consumeOSMOAuthTransaction,
   storeOSMOAuthTransaction,

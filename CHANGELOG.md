@@ -4,6 +4,14 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ## [Unreleased]
 
+### Removed
+- Entfernt die externe OpenAI-Bildanalyse samt Anbieter-, Budget- und Browsercode. Der alte Analyse-Endpunkt antwortet aus Kompatibilitätsgründen mit HTTP 410, ohne den Request-Body zu lesen.
+
+### Changed
+- Führt nach der Fotoauswahl eine ausdrückliche Sichtbestätigung ein. Foto und EXIF bleiben lokal; Foto-GPS wird zuerst genutzt, Handy-GPS oder Kartenposition nur nach bewusster Auswahl.
+- Fragt bei Galerieaufnahmen das Beobachtungsdatum ausdrücklich ab, wenn EXIF ein älteres Datum enthält oder kein Datum zuverlässig ermittelt werden kann. Ein vergangenes Foto wird nicht stillschweigend als heutige Vor-Ort-Prüfung behandelt.
+- Aktualisiert die aktuellen Produkt- und Agentenregeln auf einen Pilot ohne externe Bilddienste und ohne OpenAI.
+
 ### Added
 - Ergänzt sichere Diagnoseeinträge für fehlgeschlagene oder unvollständige Umgebungssuchen: zufällige Diagnose-ID, Fehlercode, Worker-HTTP-Status, soweit verfügbar Overpass-Status und Laufzeit. Koordinaten, Konto, Kandidaten, Antworttexte und Zugangsdaten werden nicht protokolliert.
 - Ergänzt nach einer vollständigen Umgebungssuche den ausdrücklichen, als seltene Ausnahme gekennzeichneten Weg „Keiner davon ist der fotografierte AED“. Erst nach sorgfältiger Einzelprüfung aller angezeigten nahen Treffer lassen sich Standort auf der Karte bestätigen und eine Neuanlage vorbereiten; nicht angezeigte Treffer bleiben in der Dublettenprüfung. Ältere laufende Uploads können nach einem Update sicher abgeglichen werden.

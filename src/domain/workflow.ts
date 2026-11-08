@@ -1,6 +1,5 @@
 import { assessOverpassResponse } from "./assessOverpassResponse";
 import type { CandidateAssessment, LocationEstimate, MatchPolicy } from "./candidateMatch";
-import type { VisionObservation } from "../contracts/visionObservation";
 import type { OverpassSearchResult } from "../osm/overpassSearch";
 import type { SearchLocation } from "../osm/candidateSearch";
 import type { ExistingCheckDatePreview, NewAedPreview, ProposalResult } from "./osmChangeProposal";
@@ -12,7 +11,6 @@ export type CandidateId = "main-entrance" | "sports-hall";
 export type CandidateResultState = {
   kind: "candidate-result";
   photoUrl: string;
-  observation: VisionObservation;
   search: OverpassSearchResult;
   assessment: CandidateAssessment;
   location: SearchLocation;
@@ -32,17 +30,16 @@ export type DevelopmentWriteRequest = {
 export type FlowState =
   | { kind: "ready" }
   | { kind: "photo"; photoUrl: string }
+  | { kind: "photo-date"; photoUrl: string; suggestedDate: string }
   | { kind: "analyzing"; photoUrl: string }
-  | { kind: "vision-analyzing"; photoUrl: string }
-  | { kind: "vision-result"; photoUrl: string; observation: VisionObservation }
-  | { kind: "location-choice"; photoUrl: string; observation: VisionObservation }
-  | { kind: "candidate-searching"; photoUrl: string; observation: VisionObservation }
+  | { kind: "location-choice"; photoUrl: string }
+  | { kind: "location-map"; photoUrl: string; center: LocationEstimate }
+  | { kind: "candidate-searching"; photoUrl: string }
   | CandidateResultState
   | { kind: "new-aed-preview"; photoUrl: string; result: ProposalResult<NewAedPreview>; returnState: CandidateResultState; writeStatus?: "sending" | "complete" | "uncertain" | "conflict" | "failed"; operationId?: string }
   | { kind: "osm-preview"; photoUrl: string; candidateId: string; candidateLabel: string; result: ProposalResult<ExistingCheckDatePreview>; returnState: CandidateResultState; writeStatus?: "sending" | "complete" | "uncertain" | "conflict" | "failed"; operationId?: string }
   | { kind: "development-write-recovery"; request: DevelopmentWriteRequest; writeStatus: "uncertain" | "sending" | "complete" | "conflict" | "failed" }
-  | { kind: "candidate-error"; photoUrl: string; observation: VisionObservation; reason: "location-unavailable" | "location-denied" | "location-uncertain" | "sign-in" | "rate-limited" | "service-unavailable" | "failed" | "invalid-response"; retryAvailableAt?: number }
-  | { kind: "vision-error"; photoUrl: string; reason: "sign-in" | "not-allowed" | "budget" | "unavailable" | "session-unavailable" | "analysis-budget-unavailable" | "analysis-claim-uncertain" | "invalid-image" | "failed" | "invalid-response" }
+  | { kind: "candidate-error"; photoUrl: string; reason: "location-unavailable" | "location-denied" | "location-uncertain" | "sign-in" | "rate-limited" | "service-unavailable" | "failed" | "invalid-response"; retryAvailableAt?: number }
   | { kind: "clarification"; photoUrl: string; reason: "sign-only" | "multiple" }
   | { kind: "proposal"; photoUrl: string; proposal: ProposalKind; candidateId?: CandidateId }
   | { kind: "sending"; photoUrl: string; proposal: ProposalKind; candidateId?: CandidateId }

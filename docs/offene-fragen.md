@@ -1,12 +1,12 @@
 # Entscheidungen und nächste Schritte
 
-Stand: 8.11.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto → prüfen → vorhandenen AED kurz bestätigen oder neuen AED eintragen.** GPT-6 Luna ist als erstes Bildmodell gewählt. Der OSM-Dev-Login wurde erfolgreich abgeschlossen und die App hat das gezeigte AED-Gehäuse als AED beobachtet. OSM-Schreibzugriffe bleiben ausgeschaltet. Zwei echte, lesende Umgebungssuchen mit Foto-GPS schlugen mit einer allgemeinen Verfügbarkeitsmeldung fehl; kein Standort oder Ergebnis wurde gespeichert und es gab keine OSM-Änderung. Dieser PR ergänzt sichere Diagnose-Logs, damit der nächste Versuch zwischen Overpass-, D1- und Worker-Fehlern unterscheiden kann. Der veröffentlichte Worker und die D1-Pilotdatenbank bleiben aktiv.
+Stand: 8.11.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto → Sichtbarkeit selbst bestätigen → regionalen AED-Datenbestand prüfen → vorhandenen AED bestätigen oder neuen Eintrag vorbereiten.** Der Pilot verzichtet auf OpenAI und alle anderen externen Bilddienste; Foto und EXIF bleiben lokal. GPS aus dem Foto hat Vorrang. Ohne Foto-GPS wird Handy-GPS oder eine Kartenposition nur nach ausdrücklicher Auswahl genutzt. GPT-6-Luna- und Overpass-Überlegungen weiter unten sind historische Entscheidungen und durch den aktuellen Umbau überholt. OSM-Schreibzugriffe bleiben ausgeschaltet.
 
 ## Festgelegt
 
 - Die App ist als mobile PWA mit gemeinsam gehosteter Oberfläche und API auf Cloudflare vorgesehen. Der öffentliche Pilot-Worker ist unter [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev) erreichbar; API-Funktionen bleiben bis zu ihrer sicheren Konfiguration abgeschaltet.
-- Vor dem AED wird ein Foto aufgenommen. Die KI prüft, ob ein AED zu sehen ist, und liest nur klar erkennbare Angaben aus.
-- Eine gültige OpenStreetMap-Anmeldung ist Voraussetzung für jede Arbeitsfunktion. Ohne Sitzung wird nur die Einstiegsseite mit Konto-Erstellung und OSM-Anmeldung gezeigt; Kamera, Fotos, Demo, KI, Standort und Suche bleiben gesperrt.
+- Vor Ort wird ein Foto aufgenommen oder ausgewählt; die Person bestätigt ausdrücklich, dass ein AED-Gerät oder -Gehäuse sichtbar ist. Das Foto und seine EXIF-Daten verlassen das Gerät nicht.
+- Eine gültige OpenStreetMap-Anmeldung ist Voraussetzung für jede Arbeitsfunktion. Ohne Sitzung wird nur die Einstiegsseite mit Konto-Erstellung und OSM-Anmeldung gezeigt; Kamera, Fotos, Standort und Suche bleiben gesperrt.
 - Der Standort wird mit bestehenden OpenStreetMap-Einträgen abgeglichen. Ein passender Treffer wird als „noch vorhanden“ bestätigt; ohne Treffer wird ein neuer Eintrag vorbereitet.
 - Werden nahe AEDs gefunden, kann die Person jetzt ausdrücklich bestätigen, dass keiner davon das fotografierte Gerät ist. Nach einer vollständigen Suche führt das zur Standortkarte; der Testserver prüft vor einer Neuanlage erneut auf inzwischen erschienene oder nicht geprüfte AEDs. Eine echte OSM-Testserver-Schreibprobe steht noch aus.
 - Im eindeutigen Fall genügt eine kurze Bestätigung für den OSM-Schreibvorgang.
@@ -14,15 +14,14 @@ Stand: 8.11.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto 
 - Im Pilot wird Gamification nur intern gezählt: erfolgreiche Vor-Ort-Prüfungen nach bestätigtem OSM-Vorgang. Es gibt keine sichtbare Anzeige und keine Teilfunktion. Teilen wird frühestens nach dem Pilot neu bewertet.
 - Vorbild bleibt Hydrantenjäger. Der Produktname ist „AEDjaeger“ und wird in allen Sprachen gleich geschrieben.
 - Der erste Prototyp nutzt Vite und TypeScript ohne React. Die Auswahl hält den mobilen Ablauf klein und benötigt kein React-spezifisches Zustandssystem. Die produktive Zielarchitektur bleibt Cloudflare Workers mit Static Assets.
-- Die erste API-Bildanalyse soll OpenAI GPT-6 Luna (`gpt-6-luna`) verwenden. Kein höheres OpenAI-Modell ohne neue Entscheidung. Ein explorativer Test erkannte drei positive Testbilder als AED; negative und unklare Testfälle stehen noch aus.
+- Automatische Erkennung ist keine Pilotfunktion. Eine spätere Erprobung ist nur lokal auf dem Gerät und nach eigener Produktentscheidung vorgesehen.
 
 ## Nächste praktische Prüfungen
 
-1. Den veröffentlichten Fotoablauf auf Android und iPhone prüfen, einschließlich Berechtigungen, Sprachwechsel, schmaler Darstellung und Installierbarkeit. Am 18.10.2026 meldete der Nutzer, dass Fotoaufnahme und Auswahl aus der Bibliothek über die private WLAN-/VPN-Vorschau funktionieren; Gerät und Browser sind nicht dokumentiert. Beim öffentlichen Handy-Test am 25.10.2026 wurde nach einem Foto von Schuhen ein AED-Beispielergebnis angezeigt. Das war die lokale Demo mit einem vorher gewählten Beispielszenario, keine Fotoerkennung; die Oberfläche wird deshalb klarer beschriftet und erhält freiwillige Ablauf-Logs. Der erste öffentliche Check bestätigte HTTP 200 für Startseite und `/api/health`, ersetzt aber keinen Kameratest am Handy oder Offline-Test der installierten PWA.
-2. Die [erste explorative ChatGPT-Prüfung](bildtest.md#erste-explorative-chatgpt-prüfung) als qualitative Vorprüfung einordnen; die standardisierte Wiederholung mit dem einheitlichen Prompt und den fünf Bildklassen im Bildtest durchführen. Die sieben bereinigten lokalen Kopien wurden am 18.10.2026 mit ausdrücklicher Freigabe ausschließlich an ChatGPT gesendet. Für andere Anbieter oder weitere Bilder ist eine gesonderte Freigabe erforderlich.
-3. Die [explorative OpenAI-API-Prüfung](bildtest.md) ist am 19.10.2026 mit drei bereinigten Spaziergangsfotos erfolgt. Sie ist ein Machbarkeitstest, kein kontrollierter Modellvergleich. Anschließend den Testsatz um leere Halterung, mehrere Geräte, Poster ohne Gerät, ähnliche Gegenstände und unklare Bilder erweitern; nur ausdrücklich freigegebene Fotos an Anbieter senden.
-4. Der isolierte GPT-6-Luna-Adapter unter `server/vision/openai.ts` validiert Bildcontainer, Dateigröße und Modellantwort und ist mit simulierten Aufrufen getestet. Die geschützte Analyse-Route verlangt OSM-Sitzung, Pilot-Freigabeliste und D1-Budgetreservierung vor jedem Modellaufruf. Die PWA bietet eine getrennte, ausdrücklich ausgelöste Analyse. Vor dem Senden wird das Bild lokal neu kodiert und EXIF entfernt. Die Overpass-Route begrenzt Suchgenauigkeit, Zeit und Antwortgröße und setzt einen D1-Cooldown. Bei der Umgebungssuche wird Foto-GPS zuerst lokal verwendet; Handy-GPS kommt nur nach ausdrücklicher Auswahl zum Einsatz. Am 8.11.2026 wurden zwei echte lesende Overpass-Suchen versucht; beide scheiterten, bevor Kandidaten angezeigt wurden. Ein neuer Diagnoseeintrag protokolliert nur zufällige Diagnose-ID, feste Fehlerart, HTTP-Status und Laufzeit, nicht Standort, Konto, Kandidaten, Antworttexte oder Tokens. Nach Merge und manuellem Deploy ist ein weiterer echter Suchversuch nötig, um den konkreten Fehler zu erfassen. Keine OSM-Änderung wurde ausgeführt.
-5. Den OSM-Abgleich mit Testdaten als Vorschau erproben, einschließlich mehrerer Geräte in einem Gebäude, ungenauem GPS und fehlgeschlagener Suche. Schreibwege für bestehende AEDs und Neuanlagen sind veröffentlicht, bleiben aber über `OSM_DEV_WRITES_ENABLED` standardmäßig abgeschaltet und wurden nicht gegen den echten OSM-Testserver ausgeführt. Die Remote-D1-Migrationen sind bis einschließlich 0009 angewendet. OSM-Dev-Anmeldung und OAuth-Rückkehr in die App wurden am 8.11.2026 bestätigt. Vor einem echten Schreibtest muss der Betreiber den getrennten Schreibschalter ausdrücklich freigeben; danach sind Neuanlage und Wiederaufnahme zuerst mit Testdaten auf der OSM-Entwicklungsinstanz zu prüfen.
+1. Phase 1 auf Android und iPhone prüfen: manuelle Sichtbestätigung, lokales Foto-GPS, ausdrückliche Standortwahl bei fehlendem GPS und Datum bei alten oder datumsfreien Galerieaufnahmen. Kameraaufnahme gilt als heutige Aufnahme; Galerieaufnahmen ohne zuverlässiges EXIF-Datum benötigen eine ausdrückliche Datumsbestätigung.
+2. Phase 2 planen und umsetzen: regionalen AED-Datenbestand aus der OpenFireMap-Pipeline ausliefern und in AEDjaeger konsumieren. Die laufende Suche darf nicht von Overpass abhängen. Die offizielle OSM-API wird nur für gezielte Aktualitäts-/Versionsprüfung und bestätigtes Schreiben eingesetzt.
+3. Den Abgleich mit simulierten Kandidaten testen: keine Treffer, eindeutiger Treffer, mehrere nahe Treffer, unvollständiger regionaler Bestand, veralteter Snapshot und offline/Netzabbruch. Ein unvollständiger oder veralteter Datenstand darf keine Neuanlage als sicher darstellen.
+4. Erst nach erfolgreicher Suche mit einer vollständigen regionalen Datenquelle die Vorschau und anschließend separat freigegebene OSM-Dev-Schreibwege prüfen. Produktives OSM bleibt in Tests ausgeschlossen.
 
 ## Einrichtung des OSM-Testlogins
 
@@ -30,25 +29,13 @@ Für einen echten Login muss eine **separate OAuth-Anwendung auf dem OSM-Entwick
 
 ## Noch zu entscheiden
 
-- `OSM_DEV_WRITES_ENABLED` bleibt aus; für einen echten Testserver-Schreibvorgang ist eine separate ausdrückliche Freigabe und ein konkreter bestätigter Vorschlag nötig. Der erfolgreiche Dev-Login wurde am 27.10.2026 über die App bestätigt. Die UI stellt mit diesem PR die KI-Prüfung unabhängig vom OSM-Schreibschalter bereit; der API-Aufruf benötigt weiterhin serverseitige KI-Freigabe, ein konfiguriertes Testbudget und eine erlaubte Kontoidentität.
-
-- Welche Erkennungsqualität erreicht GPT-6 Luna bei vorab annotierten positiven, negativen und unklaren Beispielen? Der erste Drei-Bilder-Test ist dafür zu klein.
-- Welche maximale Kostenreservierung pro Anfrage sowie Nutzer- und Gesamt-Tageslimits sollen für die ersten API-Tests gelten? Die geschützte Analyse-Route ist implementiert, aber standardmäßig abgeschaltet und ruft ohne Freigabeliste und alle drei Kostenwerte kein Modell auf. Die Reservierung muss mindestens die aktuelle Obergrenze für ein maximal zulässiges GPT-6-Luna-Bild abdecken.
-- Welche OSM-Konten dürfen die Analyse im Pilot nutzen? `AI_ANALYSIS_ALLOWED_OSM_SUBJECTS` muss höchstens 100 Anbieterkennungen im Format `production:<subject>` oder `development:<subject>` enthalten. Die Anbieterkennung ist nötig, weil OSM-Subjekte nur innerhalb eines Servers eindeutig sind; die D1-Kostenidentität wird zusätzlich aus Anbieter und Subjekt gebildet.
-- Die Vorschau für bestätigte vorhandene AED-Knoten und der Neuanlage-Schreibweg sind im Fotoablauf ergänzt. Beide sind zusätzlich zum getrennten Entwicklungslogin über `OSM_DEV_WRITES_ENABLED` abgeschaltet und ausschließlich auf den festen OSM-Testserver beschränkt. Die Neuanlage prüft direkt vor dem Schreiben erneut einen begrenzten OSM-Kartenausschnitt und bricht bei Treffer oder nicht verlässlicher Antwort ab. Sie schreibt derzeit nur `emergency=defibrillator` und `check_date`; ein Standorttext ist optional und wird im UI noch nicht abgefragt. Migrationen 0008 und 0009 speichern kurzlebige Vorgänge und die Ergebnis-Node-ID. Lokale Tests simulieren den OSM-Dienst; der Worker ist deployed, es gab aber kein echtes OSM-Schreiben. Für einen kontrollierten Test fehlen separates Testkonto, passende OAuth-Anwendung und ausdrückliche Betreiberaktivierung. Produktives OSM bleibt ausgeschlossen.
-- Vor einem Testserver-Schreiben muss die Standortbestätigung im neuen Ablauf nochmals auf dem Mobilgerät geprüft werden; die vorhandene Positionskorrektur erfolgt über die verschiebbare OSM-Karte.
-- Reicht Cloudflare Free für den Pilot? Workers Paid (mindestens 5 USD pro Monat) erst aktivieren, falls Free-Grenzen oder ein konkreter Betriebsbedarf es erforderlich machen. Eigene Domain ebenfalls erst dann wählen, wenn sie gebraucht wird.
+- Welches Update-Intervall und welches maximale Alter des regionalen AED-Datenbestands sind für einen Pilot akzeptabel? Ein Snapshot muss Alter und Abdeckungsstatus liefern, damit AEDjaeger bei veralteten oder unvollständigen Daten sicher stoppt.
+- Welcher eng begrenzte OSM-API-Abgleich ist für gezielte Versionsprüfung und den späteren bestätigten Schreibvorgang nötig? Er darf keine flächige Ersatzsuche werden.
+- `OSM_DEV_WRITES_ENABLED` bleibt aus. Vor einem echten Testserver-Schreibvorgang braucht es eine separate ausdrückliche Freigabe und einen konkreten Vorschlag.
+- Vor einem Testserver-Schreiben muss die Standortbestätigung auf dem Mobilgerät nochmals geprüft werden; die Korrektur erfolgt über die verschiebbare Karte.
+- Reicht Cloudflare Free für den Pilot? Workers Paid und eine eigene Domain bleiben bis zu einem belegten Bedarf ausgeschlossen.
 - Welche Lizenz passt zum Projekt?
 - Nach dem Pilot: Ist eine sichtbare oder teilbare Fortschrittskarte den Aufwand und die Datenschutzprüfung wert?
-
-Für die spätere kontrollierte Aktivierung des API-Endpunkts sind serverseitig
-`OPENAI_API_KEY`, `AI_ANALYSIS_ENABLED=true`, `AI_ANALYSIS_ALLOWED_OSM_SUBJECTS`, `AI_ANALYSIS_COST_RESERVATION_MICROS`,
-`AI_ANALYSIS_USER_DAILY_LIMIT_MICROS` und `AI_ANALYSIS_GLOBAL_DAILY_LIMIT_MICROS`
-erforderlich. Die Wrangler-Secretliste ist aktuell leer; die sechs KI-Aktivierungswerte sind noch nicht konfiguriert. Die Reservierung
-muss anhand einer belastbaren Obergrenze pro zulässigem Bild berechnet werden; ein
-Kontolimit beim Anbieter ersetzt die anfragebezogene Reservierung in D1 nicht.
-
-Vor einem Pilot müssen Verarbeitung und Aufbewahrung beim ausgewählten Dienst geprüft und verständlich erklärt werden. Öffentliche Bildspeicherung ist keine Produktfunktion. Die Beispielszenarien bleiben lokal; ausschließlich der sichtbare Analyseknopf übermittelt nach ausdrücklicher Betätigung ein bereinigtes Foto an die geschützte API, wenn sie konfiguriert und freigeschaltet ist.
 
 ## Bereits recherchiert
 

@@ -5,7 +5,6 @@ import type { D1Database } from "./storage/d1";
 import { consumeOSMOAuthTransaction, storeOSMOAuthTransaction } from "./storage/osmOAuthTransactions";
 import { deleteOSMSession, findOSMSession, rotateOSMSession, OSM_SESSION_LIFETIME_MS } from "./storage/osmSessions";
 import { storeOSMDevelopmentToken } from "./storage/osmDevelopmentTokens";
-import { handleVisionAnalysis } from "./vision/analyzeRoute";
 import { handleOverpassSearch } from "./osm/overpassRoute";
 import { handleDevelopmentCheckDate } from "./osm/developmentWriteRoute";
 import { handleDevelopmentCreateNode } from "./osm/developmentCreateNodeRoute";
@@ -23,12 +22,6 @@ type WorkerEnvironment = {
   OSM_DEV_REDIRECT_URI?: string;
   OSM_DEV_WRITES_ENABLED?: string;
   OSM_OAUTH_ENCRYPTION_KEY?: string;
-  OPENAI_API_KEY?: string;
-  AI_ANALYSIS_ENABLED?: string;
-  AI_ANALYSIS_ALLOWED_OSM_SUBJECTS?: string;
-  AI_ANALYSIS_COST_RESERVATION_MICROS?: string;
-  AI_ANALYSIS_USER_DAILY_LIMIT_MICROS?: string;
-  AI_ANALYSIS_GLOBAL_DAILY_LIMIT_MICROS?: string;
 };
 
 type OSMAuthConfiguration = {
@@ -80,7 +73,9 @@ const worker = {
     if (pathname === "/api/osm/candidates/search") return handleOverpassSearch(request, environment);
     if (pathname === "/api/osm/development/check-date") return handleDevelopmentCheckDate(request, environment);
     if (pathname === "/api/osm/development/create-node") return handleDevelopmentCreateNode(request, environment);
-    if (pathname === "/api/vision/analyze") return handleVisionAnalysis(request, environment);
+    // Older installed PWAs may still call this endpoint. Retire it without parsing or consuming
+    // their image body so no photo can reach an external image provider during the migration.
+    if (pathname === "/api/vision/analyze") return jsonResponse({ error: "feature_removed" }, 410);
     if (pathname === "/api" || pathname.startsWith("/api/")) return jsonResponse({ error: "not_found" }, 404);
     return environment.ASSETS.fetch(request);
   },

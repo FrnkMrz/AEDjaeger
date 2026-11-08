@@ -9,7 +9,7 @@ Vorbild ist [Hydrantenjäger](https://hydrantenjaeger.de), insbesondere die einf
 ## Einstieg
 
 - [Recherche und kommentierte Linksammlung](docs/recherche.md)
-- [Produktkonzept: Foto, KI und OSM-Abgleich](docs/konzept.md)
+- [Produktkonzept: Foto, Sichtbestätigung und OSM-Abgleich](docs/konzept.md)
 - [Architektur, Bedienung, Hosting und Schwachstellen](docs/architektur.md)
 - [Umsetzungsplan für den programmierenden AI-Agenten](docs/umsetzungsplan.md)
 - [Gamification-Konzept: das AED-Signalnetz](docs/gamification.md)
@@ -19,13 +19,13 @@ Vorbild ist [Hydrantenjäger](https://hydrantenjaeger.de), insbesondere die einf
 
 ## Festgelegte Produktrichtung
 
-**Foto machen → KI erkennt den AED und liest sichtbare Angaben → Abgleich mit OpenStreetMap → neu eintragen oder „noch vorhanden“ bestätigen.**
+**Foto machen → Sichtbarkeit von AED oder Gehäuse selbst bestätigen → regionale AED-Daten prüfen → vorhandenen AED bestätigen oder neuen Eintrag vorbereiten.**
 
 Absolute Einfachheit ist das oberste Ziel. Die App übernimmt Erkennung und Zuordnung. Nur notwendige offene Fragen werden gestellt; vorhandene Einträge müssen nicht erst vervollständigt werden. Im eindeutigen Fall reicht nach dem Foto ein Tippen zum Speichern. Details stehen im [Produktkonzept](docs/konzept.md).
 
 ## Technische Richtung
 
-PWA mit kleinem Serverdienst; Code auf GitHub, gemeinsames Hosting von Oberfläche und API auf Cloudflare Workers mit Static Assets. Der erste lokale Prototyp nutzt Vite und TypeScript ohne React und simuliert Foto-Prüfung und Trefferfälle; er ruft weder KI noch OSM auf. Begründung, Alternativen und Prüfschritte stehen im [Architekturentwurf](docs/architektur.md).
+PWA mit kleinem Serverdienst; Code auf GitHub, gemeinsames Hosting von Oberfläche und API auf Cloudflare Workers mit Static Assets. Im Pilot bleibt das Foto samt EXIF auf dem Gerät und es gibt keinen externen Bilddienst. Die Umgebungssuche soll den regionalen AED-Datenbestand der OpenFireMap-Pipeline nutzen. Begründung, Alternativen und Prüfschritte stehen im [Architekturentwurf](docs/architektur.md).
 
 ## Sprachen und Gamification
 
