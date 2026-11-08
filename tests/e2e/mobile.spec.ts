@@ -272,6 +272,7 @@ test("retry keeps an explicitly chosen map location instead of silently switchin
   if (await dateConfirm.isVisible()) await dateConfirm.click();
   await page.locator('[data-action="choose-map-location"]').click();
   const map = page.locator("#search-location-map");
+  for (let zoom = 0; zoom < 9; zoom += 1) await page.getByRole("button", { name: "Karte vergrößern" }).click();
   await map.focus();
   await page.keyboard.press("ArrowRight");
   const selectedCoordinates = await page.locator("#search-location-coordinates").innerText();
@@ -521,8 +522,10 @@ test("denied location access does not send a nearby search request", async ({ pa
 
 test("a denied phone location still allows choosing and searching an explicit map point", async ({ page }) => {
   await page.addInitScript(() => {
+    Object.defineProperty(window, "__locationRequests", { value: 0, writable: true });
     Object.defineProperty(navigator, "geolocation", { value: {
       getCurrentPosition(_success: PositionCallback, error: PositionErrorCallback) {
+        (window as typeof window & { __locationRequests: number }).__locationRequests += 1;
         error({ code: 1, PERMISSION_DENIED: 1, message: "Denied" } as GeolocationPositionError);
       },
     } });
@@ -542,13 +545,18 @@ test("a denied phone location still allows choosing and searching an explicit ma
 
   const map = page.locator("#search-location-map");
   await expect(map).toBeVisible();
+  expect(await page.evaluate(() => (window as typeof window & { __locationRequests: number }).__locationRequests)).toBe(0);
   await expect(page.locator(".capture-content")).toContainText("nicht an deinem Standort");
-  await expect(page.locator(".capture-content")).toContainText("Handy-Standort wird dabei nicht abgefragt");
+  await expect(page.locator(".capture-content")).toContainText("Handy-Standort wird nicht abgefragt");
   await expect(page.locator("#search-location-coordinates")).toContainText("Noch kein AED-Standort ausgewählt");
   const search = page.locator('[data-action="confirm-map-location"]');
   await expect(search).toBeDisabled();
+  for (let zoom = 0; zoom < 8; zoom += 1) await page.getByRole("button", { name: "Karte vergrößern" }).click();
+  await expect(search).toBeDisabled();
   await map.focus();
   await page.keyboard.press("ArrowRight");
+  await expect(search).toBeDisabled();
+  await page.getByRole("button", { name: "Karte vergrößern" }).click();
   await expect(search).toBeEnabled();
   await search.click();
   await expect.poll(() => searchLocation).toBeDefined();

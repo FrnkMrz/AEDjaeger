@@ -25,6 +25,7 @@ const scenarioKeys: Record<DemoScenario, TranslationKey> = {
   existing: "existingScenario", new: "newScenario", multiple: "multipleScenario", unclear: "unclearScenario", "search-error": "searchErrorScenario", "upload-unclear": "uploadErrorScenario",
 };
 const supportedLanguages = Object.keys(translations) as Language[];
+const minimumMapSearchZoom = 15;
 let language = readLanguage();
 let scenario: DemoScenario = "existing";
 // Local fixture workflows stay hidden until the user explicitly opens the preview panel.
@@ -247,7 +248,7 @@ function statusContent(): string {
       return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("locationTitle")}</h2><p>${tv("photoLocationMissing")}</p></div></div><button class="button button-primary" data-action="use-phone-location">${tv("usePhoneLocation")}</button><button class="button button-secondary" data-action="choose-map-location">${tv("chooseMapLocation")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     case "location-map": {
       const selectedPosition = mapLocationOverride ?? state.center;
-      const mapHasSelection = mapLocationOverride !== undefined;
+      const mapHasSelection = mapLocationOverride !== undefined && (state.initialZoom ?? 19) >= minimumMapSearchZoom;
       const mapPositionLabel = mapHasSelection
         ? tv("mapLocationCoordinates", { latitude: selectedPosition.latitude.toFixed(5), longitude: selectedPosition.longitude.toFixed(5) })
         : tv("mapLocationInitial");
@@ -439,10 +440,18 @@ function render(restoreFlowFocus = false): void {
           mapLocationOverride = position;
           const coordinates = app!.querySelector<HTMLParagraphElement>("#search-location-coordinates");
           if (coordinates) coordinates.textContent = tv("mapLocationCoordinates", { latitude: position.latitude.toFixed(5), longitude: position.longitude.toFixed(5) });
-          const confirmButton = app!.querySelector<HTMLButtonElement>('[data-action="confirm-map-location"]');
-          if (confirmButton) confirmButton.disabled = false;
+          updateMapSearchButton();
+        },
+        onZoomChange(zoom) {
+          if (state.kind === "location-map") state.initialZoom = zoom;
+          updateMapSearchButton();
         },
       });
+
+      function updateMapSearchButton(): void {
+        const confirmButton = app!.querySelector<HTMLButtonElement>('[data-action="confirm-map-location"]');
+        if (confirmButton) confirmButton.disabled = mapLocationOverride === undefined || (state.kind === "location-map" && (state.initialZoom ?? 19) < minimumMapSearchZoom);
+      }
     }
   }
 
@@ -778,7 +787,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
       kind: "location-map",
       photoUrl: state.photoUrl,
       center: { latitude: 50, longitude: 10, accuracyMeters: 1_000 },
-      initialZoom: 15,
+      initialZoom: 6,
     };
   } else if (action === "confirm-map-location" && state.kind === "location-map") {
     const position = mapLocationOverride ?? state.center;

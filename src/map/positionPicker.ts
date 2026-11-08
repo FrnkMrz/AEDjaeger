@@ -11,6 +11,7 @@ type PickerOptions = {
   tileErrorLabel: string;
   initialZoom?: number;
   onPositionChange: (position: Coordinate) => void;
+  onZoomChange?: (zoom: number) => void;
 };
 
 const TILE_SIZE = 256;
@@ -167,6 +168,7 @@ export function createPositionPicker(
     const change = Number(button.dataset.mapZoom);
     if (!Number.isInteger(change)) return;
     zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom + change));
+    options.onZoomChange?.(zoom);
     renderTiles();
   }
 
