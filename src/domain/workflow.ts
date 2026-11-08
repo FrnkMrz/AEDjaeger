@@ -33,7 +33,7 @@ export type FlowState =
   | { kind: "photo-date"; photoUrl: string; suggestedDate: string }
   | { kind: "analyzing"; photoUrl: string }
   | { kind: "location-choice"; photoUrl: string }
-  | { kind: "location-map"; photoUrl: string; center: LocationEstimate }
+  | { kind: "location-map"; photoUrl: string; center: LocationEstimate; initialZoom?: number }
   | { kind: "candidate-searching"; photoUrl: string }
   | CandidateResultState
   | { kind: "new-aed-preview"; photoUrl: string; result: ProposalResult<NewAedPreview>; returnState: CandidateResultState; writeStatus?: "sending" | "complete" | "uncertain" | "conflict" | "failed"; operationId?: string }

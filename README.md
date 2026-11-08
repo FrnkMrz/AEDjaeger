@@ -21,7 +21,7 @@ Vorbild ist [Hydrantenjäger](https://hydrantenjaeger.de), insbesondere die einf
 
 **Foto machen → Sichtbarkeit von AED oder Gehäuse selbst bestätigen → regionale AED-Daten prüfen → vorhandenen AED bestätigen oder neuen Eintrag vorbereiten.**
 
-Absolute Einfachheit ist das oberste Ziel. Die App übernimmt Erkennung und Zuordnung. Nur notwendige offene Fragen werden gestellt; vorhandene Einträge müssen nicht erst vervollständigt werden. Im eindeutigen Fall reicht nach dem Foto ein Tippen zum Speichern. Details stehen im [Produktkonzept](docs/konzept.md).
+Absolute Einfachheit ist das oberste Ziel. Die Person bestätigt selbst, dass AED oder Gehäuse im Foto zu sehen ist; die App unterstützt danach bei Standortsuche und Zuordnung. Nur notwendige offene Fragen werden gestellt; vorhandene Einträge müssen nicht erst vervollständigt werden. Details stehen im [Produktkonzept](docs/konzept.md).
 
 ## Technische Richtung
 

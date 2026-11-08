@@ -247,7 +247,11 @@ function statusContent(): string {
       return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("locationTitle")}</h2><p>${tv("photoLocationMissing")}</p></div></div><button class="button button-primary" data-action="use-phone-location">${tv("usePhoneLocation")}</button><button class="button button-secondary" data-action="choose-map-location">${tv("chooseMapLocation")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     case "location-map": {
       const selectedPosition = mapLocationOverride ?? state.center;
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">◎</span><div><h2>${tv("chooseMapLocation")}</h2><p>${tv("mapLocationHelp")}</p></div></div><div id="search-location-map" class="position-map" role="application" tabindex="0" aria-label="${tv("chooseMapLocation")}"></div><p class="position-map-coordinates" id="search-location-coordinates" aria-live="polite">${tv("mapLocationCoordinates", { latitude: selectedPosition.latitude.toFixed(5), longitude: selectedPosition.longitude.toFixed(5) })}</p><button class="button button-primary" data-action="confirm-map-location">${tv("searchAction")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      const mapHasSelection = mapLocationOverride !== undefined;
+      const mapPositionLabel = mapHasSelection
+        ? tv("mapLocationCoordinates", { latitude: selectedPosition.latitude.toFixed(5), longitude: selectedPosition.longitude.toFixed(5) })
+        : tv("mapLocationInitial");
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">◎</span><div><h2>${tv("chooseMapLocation")}</h2><p>${tv("mapLocationHelp")}</p></div></div><div id="search-location-map" class="position-map" role="application" tabindex="0" aria-label="${tv("chooseMapLocation")}"></div><p class="position-map-coordinates" id="search-location-coordinates" aria-live="polite">${mapPositionLabel}</p><button class="button button-primary" data-action="confirm-map-location"${mapHasSelection ? "" : " disabled"}>${tv("searchAction")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     }
     case "candidate-searching":
       return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv("searchProgress")}</span></div>`;
@@ -430,10 +434,13 @@ function render(restoreFlowFocus = false): void {
         zoomInLabel: tv("newPositionMapZoomIn"),
         zoomOutLabel: tv("newPositionMapZoomOut"),
         tileErrorLabel: tv("newPositionMapTileError"),
+        initialZoom: state.initialZoom,
         onPositionChange(position) {
           mapLocationOverride = position;
           const coordinates = app!.querySelector<HTMLParagraphElement>("#search-location-coordinates");
           if (coordinates) coordinates.textContent = tv("mapLocationCoordinates", { latitude: position.latitude.toFixed(5), longitude: position.longitude.toFixed(5) });
+          const confirmButton = app!.querySelector<HTMLButtonElement>('[data-action="confirm-map-location"]');
+          if (confirmButton) confirmButton.disabled = false;
         },
       });
     }
@@ -763,16 +770,16 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     activeSearchLocationSource = "phone";
     void runNearbySearch(state.photoUrl);
   } else if (action === "choose-map-location" && state.kind === "location-choice") {
-    // A user must explicitly choose this action before the browser asks for location access.
-    try {
-      const center = await getPhoneLocation();
-      mapLocationOverride = center;
-      activeSearchLocationSource = "map";
-      state = { kind: "location-map", photoUrl: state.photoUrl, center };
-    } catch (error) {
-      const code = error instanceof CandidateSearchError ? error.code : "location_unavailable";
-      state = { kind: "candidate-error", photoUrl: state.photoUrl, reason: code === "location_denied" ? "location-denied" : "location-unavailable" };
-    }
+    // Manual map selection must work even when the person denied phone location.
+    // Start at a neutral, clearly disclosed map view instead of inferring the device location.
+    mapLocationOverride = undefined;
+    activeSearchLocationSource = "map";
+    state = {
+      kind: "location-map",
+      photoUrl: state.photoUrl,
+      center: { latitude: 50, longitude: 10, accuracyMeters: 1_000 },
+      initialZoom: 15,
+    };
   } else if (action === "confirm-map-location" && state.kind === "location-map") {
     const position = mapLocationOverride ?? state.center;
     activeSearchLocationSource = "map";

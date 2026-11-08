@@ -519,6 +519,44 @@ test("denied location access does not send a nearby search request", async ({ pa
   expect(searchRequests).toBe(0);
 });
 
+test("a denied phone location still allows choosing and searching an explicit map point", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "geolocation", { value: {
+      getCurrentPosition(_success: PositionCallback, error: PositionErrorCallback) {
+        error({ code: 1, PERMISSION_DENIED: 1, message: "Denied" } as GeolocationPositionError);
+      },
+    } });
+  });
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  let searchLocation: { latitude: number; longitude: number; accuracy_meters: number } | undefined;
+  await page.route("**/api/osm/candidates/search", async (route) => {
+    searchLocation = route.request().postDataJSON() as typeof searchLocation;
+    await route.fulfill({ json: { status: "complete", coverage_radius_meters: 100, candidates: [] } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
+  const dateConfirm = page.locator('[data-action="confirm-photo-date"]');
+  if (await dateConfirm.isVisible()) await dateConfirm.click();
+  await page.locator('[data-action="choose-map-location"]').click();
+
+  const map = page.locator("#search-location-map");
+  await expect(map).toBeVisible();
+  await expect(page.locator(".capture-content")).toContainText("nicht an deinem Standort");
+  await expect(page.locator(".capture-content")).toContainText("Handy-Standort wird dabei nicht abgefragt");
+  await expect(page.locator("#search-location-coordinates")).toContainText("Noch kein AED-Standort ausgewählt");
+  const search = page.locator('[data-action="confirm-map-location"]');
+  await expect(search).toBeDisabled();
+  await map.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(search).toBeEnabled();
+  await search.click();
+  await expect.poll(() => searchLocation).toBeDefined();
+  expect(searchLocation?.latitude).toBeCloseTo(50, 2);
+  expect(searchLocation?.longitude).toBeLessThan(10);
+  await expect(page.locator(".capture-content")).toContainText("Standort auf der Karte ausgewählt");
+});
+
 test("an expired OSM session does not offer a search retry that cannot work", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });

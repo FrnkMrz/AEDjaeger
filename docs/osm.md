@@ -2,9 +2,11 @@
 
 Stand: 17.10.2026. Fachliche Grundlage: [deutsche Tagging-Seite](https://wiki.openstreetmap.org/wiki/DE:Tag:emergency=defibrillator) und [englische Tagging-Seite](https://wiki.openstreetmap.org/wiki/Tag:emergency=defibrillator). Die UI-Zuordnung ist unser Entwurf.
 
+> **Aktueller Pilot (8.11.2026):** Die Person bestätigt selbst, dass ein AED oder AED-Gehäuse im Foto sichtbar ist. Das Foto wird nicht an einen Bilddienst gesendet. Historische Abschnitte zur früher geplanten KI-Bildanalyse beschreiben keinen aktuellen Produktablauf.
+
 ## Mögliche Datenfelder im Hintergrund
 
-Diese Tabelle ist kein Pflichtformular. Die Fotoauswertung und vorhandene OSM-Daten liefern Angaben, soweit sie belastbar sind. Bei einem schon erfassten Gerät wird im Normalfall nur dessen Vorhandensein bestätigt; siehe [Produktkonzept](konzept.md).
+Diese Tabelle ist kein Pflichtformular. Die Sichtbestätigung der Person und vorhandene OSM-Daten liefern Angaben, soweit sie belastbar sind. Bei einem schon erfassten Gerät wird im Normalfall nur dessen Vorhandensein bestätigt; siehe [Produktkonzept](konzept.md).
 
 | Frage / Information | OSM-Tag | Behandlung im Entwurf |
 | --- | --- | --- |
@@ -70,4 +72,4 @@ Zwei AEDs in unmittelbarer Nähe sind ungewöhnlich. Deshalb ist eine Neuanlage 
 
 OSM-Objektversion vor Änderungen laden und Konflikte behandeln. Nach einem Upload-Timeout zunächst den tatsächlichen Serverzustand klären, bevor dieselbe Neuanlage wiederholt wird. Eigene erfolgreiche Änderungen sofort in der App darstellen, da abgeleitete Datenquellen verzögert sein können.
 
-Fotos werden nicht als Bilddateien in OSM hochgeladen. Ein öffentlicher Bildlink wäre eine getrennte Funktion mit eigenem Hosting. Die geplante KI-Anfrage nutzt das Foto ausdrücklich als Eingabe. Bildübermittlung, Dienst und Aufbewahrung müssen dafür festgelegt werden; die bisherige rein lokale Fotoverarbeitung aus Hydrantenjäger deckt diesen neuen Schritt nicht ab. Eine öffentliche Fotogalerie wird dafür nicht benötigt.
+Fotos werden im aktuellen Pilot weder an einen Bilddienst gesendet noch als Bilddateien in OSM hochgeladen. Ein öffentlicher Bildlink wäre eine getrennte Funktion mit eigenem Hosting. Frühere Überlegungen zu einer KI-Anfrage und Bildübermittlung sind durch den aktuellen Pilotentscheid ersetzt. Eine öffentliche Fotogalerie wird nicht benötigt.
