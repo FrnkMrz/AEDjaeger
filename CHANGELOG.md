@@ -9,7 +9,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Changed
 - Führt nach der Fotoauswahl eine ausdrückliche Sichtbestätigung ein. Foto und EXIF bleiben lokal; Foto-GPS wird zuerst genutzt, Handy-GPS oder Kartenposition nur nach bewusster Auswahl.
-- Fragt bei Kamera- und Galerie-Fotos das Beobachtungsdatum ausdrücklich ab, wenn EXIF fehlt oder nicht dem heutigen Datum entspricht. Ein altes oder undatiertes Foto wird nicht stillschweigend als heutige Vor-Ort-Prüfung behandelt.
+- Fragt bei Kamera- und Galerie-Fotos das Beobachtungsdatum ausdrücklich ab, wenn EXIF fehlt oder nicht dem heutigen lokalen Kalenderdatum entspricht. Datumsvorschlag, Eingabegrenze und Validierung verwenden dieselbe Gerätezeitzone; ein altes oder undatiertes Foto wird nicht stillschweigend als heutige Vor-Ort-Prüfung behandelt.
 - Ermöglicht die manuelle Kartenwahl auch ohne Handy-Standortfreigabe. Die Karte startet sichtbar in einer neutralen Mitteleuropa-Ansicht; eine Suche ist erst nach einer tatsächlichen Kartenbewegung möglich.
 - Aktualisiert die aktuellen Produkt- und Agentenregeln auf einen Pilot ohne externe Bilddienste und ohne OpenAI.
 

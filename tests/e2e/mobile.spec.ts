@@ -136,7 +136,10 @@ test("a camera input photo with an old EXIF date requires confirmation", async (
   await expect(page.getByRole("heading", { name: "Wann hast du den AED gesehen?" })).toBeVisible();
   await expect(page.locator("#photo-observed-on")).toHaveValue("2024-10-20");
   expect(searchRequests).toBe(0);
-  await page.locator("#photo-observed-on").fill(new Date().toISOString().slice(0, 10));
+  await page.locator("#photo-observed-on").fill(await page.evaluate(() => {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }));
   await page.locator('[data-action="confirm-photo-date"]').click();
   await expect(page.getByRole("heading", { name: "Standort für die Suche wählen" })).toBeVisible();
   expect(searchRequests).toBe(0);
@@ -152,11 +155,31 @@ test("a camera input photo without EXIF date requires explicit observation-date 
   await page.locator("#camera-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
   await expect(page.getByRole("heading", { name: "Wann hast du den AED gesehen?" })).toBeVisible();
-  await expect(page.locator("#photo-observed-on")).toHaveValue(new Date().toISOString().slice(0, 10));
+  await expect(page.locator("#photo-observed-on")).toHaveValue(await page.evaluate(() => {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }));
   expect(searchRequests).toBe(0);
   await page.locator('[data-action="confirm-photo-date"]').click();
   await expect(page.getByRole("heading", { name: "Standort für die Suche wählen" })).toBeVisible();
   expect(searchRequests).toBe(0);
+});
+
+test.describe("local photo dates near UTC midnight", () => {
+  test.use({ timezoneId: "America/Los_Angeles" });
+
+  test("an undated photo uses the local calendar date, not the UTC date", async ({ page }) => {
+    await page.clock.install({ time: new Date("2026-11-09T00:30:00.000Z") });
+    await page.goto("/");
+    await page.locator("#camera-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+    await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
+
+    await expect(page.getByRole("heading", { name: "Wann hast du den AED gesehen?" })).toBeVisible();
+    await expect(page.locator("#photo-observed-on")).toHaveValue("2026-11-08");
+    await expect(page.locator("#photo-observed-on")).toHaveAttribute("max", "2026-11-08");
+    await page.locator('[data-action="confirm-photo-date"]').click();
+    await expect(page.getByRole("heading", { name: "Standort für die Suche wählen" })).toBeVisible();
+  });
 });
 
 test("the demo photo flow stays local and does not call an image endpoint", async ({ page }) => {
@@ -257,7 +280,10 @@ test("a user-confirmed location search shows nearby candidates without writing t
   await expect(page.locator(".capture-content")).toContainText("Rathaus <img src=x onerror=alert(2)>");
   await expect(page.locator(".capture-content")).toContainText("Bisher: <img src=x onerror=alert(1)>");
   await expect(page.locator(".capture-content img[onerror]")).toHaveCount(0);
-  await expect(page.locator(".capture-content")).toContainText(new Date().toISOString().slice(0, 10));
+  await expect(page.locator(".capture-content")).toContainText(await page.evaluate(() => {
+    const date = new Date();
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }));
   await expect(page.locator(".capture-content")).toContainText("Das ist nur eine Vorschau. Es wurde nichts gespeichert oder an OpenStreetMap gesendet.");
   await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
   await expect(page.locator("[data-action='back-to-candidates']")).toBeVisible();

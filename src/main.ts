@@ -8,6 +8,7 @@ import { assessCandidates } from "./domain/candidateMatch";
 import { createPositionPicker, type Coordinate } from "./map/positionPicker";
 import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
 import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } from "./osm/candidateSearch";
+import { isCalendarDate, isValidObservedDate, localCalendarDate } from "./domain/localDate";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root element was not found.");
@@ -45,7 +46,7 @@ let analysisTimer: number | undefined;
 let saveTimer: number | undefined;
 let searchRetryTimer: number | undefined;
 let selectedPhotoLocation: SearchLocation | undefined;
-let observedOn = new Date().toISOString().slice(0, 10);
+let observedOn = localCalendarDate();
 let photoDateRequiresConfirmation = false;
 let activeSearchLocation: SearchLocation | undefined;
 let activeSearchLocationSource: "photo" | "phone" | "map" | undefined;
@@ -99,12 +100,6 @@ function readPendingDevelopmentWrite(): DevelopmentWriteRequest | undefined {
   } catch {
     return undefined;
   }
-}
-
-function isCalendarDate(value: unknown): value is string {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
-  const parsed = new Date(`${value}T00:00:00.000Z`);
-  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 function persistPendingDevelopmentWrite(request: DevelopmentWriteRequest): void {
@@ -241,7 +236,7 @@ function statusContent(): string {
       return `${photoMarkup}${photoAction}<p class="supporting-copy">${tv("photoStaysLocal")}</p>${demoMode ? `<p class="simulation-note">${t("testPhotoNotice")}</p>` : ""}<button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
     }
     case "photo-date":
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("photoDateTitle")}</h2><p>${tv("photoDateHelp")}</p><label for="photo-observed-on">${tv("photoDateLabel")}</label><input id="photo-observed-on" type="date" value="${escapeHtml(state.suggestedDate)}" max="${new Date().toISOString().slice(0, 10)}" /></div></div><button class="button button-primary" data-action="confirm-photo-date">${tv("photoDateConfirm")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("photoDateTitle")}</h2><p>${tv("photoDateHelp")}</p><label for="photo-observed-on">${tv("photoDateLabel")}</label><input id="photo-observed-on" type="date" value="${escapeHtml(state.suggestedDate)}" max="${localCalendarDate()}" /></div></div><button class="button button-primary" data-action="confirm-photo-date">${tv("photoDateConfirm")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     case "analyzing":
       return `${photoMarkup}${demoNotice()}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${t("demoRunning")}</span></div>`;
     case "location-choice":
@@ -729,7 +724,7 @@ async function onPhotoSelected(event: Event): Promise<void> {
   // The open disclosure is an explicit user choice; carry that preview mode into this photo.
   demoMode = demoMode || (document.querySelector<HTMLDetailsElement>(".demo-panel")?.open ?? false);
   selectedPhotoLocation = photoLocation;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localCalendarDate();
   observedOn = photoDate ?? today;
   photoDateRequiresConfirmation = photoDate === undefined || photoDate !== today;
   activeSearchLocation = undefined;
@@ -1026,20 +1021,13 @@ function continueAfterSighting(photoUrl: string): void {
   }
 }
 
-function isValidObservedDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
-  const parsed = new Date(`${value}T00:00:00.000Z`);
-  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
-    && value <= new Date().toISOString().slice(0, 10);
-}
-
 function releasePhoto(): void {
   newAedPositionOverride = undefined;
   const photoUrl = getPhotoUrl(state);
   if (photoUrl?.startsWith("blob:")) URL.revokeObjectURL(photoUrl);
   selectedPhotoLocation = undefined;
   photoDateRequiresConfirmation = false;
-  observedOn = new Date().toISOString().slice(0, 10);
+  observedOn = localCalendarDate();
   activeSearchLocation = undefined;
   activeSearchLocationSource = undefined;
   mapLocationOverride = undefined;
