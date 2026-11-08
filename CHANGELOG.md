@@ -19,6 +19,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Ergänzt eine mehrsprachige OSM-Einstiegsseite mit Konto-Erstellungslink. Ohne bestätigte OSM-Sitzung bleiben Fotoaufnahme, Fotoauswahl, Demo, KI-Analyse und Umgebungssuche ausgeblendet; Passwortdaten werden ausschließlich auf der OSM-Seite eingegeben.
 
 ### Fixed
+- Akzeptiert ausdrücklich bestätigte historische Beobachtungsdaten in beiden OSM-Dev-Schreibrouten; ungültige und zukünftige Daten bleiben gesperrt.
 - Hält die Abmeldung nach einem vorübergehenden Fehler auf der OSM-Einstiegsseite erneut verfügbar.
 - Stellt nach abgelaufener Anmeldung den Tastaturfokus auf eine fokussierbare Überschrift der Einstiegsseite.
 - Ergänzt einen manuellen Cloudflare-Deploy aus GitHub Actions: Nur ein bewusst gestarteter Lauf auf `main` mit Bestätigung kann nach grüner CI und Freigabe der `production`-Umgebung auf `workers.dev` veröffentlichen. Zugangsdaten werden als GitHub-Environment-Werte erwartet; PRs und gewöhnliche Merges deployen nicht.

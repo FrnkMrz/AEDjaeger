@@ -10,6 +10,7 @@ import {
 } from "../storage/osmDevelopmentWriteOperations";
 import type { D1Database } from "../storage/d1";
 import { requestOSMDevelopmentApi } from "./developmentApi";
+import { isAcceptableObservationDate } from "./observationDate";
 
 const SESSION_COOKIE = "aedjaeger_osm_session";
 const MAX_BODY_BYTES = 2_048;
@@ -330,8 +331,7 @@ function parseRequest(bytes: Uint8Array, now: number): ConfirmedCheckDate {
     || typeof value.target !== "string" || !/^node\/[1-9]\d{0,15}$/u.test(value.target)
     || !isPositiveInteger(value.expected_version)
     || !(value.expected_check_date === null || isCalendarDate(value.expected_check_date))
-    || !isCalendarDate(value.observed_on)
-    || Math.abs(Date.parse(`${value.observed_on}T12:00:00.000Z`) - now) > 24 * 60 * 60 * 1_000) {
+    || !isAcceptableObservationDate(value.observed_on, now)) {
     throw new Error("Invalid request");
   }
   return value as ConfirmedCheckDate;

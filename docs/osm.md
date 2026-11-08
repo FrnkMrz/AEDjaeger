@@ -23,6 +23,8 @@ Ein unbekannter Wert bleibt bei Neuanlage ohne Tag. Bei Bearbeitungen darf „ni
 
 Die [Dokumentation zu `check_date`](https://wiki.openstreetmap.org/wiki/Key:check_date) erlaubt ausdrücklich die Dokumentation der überprüften Existenz. Unsere frühere Forderung nach einem noch zu bestimmenden gesonderten Tag war daher zu streng. Spezifische Prüfdatums-Tags anderer Eigenschaften bleiben unverändert.
 
+Das Prüfdatum beschreibt den Tag der tatsächlichen Beobachtung, auch wenn ein älteres Foto verwendet wird. Beide OSM-Entwicklungs-Schreibrouten akzeptieren deshalb vergangene, gültige Kalenderdaten, nachdem die Person sie ausdrücklich bestätigt hat. Ungültige oder zukünftige Daten werden serverseitig abgewiesen. Ein älteres Prüfdatum darf ein neueres vorhandenes Datum weiterhin nicht zurücksetzen.
+
 ## Eigene Regeln für eine verlässliche Erfassung
 
 - Einen Punkt am Gerät anlegen; ein AED-Hinweisschild ist nicht zwangsläufig der Gerätestandort.
