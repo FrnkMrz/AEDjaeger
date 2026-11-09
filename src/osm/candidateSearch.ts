@@ -1,4 +1,4 @@
-import type { OverpassCandidate, OverpassSearchResult } from "./overpassSearch";
+import type { CandidateSearchResult, NearbyAedCandidate } from "./candidateTypes";
 
 export class CandidateSearchError extends Error {
   constructor(readonly code: string, readonly retryAfterSeconds?: number) {
@@ -21,7 +21,7 @@ const MAX_RETRY_AFTER_SECONDS = 7 * 24 * 60 * 60;
 export async function requestNearbyCandidates(
   location: SearchLocation,
   fetcher: typeof fetch = fetch,
-): Promise<OverpassSearchResult> {
+): Promise<CandidateSearchResult> {
   // Do not send a precise location that the server must reject as too uncertain.
   if (!Number.isFinite(location.accuracyMeters) || location.accuracyMeters <= 0 || location.accuracyMeters > MAX_SEARCH_ACCURACY_METERS) {
     throw new CandidateSearchError("location_too_uncertain");
@@ -78,34 +78,36 @@ function readRetryAfter(response: Response): number {
   return Number.isSafeInteger(seconds) && seconds >= 0 && seconds <= MAX_RETRY_AFTER_SECONDS ? seconds : 30;
 }
 
-function parseSearchResult(value: unknown): OverpassSearchResult | null {
+function parseSearchResult(value: unknown): CandidateSearchResult | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  if (!Object.keys(record).every((key) => ["status", "candidates", "coverage_radius_meters", "reason"].includes(key))) return null;
+  if (!Object.keys(record).every((key) => ["status", "candidates", "coverage_radius_meters", "snapshot_id", "data_until"].includes(key))) return null;
   if (!(["complete", "partial"].includes(record.status as string) && Array.isArray(record.candidates))) return null;
   if (!Number.isFinite(record.coverage_radius_meters) || (record.coverage_radius_meters as number) <= 0 || (record.coverage_radius_meters as number) > 500) return null;
   if (record.candidates.length > 100) return null;
 
-  const candidates: OverpassCandidate[] = [];
+  const candidates: NearbyAedCandidate[] = [];
   for (const candidateValue of record.candidates) {
     if (typeof candidateValue !== "object" || candidateValue === null || Array.isArray(candidateValue)) return null;
     const candidate = candidateValue as Record<string, unknown>;
-    if (typeof candidate.id !== "string" || !/^(node|way|relation)\/\d+$/u.test(candidate.id)) return null;
+    if (typeof candidate.id !== "string" || !/^(node|way|relation)\/[1-9]\d{0,15}$/u.test(candidate.id) || !Number.isSafeInteger(Number(candidate.id.split("/")[1]))) return null;
     if (candidate.version !== undefined && (!Number.isSafeInteger(candidate.version) || (candidate.version as number) <= 0)) return null;
     const osmType = candidate.id.split("/", 1)[0];
     if (candidate.osmType !== osmType) return null;
     if (candidate.coordinateQuality !== (osmType === "node" ? "exact" : "approximate-center")) return null;
     if (!isCoordinate(candidate.position) || !isStringRecord(candidate.tags)) return null;
-    candidates.push(candidate as unknown as OverpassCandidate);
+    candidates.push(candidate as unknown as NearbyAedCandidate);
   }
 
-  if (record.status === "complete" && record.reason !== undefined) return null;
-  if (record.status === "partial" && typeof record.reason !== "string") return null;
+  if (record.snapshot_id !== undefined && (typeof record.snapshot_id !== "string" || !/^aed-[0-9a-f]{20}$/u.test(record.snapshot_id))) return null;
+  if (record.data_until !== undefined && (typeof record.data_until !== "string" || !Number.isFinite(Date.parse(record.data_until)))) return null;
+  if ((record.snapshot_id === undefined) !== (record.data_until === undefined)) return null;
   return {
     status: record.status as "complete" | "partial",
     candidates,
     coverageRadiusMeters: record.coverage_radius_meters as number,
-    ...(typeof record.reason === "string" ? { reason: record.reason as OverpassSearchResult["reason"] } : {}),
+    ...(typeof record.snapshot_id === "string" ? { snapshotId: record.snapshot_id } : {}),
+    ...(typeof record.data_until === "string" ? { dataUntil: record.data_until } : {}),
   };
 }
 

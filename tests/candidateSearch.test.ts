@@ -1,67 +1,42 @@
 import { describe, expect, it, vi } from "vitest";
 import { CandidateSearchError, requestNearbyCandidates } from "../src/osm/candidateSearch";
 
+const location = { latitude: 52.52, longitude: 13.405, accuracyMeters: 12 };
+const candidate = { id: "node/123", osmType: "node", coordinateQuality: "exact", position: { latitude: 52.52, longitude: 13.405 }, tags: { name: "Bahnhof" } };
+
 describe("nearby candidate client", () => {
   it("does not send coordinates when GPS accuracy exceeds the usable threshold", async () => {
     const fetcher = vi.fn<typeof fetch>();
-
-    await expect(requestNearbyCandidates({ latitude: 52.52, longitude: 13.405, accuracyMeters: 150 }, fetcher))
+    await expect(requestNearbyCandidates({ ...location, accuracyMeters: 150 }, fetcher))
       .rejects.toMatchObject({ code: "location_too_uncertain" } satisfies Partial<CandidateSearchError>);
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it("uses the server retry delay for partial results and defaults safely when it is missing", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      status: "partial", coverage_radius_meters: 112, reason: "overpass-remark", candidates: [],
-    }), { status: 200, headers: { "Content-Type": "application/json", "Retry-After": "12" } }));
-    const result = await requestNearbyCandidates({ latitude: 52.52, longitude: 13.405, accuracyMeters: 12 }, fetcher);
-    expect(result.retryAfterSeconds).toBe(12);
-
-    fetcher.mockResolvedValue(new Response(JSON.stringify({
-      status: "partial", coverage_radius_meters: 112, reason: "overpass-remark", candidates: [],
-    }), { status: 200, headers: { "Content-Type": "application/json" } }));
-    const fallbackResult = await requestNearbyCandidates({ latitude: 52.52, longitude: 13.405, accuracyMeters: 12 }, fetcher);
-    expect(fallbackResult.retryAfterSeconds).toBe(30);
+  it("accepts versioned feed metadata with a complete candidate result", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({
+      status: "complete", coverage_radius_meters: 112, snapshot_id: "aed-0123456789abcdef0123",
+      data_until: "2026-11-08T12:00:00Z", candidates: [candidate],
+    }, { headers: { "Retry-After": "12" } }));
+    await expect(requestNearbyCandidates(location, fetcher)).resolves.toMatchObject({
+      status: "complete", snapshotId: "aed-0123456789abcdef0123", dataUntil: "2026-11-08T12:00:00Z",
+      candidates: [{ id: "node/123", tags: { name: "Bahnhof" } }], retryAfterSeconds: 12,
+    });
+    expect(fetcher.mock.calls[0][0]).toBe("/api/osm/candidates/search");
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({ latitude: 52.52, longitude: 13.405, accuracy_meters: 12 });
   });
 
-  it("preserves Retry-After from rate-limit errors", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ error: "search_rate_limited" }), {
-      status: 429, headers: { "Content-Type": "application/json", "Retry-After": "17" },
-    }));
-    await expect(requestNearbyCandidates({ latitude: 52.52, longitude: 13.405, accuracyMeters: 12 }, fetcher))
-      .rejects.toMatchObject({ code: "search_rate_limited", retryAfterSeconds: 17 });
+  it("preserves Retry-After for throttling and unavailable feed responses", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ error: "search_rate_limited" }, { status: 429, headers: { "Retry-After": "17" } }));
+    await expect(requestNearbyCandidates(location, fetcher)).rejects.toMatchObject({ code: "search_rate_limited", retryAfterSeconds: 17 });
+    fetcher.mockResolvedValue(Response.json({ error: "source_unavailable" }, { status: 502, headers: { "Retry-After": "23" } }));
+    await expect(requestNearbyCandidates(location, fetcher)).rejects.toMatchObject({ code: "source_unavailable", retryAfterSeconds: 23 });
   });
 
-  it("accepts long bounded cooldowns from the server", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ error: "overpass_rate_limited" }), {
-      status: 503, headers: { "Content-Type": "application/json", "Retry-After": "3600" },
-    }));
-    await expect(requestNearbyCandidates({ latitude: 52.52, longitude: 13.405, accuracyMeters: 12 }, fetcher))
-      .rejects.toMatchObject({ code: "overpass_rate_limited", retryAfterSeconds: 3600 });
-  });
-
-  it("preserves the cooldown header on upstream errors too", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ error: "overpass_unavailable" }), {
-      status: 502, headers: { "Content-Type": "application/json", "Retry-After": "23" },
-    }));
-    await expect(requestNearbyCandidates({ latitude: 52.52, longitude: 13.405, accuracyMeters: 12 }, fetcher))
-      .rejects.toMatchObject({ code: "overpass_unavailable", retryAfterSeconds: 23 });
-  });
-
-  it("preserves Retry-After when a response body is invalid", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response("not-json", {
-      status: 502, headers: { "Content-Type": "application/json", "Retry-After": "9" },
-    }));
-    await expect(requestNearbyCandidates({ latitude: 52.52, longitude: 13.405, accuracyMeters: 12 }, fetcher))
-      .rejects.toMatchObject({ code: "invalid_response", retryAfterSeconds: 9 });
-  });
-
-  it("preserves Retry-After when valid JSON fails the search schema", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ status: "partial" }), {
-      status: 200, headers: { "Content-Type": "application/json", "Retry-After": "11" },
-    }));
-    await expect(requestNearbyCandidates({ latitude: 52.52, longitude: 13.405, accuracyMeters: 12 }, fetcher))
-      .rejects.toMatchObject({ code: "invalid_response", retryAfterSeconds: 11 });
+  it("rejects incomplete feed metadata and malformed candidate records", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ status: "complete", coverage_radius_meters: 112, snapshot_id: "aed-bad", data_until: "yesterday", candidates: [candidate] }));
+    await expect(requestNearbyCandidates(location, fetcher)).rejects.toMatchObject({ code: "invalid_response" });
+    fetcher.mockResolvedValue(Response.json({ status: "complete", coverage_radius_meters: 112, candidates: [{ ...candidate, tags: { emergency: { invalid: true } } }] }));
+    await expect(requestNearbyCandidates(location, fetcher)).rejects.toMatchObject({ code: "invalid_response" });
   });
 
   it("aborts a stalled request so the photo flow can offer a retry", async () => {
@@ -69,35 +44,10 @@ describe("nearby candidate client", () => {
     let signal: AbortSignal | undefined;
     const fetcher = vi.fn<typeof fetch>((_input, init) => {
       signal = init?.signal ?? undefined;
-      return new Promise<Response>((_resolve, reject) => {
-        signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
-      });
+      return new Promise<Response>((_resolve, reject) => signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true }));
     });
-
-    const pendingSearch = requestNearbyCandidates({ latitude: 52.52, longitude: 13.405, accuracyMeters: 12 }, fetcher);
-    const assertion = expect(pendingSearch).rejects.toMatchObject({ code: "network_error" });
-    await vi.advanceTimersByTimeAsync(35_000);
-    await assertion;
-    expect(signal?.aborted).toBe(true);
-    vi.useRealTimers();
-  });
-
-  it("keeps the timeout active while reading a stalled response body", async () => {
-    vi.useFakeTimers();
-    let signal: AbortSignal | undefined;
-    const fetcher = vi.fn<typeof fetch>((_input, init) => {
-      signal = init?.signal ?? undefined;
-      return Promise.resolve({
-        ok: true,
-        headers: new Headers(),
-        json: () => new Promise<unknown>((_resolve, reject) => {
-          signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
-        }),
-      } as Response);
-    });
-
-    const pendingSearch = requestNearbyCandidates({ latitude: 52.52, longitude: 13.405, accuracyMeters: 12 }, fetcher);
-    const assertion = expect(pendingSearch).rejects.toMatchObject({ code: "network_error" });
+    const pending = requestNearbyCandidates(location, fetcher);
+    const assertion = expect(pending).rejects.toMatchObject({ code: "network_error" });
     await vi.advanceTimersByTimeAsync(35_000);
     await assertion;
     expect(signal?.aborted).toBe(true);

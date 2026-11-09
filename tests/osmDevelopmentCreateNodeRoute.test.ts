@@ -130,7 +130,7 @@ function makeRequest(body: unknown = input): Request {
   });
 }
 
-function makeFetch(options: { nearbyAed?: boolean; nearbyAedId?: number; loseUploadResponse?: boolean; invalidMap?: boolean; emptyChangeset?: boolean } = {}) {
+function makeFetch(options: { nearbyAed?: boolean; nearbyAedId?: number; loseUploadResponse?: boolean; invalidMap?: boolean; emptyChangeset?: boolean; observedOn?: string } = {}) {
   let loseUploadResponse = options.loseUploadResponse ?? false;
   let uploadCount = 0;
   const calls: Array<{ url: string; method: string; body?: string }> = [];
@@ -145,7 +145,7 @@ function makeFetch(options: { nearbyAed?: boolean; nearbyAedId?: number; loseUpl
       uploadCount += 1;
       expect(body).toContain('<node id="-1" changeset="77" lat="52.52" lon="13.405">');
       expect(body).toContain('<tag k="emergency" v="defibrillator"/>');
-      expect(body).toContain('<tag k="check_date" v="2026-10-24"/>');
+      expect(body).toContain(`<tag k="check_date" v="${options.observedOn ?? "2026-10-24"}"/>`);
       expect(body).toContain('<tag k="defibrillator:location" v="Near main entrance"/>');
       if (loseUploadResponse) { loseUploadResponse = false; throw new Error("connection lost after upload"); }
       return new Response('<diffResult><node old_id="-1" new_id="456" new_version="1"/></diffResult>', { status: 200 });
@@ -172,6 +172,19 @@ describe("OSM development node creation", () => {
     const replay = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
     expect(replay.status).toBe(200);
     expect(api.calls.filter((call) => call.url.endsWith("/upload"))).toHaveLength(1);
+  });
+
+  it("creates a confirmed node with the historical date from an older photo", async () => {
+    const DB = await setupDatabase();
+    const historicalDate = "2025-10-21";
+    const api = makeFetch({ observedOn: historicalDate });
+    const response = await handleDevelopmentCreateNode(
+      makeRequest({ ...input, observed_on: historicalDate }),
+      { ...environment, DB },
+      { now: () => now, fetch: api.fetcher },
+    );
+    expect(response.status).toBe(200);
+    expect(api.calls.find((call) => call.url.endsWith("/upload"))?.body).toContain(`<tag k="check_date" v="${historicalDate}"/>`);
   });
 
   it("blocks creation if the fresh OSM map contains any nearby AED object", async () => {

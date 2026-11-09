@@ -1,20 +1,20 @@
 # Produktkonzept: Foto machen, AED eintragen oder bestätigen
 
-Stand: 19.10.2026. Die Produktrichtung wurde vom Projektinitiator konkretisiert. Für den ersten API-Prototyp ist GPT-6 Luna festgelegt; die Erkennung wurde bislang nur explorativ mit drei positiven Testfotos geprüft.
+Stand: 8.11.2026. **Aktueller Pilotentscheid:** AEDjaeger läuft ohne OpenAI und ohne andere externe Bilddienste. Die Person vor Ort bestätigt selbst, ob ein AED-Gerät oder AED-Gehäuse im ausgewählten Foto sichtbar ist. Das Foto bleibt lokal. Frühere Modelltests weiter unten sind historische Erkundungen, keine Laufzeitvoraussetzung.
 
 ## Oberstes Ziel: absolute Einfachheit
 
 Ich stehe vor einem AED, mache ein Foto und die App erledigt die Zuordnung zu OpenStreetMap. Sie trägt ein neues Gerät ein oder bestätigt, dass ein vorhandenes noch da ist. Nur wirklich notwendige offene Fragen gehen an mich zurück.
 
-Das Foto ist der Einstieg und die Grundlage für die KI-Erkennung. Der normale Ablauf benötigt weder eine Kartensuche noch ein vollständiges Formular.
+Das Foto ist der Einstieg und hilft der Person, den konkreten AED zu prüfen. Die Anwendung behauptet keine automatische Bilderkennung. Der normale Ablauf benötigt weder eine Kartensuche noch ein vollständiges Formular.
 
 ## Der normale Ablauf
 
-1. **Foto machen.** Die App ermittelt die Position und fragt vorhandene AEDs in der Umgebung ab. Eine KI-Anfrage prüft das Foto auf einen AED und liest erkennbare Angaben aus.
-2. **Automatisch zuordnen.** Die App gleicht Position, vorhandene OSM-Daten und Bildinformationen ab. Sie entscheidet, ob ein vorhandener Eintrag passt oder ein neues Gerät einzutragen ist.
+1. **Foto machen oder auswählen.** Die Person bestätigt ausdrücklich, dass das AED-Gerät oder sein Gehäuse zu sehen ist. GPS aus dem Foto wird lokal zuerst ausgewertet. Fehlt es, wird Handy-GPS oder eine Kartenposition nur nach bewusster Auswahl verwendet.
+2. **Umgebung abgleichen.** Die App vergleicht den gewählten Standort mit vorhandenen AED-Daten. Sie zeigt Kandidaten zur Prüfung; Nähe allein entscheidet nicht über eine Zuordnung.
 3. **Kurz bestätigen, fertig.** Bei einem passenden Eintrag: „Schon eingetragen. Noch vorhanden bestätigen.“ Bei einem neuen Gerät: „Neuen AED eintragen.“ Ein Tippen speichert die jeweils angekündigte Änderung.
 
-OSM-Anmeldung und Erklärung der Fotoübermittlung gehören in die einmalige Einrichtung. Nach dieser Einrichtung ist das Ziel für den eindeutigen Fall: **Foto aufnehmen → Ergebnis bestätigen → fertig.**
+Eine gültige OSM-Anmeldung ist Voraussetzung für die Arbeitsfunktionen. Das Ziel für den eindeutigen Fall: **Foto aufnehmen → Sichtbarkeit bestätigen → OSM-Vorschlag prüfen → fertig.**
 
 ## Bereits vorhanden
 
@@ -24,7 +24,7 @@ Ein heutiges Foto bestätigt nicht automatisch die bisherigen Zugangszeiten oder
 
 ## Noch nicht eingetragen
 
-Die App bereitet den neuen Eintrag aus Position und Foto vor. Als AED erkannt werden sowohl das sichtbare Gerät als auch ein eindeutig erkennbares AED-Gehäuse; das Gerät muss im Gehäuse nicht sichtbar sein. Die KI kann zusätzlich klar lesbare Angaben übernehmen, beispielsweise Hersteller, Modell oder eine Beschriftung zum Standort. Die Zahl sichtbarer Geräte darf die positive Erkennung eines Gehäuses nicht aufheben. Diese Erkennungsleistung muss an echten Fotos erprobt werden.
+Die App bereitet den neuen Eintrag aus bestätigter Sichtbarkeit und gewählter Position vor. Das Gerät muss im Gehäuse nicht sichtbar sein. Angaben wie Hersteller, Modell oder Standortbeschriftung werden nicht automatisch aus dem Foto übernommen.
 
 Fehlen entscheidende Angaben, fragt die App gezielt nach, zum Beispiel „Wo im Gebäude?“ oder bei unsicherer Position „Wo hängt der AED?“. Eine kleine Karte erscheint nur, wenn die Lage geklärt werden muss oder der Benutzer sie korrigieren möchte. Optionale Angaben dürfen fehlen; es gibt keinen Fragenkatalog zum vollständigen Ausfüllen.
 
@@ -44,7 +44,7 @@ Nähe allein reicht nicht zur Zuordnung: In einem Gebäude können mehrere AEDs 
 
 ## Umfang des ersten Prototyps
 
-Fotoaufnahme, KI-Auswertung, Suche in der Umgebung, Zuordnung und die beiden Speicherwege „neu eintragen“ und „noch vorhanden“. Rückfragen erscheinen ausschließlich dort, wo der konkrete Vorgang sie benötigt.
+Fotoaufnahme, manuelle Sichtbestätigung, Suche in der Umgebung, Zuordnung und die beiden Speicherwege „neu eintragen“ und „noch vorhanden“. Rückfragen erscheinen ausschließlich dort, wo der konkrete Vorgang sie benötigt.
 
 Karte, Tags und technische Details bleiben im Hintergrund. Punkte, Ranglisten, öffentliche Fotogalerien und zusätzliche Erfassungsfunktionen stehen hinter dem einfachen Hauptablauf zurück. Eine PWA wie Hydrantenjäger bleibt ein technischer Kandidat.
 

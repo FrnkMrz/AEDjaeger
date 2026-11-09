@@ -1,6 +1,8 @@
 # Architektur und Bedienung für AEDjaeger
 
-Stand: **26.10.2026**. Cloudflare Workers Free ist als Hosting-Richtung gewählt. Der Bedienprototyp nutzt Vite und TypeScript ohne React. Die D1-Pilotdatenbank ist angelegt, gebunden und remote bis einschließlich Migration 0009 migriert; ein Paid-Tarif wurde nicht aktiviert. Der Worker ist unter [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev) veröffentlicht. Startseite und `/api/health` wurden mit HTTP 200 geprüft. OSM-Dev-Client-ID, Callback, Verschlüsselungsschlüssel und Client-Secret sind serverseitig konfiguriert; der Dev-Login ist aktiviert. Die bisherigen OSM-Zustimmungen erzeugten keine AEDjaeger-Sitzung. Ursache ist der in Workers nicht unterstützte Aufrufparameter `redirect: "error"`, der vor der Netzwerkanfrage einen TypeError auslöst. Eine isolierte lokale und Cloudflare-Preview-Probe bestätigte: Mit `manual` liefert dieselbe Discovery-URL HTTP 200. Die vorbereitete Korrektur lehnt Weiterleitungen mit einem gemeinsamen HTTP-Baustein ausdrücklich ab; der echte vollständige Login bleibt nach Merge und Bereitstellung zu prüfen. Siehe [Login-Diagnose](osm.md#osm-login-nachgewiesener-cloudflare-laufzeitfehler). OAuth-Codes, Tokens, Geheimnisse, IP-Adressen und Providerantworten bleiben aus den Anwendungs-Diagnoseeinträgen ausgeschlossen. `OSM_DEV_WRITES_ENABLED` bleibt aus. Bildanalyse ist deaktiviert. Es wurde kein Modell aufgerufen, keine echte Overpass-Anfrage ausgeführt und kein OSM-Objekt verändert. Die Produktvorgabe bleibt: **Foto → vorhandenen AED bestätigen oder neuen eintragen → kurz bestätigen → fertig.**
+> **Aktueller Pilotentscheid (8.11.2026):** Der Produktablauf verwendet keine externe Bilderkennung und keine OpenAI-API. Fotos und EXIF bleiben auf dem Gerät; die Person bestätigt die Sichtbarkeit des AED selbst. Frühere Abschnitte zu Anbieterwahl, Modelltests und externer Bildverarbeitung dokumentieren ausschließlich den historischen Prototyp und sind keine aktuelle Architekturvorgabe.
+
+Stand: **8.11.2026**. Cloudflare Workers Free ist als Hosting-Richtung gewählt. Der Bedienprototyp nutzt Vite und TypeScript ohne React. Die D1-Pilotdatenbank ist angelegt, gebunden und remote bis einschließlich Migration 0009 migriert; ein Paid-Tarif wurde nicht aktiviert. Der Worker ist unter [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev) veröffentlicht. Startseite und `/api/health` wurden mit HTTP 200 geprüft. OSM-Dev-Client-ID, Callback, Verschlüsselungsschlüssel und Client-Secret sind serverseitig konfiguriert; der Dev-Login ist aktiviert. Die bisherigen OSM-Zustimmungen erzeugten keine AEDjaeger-Sitzung. Ursache ist der in Workers nicht unterstützte Aufrufparameter `redirect: "error"`, der vor der Netzwerkanfrage einen TypeError auslöst. Eine isolierte lokale und Cloudflare-Preview-Probe bestätigte: Mit `manual` liefert dieselbe Discovery-URL HTTP 200. Die vorbereitete Korrektur lehnt Weiterleitungen mit einem gemeinsamen HTTP-Baustein ausdrücklich ab; der echte vollständige Login bleibt nach Merge und Bereitstellung zu prüfen. Siehe [Login-Diagnose](osm.md#osm-login-nachgewiesener-cloudflare-laufzeitfehler). OAuth-Codes, Tokens, Geheimnisse, IP-Adressen und Providerantworten bleiben aus den Anwendungs-Diagnoseeinträgen ausgeschlossen. `OSM_DEV_WRITES_ENABLED` bleibt aus. Bildanalyse ist deaktiviert. Es wurde kein Modell aufgerufen, kein Live-Aufruf an den regionalen AED-Feed ausgeführt und kein OSM-Objekt verändert. Die Produktvorgabe bleibt: **Foto → vorhandenen AED bestätigen oder neuen eintragen → kurz bestätigen → fertig.**
 
 **Aktueller Teststand, 8.11.2026:** OSM-Dev-Anmeldung und AED-Bildbeobachtung wurden in der workers.dev-App bestätigt. Zwei echte Umgebungssuchen mit Foto-GPS scheiterten mit einer allgemeinen Verfügbarkeitsmeldung. Es gab keine OSM-Schreiboperation. Die Diagnoseinstrumentierung wird ergänzt; Details und Datenschutzumfang stehen in [OSM-Datenzugriff](osm.md).
 
@@ -8,13 +10,13 @@ Stand: **26.10.2026**. Cloudflare Workers Free ist als Hosting-Richtung gewählt
 
 **Eine installierbare PWA mit einem kleinen Serverdienst. GitHub bleibt der Speicherort für Code, Dokumentation und Tests. App und Serverdienst laufen gemeinsam auf Cloudflare Workers mit Static Assets. Eine kleine D1-Datenbank hält Sitzungen und den Status von Schreibvorgängen.**
 
-Die zusätzliche Serverseite hat einen konkreten Zweck: KI-Zugang schützen, Kosten begrenzen und OSM-Schreibvorgänge auch nach einem Verbindungsabbruch nachvollziehen können. Sie ist keine eigene AED-Datenbank; OpenStreetMap bleibt die maßgebliche Datenquelle.
+Die Serverseite schützt OSM-Zugangsdaten, validiert den regionalen AED-Feed und macht bestätigte OSM-Testschreibvorgänge nach einem Verbindungsabbruch nachvollziehbar. Sie ist keine eigene AED-Datenbank; OpenStreetMap bleibt für Schreibvorgänge maßgeblich.
 
 ### Hosting-Alternativen
 
 | Variante | Eignung | Abwägung |
 | --- | --- | --- |
-| Nur GitHub Pages | Für eine öffentliche App mit geheimem KI-Schlüssel unzureichend | Pages liefert statische Dateien; ein im Browser eingebauter Schlüssel wäre auslesbar. |
+| Nur GitHub Pages | Für die vorgesehene App mit OSM-Sitzung und serverseitiger Prüfung unzureichend | Pages liefert statische Dateien; vertrauliche OAuth-Tokens und OSM-Schreibregeln brauchen einen Server. |
 | GitHub Pages plus separater API-Dienst | Technisch möglich | Vertrautes Frontend-Hosting, aber zwei Deployments und gegebenenfalls zusätzliche Origin-, Cookie- und CORS-Konfiguration. |
 | Cloudflare Workers mit Static Assets und D1 | **Empfehlung für dieses Projekt** | Oberfläche und API unter derselben Domain, ein zusammenhängendes Deployment, verwalteter Betrieb. Dafür ein zusätzliches Betreiberkonto und Bindung an dessen Dienste. |
 | Verwaltetes Node-Backend oder eigener Server | Mögliche Alternative | Mehr Betriebsaufwand; für die ersten Funktionen kein erkennbarer Vorteil. Ein EU-Hosting-Anbieter wäre zu prüfen, falls verbindliche Datenresidenz ein Ziel wird. |
@@ -47,13 +49,13 @@ Offene Aufnahme fortsetzen       Konto
 
 Nach der ersten bewussten Betätigung öffnet die Kamera. Für wiederkehrende Nutzer kann die App direkt eine Kameraansicht anbieten, soweit der Browser dies erlaubt. Browserberechtigungen und gelegentlich erneute OSM-Anmeldung lassen sich nicht vollständig wegdesignen.
 
-Vor der ersten Analyse einmal verständlich erklären, an welchen KI-Dienst das Bild geht. Standortberechtigung erst im Zusammenhang mit der Aufnahme erfragen. Die OSM-Anmeldung sollte beim ersten produktiven Durchlauf erfolgen und anschließend möglichst erhalten bleiben. Der Bildentwurf muss eine Login-Weiterleitung überleben.
+**Aktueller Pilot:** Es gibt keine Bildanalyse und keinen externen Bilddienst. Nach der Fotoauswahl bestätigt die Person selbst, ob ein AED-Gerät oder AED-Gehäuse sichtbar ist. Das Foto bleibt lokal. Erst danach wird die Umgebungssuche angeboten; Foto-GPS wird lokal aus EXIF gelesen und hat Vorrang. Ein Handy-Standort oder Kartenpunkt wird nur nach bewusster Auswahl verwendet.
 
 ### Während der Prüfung
 
-Das aufgenommene Foto bleibt sichtbar. Darunter steht „Foto und Umgebung werden geprüft“. Im Hintergrund laufen Bildauswertung und Umgebungssuche parallel. Fortschritt nur anzeigen, wenn er tatsächlich messbar ist; keine erfundene Prozentanzeige.
+Das aufgenommene Foto bleibt sichtbar. Die Person bestätigt die Sichtbarkeit von AED oder AED-Gehäuse und startet danach die Umgebungssuche ausdrücklich. Der Worker fragt den versionierten AED-Snapshot aus der OpenFireMap-Pipeline ab. Er zeigt Quelle, Snapshotkennung und Datenstand an. Eine fehlgeschlagene oder nicht vollständig abgedeckte Suche wird ausdrücklich als nicht abgeschlossen angezeigt und kann niemals als Beleg für einen neuen AED gelten.
 
-Bei längerer Wartezeit bleibt „Für später aufheben“ erreichbar. Ein Timeout verliert weder das Foto noch eine bereits erfolgreiche Teilauswertung.
+Bei längerer Wartezeit oder einem Feedfehler bleibt das Foto im lokalen Ablauf erhalten; die Suche kann nach dem Cooldown wiederholt werden. Es gibt keinen Overpass-Fallback und keinen automatischen Wechsel zu einem anderen AED-Dienst.
 
 ### Ergebnis und Speichern
 
@@ -114,8 +116,9 @@ Im Pilot bleibt Gamification für Nutzende vollständig unsichtbar. Intern werde
 ```mermaid
 flowchart TD
   A[Handy: PWA mit Kamera und Standort] --> B[Eigener API-Dienst auf Cloudflare]
-  B --> C[KI-API: Bild auswerten]
-  B --> D[Overpass: AEDs in der Umgebung]
+  A -->|Person bestätigt AED/Gehäuse manuell| B
+  B --> C[Versionierter OpenFireMap-AED-Snapshot]
+  B --> D[Schema-, Alters- und Coverage-Prüfung]
   B --> E[Prüfregeln: Kandidat und Änderungsvorschlag]
   E --> A
   A -->|Benutzer bestätigt den konkreten Vorschlag| F[OSM-Schreibdienst]
@@ -131,8 +134,8 @@ flowchart TD
 | Oberfläche | TypeScript, Vite, einfache CSS-Regeln | Der lokale Prototyp nutzt kein React: Für den schmalen Ablauf reicht ein kleines Zustandsmodul, und zusätzliche Laufzeitbibliotheken entfallen. |
 | PWA | Manifest und Service Worker mit kontrollierten Updates | Installierbarkeit, schneller Start und Wiederaufnahme offener Vorgänge. |
 | Karte | Leaflet erst laden, wenn benötigt | Bekannter Baustein aus Hydrantenjäger; kein Kartenaufwand auf dem Startbildschirm. |
-| Server | TypeScript in Cloudflare Workers | KI-Anbindung, Anmeldung, Prüfung und OSM-Schreibzugriffe. |
-| Datenprüfung | Gemeinsame Laufzeitschemas, beispielsweise mit Zod | KI-Antworten und Browseranfragen an der Servergrenze validieren. |
+| Server | TypeScript in Cloudflare Workers | Feedzugriff, Anmeldung, Prüfung und OSM-Schreibzugriffe. |
+| Datenprüfung | Gemeinsame Laufzeitschemas | Feeddaten und Browseranfragen an der Servergrenze validieren. |
 | Kleiner persistenter Speicher | D1 | Sitzungen, freigegebene Vorschläge, Uploadstatus und Verbrauchszähler. |
 | Lokale Entwürfe | IndexedDB | Foto und Aufnahmezustand nach Login, Neuladen oder Netzverlust fortsetzen. |
 | Prüfung | Vitest und Playwright; reale Mobilgeräte ergänzen | Fachlogik, API-Fehlerfälle und vollständige Benutzerabläufe absichern. |
@@ -141,7 +144,7 @@ Die erste Implementierungsentscheidung ist Vite mit TypeScript ohne React. Sollt
 
 Hydrantenjäger liefert geprüfte Ausgangspunkte für Kamera, OSM-XML, OAuth, Standortkorrektur und PWA-Updates. Geeignete Bausteine gezielt übernehmen und Herkunft festhalten. Die gesamte App zu kopieren würde auch unnötige Hydrantenlogik und bestehende Annahmen zur Positionierung übernehmen.
 
-## 6. KI-Aufgabe eng begrenzen
+## 6. Historischer Prototyp: externe KI-Bildanalyse (nicht im aktuellen Pilot)
 
 Die KI erhält das verkleinerte, korrekt gedrehte Foto und eine feste Extraktionsanweisung. Sie liefert strukturierte Beobachtungen, etwa:
 
@@ -163,9 +166,11 @@ Das ist ein vorgeschlagener Vertrag, keine bereits getestete API-Antwort. Zu den
 
 Text im Foto und bestehende OSM-Beschreibungen sind fremde Daten. Anweisungen wie „ignoriere die Regeln“ müssen als Bildinhalt behandelt werden. Die KI erhält weder OSM-Token noch API-Schlüssel, freien Webzugriff oder die Möglichkeit, weitere URLs aufzurufen. Auch valide JSON-Antworten können sachlich falsch sein; das Schema ersetzt keine fachliche Prüfung.
 
+> **Historische Anbieterrecherche, nicht Teil des aktuellen Piloten:** Die folgenden Abschnitte dokumentieren die frühere Evaluierung externer Bilddienste. Sie beschreiben keine aktive Integration oder künftige Laufzeitabhängigkeit.
+
 Gemini, OpenAI und Anthropic bieten Bildauswertung an; Gemini stellt außerdem strukturierte Ausgaben bereit. Das belegt noch keine ausreichende AED-Erkennung. Quellen: [Gemini Bilder](https://ai.google.dev/gemini-api/docs/image-understanding), [Gemini strukturierte Ausgaben](https://ai.google.dev/gemini-api/docs/structured-output), [OpenAI Bildverständnis](https://developers.openai.com/api/docs/guides/images-vision), [Claude Vision](https://docs.anthropic.com/en/docs/build-with-claude/vision).
 
-### Anbieterwahl
+### Historische Anbieterwahl
 
 Für die erste API-Integration ist auf ausdrückliche Nutzerentscheidung **OpenAI GPT-6 Luna (`gpt-6-luna`)** festgelegt. Für AEDjaeger darf kein höheres OpenAI-Modell verwendet werden. Die API-Schlüsselauthentifizierung wurde geprüft; eine einzelne explorative Bildanfrage mit drei positiven Testfotos erkannte alle drei als AED. Das ist ein erster Machbarkeitstest, aber kein kontrollierter Vergleich und kein Nachweis ausreichender Zuverlässigkeit: negative und unklare Fälle, Wiederholungen und ein vorab annotierter Testsatz fehlen noch. GPT-6 Luna unterstützt Bildeingaben und ist für kostensensible Aufgaben positioniert. [OpenAI: Modelle](https://developers.openai.com/api/docs/models), [Bildverständnis](https://developers.openai.com/api/docs/guides/images-vision).
 
@@ -175,11 +180,15 @@ Für manuelle Tests und weitere Modellprüfungen nur eigens aufgenommene oder re
 
 Die im Chrome-Browser integrierte Prompt API ist derzeit keine Basis für diese mobile App: Die offizielle Dokumentation führt Android und iOS als nicht unterstützt auf. Chrome bleibt ein Entwicklungs- und Testwerkzeug. [Chrome Prompt API, geprüft am 17.10.2026](https://developer.chrome.com/docs/ai/prompt-api)
 
+## Aktuelle Feed-Grenze
+
+Die Kandidatensuche verwendet ausschließlich den versionierten Feed `https://pipeline.openfiremap.org/`. Das Feed-Schema ist `aedjaeger-cells-v1`; die Anwendung fragt derzeit die Region `dachlilu` ab. Manifest und Metadaten werden frisch geladen und müssen Snapshot-ID, Region, Schema, Alter (`max_source_age_hours`) und vollständige Coverage konsistent bestätigen. Index und Shards sind unveränderliche Snapshotobjekte und werden mit Cloudflare Fetch-Caching abgerufen; Fehlerstatus werden nicht gecacht. Bei jeder Abweichung lautet das Ergebnis „Suche nicht abgeschlossen“ und die Oberfläche bietet keine Neuanlage an. Overpass ist weder primäre Quelle noch Backup. Die aktuellen Route- und Mocktests decken diese Fehlerpfade ab; sie belegen nicht, dass der Feed live veröffentlicht oder für die Region vollständig ist.
+
 ## 7. Der schwierigste Teil: den richtigen AED zuordnen
 
 ### Informationen zusammenführen
 
-Bei einem ausgewählten Foto liest die App GPS-Koordinaten lokal aus den EXIF-Daten aus und verwendet sie für die Umgebungssuche. Nur die Koordinaten werden nach dem ausdrücklichen Suchknopfdruck an Overpass gesendet; übrige EXIF-Daten bleiben lokal und die KI erhält weiterhin nur das neu kodierte, metadatenfreie Bild. Fehlen Foto-Koordinaten, fragt die App ausdrücklich, ob sie stattdessen den aktuellen Handy-Standort verwenden darf. Sie setzt ihn nicht stillschweigend ein, weil das Foto von einem anderen Ort stammen kann. EXIF-GPS enthält oft keine Genauigkeitsangabe; in diesem Fall nutzt die Suche die begrenzte maximale Unsicherheit von 100 Metern und weist auf die Schätzung hin. Bei GPS des Handys bleibt dessen Browser-Genauigkeit maßgeblich. Die App verbindet den jeweils gewählten Standort mit OSM-Kandidaten, sichtbaren Hinweisen und gegebenenfalls einer kurzen Benutzerantwort. Bei Handy-GPS ist die Browserangabe zur Genauigkeit eine Schätzung, kein Beweis einer exakten Position. [Geolocation-Dokumentation](https://developer.mozilla.org/en-US/docs/Web/API/GeolocationCoordinates/accuracy)
+Bei einem ausgewählten Foto liest die App GPS-Koordinaten lokal aus den EXIF-Daten aus und verwendet sie für die Umgebungssuche. Nur die ausgewählten Koordinaten werden nach dem ausdrücklichen Suchknopfdruck an den festen AEDjaeger-Worker gesendet; übrige EXIF-Daten bleiben lokal. Das Foto wird nicht an einen externen Bilddienst übertragen. Fehlen Foto-Koordinaten, fragt die App ausdrücklich, ob sie stattdessen den aktuellen Handy-Standort verwenden darf. Sie setzt ihn nicht stillschweigend ein, weil das Foto von einem anderen Ort stammen kann. EXIF-GPS enthält oft keine Genauigkeitsangabe; in diesem Fall nutzt die Suche die begrenzte maximale Unsicherheit von 100 Metern und weist auf die Schätzung hin. Bei GPS des Handys bleibt dessen Browser-Genauigkeit maßgeblich. Die App verbindet den jeweils gewählten Standort mit OSM-Kandidaten, sichtbaren Hinweisen und gegebenenfalls einer kurzen Benutzerantwort. Bei Handy-GPS ist die Browserangabe zur Genauigkeit eine Schätzung, kein Beweis einer exakten Position. [Geolocation-Dokumentation](https://developer.mozilla.org/en-US/docs/Web/API/GeolocationCoordinates/accuracy)
 
 Ein Suchradius von beispielsweise mindestens 100 Metern, erweitert bei ungenauem Standort bis zu einem begrenzten Maximum, kann ein Startwert für Versuche sein. **Das ist keine Zuordnungsregel und kein fertiger Grenzwert.** Ein einziger Treffer innerhalb dieses Radius ist noch kein Beweis. Standortbeschreibung, Eingang, Ebene und Widersprüche entscheiden mit. Gleiches Gerätemodell ist kein eindeutiges Identifikationsmerkmal.
 
@@ -194,7 +203,7 @@ Erst nach erfolgreicher Suche im relevanten Bereich darf eine Neuanlage angebote
 - Ein bereits vorhandener AED wird nicht wegen einer abweichenden Handyposition verschoben.
 - Ungewöhnliche OSM-Objekte, etwa als Gebäude erfasste AEDs, nicht automatisch in Knoten umwandeln. Vorerst gesondert behandeln.
 
-Overpass ist für die Kandidatensuche geeignet, kann gegenüber OSM verzögert sein. Vor einer Neuanlage im Pilotprojekt zusätzlich einen kleinen, aktuellen OSM-Kartenausschnitt prüfen, soweit die Bearbeitungs-API dies innerhalb ihrer Grenzen zulässt. Kein massenhaftes Kartenladen über die Schreib-API. Schlägt die Prüfung fehl, bleibt die Neuanlage offen. [OSM API-Nutzungsregeln](https://operations.osmfoundation.org/policies/api/)
+Die Umgebungssuche liest einen versionierten Snapshot aus der OpenFireMap-Pipeline. Wurzelmetadaten und Manifest werden frisch geladen; Snapshotindex und Shards sind unveränderlich und dürfen über Cloudflare gecacht werden. Der Worker prüft Schema, Region, Altersgrenze und vollständige Coverage. Fehlende, veraltete, unvollständige oder widersprüchliche Daten bleiben ein Fehler und sperren jede Neuanlage; es gibt keinen Overpass-Fallback. Vor bestätigtem Schreiben liest der OSM-Testserver das konkrete Zielobjekt erneut. Kein flächiges Laden über die OSM-API. Schlägt die gezielte Prüfung fehl, bleibt der Vorgang offen. [OSM API-Nutzungsregeln](https://operations.osmfoundation.org/policies/api/)
 
 Vollständige Vermeidung zeitgleicher Neuanlagen durch verschiedene externe OSM-Editoren ist dadurch nicht garantiert. Innerhalb unserer App können Wiederholungen und konkurrierende Vorgänge erkannt werden; auffällige Dubletten müssen im Pilotbetrieb trotzdem kontrolliert werden.
 
@@ -202,13 +211,13 @@ Vollständige Vermeidung zeitgleicher Neuanlagen durch verschiedene externe OSM-
 
 **Korrektur zur früheren Sammlung:** Die aktuelle OSM-Dokumentation beschreibt `check_date=YYYY-MM-DD` ausdrücklich auch für die zuletzt überprüfte Existenz eines Objekts. Für „noch vorhanden“ empfehlen wir deshalb diesen Tag. Andere Angaben bleiben unverändert; Änderungen an Zugangszeiten brauchen eine eigene Beobachtung. [OSM: check_date](https://wiki.openstreetmap.org/wiki/Key:check_date)
 
-Bei derselben Bestätigung am gleichen Tag ist kein erneuter identischer Upload nötig. Ein älteres Offline-Foto darf ein neueres Prüfdatum nicht zurücksetzen. Verwendet wird das bestätigte Beobachtungsdatum, nicht automatisch das spätere Uploaddatum. Ein aus der Galerie gewähltes Foto belegt weder eine heutige Aufnahme noch den aktuellen Standort; der Ersatzweg muss Datum und Ort klären.
+Bei derselben Bestätigung am gleichen Tag ist kein erneuter identischer Upload nötig. Ein älteres Offline-Foto darf ein neueres Prüfdatum nicht zurücksetzen. Verwendet wird das bestätigte Beobachtungsdatum, nicht automatisch das spätere Uploaddatum. Ein Foto ohne EXIF-Aufnahmedatum oder mit einem Datum ungleich heute belegt weder eine heutige Aufnahme noch den aktuellen Standort; vor Suche oder Prüfdatum muss die Person Beobachtungsdatum und Ort bestätigen.
 
 Ein sichtbares Gerät oder eine bewusste Vor-Ort-Bestätigung ist erforderlich. Ein geschlossener und nicht einsehbarer Kasten allein genügt nicht. Die App spricht stets von „vorhanden“, nicht von „gewartet“, „funktionsfähig“ oder „jederzeit zugänglich“.
 
 ## 9. Zuverlässig nach OSM schreiben
 
-Der Server erzeugt nach der Analyse einen zeitlich begrenzten Änderungsvorschlag, gebunden an Benutzer, Aufnahme und die gelesene OSM-Version. Der Browser bestätigt genau diesen Vorschlag. Der Server akzeptiert keine beliebigen OSM-XML-Inhalte oder frei gewählten URLs vom Client.
+Der Server erzeugt nach abgeschlossener Suche einen zeitlich begrenzten Änderungsvorschlag, gebunden an Benutzer, Fotoablauf und die gelesene OSM-Version beziehungsweise das bestätigte Vorher-Prüfdatum. Der Browser bestätigt genau diesen Vorschlag. Der Server akzeptiert keine beliebigen OSM-XML-Inhalte oder frei gewählten URLs vom Client.
 
 Jeder Vorgang bekommt eine eindeutige ID. Vor der Übermittlung werden Benutzerfreigabe und beabsichtigte Änderung dauerhaft gespeichert. Ein wiederholtes Tippen oder Wiederholen derselben HTTP-Anfrage liefert den Status dieses Vorgangs. Es darf keinen zweiten unabhängigen Schreibvorgang starten.
 
@@ -229,7 +238,7 @@ OSM nutzt Objektversionen zur Konfliktkontrolle. Ein kompletter Changeset ist ni
 
 Diese Vorsicht kann selten einen Vorgang zur manuellen Klärung offen lassen. Das ist besser als ein fälschlich angezeigter Erfolg oder eine doppelte Anlage. Im Pilotbetrieb braucht der Betreiber eine einfache Übersicht unklarer Vorgänge; kein riesiges Verwaltungsportal.
 
-## 10. Anmeldung, Kosten und Fotoverarbeitung
+## 10. Anmeldung und Fotoverarbeitung
 
 ### OSM-Konto
 
@@ -237,23 +246,13 @@ OSM OAuth 2.0 mit PKCE; die Anmeldung findet bei OSM statt. Der eigene Dienst ve
 
 Dieser Vorschlag schützt Tokens vor direktem Auslesen durch Browser-JavaScript, macht den Server aber zum schützenswerten Tokenhalter. Verschlüsselungsschlüssel getrennt als Secret speichern; keine Tokens oder OAuth-Codes in Logs. Auch mit HttpOnly bleiben XSS-Abwehr und restriktive Sicherheitsheader notwendig.
 
-### Kosten begrenzen
+### Betriebskosten
 
-KI-Endpunkte nur für angemeldete Nutzer, anfangs für eine kleine freigeschaltete Gruppe. Größenlimit für Bilder, begrenzte Ausgabelänge, ein laufender Analysevorgang pro Aufnahme, Tageslimits pro Nutzer und globales Limit. Budget muss vor der KI-Anfrage atomar reserviert werden; parallele Anfragen dürfen die Grenze nicht umgehen. Nutzer- und IP-Limits ergänzen einander. CORS ist keine Zugriffskontrolle gegen direkte API-Aufrufe.
-
-Provider-Budgetwarnungen sind kein verlässlicher sofortiger Ausgabestopp. Zusätzlich braucht die App ein eigenes Limit, einen Schalter zum Abschalten der Analyse und einen gesonderten Schalter für OSM-Schreibzugriffe. Wiederholungen zählen zum Budget; bei unklarer Abrechnung konservativ reservieren.
-
-Workers Paid kostet mindestens 5 USD monatlich, ist für den ersten Prototyp aber nicht eingeplant. KI-Aufrufe, eine eigene Domain und späterer Mehrverbrauch können zusätzliche Kosten verursachen. Die KI-Kosten müssen unabhängig vom Hosting einzeln begrenzt werden. [Workers-Preise](https://developers.cloudflare.com/workers/platform/pricing/)
-
-Keine erfundene Cent-Zahl pro Foto: Beim Vergleich die tatsächlich abgerechneten Bild-/Texttokens und Wiederholungen messen. Monatsprognose = Hosting + Domainanteil + Aufnahmen × gemessener mittlerer Analysepreis + Reserve. Ein zunächst vorgeschlagenes KI-Budget von z. B. 10 Euro pro Monat wäre eine Betreiberentscheidung, keine Prognose und wird hier nicht eingerichtet. [Gemini-Abrechnung](https://ai.google.dev/gemini-api/docs/billing)
+Der aktuelle Pilot ruft keine kostenpflichtige KI-API auf und benötigt weder KI-Schlüssel noch Reservierung eines Modellbudgets. Die App verwendet Workers Free als Hosting-Richtung; Paid-Tarif und eigene Domain bleiben bis zu einem belegten Bedarf ausgeschlossen. Die Suche liest den regionalen AED-Snapshot. OSM-Schreibzugriffe sind ein eigener, standardmäßig abgeschalteter Testserver-Schalter. [Workers-Preise](https://developers.cloudflare.com/workers/platform/pricing/)
 
 ### Fotos und personenbezogene Daten
 
-Das Handy dreht und verkleinert Bilder vor dem Versand und entfernt unnötige EXIF-Metadaten. Als zu testender Ausgangspunkt: etwa 1.600–2.048 Pixel lange Kante, bei lesbarer Beschriftung; nicht so stark komprimieren, dass OCR unbrauchbar wird. Der Server prüft Dateityp, Größe und Abmessungen nochmals und akzeptiert keine externen Bild-URLs. Auch technisch gültige Dateien können die KI täuschen; die fachlichen Regeln bleiben erforderlich.
-
-Der KI-Anbieter bekommt das Bild, möglichst ohne exakte GPS-Koordinaten oder OSM-Benutzeridentität. Die Zuordnung erfolgt separat. Der Server speichert Fotos regulär nicht dauerhaft und loggt keine Bilddaten oder vollständigen Modellantworten. Lokale Entwürfe erhalten einen sichtbaren Löschweg und werden nach Erfolg oder Verwerfen entfernt. Bei Browser-Speicherverlust kann ein lokaler Entwurf dennoch verloren gehen; keine Sicherungsgarantie versprechen.
-
-„Wir speichern das Foto nicht dauerhaft“ ist nicht gleich „der KI-Anbieter speichert nichts“. Google beschreibt eigene Verarbeitungsbedingungen, einschließlich einer Sonderregel für EWR, Schweiz und UK; OpenAI nennt standardmäßige Missbrauchsprotokolle und weitere speicherungsabhängige Ausnahmen. Der ausgewählte Vertrag und die tatsächliche API-Konfiguration müssen zum Datenschutzhinweis passen. Ein EU-Nutzerkonto garantiert keine ausschließlich europäische Verarbeitung. [Gemini-Bedingungen](https://ai.google.dev/gemini-api/terms), [OpenAI-Datenkontrollen](https://developers.openai.com/api/docs/guides/your-data)
+Das ausgewählte Foto und seine EXIF-Daten bleiben auf dem Gerät. EXIF-GPS wird lokal gelesen; nur die ausgewählten Koordinaten werden nach dem ausdrücklichen Suchstart an den AEDjaeger-Worker übermittelt. Das Bild selbst wird weder an AEDjaeger noch an einen KI-Anbieter gesendet und nicht in OSM hochgeladen. Die App speichert kein Foto dauerhaft. Lokale Entwürfe haben einen sichtbaren Löschweg; bei Verlust des Browser-Speichers kann ein nicht abgeschlossener Entwurf dennoch verloren gehen.
 
 OSM-Bearbeitungen sind öffentliche Beiträge. Das ist beim ersten Verbinden des Kontos verständlich zu erklären. Private Fotos gehören nicht in ein öffentliches Test-Repository; echte Testbilder benötigen geklärte Nutzungsrechte und sollen möglichst keine Personen zeigen.
 
@@ -261,7 +260,7 @@ OSM-Bearbeitungen sind öffentliche Beiträge. Das ist beim ersten Verbinden des
 
 Kamera und Standort sind auf HTTPS angewiesen und unterliegen Browserberechtigungen. Eine verweigerte Berechtigung braucht einen verständlichen Ersatzweg. Kameraauswahl, Bilddrehung, HEIC, Wechsel zu OSM und Rückkehr in eine installierte PWA müssen auf echten Geräten geprüft werden. [Kamera-API](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia)
 
-Offline kann die App eine Aufnahme vorbereiten und lokal behalten. Cloud-KI, aktueller OSM-Abgleich und Upload benötigen Netz. Wiederaufnahme beim nächsten Öffnen ist der verlässliche Hauptweg; Hintergrund-Synchronisation ist keine Voraussetzung. [MDN: Offline und Hintergrundbetrieb](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Offline_and_background_operation)
+Offline kann die App eine Aufnahme vorbereiten und lokal behalten. Der aktuelle AED-Snapshotabgleich, OSM-Login und ein bestätigter Upload benötigen Netz. Wiederaufnahme beim nächsten Öffnen ist der verlässliche Hauptweg; Hintergrund-Synchronisation ist keine Voraussetzung. [MDN: Offline und Hintergrundbetrieb](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Offline_and_background_operation)
 
 Der Service Worker speichert die App-Oberfläche, aber keine OAuth-Antworten, Sitzungsausgaben oder Schreibanfragen. Aktualisierungen wechseln nicht mitten in einer Aufnahme die App-Version. Backend und gespeicherte Entwürfe brauchen versionierte Datenverträge, damit eine ältere installierte Oberfläche verständlich weiterarbeiten oder aktualisieren kann.
 
@@ -271,14 +270,14 @@ OSM-Kartenkacheln nicht pauschal für Offline-Gebiete herunterladen. Anbieterreg
 
 | Schwachpunkt | Vorbeugung | Nachweis im Prototyp |
 | --- | --- | --- |
-| Schild, Foto eines AED oder leerer Kasten wird als Gerät erkannt | Eigene Bildklassen, Unsicherheit zulassen, Bestätigung des tatsächlichen Vor-Ort-Geräts | Negative Beispiele und schwierige Fotos gezielt prüfen. |
+| Person bestätigt irrtümlich ein AED-Gehäuse | Klare manuelle Vor-Ort-Bestätigung; kein KI-Ergebnis vortäuschen | Gerät, leeres Gehäuse, Schild und unklare Fotos auf dem Handy durchspielen. |
 | Falscher bestehender AED ausgewählt | Standortunsicherheit, Ebene und Beschreibung einbeziehen; keine reine Nächster-Punkt-Regel | Mehrere Geräte im selben Gebäude testen. |
 | Gerät wird auf Handyposition statt Wandposition angelegt | Kleine Standortvorschau; bei Unsicherheit Korrektur | Innenraum, Straßenseiten und schlechte GPS-Fixes testen. |
-| Veraltete Daten führen zur Dublette | Frische Suche und begrenzte aktuelle Vorprüfung | Verzögerte Overpass-Daten simulieren. |
+| Veraltete Daten führen zur Dublette | Frische Suche und begrenzte aktuelle Vorprüfung | Veraltete oder unvollständige Snapshotdaten simulieren. |
 | Netzabbruch erzeugt doppelte Anlage | Persistente Vorgangs-ID, Statusprüfung, unklaren Upload nicht wiederholen | Antwort nach erfolgreichem Upload absichtlich verlieren. |
-| KI erfindet Tags | Beobachtungsschema, erlaubte Felder und serverseitige Übersetzung | Widersprüchliche Angaben und Bildanweisungen testen. |
+| Feed enthält falsche oder nicht vertrauenswürdige Kandidaten | Feste Quelle, strenge Laufzeitvalidierung, begrenzte Tag-Allowlist und erneutes Lesen des konkreten OSM-Objekts vor dem Testserver-Update | Fehlende Felder, falsches Schema, doppelte IDs und unerlaubte Tags simulieren. |
 | Bestehende Daten gehen verloren | Minimaler Patch auf aktuelle Version | Fremde Tags und Paralleländerungen prüfen. |
-| API wird zum Kostentreiber | Anmeldung, Limits, atomare Reservierung, Abschalter | Parallelzugriffe, erneutes Laden und missbräuchliche Aufrufe testen. |
+| Feed oder Hosting ist nicht erreichbar | Zeitlimit, begrenzte Abfragen, Cooldown und fail-closed; keine Overpass-Ausweichroute | Ausfall, Timeout, veralteter Snapshot und unvollständige Coverage simulieren. |
 | Foto geht beim Login/Update verloren | Lokaler Entwurf und kontrollierte Updates | Neuladen, OAuth-Rückkehr und App-Wechsel prüfen. |
 | Alte App passt nicht zur neuen API | Versionierte Verträge, kompatible Releases | Vorherige PWA-Version gegen neue API testen. |
 | Erfolgsanzeige trotz offener Speicherung | Eindeutige Zustände, Erfolg nur aus bestätigtem Ergebnis | Timeout in jedem Schreibschritt testen. |
@@ -288,6 +287,6 @@ Die OSM-Regeln zu automatisierten Änderungen gelten insbesondere für systemati
 
 ## 13. Was vor einem öffentlichen Start noch belegt werden muss
 
-Keine Anbieterbeschreibung beweist, dass die Erkennung in unserer Situation zuverlässig genug ist. Ebenso wenig ist die Zuordnung nur durch eine gute Demo abgesichert. Zuerst müssen Bildauswertung, räumliche Zuordnung, Login-Rückkehr und Verhalten bei Netzverlust als durchgehender Ablauf funktionieren.
+Ein erfolgreicher Mocktest beweist nicht, dass die regionale Datenpipeline live läuft oder ihre Coverage vollständig ist. Pipeline-PR #63 ist gemergt. Eine schreibgeschützte Prüfung am 9.11.2026 fand in den öffentlichen Metadaten keinen AED-Snapshot-Verweis; `aed/manifest.json` antwortete mit HTTP 404. Vor einem Pilot muss der Snapshot daher erst tatsächlich veröffentlicht und Region `dachlilu`, Coverage und Datenalter anschließend anhand echter Feed-Metadaten geprüft werden. Danach müssen OSM-Login-Rückkehr, räumliche Zuordnung und Verhalten bei Netzverlust als durchgehender Ablauf auf realen Geräten funktionieren. Es gibt im aktuellen Pilot keine Bildauswertung.
 
 Erst danach sind zusätzliche Funktionen sinnvoll. Wenn gute Ergebnisse zu viele Rückfragen benötigen, verbessern wir zuerst diese Fälle. Wenn ein Gerät aus einem Foto nicht sicher zugeordnet werden kann, bleibt eine kurze Frage Teil des Produkts. Das Ziel ist ein sehr kurzer zuverlässiger Ablauf, keine versprochene Vollautomatik unter allen Bedingungen.

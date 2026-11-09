@@ -9,12 +9,15 @@ type PickerOptions = {
   zoomInLabel: string;
   zoomOutLabel: string;
   tileErrorLabel: string;
+  initialZoom?: number;
   onPositionChange: (position: Coordinate) => void;
+  onZoomChange?: (zoom: number) => void;
 };
 
 const TILE_SIZE = 256;
-const MIN_ZOOM = 15;
+const MIN_ZOOM = 3;
 const MAX_ZOOM = 19;
+const DEFAULT_ZOOM = 19;
 const MAX_MERCATOR_LATITUDE = 85.05112878;
 
 /** Converts a map coordinate to global pixels in the Web Mercator tile grid. */
@@ -55,7 +58,7 @@ export function createPositionPicker(
   options: PickerOptions,
 ): { destroy(): void } {
   let center = { ...initialPosition };
-  let zoom = MAX_ZOOM;
+  let zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, options.initialZoom ?? DEFAULT_ZOOM));
   let pointer: { id: number; x: number; y: number; moved: boolean } | undefined;
   const tileLayer = document.createElement("div");
   tileLayer.className = "position-map-tiles";
@@ -165,6 +168,7 @@ export function createPositionPicker(
     const change = Number(button.dataset.mapZoom);
     if (!Number.isInteger(change)) return;
     zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom + change));
+    options.onZoomChange?.(zoom);
     renderTiles();
   }
 

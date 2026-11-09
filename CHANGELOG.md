@@ -4,12 +4,30 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ## [Unreleased]
 
+> Die jüngsten Einträge am Anfang beschreiben den aktuellen Pilotstand. Ältere Einträge darunter dokumentieren frühere, inzwischen teilweise abgelöste Zwischenstände und sind keine Beschreibung des aktuellen Laufzeitverhaltens.
+
 ### Added
-- Ergänzt sichere Diagnoseeinträge für fehlgeschlagene oder unvollständige Umgebungssuchen: zufällige Diagnose-ID, Fehlercode, Worker-HTTP-Status, soweit verfügbar Overpass-Status und Laufzeit. Koordinaten, Konto, Kandidaten, Antworttexte und Zugangsdaten werden nicht protokolliert.
+- Ersetzt die laufende Overpass-Kandidatensuche durch den versionierten OpenFireMap-AED-Feed (`aedjaeger-cells-v1`, Region `dachlilu`). Die UI zeigt Snapshotkennung und Datenstand in allen sechs Sprachen.
+- Schließt die Suche bei fehlendem, veraltetem, unvollständigem oder schemawidrigem Feed geschlossen aus; ein Fehler gilt nie als „keine AEDs“ und löst keinen Overpass-Fallback aus.
+- Prüft Versionen statischer Feedobjekte über frische Root-Metadaten und Manifest; unveränderliche Snapshot-Indizes und Shards können über Cloudflare Fetch-Caching geladen werden.
+
+### Removed
+- Entfernt die externe OpenAI-Bildanalyse samt Anbieter-, Budget- und Browsercode. Der alte Analyse-Endpunkt antwortet aus Kompatibilitätsgründen mit HTTP 410, ohne den Request-Body zu lesen.
+
+### Changed
+- Dokumentiert den Merge von OpenFireMap-Pipeline-PR #63 und den noch fehlenden Live-AED-Snapshot: öffentliche Metadaten enthalten keinen Snapshot-Verweis und das Manifest antwortet derzeit mit HTTP 404.
+- Führt nach der Fotoauswahl eine ausdrückliche Sichtbestätigung ein. Foto und EXIF bleiben lokal; Foto-GPS wird zuerst genutzt, Handy-GPS oder Kartenposition nur nach bewusster Auswahl.
+- Fragt bei Kamera- und Galerie-Fotos das Beobachtungsdatum ausdrücklich ab, wenn EXIF fehlt oder nicht dem heutigen lokalen Kalenderdatum entspricht. Datumsvorschlag, Eingabegrenze und Validierung verwenden dieselbe Gerätezeitzone; ein altes oder undatiertes Foto wird nicht stillschweigend als heutige Vor-Ort-Prüfung behandelt.
+- Ermöglicht die manuelle Kartenwahl auch ohne Handy-Standortfreigabe. Die Karte startet sichtbar in einer neutralen Mitteleuropa-Ansicht; eine Suche ist erst nach einer tatsächlichen Kartenbewegung möglich.
+- Aktualisiert die aktuellen Produkt- und Agentenregeln auf einen Pilot ohne externe Bilddienste und ohne OpenAI.
+
+### Added
+- Ergänzt sichere Diagnoseeinträge für fehlgeschlagene oder unvollständige Umgebungssuchen: zufällige Diagnose-ID, Fehlercode, Worker-HTTP-Status und Laufzeit. Koordinaten, Konto, Kandidaten, Antworttexte und Zugangsdaten werden nicht protokolliert.
 - Ergänzt nach einer vollständigen Umgebungssuche den ausdrücklichen, als seltene Ausnahme gekennzeichneten Weg „Keiner davon ist der fotografierte AED“. Erst nach sorgfältiger Einzelprüfung aller angezeigten nahen Treffer lassen sich Standort auf der Karte bestätigen und eine Neuanlage vorbereiten; nicht angezeigte Treffer bleiben in der Dublettenprüfung. Ältere laufende Uploads können nach einem Update sicher abgeglichen werden.
-- Ergänzt eine mehrsprachige OSM-Einstiegsseite mit Konto-Erstellungslink. Ohne bestätigte OSM-Sitzung bleiben Fotoaufnahme, Fotoauswahl, Demo, KI-Analyse und Umgebungssuche ausgeblendet; Passwortdaten werden ausschließlich auf der OSM-Seite eingegeben.
+- Ergänzt eine mehrsprachige OSM-Einstiegsseite mit Konto-Erstellungslink. Ohne bestätigte OSM-Sitzung bleiben Fotoaufnahme, Fotoauswahl, Demo, Sichtbestätigung und Umgebungssuche ausgeblendet; Passwortdaten werden ausschließlich auf der OSM-Seite eingegeben.
 
 ### Fixed
+- Akzeptiert ausdrücklich bestätigte historische Beobachtungsdaten in beiden OSM-Dev-Schreibrouten; ungültige und zukünftige Daten bleiben gesperrt.
 - Hält die Abmeldung nach einem vorübergehenden Fehler auf der OSM-Einstiegsseite erneut verfügbar.
 - Stellt nach abgelaufener Anmeldung den Tastaturfokus auf eine fokussierbare Überschrift der Einstiegsseite.
 - Ergänzt einen manuellen Cloudflare-Deploy aus GitHub Actions: Nur ein bewusst gestarteter Lauf auf `main` mit Bestätigung kann nach grüner CI und Freigabe der `production`-Umgebung auf `workers.dev` veröffentlichen. Zugangsdaten werden als GitHub-Environment-Werte erwartet; PRs und gewöhnliche Merges deployen nicht.

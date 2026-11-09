@@ -10,6 +10,7 @@ import {
 } from "../storage/osmDevelopmentWriteOperations";
 import type { D1Database } from "../storage/d1";
 import { requestOSMDevelopmentApi } from "./developmentApi";
+import { isAcceptableObservationDate } from "./observationDate";
 
 const SESSION_COOKIE = "aedjaeger_osm_session";
 const MAX_BODY_BYTES = 2_048;
@@ -28,7 +29,7 @@ type ConfirmedCheckDate = {
   operation_id: string;
   confirmed: true;
   target: string;
-  expected_version: number;
+  expected_version?: number;
   expected_check_date: string | null;
   observed_on: string;
 };
@@ -127,7 +128,7 @@ export async function handleDevelopmentCheckDate(
       : jsonResponse({ error: "development_api_unavailable" }, 502);
   }
 
-  if (currentNode.version !== input.expected_version
+  if ((input.expected_version !== undefined && currentNode.version !== input.expected_version)
     || (currentNode.tags.check_date ?? null) !== input.expected_check_date
     || currentNode.tags.emergency !== "defibrillator") {
     await safelyUpdate(environment.DB, { sessionHash, operationId: input.operation_id, state: "conflict", now: (dependencies.now ?? Date.now)() });
@@ -182,7 +183,7 @@ async function uploadNodeChange(
     await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state, changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
     return error instanceof VersionConflictError ? jsonResponse({ error: "version_conflict" }, 409) : jsonResponse({ error: "development_api_unavailable" }, 502);
   }
-  if (node.version !== input.expected_version || (node.tags.check_date ?? null) !== input.expected_check_date || node.tags.emergency !== "defibrillator") {
+  if ((input.expected_version !== undefined && node.version !== input.expected_version) || (node.tags.check_date ?? null) !== input.expected_check_date || node.tags.emergency !== "defibrillator") {
     await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state: "conflict", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
     return jsonResponse({ error: "version_conflict" }, 409);
   }
@@ -238,7 +239,8 @@ async function reconcileUncertainWrite(
   if (!operation.changeset_id) return jsonResponse({ status: "uncertain" }, 202);
   try {
     const node = await readDevelopmentNode(input.target, token, dependencies.fetch ?? fetch);
-    if (node.version > input.expected_version && node.tags.check_date === input.observed_on) {
+    if (node.tags.check_date === input.observed_on && input.expected_check_date !== input.observed_on && node.tags.emergency === "defibrillator"
+      && (input.expected_version === undefined || node.version > input.expected_version)) {
       await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state: "uploaded", changesetId: operation.changeset_id, resultVersion: node.version, now: (dependencies.now ?? Date.now)() });
       return finishChangeset(database, sessionHash, input.operation_id, { ...operation, state: "uploaded", result_version: node.version }, token, dependencies);
     }
@@ -324,14 +326,13 @@ function parseRequest(bytes: Uint8Array, now: number): ConfirmedCheckDate {
   } catch {
     throw new Error("Invalid JSON");
   }
-  if (!isRecord(value) || Object.keys(value).sort().join(",") !== "confirmed,expected_check_date,expected_version,observed_on,operation_id,target"
+  if (!isRecord(value) || !["confirmed,expected_check_date,expected_version,observed_on,operation_id,target", "confirmed,expected_check_date,observed_on,operation_id,target"].includes(Object.keys(value).sort().join(","))
     || value.confirmed !== true || typeof value.operation_id !== "string"
     || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value.operation_id)
     || typeof value.target !== "string" || !/^node\/[1-9]\d{0,15}$/u.test(value.target)
-    || !isPositiveInteger(value.expected_version)
+    || (value.expected_version !== undefined && !isPositiveInteger(value.expected_version))
     || !(value.expected_check_date === null || isCalendarDate(value.expected_check_date))
-    || !isCalendarDate(value.observed_on)
-    || Math.abs(Date.parse(`${value.observed_on}T12:00:00.000Z`) - now) > 24 * 60 * 60 * 1_000) {
+    || !isAcceptableObservationDate(value.observed_on, now)) {
     throw new Error("Invalid request");
   }
   return value as ConfirmedCheckDate;

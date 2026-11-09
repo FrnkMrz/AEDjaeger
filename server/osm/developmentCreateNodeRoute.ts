@@ -15,6 +15,7 @@ import {
 } from "../storage/osmDevelopmentWriteOperations";
 import type { D1Database } from "../storage/d1";
 import { requestOSMDevelopmentApi } from "./developmentApi";
+import { isAcceptableObservationDate } from "./observationDate";
 
 const SESSION_COOKIE = "aedjaeger_osm_session";
 const MAX_BODY_BYTES = 2_048;
@@ -160,7 +161,7 @@ export async function handleDevelopmentCreateNode(
 }
 
 async function findNearbyAed(input: CreateRequest, token: string, fetcher: typeof fetch): Promise<boolean> {
-  // The browser's earlier Overpass result is useful for the UI but is not trusted
+  // The browser's earlier versioned AED-index result is useful for the UI but is not trusted
   // to authorize a create. Re-read one small authoritative OSM API box here.
   const latitudePadding = 0.001;
   const longitudePadding = Math.min(0.01, 0.0015 / Math.max(0.1, Math.cos(input.latitude * Math.PI / 180)));
@@ -367,7 +368,7 @@ function parseRequest(bytes: Uint8Array, now: number): CreateRequest {
     || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value.operation_id)
     || typeof value.latitude !== "number" || !Number.isFinite(value.latitude) || value.latitude < -90 || value.latitude > 90
     || typeof value.longitude !== "number" || !Number.isFinite(value.longitude) || value.longitude < -180 || value.longitude > 180
-    || !isCalendarDate(value.observed_on) || Math.abs(Date.parse(`${value.observed_on}T12:00:00.000Z`) - now) > 24 * 60 * 60 * 1_000
+    || !isAcceptableObservationDate(value.observed_on, now)
     || !(value.location_description === null || (typeof value.location_description === "string" && value.location_description.trim().length > 0
       && value.location_description.trim().length <= 160 && !/[\u0000-\u001f\u007f]/u.test(value.location_description)))
     || value.confirmed_different_candidate_ids !== undefined && (!Array.isArray(value.confirmed_different_candidate_ids)
@@ -396,7 +397,6 @@ function serializeCreateRequestForHash(input: CreateRequest): string {
   return JSON.stringify(legacyCompatibleInput);
 }
 
-function isCalendarDate(value: unknown): value is string { if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false; const date = new Date(`${value}T00:00:00.000Z`); return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value; }
 function isStringRecord(value: unknown): value is Record<string, string> { return isRecord(value) && Object.keys(value).length <= 512 && Object.entries(value).every(([key, text]) => key.length > 0 && key.length <= 255 && typeof text === "string" && text.length <= 255); }
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 function escapeXml(value: string): string { return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;"); }

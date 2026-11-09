@@ -209,7 +209,7 @@ function makeRequest(payload: unknown = requestBody): Request {
   });
 }
 
-function makeFetch(options: { appliedAfterUploadFailure?: boolean; conflictVersion?: number } = {}) {
+function makeFetch(options: { appliedAfterUploadFailure?: boolean; conflictVersion?: number; observedOn?: string } = {}) {
   let version = options.conflictVersion ?? 3;
   let checkDate = "2025-10-20";
   const calls: Array<{ method: string; url: string; body?: string }> = [];
@@ -224,16 +224,16 @@ function makeFetch(options: { appliedAfterUploadFailure?: boolean; conflictVersi
     }
     if (url.endsWith("/api/0.6/changeset/create")) return new Response("77", { status: 200 });
     if (url.endsWith("/api/0.6/changeset/77/upload")) {
-      expect(body).toContain('<tag k="check_date" v="2026-10-24"/>');
+      expect(body).toContain(`<tag k="check_date" v="${options.observedOn ?? "2026-10-24"}"/>`);
       expect(body).toContain('<tag k="name" v="Clinic &amp; hall"/>');
       if (failAfterUpload) {
         failAfterUpload = false;
         version = 4;
-        checkDate = "2026-10-24";
+        checkDate = options.observedOn ?? "2026-10-24";
         throw new Error("simulated connection loss after server accepted the write");
       }
       version = 4;
-      checkDate = "2026-10-24";
+      checkDate = options.observedOn ?? "2026-10-24";
       return new Response('<diffResult><node old_id="42" new_id="42" new_version="4"/></diffResult>', { status: 200 });
     }
     if (url.endsWith("/api/0.6/changeset/77/close")) return new Response(null, { status: 200 });
@@ -261,6 +261,29 @@ describe("OSM development check-date writer", () => {
     expect(duplicate.status).toBe(200);
     expect(await duplicate.json()).toMatchObject({ status: "complete", version: 4 });
     expect(calls.filter((call) => call.url.endsWith("/upload"))).toHaveLength(1);
+  });
+
+  it("uses a fresh targeted OSM node read when the static AED index has no version", async () => {
+    const DB = await setupDatabase();
+    const { fetcher, calls } = makeFetch();
+    const { expected_version: _ignored, ...versionlessRequest } = requestBody;
+    const response = await handleDevelopmentCheckDate(makeRequest(versionlessRequest), { ...environment, DB }, { now: () => now, fetch: fetcher });
+    expect(response.status).toBe(200);
+    expect(calls[0].url).toMatch(/\/api\/0\.6\/node\/42\.json$/u);
+    expect(calls.find((call) => call.url.endsWith("/upload"))?.body).toContain('<tag k="check_date" v="2026-10-24"/>');
+  });
+
+  it("writes a confirmed historical observation date from an older photo", async () => {
+    const DB = await setupDatabase();
+    const historicalDate = "2026-10-21";
+    const { fetcher, calls } = makeFetch({ observedOn: historicalDate });
+    const response = await handleDevelopmentCheckDate(
+      makeRequest({ ...requestBody, observed_on: historicalDate }),
+      { ...environment, DB },
+      { now: () => now, fetch: fetcher },
+    );
+    expect(response.status).toBe(200);
+    expect(calls.find((call) => call.url.endsWith("/upload"))?.body).toContain(`<tag k="check_date" v="${historicalDate}"/>`);
   });
 
   it("refuses production sessions before calling any OSM endpoint", async () => {

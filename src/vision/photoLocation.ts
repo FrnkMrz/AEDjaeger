@@ -1,3 +1,4 @@
+import exifr from "exifr";
 import { gps } from "exifr/dist/mini.esm.mjs";
 import type { SearchLocation } from "../osm/candidateSearch";
 
@@ -26,6 +27,22 @@ export async function readPhotoLocation(file: File, readGps: GpsReader = gps): P
     };
   } catch {
     // Missing, stripped, or malformed metadata must not prevent the photo workflow.
+    return undefined;
+  }
+}
+
+/** Read only the capture date locally; it prevents an old or undated photo from silently becoming today's check. */
+export async function readPhotoDate(file: File): Promise<string | undefined> {
+  try {
+    const metadata = await exifr.parse(file, ["DateTimeOriginal"]);
+    const value = metadata?.DateTimeOriginal;
+    if (!(value instanceof Date) || !Number.isFinite(value.getTime())) return undefined;
+    // EXIF dates have no timezone. Keep the camera's displayed calendar day instead of shifting it to UTC.
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  } catch {
     return undefined;
   }
 }
