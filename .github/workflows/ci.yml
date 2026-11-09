@@ -30,9 +30,9 @@ jobs:
       - run: npm run test:e2e
 
   deploy:
-    # Ein Merge allein veröffentlicht nichts. Der Betreiber startet den Workflow
-    # bewusst auf main und bestätigt den Deploy im Eingabefeld.
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.deploy_to_workers
+    # Nach einem Push auf main (zum Beispiel durch einen Merge) wird nach grüner
+    # CI automatisch deployt. Manuelle Läufe brauchen weiterhin eine Bestätigung.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.deploy_to_workers)
     needs: validate
     runs-on: ubuntu-latest
     environment:
