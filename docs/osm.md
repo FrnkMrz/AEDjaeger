@@ -44,7 +44,7 @@ Der Browser sendet für eine ausdrücklich gestartete Suche nur die ausgewählte
 
 Für den OAuth-Login bestätigt die Worker-Anmeldung die OSM-Identität. Schreibzugriffe sind separat und standardmäßig deaktiviert. Die OSM-Entwicklungsinstanz bleibt einziges zulässiges Schreibziel für Tests; produktives OSM wird in Tests nicht verändert. [OSM OAuth-Dokumentation](https://wiki.openstreetmap.org/wiki/OAuth), [OSM API v0.6](https://wiki.openstreetmap.org/wiki/API_v0.6).
 
-Der Feed-Consumer ist mit simulierten HTTP-Antworten geprüft. In diesem Änderungsschritt erfolgte kein Live-Aufruf an die Pipeline, kein Deployment und kein OSM-Schreibvorgang. Vor einer mobilen Pilotfreigabe müssen Pipeline-PR #63 bzw. die Veröffentlichung des passenden Snapshots, Region `dachlilu`, Coverage und Refresh-Alter separat bestätigt werden.
+Der Feed-Consumer ist mit simulierten HTTP-Antworten geprüft. Pipeline-PR #63 ist am 9.11.2026 gemergt. Eine anschließende schreibgeschützte Prüfung der öffentlichen Pipeline zeigte jedoch noch keinen AED-Snapshot: `metadata.json` antwortete mit HTTP 200, enthielt aber keinen `aed_candidate_snapshot`-Verweis; `aed/manifest.json` antwortete mit HTTP 404. Die Metadaten meldeten `generated_at=2026-11-09T05:59:54Z` und OSM-Datenstand `2026-11-08T21:21:00Z`. Damit sind Feed-Veröffentlichung, Coverage der Region `dachlilu` und Refresh-Alter für den AED-Feed weiterhin nicht bestätigt. Es erfolgten dabei kein Deployment und kein OSM-Schreibvorgang. Vor einer mobilen Pilotfreigabe müssen ein erfolgreicher Pipeline-Lauf mit veröffentlichtem Snapshot sowie Region, vollständige Coverage und Aktualität separat bestätigt werden.
 
 ## Technische Prüfpunkte vor Umsetzung
 
