@@ -2,10 +2,13 @@ import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 import { PMTiles, type RangeResponse, type Source } from "pmtiles";
 import { fetchWithoutRedirects } from "../http/fetchWithoutRedirects";
+import { importOAuthEncryptionKey } from "../auth/osmOAuth";
 import { findOSMSession } from "../storage/osmSessions";
+import { findOSMDevelopmentToken } from "../storage/osmDevelopmentTokens";
 import type { D1Database } from "../storage/d1";
 import { reserveSearchSlot } from "../storage/searchCooldown";
 import type { NearbyAedCandidate, SearchCoordinate } from "../../src/osm/candidateTypes";
+import { requestOSMDevelopmentApi } from "./developmentApi";
 
 const SESSION_COOKIE = "aedjaeger_osm_session";
 const DATA_ORIGIN = "https://pipeline.openfiremap.org/";
@@ -19,17 +22,18 @@ const MAX_REQUEST_BYTES = 1_024;
 const MAX_METADATA_BYTES = 256 * 1_024;
 const MAX_RANGE_BYTES = 8 * 1_024 * 1_024;
 const MAX_TILE_BYTES = 1 * 1_024 * 1_024;
+const MAX_MAP_BYTES = 512 * 1_024;
 const MAX_CANDIDATES = 100;
 const MAX_TILES = 16;
 const TIMEOUT_MS = 15_000;
 const EXTRACT_STATUSES = new Set(["fresh_download", "downloaded_dated", "cached_head_ok", "downloaded"]);
 const REQUIRED_EXTRACTS = ["germany", "austria", "switzerland", "luxembourg", "liechtenstein"];
 const ALLOWED_TAGS = new Set([
-  "access", "defibrillator:location", "fee", "indoor", "level", "location", "name", "opening_hours",
+  "access", "check_date", "defibrillator:location", "fee", "indoor", "level", "location", "name", "opening_hours",
   "operator", "ref", "start_date", "wheelchair",
 ]);
 
-type Environment = { DB?: D1Database };
+type Environment = { DB?: D1Database; OSM_OAUTH_ENCRYPTION_KEY?: string };
 type Dependencies = {
   fetch?: typeof fetch;
   now?: () => number;
@@ -139,6 +143,20 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
       }
     }
 
+    // Das PMTiles-Headerrechteck ist größer als die tatsächlich heruntergeladenen
+    // Länderflächen. Deshalb kann eine leere Kachel außerhalb der Extrakte keinen
+    // Beleg für „hier gibt es keinen AED“ liefern. Nur bei einer leeren Feed-Suche
+    // bestätigen wir den kleinen Ausschnitt direkt über die angemeldete OSM-Dev-API.
+    // Scheitert diese gezielte Prüfung, bleibt die Suche unvollständig.
+    if (candidates.size === 0) {
+      if (session.environment !== "development" || !env.OSM_OAUTH_ENCRYPTION_KEY) throw new CoverageUnavailableError();
+      const encryptionKey = await importOAuthEncryptionKey(env.OSM_OAUTH_ENCRYPTION_KEY);
+      const accessToken = await findOSMDevelopmentToken(env.DB, sessionToken, now, encryptionKey);
+      if (!accessToken) throw new CoverageUnavailableError();
+      const mapCandidates = await fetchDevelopmentCandidates(accessToken, bounds, location, fetcher, controller.signal);
+      for (const candidate of mapCandidates) candidates.set(candidate.id, candidate);
+    }
+
     return json({
       status: "complete", candidates: [...candidates.values()], coverage_radius_meters: radius,
       snapshot_id: await snapshotId(metadata), data_until: metadata.osm_data_until,
@@ -226,6 +244,59 @@ function candidateFromFeature(feature: GeoJSON.Feature): NearbyAedCandidate | nu
     tags[key] = value;
   }
   return { id, osmType: "node", coordinateQuality: "exact", position, tags };
+}
+
+/**
+ * Confirms an empty static-index result with a tiny, authenticated OSM-dev map
+ * request. The API response must be complete and valid before an empty result is
+ * allowed to unlock the new-AED flow. Non-node AEDs fail closed because this
+ * compact response does not provide a trustworthy point location for them.
+ */
+async function fetchDevelopmentCandidates(
+  accessToken: string,
+  bounds: ReturnType<typeof searchBounds>,
+  location: Location,
+  fetcher: typeof fetch,
+  signal: AbortSignal,
+): Promise<NearbyAedCandidate[]> {
+  const response = await requestOSMDevelopmentApi("development", "/api/0.6/map.json", accessToken, {
+    method: "GET",
+    bbox: { west: bounds.minLon, south: bounds.minLat, east: bounds.maxLon, north: bounds.maxLat },
+    signal,
+  }, fetcher);
+  if (!response.ok) throw new FeedHTTPError(response.status);
+
+  let payload: unknown;
+  try { payload = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(await readLimitedBody(response, MAX_MAP_BYTES))); }
+  catch { throw new InvalidFeedError(); }
+  if (!isRecord(payload) || !Array.isArray(payload.elements) || payload.elements.length > 5_000) throw new InvalidFeedError();
+
+  const candidates = new Map<string, NearbyAedCandidate>();
+  for (const element of payload.elements) {
+    if (!isRecord(element) || !["node", "way", "relation"].includes(String(element.type))
+      || (element.tags !== undefined && !isStringRecord(element.tags))) throw new InvalidFeedError();
+    if (!isStringRecord(element.tags) || element.tags.emergency !== "defibrillator") continue;
+    if (element.type !== "node" || typeof element.lon !== "number" || typeof element.lat !== "number") {
+      // Returning an empty result here could hide a mapped AED from the user and
+      // incorrectly allow a duplicate node to be proposed.
+      throw new CoverageUnavailableError();
+    }
+    const candidate = candidateFromFeature({
+      type: "Feature",
+      properties: { ...element.tags, "@type": "node", "@id": `node/${element.id}` },
+      geometry: { type: "Point", coordinates: [element.lon, element.lat] },
+    });
+    if (!candidate) throw new InvalidFeedError();
+    if (distanceMeters(location, candidate.position) <= Math.ceil(location.accuracyMeters + SEARCH_RADIUS)) {
+      candidates.set(candidate.id, candidate);
+    }
+    if (candidates.size > MAX_CANDIDATES) throw new InvalidFeedError();
+  }
+  return [...candidates.values()];
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return isRecord(value) && Object.values(value).every((item) => typeof item === "string");
 }
 
 function searchBounds(location: Location, radius: number): { minLat: number; minLon: number; maxLat: number; maxLon: number } {

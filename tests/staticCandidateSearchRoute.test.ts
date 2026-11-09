@@ -1,12 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { handleStaticCandidateSearch } from "../server/osm/staticCandidateSearchRoute";
 import type { D1Database, D1Result, D1Statement } from "../server/storage/d1";
 
-const { pointFeature } = vi.hoisted(() => ({
-  pointFeature: {
+const { fixture } = vi.hoisted(() => ({
+  fixture: {
+    pointFeature: {
     type: "Feature",
-    properties: { "@type": "node", "@id": "node/123", emergency: "defibrillator", name: "Bahnhof", wheelchair: "yes" },
+    properties: { "@type": "node", "@id": "node/123", emergency: "defibrillator", name: "Bahnhof", wheelchair: "yes", check_date: "2026-10-20", private_note: "not returned" },
     geometry: { type: "Point", coordinates: [13.405, 52.52] },
+    } as Record<string, unknown> | null,
+    mapPayload: { elements: [] as unknown[] },
   },
 }));
 
@@ -30,22 +33,24 @@ vi.mock("pmtiles", () => ({
 vi.mock("pbf", () => ({ PbfReader: class {} }));
 vi.mock("@mapbox/vector-tile", () => ({
   VectorTile: class {
-    layers = { defibrillators: { length: 1, feature: () => ({ toGeoJSON: () => pointFeature }) } };
+    layers = { defibrillators: { get length() { return fixture.pointFeature ? 1 : 0; }, feature: () => ({ toGeoJSON: () => fixture.pointFeature }) } };
     constructor(_reader: unknown) {}
   },
 }));
+vi.mock("../server/auth/osmOAuth", () => ({ importOAuthEncryptionKey: vi.fn(async () => ({ testKey: true })) }));
+vi.mock("../server/storage/osmDevelopmentTokens", () => ({ findOSMDevelopmentToken: vi.fn(async () => "dev-access-token") }));
 
 const now = Date.parse("2026-11-08T12:00:00.000Z");
 const session = "s".repeat(43);
 
-function database(options: { authenticated?: boolean; cooldown?: boolean } = {}): D1Database {
+function database(options: { authenticated?: boolean; cooldown?: boolean; environment?: "production" | "development" } = {}): D1Database {
   return {
     prepare(query: string): D1Statement {
       const statement: D1Statement = {
         bind() { return statement; },
         async run<T>() { return { success: true, meta: { changes: options.cooldown === false ? 0 : 1 } } as D1Result<T>; },
         async first<T>() {
-          if (query.includes("FROM osm_sessions")) return (options.authenticated === false ? null : { osm_subject: "tester", osm_environment: "development" }) as T | null;
+          if (query.includes("FROM osm_sessions")) return (options.authenticated === false ? null : { osm_subject: "tester", osm_environment: options.environment ?? "development" }) as T | null;
           if (query.includes("SELECT next_allowed_at")) return { next_allowed_at: now + 30_000 } as T;
           return null;
         },
@@ -70,12 +75,18 @@ function metadata(dataUntil = new Date(now - 60 * 60_000).toISOString()) {
   };
 }
 
-function fetchArchive(options: { dataUntil?: string; ignoreRange?: boolean } = {}) {
+function fetchArchive(options: { dataUntil?: string; ignoreRange?: boolean; mapStatus?: number } = {}) {
   const currentMetadata = metadata(options.dataUntil);
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
-    expect(url.origin).toBe("https://pipeline.openfiremap.org");
     expect(init?.redirect).toBe("manual");
+    if (url.origin === "https://master.apis.dev.openstreetmap.org") {
+      expect(url.pathname).toBe("/api/0.6/map.json");
+      expect(url.searchParams.get("bbox")).toBeTruthy();
+      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer dev-access-token");
+      return Response.json(fixture.mapPayload, { status: options.mapStatus ?? 200 });
+    }
+    expect(url.origin).toBe("https://pipeline.openfiremap.org");
     if (url.pathname === "/metadata.json") {
       expect(init?.cache).toBe("no-store");
       return Response.json(currentMetadata);
@@ -96,6 +107,14 @@ function fetchArchive(options: { dataUntil?: string; ignoreRange?: boolean } = {
 }
 
 describe("PMTiles AED candidate search", () => {
+  beforeEach(() => {
+    fixture.pointFeature = {
+      type: "Feature",
+      properties: { "@type": "node", "@id": "node/123", emergency: "defibrillator", name: "Bahnhof", wheelchair: "yes", check_date: "2026-10-20", private_note: "not returned" },
+      geometry: { type: "Point", coordinates: [13.405, 52.52] },
+    };
+    fixture.mapPayload = { elements: [] };
+  });
   it("authenticates before fetching the fixed archive", async () => {
     const fetcher = vi.fn<typeof fetch>();
     const response = await handleStaticCandidateSearch(request(), { DB: database({ authenticated: false }) }, { fetch: fetcher, now: () => now });
@@ -109,10 +128,71 @@ describe("PMTiles AED candidate search", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       status: "complete", data_until: metadata().osm_data_until,
-      candidates: [{ id: "node/123", osmType: "node", coordinateQuality: "exact", tags: { name: "Bahnhof", wheelchair: "yes" } }],
+      candidates: [{ id: "node/123", osmType: "node", coordinateQuality: "exact", tags: { name: "Bahnhof", wheelchair: "yes", check_date: "2026-10-20" } }],
     });
     expect(fetcher.mock.calls.length).toBeGreaterThan(2);
     expect(fetcher.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+
+  it("confirms a PMTiles-empty search on the authenticated OSM development map", async () => {
+    fixture.pointFeature = null;
+    fixture.mapPayload = { elements: [
+      { type: "node", id: 456, lat: 52.5201, lon: 13.4051, tags: { emergency: "defibrillator", check_date: "2026-10-01", name: "Eingang" } },
+    ] };
+    const fetcher = fetchArchive();
+    const response = await handleStaticCandidateSearch(request(), {
+      DB: database(), OSM_OAUTH_ENCRYPTION_KEY: "test-encryption-key",
+    }, { fetch: fetcher, now: () => now });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      status: "complete",
+      candidates: [{ id: "node/456", tags: { check_date: "2026-10-01", name: "Eingang" } }],
+    });
+    expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).origin === "https://master.apis.dev.openstreetmap.org")).toBe(true);
+  });
+
+  it("returns no matches only after the complete development-map area has been checked", async () => {
+    fixture.pointFeature = null;
+    const fetcher = fetchArchive();
+    const response = await handleStaticCandidateSearch(request(), {
+      DB: database(), OSM_OAUTH_ENCRYPTION_KEY: "test-encryption-key",
+    }, { fetch: fetcher, now: () => now });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: "complete", candidates: [] });
+    expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).origin === "https://master.apis.dev.openstreetmap.org")).toBe(true);
+  });
+
+  it("keeps an empty production PMTiles result incomplete without verified extract coverage", async () => {
+    fixture.pointFeature = null;
+    const fetcher = fetchArchive();
+    const response = await handleStaticCandidateSearch(request(), {
+      DB: database({ environment: "production" }), OSM_OAUTH_ENCRYPTION_KEY: "test-encryption-key",
+    }, { fetch: fetcher, now: () => now });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "coverage_unavailable" });
+    expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).origin === "https://master.apis.dev.openstreetmap.org")).toBe(false);
+  });
+
+  it("does not treat a failed authoritative check as an empty search", async () => {
+    fixture.pointFeature = null;
+    const fetcher = fetchArchive({ mapStatus: 503 });
+    const response = await handleStaticCandidateSearch(request(), {
+      DB: database(), OSM_OAUTH_ENCRYPTION_KEY: "test-encryption-key",
+    }, { fetch: fetcher, now: () => now });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: "source_unavailable" });
+  });
+
+  it("does not declare an empty result when the authoritative area contains a non-node AED", async () => {
+    fixture.pointFeature = null;
+    fixture.mapPayload = { elements: [
+      { type: "way", id: 789, tags: { emergency: "defibrillator" } },
+    ] };
+    const response = await handleStaticCandidateSearch(request(), {
+      DB: database(), OSM_OAUTH_ENCRYPTION_KEY: "test-encryption-key",
+    }, { fetch: fetchArchive(), now: () => now });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "coverage_unavailable" });
   });
 
   it("fails closed when source extracts exceed the 48-hour freshness limit", async () => {

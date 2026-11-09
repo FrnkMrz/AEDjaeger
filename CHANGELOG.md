@@ -26,6 +26,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Ergänzt eine mehrsprachige OSM-Einstiegsseite mit Konto-Erstellungslink. Ohne bestätigte OSM-Sitzung bleiben Fotoaufnahme, Fotoauswahl, Demo, Sichtbestätigung und Umgebungssuche ausgeblendet; Passwortdaten werden ausschließlich auf der OSM-Seite eingegeben.
 
 ### Fixed
+- Verhindert, dass eine leere PMTiles-Suche ohne tatsächliche Extraktabdeckung als „keine AEDs“ gilt: Angemeldete OSM-Dev-Sitzungen bestätigen leere Bereiche über einen begrenzten, authentifizierten `map.json`-Abruf. Fehler und nicht als Punkt darstellbare AEDs sperren den Neuanlagevorschlag. Übernimmt außerdem `check_date` in vorhandene Kandidatendaten, damit die Update-Vorschau den erwarteten Wert korrekt vergleichen kann.
 - Akzeptiert ausdrücklich bestätigte historische Beobachtungsdaten in beiden OSM-Dev-Schreibrouten; ungültige und zukünftige Daten bleiben gesperrt.
 - Hält die Abmeldung nach einem vorübergehenden Fehler auf der OSM-Einstiegsseite erneut verfügbar.
 - Stellt nach abgelaufener Anmeldung den Tastaturfokus auf eine fokussierbare Überschrift der Einstiegsseite.
