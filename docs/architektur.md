@@ -1,8 +1,8 @@
 # Architektur und Bedienung für AEDjaeger
 
-> **Aktueller Pilotentscheid (8.11.2026):** Der Produktablauf verwendet keine externe Bilderkennung und keine OpenAI-API. Fotos und EXIF bleiben auf dem Gerät; die Person bestätigt die Sichtbarkeit des AED selbst. Frühere Abschnitte zu Anbieterwahl, Modelltests und externer Bildverarbeitung dokumentieren ausschließlich den historischen Prototyp und sind keine aktuelle Architekturvorgabe.
+> **Aktueller Pilotentscheid (9.11.2026):** Der Produktablauf verwendet keine externe Bilderkennung und keine OpenAI-API. Fotos und EXIF bleiben auf dem Gerät; die Person bestätigt die Sichtbarkeit des AED selbst. Die Umkreissuche liest den AED-Layer aus dem bestehenden OpenFireMap-PMTiles-Archiv. Frühere Abschnitte zu Anbieterwahl, Modelltests und externer Bildverarbeitung dokumentieren ausschließlich den historischen Prototyp und sind keine aktuelle Architekturvorgabe.
 
-Stand: **8.11.2026**. Cloudflare Workers Free ist als Hosting-Richtung gewählt. Der Bedienprototyp nutzt Vite und TypeScript ohne React. Die D1-Pilotdatenbank ist angelegt, gebunden und remote bis einschließlich Migration 0009 migriert; ein Paid-Tarif wurde nicht aktiviert. Der Worker ist unter [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev) veröffentlicht. Startseite und `/api/health` wurden mit HTTP 200 geprüft. OSM-Dev-Client-ID, Callback, Verschlüsselungsschlüssel und Client-Secret sind serverseitig konfiguriert; der Dev-Login ist aktiviert. Die bisherigen OSM-Zustimmungen erzeugten keine AEDjaeger-Sitzung. Ursache ist der in Workers nicht unterstützte Aufrufparameter `redirect: "error"`, der vor der Netzwerkanfrage einen TypeError auslöst. Eine isolierte lokale und Cloudflare-Preview-Probe bestätigte: Mit `manual` liefert dieselbe Discovery-URL HTTP 200. Die vorbereitete Korrektur lehnt Weiterleitungen mit einem gemeinsamen HTTP-Baustein ausdrücklich ab; der echte vollständige Login bleibt nach Merge und Bereitstellung zu prüfen. Siehe [Login-Diagnose](osm.md#osm-login-nachgewiesener-cloudflare-laufzeitfehler). OAuth-Codes, Tokens, Geheimnisse, IP-Adressen und Providerantworten bleiben aus den Anwendungs-Diagnoseeinträgen ausgeschlossen. `OSM_DEV_WRITES_ENABLED` bleibt aus. Bildanalyse ist deaktiviert. Es wurde kein Modell aufgerufen, kein Live-Aufruf an den regionalen AED-Feed ausgeführt und kein OSM-Objekt verändert. Die Produktvorgabe bleibt: **Foto → vorhandenen AED bestätigen oder neuen eintragen → kurz bestätigen → fertig.**
+Stand: **9.11.2026**. Cloudflare Workers Free ist als Hosting-Richtung gewählt. Der Bedienprototyp nutzt Vite und TypeScript ohne React. Die D1-Pilotdatenbank ist angelegt, gebunden und remote bis einschließlich Migration 0009 migriert; ein Paid-Tarif wurde nicht aktiviert. Der Worker ist unter [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev) veröffentlicht. OSM-Dev-Client-ID, Callback, Verschlüsselungsschlüssel und Client-Secret sind serverseitig konfiguriert; der Dev-Login ist aktiviert. Der echte vollständige Login muss nach Bereitstellung der aktuellen Korrektur geprüft werden. Siehe [Login-Diagnose](osm.md#osm-login-nachgewiesener-cloudflare-laufzeitfehler). OAuth-Codes, Tokens, Geheimnisse, IP-Adressen und Providerantworten bleiben aus den Anwendungs-Diagnoseeinträgen ausgeschlossen. `OSM_DEV_WRITES_ENABLED` bleibt aus. Bildanalyse ist deaktiviert. In dieser Änderung wurde kein OSM-Objekt verändert. Die Produktvorgabe bleibt: **Foto → vorhandenen AED bestätigen oder neuen eintragen → kurz bestätigen → fertig.**
 
 **Aktueller Teststand, 8.11.2026:** OSM-Dev-Anmeldung und AED-Bildbeobachtung wurden in der workers.dev-App bestätigt. Zwei echte Umgebungssuchen mit Foto-GPS scheiterten mit einer allgemeinen Verfügbarkeitsmeldung. Es gab keine OSM-Schreiboperation. Die Diagnoseinstrumentierung wird ergänzt; Details und Datenschutzumfang stehen in [OSM-Datenzugriff](osm.md).
 
@@ -10,7 +10,7 @@ Stand: **8.11.2026**. Cloudflare Workers Free ist als Hosting-Richtung gewählt.
 
 **Eine installierbare PWA mit einem kleinen Serverdienst. GitHub bleibt der Speicherort für Code, Dokumentation und Tests. App und Serverdienst laufen gemeinsam auf Cloudflare Workers mit Static Assets. Eine kleine D1-Datenbank hält Sitzungen und den Status von Schreibvorgängen.**
 
-Die Serverseite schützt OSM-Zugangsdaten, validiert den regionalen AED-Feed und macht bestätigte OSM-Testschreibvorgänge nach einem Verbindungsabbruch nachvollziehbar. Sie ist keine eigene AED-Datenbank; OpenStreetMap bleibt für Schreibvorgänge maßgeblich.
+Die Serverseite schützt OSM-Zugangsdaten, liest den AED-Layer aus dem PMTiles-Kartenarchiv und macht bestätigte OSM-Testschreibvorgänge nach einem Verbindungsabbruch nachvollziehbar. Sie ist keine eigene AED-Datenbank; OpenStreetMap bleibt für Schreibvorgänge maßgeblich.
 
 ### Hosting-Alternativen
 
@@ -53,7 +53,7 @@ Nach der ersten bewussten Betätigung öffnet die Kamera. Für wiederkehrende Nu
 
 ### Während der Prüfung
 
-Das aufgenommene Foto bleibt sichtbar. Die Person bestätigt die Sichtbarkeit von AED oder AED-Gehäuse und startet danach die Umgebungssuche ausdrücklich. Der Worker fragt den versionierten AED-Snapshot aus der OpenFireMap-Pipeline ab. Er zeigt Quelle, Snapshotkennung und Datenstand an. Eine fehlgeschlagene oder nicht vollständig abgedeckte Suche wird ausdrücklich als nicht abgeschlossen angezeigt und kann niemals als Beleg für einen neuen AED gelten.
+Das aufgenommene Foto bleibt sichtbar. Die Person bestätigt die Sichtbarkeit von AED oder AED-Gehäuse und startet danach die Umgebungssuche ausdrücklich. Der Worker liest Kandidaten aus dem AED-Layer des OpenFireMap-PMTiles-Archivs. Er zeigt Datenquelle, Snapshotkennung und Datenstand an. Eine fehlgeschlagene oder nicht vollständig abgedeckte Suche wird ausdrücklich als nicht abgeschlossen angezeigt und kann niemals als Beleg für einen neuen AED gelten.
 
 Bei längerer Wartezeit oder einem Feedfehler bleibt das Foto im lokalen Ablauf erhalten; die Suche kann nach dem Cooldown wiederholt werden. Es gibt keinen Overpass-Fallback und keinen automatischen Wechsel zu einem anderen AED-Dienst.
 
@@ -117,7 +117,7 @@ Im Pilot bleibt Gamification für Nutzende vollständig unsichtbar. Intern werde
 flowchart TD
   A[Handy: PWA mit Kamera und Standort] --> B[Eigener API-Dienst auf Cloudflare]
   A -->|Person bestätigt AED/Gehäuse manuell| B
-  B --> C[Versionierter OpenFireMap-AED-Snapshot]
+  B --> C[AED-Layer im OpenFireMap-PMTiles-Archiv]
   B --> D[Schema-, Alters- und Coverage-Prüfung]
   B --> E[Prüfregeln: Kandidat und Änderungsvorschlag]
   E --> A
@@ -182,7 +182,7 @@ Die im Chrome-Browser integrierte Prompt API ist derzeit keine Basis für diese 
 
 ## Aktuelle Feed-Grenze
 
-Die Kandidatensuche verwendet ausschließlich den versionierten Feed `https://pipeline.openfiremap.org/`. Das Feed-Schema ist `aedjaeger-cells-v1`; die Anwendung fragt derzeit die Region `dachlilu` ab. Manifest und Metadaten werden frisch geladen und müssen Snapshot-ID, Region, Schema, Alter (`max_source_age_hours`) und vollständige Coverage konsistent bestätigen. Index und Shards sind unveränderliche Snapshotobjekte und werden mit Cloudflare Fetch-Caching abgerufen; Fehlerstatus werden nicht gecacht. Bei jeder Abweichung lautet das Ergebnis „Suche nicht abgeschlossen“ und die Oberfläche bietet keine Neuanlage an. Overpass ist weder primäre Quelle noch Backup. Die aktuellen Route- und Mocktests decken diese Fehlerpfade ab; sie belegen nicht, dass der Feed live veröffentlicht oder für die Region vollständig ist.
+Die Kandidatensuche liest die Ebene `defibrillators` aus `https://pipeline.openfiremap.org/openfiremap.pmtiles`. Frische `metadata.json`-Angaben müssen einen erfolgreichen DACHLiLu-Lauf, den erwarteten Archivnamen, einen AED-Featurezähler sowie höchstens 48 Stunden alte OSM-Daten und aktuelle Länderextrakte für Deutschland, Österreich, die Schweiz, Luxemburg und Liechtenstein bestätigen. Der Worker lädt nicht das ganze Archiv, sondern nur Header und nötige Zoom-14-Kacheln per begrenztem HTTP Range. Er prüft Range-Antworten, Vektorkartentyp, Zoom und Headergrenzen. Ein leeres PMTiles-Ergebnis wird für eine angemeldete OSM-Dev-Sitzung zusätzlich mit demselben begrenzten Gebiet auf dem festen OSM-Dev-`map.json`-Endpunkt bestätigt, weil Headergrenzen nicht die tatsächlichen Extraktumrisse belegen. Fehler oder nicht punktförmig darstellbare AEDs bleiben unvollständig. Eine leere Suche mit Produktionssitzung bleibt gesperrt. Overpass und ein separater AED-Feed sind keine Laufzeitquellen. Ein erfolgreicher Build belegt noch keinen Live-Abruf oder Ende-zu-Ende-Ablauf am Handy.
 
 ## 7. Der schwierigste Teil: den richtigen AED zuordnen
 
@@ -203,7 +203,7 @@ Erst nach erfolgreicher Suche im relevanten Bereich darf eine Neuanlage angebote
 - Ein bereits vorhandener AED wird nicht wegen einer abweichenden Handyposition verschoben.
 - Ungewöhnliche OSM-Objekte, etwa als Gebäude erfasste AEDs, nicht automatisch in Knoten umwandeln. Vorerst gesondert behandeln.
 
-Die Umgebungssuche liest einen versionierten Snapshot aus der OpenFireMap-Pipeline. Wurzelmetadaten und Manifest werden frisch geladen; Snapshotindex und Shards sind unveränderlich und dürfen über Cloudflare gecacht werden. Der Worker prüft Schema, Region, Altersgrenze und vollständige Coverage. Fehlende, veraltete, unvollständige oder widersprüchliche Daten bleiben ein Fehler und sperren jede Neuanlage; es gibt keinen Overpass-Fallback. Vor bestätigtem Schreiben liest der OSM-Testserver das konkrete Zielobjekt erneut. Kein flächiges Laden über die OSM-API. Schlägt die gezielte Prüfung fehl, bleibt der Vorgang offen. [OSM API-Nutzungsregeln](https://operations.osmfoundation.org/policies/api/)
+Die Umgebungssuche liest Kacheln des AED-Layers direkt aus dem PMTiles-Kartenarchiv. Der Worker validiert frische Metadaten, Ländernachweise, Datenalter und Archivheader; die Range-Quelle ist auf den festen OpenFireMap-Ursprung begrenzt und akzeptiert keine Vollarchiv-Antwort. Fehlende, veraltete, unvollständige oder widersprüchliche Daten bleiben ein Fehler und sperren jede Neuanlage; es gibt keinen Overpass-Fallback. Vor bestätigtem Schreiben liest der OSM-Testserver das konkrete Zielobjekt erneut. Kein flächiges Laden über die OSM-API. Schlägt die gezielte Prüfung fehl, bleibt der Vorgang offen. [OSM API-Nutzungsregeln](https://operations.osmfoundation.org/policies/api/)
 
 Vollständige Vermeidung zeitgleicher Neuanlagen durch verschiedene externe OSM-Editoren ist dadurch nicht garantiert. Innerhalb unserer App können Wiederholungen und konkurrierende Vorgänge erkannt werden; auffällige Dubletten müssen im Pilotbetrieb trotzdem kontrolliert werden.
 
@@ -248,7 +248,7 @@ Dieser Vorschlag schützt Tokens vor direktem Auslesen durch Browser-JavaScript,
 
 ### Betriebskosten
 
-Der aktuelle Pilot ruft keine kostenpflichtige KI-API auf und benötigt weder KI-Schlüssel noch Reservierung eines Modellbudgets. Die App verwendet Workers Free als Hosting-Richtung; Paid-Tarif und eigene Domain bleiben bis zu einem belegten Bedarf ausgeschlossen. Die Suche liest den regionalen AED-Snapshot. OSM-Schreibzugriffe sind ein eigener, standardmäßig abgeschalteter Testserver-Schalter. [Workers-Preise](https://developers.cloudflare.com/workers/platform/pricing/)
+Der aktuelle Pilot ruft keine kostenpflichtige KI-API auf und benötigt weder KI-Schlüssel noch Reservierung eines Modellbudgets. Die App verwendet Workers Free als Hosting-Richtung; Paid-Tarif und eigene Domain bleiben bis zu einem belegten Bedarf ausgeschlossen. Die Suche liest den AED-Layer im regionalen PMTiles-Archiv. OSM-Schreibzugriffe sind ein eigener, standardmäßig abgeschalteter Testserver-Schalter. [Workers-Preise](https://developers.cloudflare.com/workers/platform/pricing/)
 
 ### Fotos und personenbezogene Daten
 
@@ -260,7 +260,7 @@ OSM-Bearbeitungen sind öffentliche Beiträge. Das ist beim ersten Verbinden des
 
 Kamera und Standort sind auf HTTPS angewiesen und unterliegen Browserberechtigungen. Eine verweigerte Berechtigung braucht einen verständlichen Ersatzweg. Kameraauswahl, Bilddrehung, HEIC, Wechsel zu OSM und Rückkehr in eine installierte PWA müssen auf echten Geräten geprüft werden. [Kamera-API](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia)
 
-Offline kann die App eine Aufnahme vorbereiten und lokal behalten. Der aktuelle AED-Snapshotabgleich, OSM-Login und ein bestätigter Upload benötigen Netz. Wiederaufnahme beim nächsten Öffnen ist der verlässliche Hauptweg; Hintergrund-Synchronisation ist keine Voraussetzung. [MDN: Offline und Hintergrundbetrieb](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Offline_and_background_operation)
+Offline kann die App eine Aufnahme vorbereiten und lokal behalten. Der aktuelle PMTiles-Abgleich, OSM-Login und ein bestätigter Upload benötigen Netz. Wiederaufnahme beim nächsten Öffnen ist der verlässliche Hauptweg; Hintergrund-Synchronisation ist keine Voraussetzung. [MDN: Offline und Hintergrundbetrieb](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Offline_and_background_operation)
 
 Der Service Worker speichert die App-Oberfläche, aber keine OAuth-Antworten, Sitzungsausgaben oder Schreibanfragen. Aktualisierungen wechseln nicht mitten in einer Aufnahme die App-Version. Backend und gespeicherte Entwürfe brauchen versionierte Datenverträge, damit eine ältere installierte Oberfläche verständlich weiterarbeiten oder aktualisieren kann.
 
@@ -277,7 +277,7 @@ OSM-Kartenkacheln nicht pauschal für Offline-Gebiete herunterladen. Anbieterreg
 | Netzabbruch erzeugt doppelte Anlage | Persistente Vorgangs-ID, Statusprüfung, unklaren Upload nicht wiederholen | Antwort nach erfolgreichem Upload absichtlich verlieren. |
 | Feed enthält falsche oder nicht vertrauenswürdige Kandidaten | Feste Quelle, strenge Laufzeitvalidierung, begrenzte Tag-Allowlist und erneutes Lesen des konkreten OSM-Objekts vor dem Testserver-Update | Fehlende Felder, falsches Schema, doppelte IDs und unerlaubte Tags simulieren. |
 | Bestehende Daten gehen verloren | Minimaler Patch auf aktuelle Version | Fremde Tags und Paralleländerungen prüfen. |
-| Feed oder Hosting ist nicht erreichbar | Zeitlimit, begrenzte Abfragen, Cooldown und fail-closed; keine Overpass-Ausweichroute | Ausfall, Timeout, veralteter Snapshot und unvollständige Coverage simulieren. |
+| PMTiles-Archiv oder Hosting ist nicht erreichbar | Zeitlimit, begrenzte Range-Abfragen, Cooldown und fail-closed; keine Overpass-Ausweichroute | Ausfall, Timeout, veraltete Metadaten, ungültige Range-Antworten und unvollständige Extrakte simulieren. |
 | Foto geht beim Login/Update verloren | Lokaler Entwurf und kontrollierte Updates | Neuladen, OAuth-Rückkehr und App-Wechsel prüfen. |
 | Alte App passt nicht zur neuen API | Versionierte Verträge, kompatible Releases | Vorherige PWA-Version gegen neue API testen. |
 | Erfolgsanzeige trotz offener Speicherung | Eindeutige Zustände, Erfolg nur aus bestätigtem Ergebnis | Timeout in jedem Schreibschritt testen. |
@@ -287,6 +287,6 @@ Die OSM-Regeln zu automatisierten Änderungen gelten insbesondere für systemati
 
 ## 13. Was vor einem öffentlichen Start noch belegt werden muss
 
-Ein erfolgreicher Mocktest beweist nicht, dass die regionale Datenpipeline live läuft oder ihre Coverage vollständig ist. Pipeline-PR #63 ist gemergt. Eine schreibgeschützte Prüfung am 9.11.2026 fand in den öffentlichen Metadaten keinen AED-Snapshot-Verweis; `aed/manifest.json` antwortete mit HTTP 404. Vor einem Pilot muss der Snapshot daher erst tatsächlich veröffentlicht und Region `dachlilu`, Coverage und Datenalter anschließend anhand echter Feed-Metadaten geprüft werden. Danach müssen OSM-Login-Rückkehr, räumliche Zuordnung und Verhalten bei Netzverlust als durchgehender Ablauf auf realen Geräten funktionieren. Es gibt im aktuellen Pilot keine Bildauswertung.
+Ein erfolgreicher Build beweist nicht, dass das öffentliche PMTiles-Archiv erreichbar ist oder der Live-Ablauf vollständig funktioniert. Der aktuelle Code liest den AED-Layer aus dem bestehenden Archiv statt ein separates Manifest zu benötigen. Der Live-Range-Abruf, räumliche Zuordnung und Verhalten bei Netzverlust müssen vor dem Pilot mit deployter App und realem Mobilgerät geprüft werden. Es gibt im aktuellen Pilot keine automatische Bildauswertung.
 
 Erst danach sind zusätzliche Funktionen sinnvoll. Wenn gute Ergebnisse zu viele Rückfragen benötigen, verbessern wir zuerst diese Fälle. Wenn ein Gerät aus einem Foto nicht sicher zugeordnet werden kann, bleibt eine kurze Frage Teil des Produkts. Das Ziel ist ein sehr kurzer zuverlässiger Ablauf, keine versprochene Vollautomatik unter allen Bedingungen.

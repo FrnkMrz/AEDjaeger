@@ -1,25 +1,56 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { handleStaticCandidateSearch } from "../server/osm/staticCandidateSearchRoute";
 import type { D1Database, D1Result, D1Statement } from "../server/storage/d1";
 
+const { fixture } = vi.hoisted(() => ({
+  fixture: {
+    pointFeature: {
+    type: "Feature",
+    properties: { "@type": "node", "@id": "node/123", emergency: "defibrillator", name: "Bahnhof", wheelchair: "yes", check_date: "2026-10-20", private_note: "not returned" },
+    geometry: { type: "Point", coordinates: [13.405, 52.52] },
+    } as Record<string, unknown> | null,
+    mapPayload: { elements: [] as unknown[] },
+  },
+}));
+
+// The route contract needs only two PMTiles operations. The fake still calls the
+// supplied source, so these tests verify the worker's bounded Range HTTP behavior.
+vi.mock("pmtiles", () => ({
+  PMTiles: class {
+    constructor(private readonly source: {
+      getBytes(offset: number, length: number, signal?: AbortSignal): Promise<{ data: ArrayBuffer }>;
+    }) {}
+    async getHeader() {
+      await this.source.getBytes(0, 127);
+      return { tileType: 1, minZoom: 14, maxZoom: 14, minLon: 5, minLat: 45, maxLon: 18, maxLat: 56 };
+    }
+    async getZxy(_z: number, _x: number, _y: number, signal?: AbortSignal) {
+      return { data: (await this.source.getBytes(200, 1, signal)).data };
+    }
+  },
+}));
+
+vi.mock("pbf", () => ({ PbfReader: class {} }));
+vi.mock("@mapbox/vector-tile", () => ({
+  VectorTile: class {
+    layers = { defibrillators: { get length() { return fixture.pointFeature ? 1 : 0; }, feature: () => ({ toGeoJSON: () => fixture.pointFeature }) } };
+    constructor(_reader: unknown) {}
+  },
+}));
+vi.mock("../server/auth/osmOAuth", () => ({ importOAuthEncryptionKey: vi.fn(async () => ({ testKey: true })) }));
+vi.mock("../server/storage/osmDevelopmentTokens", () => ({ findOSMDevelopmentToken: vi.fn(async () => "dev-access-token") }));
+
 const now = Date.parse("2026-11-08T12:00:00.000Z");
 const session = "s".repeat(43);
-const latCell = Math.floor(52.52 / 0.05);
-const lonCell = Math.floor(13.405 / 0.05);
-const cellId = `${latCell}:${lonCell}`;
-const shardId = `${Math.floor((latCell + 0.5) * 0.05)}_${Math.floor((lonCell + 0.5) * 0.05)}`;
-const snapshotId = "aed-0123456789abcdef0123";
-const coverageId = "a".repeat(64);
-const tags = ["name", "ref", "operator", "access", "indoor", "level", "opening_hours", "check_date", "defibrillator:location", "location", "wheelchair", "fee", "start_date"];
 
-function database(options: { authenticated?: boolean; cooldown?: boolean } = {}): D1Database {
+function database(options: { authenticated?: boolean; cooldown?: boolean; environment?: "production" | "development" } = {}): D1Database {
   return {
     prepare(query: string): D1Statement {
       const statement: D1Statement = {
         bind() { return statement; },
         async run<T>() { return { success: true, meta: { changes: options.cooldown === false ? 0 : 1 } } as D1Result<T>; },
         async first<T>() {
-          if (query.includes("FROM osm_sessions")) return (options.authenticated === false ? null : { osm_subject: "tester", osm_environment: "development" }) as T | null;
+          if (query.includes("FROM osm_sessions")) return (options.authenticated === false ? null : { osm_subject: "tester", osm_environment: options.environment ?? "development" }) as T | null;
           if (query.includes("SELECT next_allowed_at")) return { next_allowed_at: now + 30_000 } as T;
           return null;
         },
@@ -35,122 +66,163 @@ function request(body: unknown = { latitude: 52.52, longitude: 13.405, accuracy_
   });
 }
 
-function feed(dataUntil = new Date(now - 60 * 60_000).toISOString()) {
-  const manifest = {
-    schema_version: "aedjaeger-cells-v1", status: "ready", region: "dachlilu", snapshot_id: snapshotId,
-    index_url: `aed/snapshots/${snapshotId}/index.json`, generated_at: new Date(now).toISOString(),
-    osm_data_until: dataUntil, coverage_id: coverageId, cell_size_degrees: 0.05, shard_size_degrees: 1,
-    max_source_age_hours: 48, allowed_candidate_fields: ["id", "latitude", "longitude", "tags"], allowed_osm_tags: tags,
+function metadata(dataUntil = new Date(now - 60 * 60_000).toISOString()) {
+  const extracts = Object.fromEntries(["germany", "austria", "switzerland", "luxembourg", "liechtenstein"]
+    .map((country) => [country, { status: "cached_head_ok", osm_data_timestamp: dataUntil }]));
+  return {
+    status: "ok", region: "dachlilu", generated_at: new Date(now).toISOString(), osm_data_until: dataUntil,
+    extracts, pmtiles: { file: "openfiremap.pmtiles", size_bytes: 1_024 }, features: { defibrillators: { count: 12_345 } },
   };
-  const index = {
-    schema_version: manifest.schema_version, region: manifest.region, snapshot_id: snapshotId, coverage_id: coverageId,
-    osm_data_until: dataUntil, cell_size_degrees: 0.05, shard_size_degrees: 1,
-    cells: [{ id: cellId, status: "complete_with_candidates", shard_id: shardId }],
-    shards: { [shardId]: `aed/snapshots/${snapshotId}/shards/${shardId}.json` },
-  };
-  const candidate = { id: "node/123", latitude: 52.52, longitude: 13.405, tags: { name: "Bahnhof", wheelchair: "yes" } };
-  const shard = { schema_version: manifest.schema_version, snapshot_id: snapshotId, shard_id: shardId, cells: { [cellId]: [candidate] } };
-  const docs: Record<string, unknown> = {
-    "metadata.json": { region: "dachlilu", aed_candidate_snapshot: { manifest: "aed/manifest.json", status: "ready", snapshot_id: snapshotId } },
-    "aed/manifest.json": manifest,
-    [`aed/snapshots/${snapshotId}/index.json`]: index,
-    [`aed/snapshots/${snapshotId}/shards/${shardId}.json`]: shard,
-  };
-  return { docs, manifest, index, candidate };
 }
 
-function fetchFeed(docs: Record<string, unknown>) {
-  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+function fetchArchive(options: { dataUntil?: string; ignoreRange?: boolean; mapStatus?: number } = {}) {
+  const currentMetadata = metadata(options.dataUntil);
+  const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
-    expect(url.origin).toBe("https://pipeline.openfiremap.org");
     expect(init?.redirect).toBe("manual");
-    if (url.pathname.endsWith("/index.json") || url.pathname.endsWith(".json") && url.pathname.includes("/shards/")) {
-      expect(init?.cache).toBeUndefined();
-      expect((init as RequestInit & { cf?: Record<string, unknown> }).cf).toMatchObject({ cacheEverything: true, cacheTtl: 86_400, cacheTtlByStatus: { "200-299": 86_400, "404": 0, "500-599": 0 } });
-    } else expect(init?.cache).toBe("no-store");
-    const item = docs[url.pathname.slice(1)];
-    return item === undefined ? new Response("missing", { status: 404 }) : Response.json(item);
+    if (url.origin === "https://master.apis.dev.openstreetmap.org") {
+      expect(url.pathname).toBe("/api/0.6/map.json");
+      expect(url.searchParams.get("bbox")).toBeTruthy();
+      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer dev-access-token");
+      return Response.json(fixture.mapPayload, { status: options.mapStatus ?? 200 });
+    }
+    expect(url.origin).toBe("https://pipeline.openfiremap.org");
+    if (url.pathname === "/metadata.json") {
+      expect(init?.cache).toBe("no-store");
+      return Response.json(currentMetadata);
+    }
+    expect(url.pathname).toBe("/openfiremap.pmtiles");
+    expect(url.searchParams.get("v")).toBe(currentMetadata.generated_at);
+    const range = init?.headers instanceof Headers ? init.headers.get("Range") : (init?.headers as Record<string, string> | undefined)?.Range;
+    expect(range).toMatch(/^bytes=\d+-\d+$/u);
+    const match = /^bytes=(\d+)-(\d+)$/u.exec(range ?? "");
+    if (!match) return new Response("invalid range", { status: 416 });
+    const start = Number(match[1]); const end = Number(match[2]);
+    if (options.ignoreRange) return new Response(new Uint8Array(end - start + 1));
+    return new Response(new Uint8Array(end - start + 1), {
+      status: 206, headers: { "Content-Range": `bytes ${start}-${end}/${currentMetadata.pmtiles.size_bytes}` },
+    });
   });
+  return fetcher;
 }
 
-describe("static AED candidate source", () => {
-  it("authenticates first and does not accept a caller-supplied feed URL", async () => {
+describe("PMTiles AED candidate search", () => {
+  beforeEach(() => {
+    fixture.pointFeature = {
+      type: "Feature",
+      properties: { "@type": "node", "@id": "node/123", emergency: "defibrillator", name: "Bahnhof", wheelchair: "yes", check_date: "2026-10-20", private_note: "not returned" },
+      geometry: { type: "Point", coordinates: [13.405, 52.52] },
+    };
+    fixture.mapPayload = { elements: [] };
+  });
+  it("authenticates before fetching the fixed archive", async () => {
     const fetcher = vi.fn<typeof fetch>();
     const response = await handleStaticCandidateSearch(request(), { DB: database({ authenticated: false }) }, { fetch: fetcher, now: () => now });
     expect(response.status).toBe(401);
     expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it("reads only the fixed feed and accepts the pipeline's allowlisted candidate shape", async () => {
-    const source = feed();
-    const fetcher = fetchFeed(source.docs);
+  it("reads only bounded ranges from the fixed archive and returns nearby AED nodes", async () => {
+    const fetcher = fetchArchive();
     const response = await handleStaticCandidateSearch(request(), { DB: database() }, { fetch: fetcher, now: () => now });
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
-      status: "complete", snapshot_id: snapshotId, data_until: source.manifest.osm_data_until,
-      candidates: [{ id: "node/123", osmType: "node", tags: { name: "Bahnhof", wheelchair: "yes" } }],
+      status: "complete", data_until: metadata().osm_data_until,
+      candidates: [{ id: "node/123", osmType: "node", coordinateQuality: "exact", tags: { name: "Bahnhof", wheelchair: "yes", check_date: "2026-10-20" } }],
     });
-    expect(fetcher).toHaveBeenCalledTimes(4);
+    expect(fetcher.mock.calls.length).toBeGreaterThan(2);
+    expect(fetcher.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
   });
 
-  it("uses exactly the manifest's 48-hour freshness window", async () => {
-    const source = feed(new Date(now - 48 * 60 * 60_000 - 1).toISOString());
-    const response = await handleStaticCandidateSearch(request(), { DB: database() }, { fetch: fetchFeed(source.docs), now: () => now });
+  it("confirms a PMTiles-empty search on the authenticated OSM development map", async () => {
+    fixture.pointFeature = null;
+    fixture.mapPayload = { elements: [
+      { type: "node", id: 456, lat: 52.5201, lon: 13.4051, tags: { emergency: "defibrillator", check_date: "2026-10-01", name: "Eingang" } },
+    ] };
+    const fetcher = fetchArchive();
+    const response = await handleStaticCandidateSearch(request(), {
+      DB: database(), OSM_OAUTH_ENCRYPTION_KEY: "test-encryption-key",
+    }, { fetch: fetcher, now: () => now });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      status: "complete",
+      candidates: [{ id: "node/456", tags: { check_date: "2026-10-01", name: "Eingang" } }],
+    });
+    expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).origin === "https://master.apis.dev.openstreetmap.org")).toBe(true);
+  });
+
+  it("returns no matches only after the complete development-map area has been checked", async () => {
+    fixture.pointFeature = null;
+    const fetcher = fetchArchive();
+    const response = await handleStaticCandidateSearch(request(), {
+      DB: database(), OSM_OAUTH_ENCRYPTION_KEY: "test-encryption-key",
+    }, { fetch: fetcher, now: () => now });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: "complete", candidates: [] });
+    expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).origin === "https://master.apis.dev.openstreetmap.org")).toBe(true);
+  });
+
+  it("keeps an empty production PMTiles result incomplete without verified extract coverage", async () => {
+    fixture.pointFeature = null;
+    const fetcher = fetchArchive();
+    const response = await handleStaticCandidateSearch(request(), {
+      DB: database({ environment: "production" }), OSM_OAUTH_ENCRYPTION_KEY: "test-encryption-key",
+    }, { fetch: fetcher, now: () => now });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "coverage_unavailable" });
+    expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).origin === "https://master.apis.dev.openstreetmap.org")).toBe(false);
+  });
+
+  it("does not treat a failed authoritative check as an empty search", async () => {
+    fixture.pointFeature = null;
+    const fetcher = fetchArchive({ mapStatus: 503 });
+    const response = await handleStaticCandidateSearch(request(), {
+      DB: database(), OSM_OAUTH_ENCRYPTION_KEY: "test-encryption-key",
+    }, { fetch: fetcher, now: () => now });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: "source_unavailable" });
+  });
+
+  it("does not declare an empty result when the authoritative area contains a non-node AED", async () => {
+    fixture.pointFeature = null;
+    fixture.mapPayload = { elements: [
+      { type: "way", id: 789, tags: { emergency: "defibrillator" } },
+    ] };
+    const response = await handleStaticCandidateSearch(request(), {
+      DB: database(), OSM_OAUTH_ENCRYPTION_KEY: "test-encryption-key",
+    }, { fetch: fetchArchive(), now: () => now });
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: "coverage_unavailable" });
   });
 
-  it("fails closed when the published AED snapshot is unavailable", async () => {
-    const source = feed();
-    source.manifest.status = "unavailable";
-    delete (source.manifest as { snapshot_id?: string }).snapshot_id;
-    delete (source.manifest as { index_url?: string }).index_url;
-    const metadata = source.docs["metadata.json"] as { aed_candidate_snapshot: { status: string; snapshot_id: string | null } };
-    metadata.aed_candidate_snapshot.status = "unavailable";
-    metadata.aed_candidate_snapshot.snapshot_id = null;
-    const response = await handleStaticCandidateSearch(request(), { DB: database() }, { fetch: fetchFeed(source.docs), now: () => now });
+  it("fails closed when source extracts exceed the 48-hour freshness limit", async () => {
+    const fetcher = fetchArchive({ dataUntil: new Date(now - 48 * 60 * 60_000 - 1).toISOString() });
+    const response = await handleStaticCandidateSearch(request(), { DB: database() }, { fetch: fetcher, now: () => now });
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: "coverage_unavailable" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
-  it("fails closed when root and AED manifests point at different snapshots", async () => {
-    const source = feed();
-    const root = source.docs["metadata.json"] as { aed_candidate_snapshot: { snapshot_id: string } };
-    root.aed_candidate_snapshot.snapshot_id = "aed-ffffffffffffffffffff";
-    const response = await handleStaticCandidateSearch(request(), { DB: database() }, { fetch: fetchFeed(source.docs), now: () => now });
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ error: "invalid_response" });
+  it("fails closed if the archive server ignores a byte range", async () => {
+    const fetcher = fetchArchive({ ignoreRange: true });
+    const response = await handleStaticCandidateSearch(request(), { DB: database() }, { fetch: fetcher, now: () => now });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: "source_unavailable" });
   });
 
-  it("does not treat a missing or unavailable cell as an empty search", async () => {
-    const source = feed();
-    (source.index.cells[0] as { status: string }).status = "unavailable";
-    delete (source.index.cells[0] as { shard_id?: string }).shard_id;
-    const response = await handleStaticCandidateSearch(request(), { DB: database() }, { fetch: fetchFeed(source.docs), now: () => now });
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ error: "coverage_unavailable" });
+  it("fails closed for a cross-origin request without contacting the archive", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    const response = await handleStaticCandidateSearch(request(undefined, "https://attacker.test"), { DB: database() }, { fetch: fetcher, now: () => now });
+    expect(response.status).toBe(403);
+    expect(fetcher).not.toHaveBeenCalled();
   });
 
-  it("does not call an omitted required cell an empty area", async () => {
-    const source = feed();
-    source.index.cells = [];
-    const response = await handleStaticCandidateSearch(request(), { DB: database() }, { fetch: fetchFeed(source.docs), now: () => now });
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ error: "coverage_unavailable" });
-  });
-
-  it("rejects schema drift and a shard assigned to the wrong geographic cell", async () => {
-    const source = feed();
-    source.manifest.allowed_osm_tags = ["name"];
-    const response = await handleStaticCandidateSearch(request(), { DB: database() }, { fetch: fetchFeed(source.docs), now: () => now });
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ error: "invalid_response" });
-  });
-
-  it("never follows feed redirects or leaks source response text", async () => {
+  it("never follows redirects or logs coordinates and source response text", async () => {
     const logs: Record<string, string | number>[] = [];
     const fetcher = vi.fn(async () => new Response("private source payload", { status: 302, headers: { Location: "https://attacker.test" } }));
-    const response = await handleStaticCandidateSearch(request(), { DB: database() }, { fetch: fetcher, now: () => now, logDiagnostic: (entry) => logs.push(entry) });
+    const response = await handleStaticCandidateSearch(request(), { DB: database() }, {
+      fetch: fetcher, now: () => now, logDiagnostic: (entry) => logs.push(entry),
+    });
     expect(response.status).toBe(502);
     expect(await response.text()).not.toContain("private source payload");
     expect(logs[0]).toMatchObject({ event: "static_aed_search_failure", failure_code: "source_unavailable" });

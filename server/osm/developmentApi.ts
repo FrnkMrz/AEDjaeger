@@ -34,6 +34,7 @@ export async function requestOSMDevelopmentApi(
     body?: string;
     contentType?: "application/json" | "text/xml; charset=utf-8";
     bbox?: { west: number; south: number; east: number; north: number };
+    signal?: AbortSignal;
   },
   fetcher: typeof fetch = fetch,
 ): Promise<Response> {
@@ -60,6 +61,6 @@ export async function requestOSMDevelopmentApi(
     method: input.method,
     headers,
     ...(input.body !== undefined ? { body: input.body } : {}),
-    cache: "no-store",
+    cache: "no-store", signal: input.signal,
   }, fetcher);
 }
