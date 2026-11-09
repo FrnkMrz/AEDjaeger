@@ -1,3 +1,6 @@
+import { VectorTile } from "@mapbox/vector-tile";
+import { PbfReader } from "pbf";
+import { PMTiles, type RangeResponse, type Source } from "pmtiles";
 import { fetchWithoutRedirects } from "../http/fetchWithoutRedirects";
 import { findOSMSession } from "../storage/osmSessions";
 import type { D1Database } from "../storage/d1";
@@ -5,22 +8,25 @@ import { reserveSearchSlot } from "../storage/searchCooldown";
 import type { NearbyAedCandidate, SearchCoordinate } from "../../src/osm/candidateTypes";
 
 const SESSION_COOKIE = "aedjaeger_osm_session";
-const FEED_ORIGIN = "https://pipeline.openfiremap.org/";
-const SCHEMA = "aedjaeger-cells-v1";
-const CELL_SIZE = 0.05;
-const MAX_AGE_HOURS = 48;
+const DATA_ORIGIN = "https://pipeline.openfiremap.org/";
+const PMTILES_PATH = "openfiremap.pmtiles";
+const AED_LAYER = "defibrillators";
+const AED_ZOOM = 14;
+const MAX_SOURCE_AGE_HOURS = 48;
 const MAX_ACCURACY = 100;
 const SEARCH_RADIUS = 100;
 const MAX_REQUEST_BYTES = 1_024;
-const MAX_MANIFEST_BYTES = 16 * 1_024;
 const MAX_METADATA_BYTES = 256 * 1_024;
-const MAX_INDEX_BYTES = 8 * 1_024 * 1_024;
-const MAX_SHARD_BYTES = 4 * 1_024 * 1_024;
+const MAX_RANGE_BYTES = 8 * 1_024 * 1_024;
+const MAX_TILE_BYTES = 1 * 1_024 * 1_024;
 const MAX_CANDIDATES = 100;
+const MAX_TILES = 16;
 const TIMEOUT_MS = 15_000;
+const EXTRACT_STATUSES = new Set(["fresh_download", "downloaded_dated", "cached_head_ok", "downloaded"]);
+const REQUIRED_EXTRACTS = ["germany", "austria", "switzerland", "luxembourg", "liechtenstein"];
 const ALLOWED_TAGS = new Set([
-  "name", "ref", "operator", "access", "indoor", "level", "opening_hours",
-  "check_date", "defibrillator:location", "location", "wheelchair", "fee", "start_date",
+  "access", "defibrillator:location", "fee", "indoor", "level", "location", "name", "opening_hours",
+  "operator", "ref", "start_date", "wheelchair",
 ]);
 
 type Environment = { DB?: D1Database };
@@ -31,19 +37,17 @@ type Dependencies = {
   logDiagnostic?: (event: Readonly<Record<string, string | number>>) => void;
 };
 type Location = SearchCoordinate & { accuracyMeters: number };
-type Cell = { id: string; status: string; shard_id?: string };
-type Manifest = {
-  schema_version: string; status: "ready"; region: string; snapshot_id: string;
-  index_url: string; generated_at: string; osm_data_until: string; coverage_id: string;
-  cell_size_degrees: number; shard_size_degrees: number; max_source_age_hours: number;
-};
-type Index = {
-  schema_version: string; region: string; snapshot_id: string; coverage_id: string;
-  osm_data_until: string; cell_size_degrees: number; shard_size_degrees: number;
-  cells: Cell[]; shards: Record<string, string>;
+type PipelineMetadata = {
+  status: "ok";
+  region: "dachlilu";
+  generated_at: string;
+  osm_data_until: string;
+  extracts: Record<string, { status: string; osm_data_timestamp: string }>;
+  pmtiles: { file: string; size_bytes: number };
+  features: { defibrillators: { count: number } };
 };
 
-/** Authenticated lookup against one trusted, immutable feed origin; never a browser-selected URL. */
+/** Authenticated lookup in the AED layer of the fixed, read-only PMTiles archive. */
 export async function handleStaticCandidateSearch(request: Request, env: Environment, deps: Dependencies = {}): Promise<Response> {
   const diagnosticId = (deps.createDiagnosticId ?? (() => crypto.randomUUID()))();
   const startedAt = Date.now();
@@ -88,7 +92,6 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
   if (!location) return json({ error: "invalid_request" }, 400);
   if (location.accuracyMeters > MAX_ACCURACY) return json({ error: "location_too_uncertain" }, 422);
 
-  // Throttle by hashed OSM identity; keep the source service independent of account volume.
   const now = (deps.now ?? Date.now)();
   let retryAfter = 30;
   try {
@@ -101,50 +104,44 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const fetcher = deps.fetch ?? fetch;
-    // Both non-versioned manifests are fetched freshly; snapshot objects are immutable.
-    const metadata = await fetchJson(fetcher, "metadata.json", MAX_METADATA_BYTES, controller.signal);
-    const manifestValue = await fetchJson(fetcher, "aed/manifest.json", MAX_MANIFEST_BYTES, controller.signal);
-    validateRootPointer(metadata, manifestValue);
-    const manifest = readyManifest(manifestValue, (deps.now ?? Date.now)());
-    const indexPath = indexPathFor(manifest.snapshot_id);
-    if (manifest.index_url !== indexPath) throw new InvalidFeedError();
-    const indexValue = await fetchJson(fetcher, indexPath, MAX_INDEX_BYTES, controller.signal, true);
-    const index = validateIndex(indexValue, manifest);
-
+    const metadata = await fetchMetadata(fetcher, controller.signal, now);
     const radius = Math.ceil(location.accuracyMeters + SEARCH_RADIUS);
-    const wantedCellIds = cellsForSearch(location, radius);
-    const indexCells = new Map(index.cells.map((cell) => [cell.id, cell]));
-    const relevant: Cell[] = [];
-    for (const id of wantedCellIds) {
-      const cell = indexCells.get(id);
-      // Missing and unavailable cells both mean that we cannot prove the area was searched.
-      if (!cell || cell.status === "unavailable") throw new CoverageUnavailableError();
-      if (cell.status !== "complete_empty" && cell.status !== "complete_with_candidates") throw new InvalidFeedError();
-      relevant.push(cell);
-    }
+    const bounds = searchBounds(location, radius);
+    if (!boundsFitArchive(bounds, metadata)) throw new CoverageUnavailableError();
 
-    const shardIds = Array.from(new Set(relevant.flatMap((cell) => cell.shard_id ? [cell.shard_id] : [])));
-    const candidates: NearbyAedCandidate[] = [];
-    for (const shardId of shardIds) {
-      const shardPath = index.shards[shardId];
-      if (!/^-?\d+_-?\d+$/u.test(shardId) || shardPath !== shardPathFor(manifest.snapshot_id, shardId)) throw new InvalidFeedError();
-      const shard = requireRecord(await fetchJson(fetcher, shardPath, MAX_SHARD_BYTES, controller.signal, true));
-      if (shard.schema_version !== SCHEMA || shard.snapshot_id !== manifest.snapshot_id || shard.shard_id !== shardId) throw new InvalidFeedError();
-      const shardCells = requireRecord(shard.cells);
-      for (const cell of relevant.filter((entry) => entry.shard_id === shardId)) {
-        const records = shardCells[cell.id];
-        if (!Array.isArray(records) || records.length === 0) throw new InvalidFeedError();
-        for (const record of records) {
-          const candidate = parseCandidate(record, cell.id);
-          if (!candidate) throw new InvalidFeedError();
-          candidates.push(candidate);
-          if (candidates.length > MAX_CANDIDATES) throw new InvalidFeedError();
-        }
+    // metadata.json is the current pointer. Putting its build time in the archive URL
+    // prevents a warm Worker from mixing cached tile directories from two builds.
+    const archiveUrl = new URL(PMTILES_PATH, DATA_ORIGIN);
+    archiveUrl.searchParams.set("v", metadata.generated_at);
+    const archive = new PMTiles(new FixedRangeSource(archiveUrl, fetcher, controller.signal));
+    const header = await archive.getHeader();
+    if (header.tileType !== 1 || header.minZoom > AED_ZOOM || header.maxZoom < AED_ZOOM
+      || !boundsFitHeader(bounds, header)) throw new CoverageUnavailableError();
+
+    const tiles = tilesForBounds(bounds, AED_ZOOM);
+    if (tiles.length === 0 || tiles.length > MAX_TILES) throw new CoverageUnavailableError();
+    const candidates = new Map<string, NearbyAedCandidate>();
+    for (const tile of tiles) {
+      const content = await archive.getZxy(tile.z, tile.x, tile.y, controller.signal);
+      if (!content) continue; // A missing tile in a validated archive represents an empty tile.
+      if (content.data.byteLength > MAX_TILE_BYTES) throw new InvalidFeedError();
+      const decoded = new VectorTile(new PbfReader(new Uint8Array(content.data)));
+      const layer = decoded.layers[AED_LAYER];
+      if (!layer) continue;
+      for (let index = 0; index < layer.length; index += 1) {
+        const feature = layer.feature(index);
+        const candidate = candidateFromFeature(feature.toGeoJSON(tile.x, tile.y, tile.z));
+        if (!candidate || distanceMeters(location, candidate.position) > radius) continue;
+        const prior = candidates.get(candidate.id);
+        if (prior && JSON.stringify(prior) !== JSON.stringify(candidate)) throw new InvalidFeedError();
+        candidates.set(candidate.id, candidate);
+        if (candidates.size > MAX_CANDIDATES) throw new InvalidFeedError();
       }
     }
+
     return json({
-      status: "complete", candidates: dedupe(candidates), coverage_radius_meters: radius,
-      snapshot_id: manifest.snapshot_id, data_until: manifest.osm_data_until,
+      status: "complete", candidates: [...candidates.values()], coverage_radius_meters: radius,
+      snapshot_id: await snapshotId(metadata), data_until: metadata.osm_data_until,
     }, 200, { "Retry-After": String(retryAfter) });
   } catch (error) {
     if (error instanceof CoverageUnavailableError) return json({ error: "coverage_unavailable" }, 503, { "Retry-After": String(retryAfter) });
@@ -154,122 +151,129 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
   } finally { clearTimeout(timeout); }
 }
 
-async function fetchJson(fetcher: typeof fetch, path: string, maxBytes: number, signal: AbortSignal, immutable = false): Promise<unknown> {
-  const url = new URL(path, FEED_ORIGIN);
-  if (url.origin !== new URL(FEED_ORIGIN).origin || !url.pathname.startsWith("/")) throw new InvalidFeedError();
-  // Manifests are fetched freshly. Snapshot paths embed an immutable ID, so the
-  // CDN may reuse them without ever making a stale manifest look current.
-  const init: RequestInit & { cf?: Record<string, unknown> } = {
-    method: "GET", headers: { Accept: "application/json" }, cache: immutable ? undefined : "no-store", signal,
-    ...(immutable ? { cf: { cacheEverything: true, cacheTtl: 86_400, cacheTtlByStatus: { "200-299": 86_400, "404": 0, "500-599": 0 } } } : {}),
-  };
-  const response = await fetchWithoutRedirects(url, init, fetcher);
+/** Fetch current build metadata and reject partial/stale source coverage before searching tiles. */
+async function fetchMetadata(fetcher: typeof fetch, signal: AbortSignal, now: number): Promise<PipelineMetadata> {
+  const response = await fetchWithoutRedirects(new URL("metadata.json", DATA_ORIGIN), {
+    method: "GET", headers: { Accept: "application/json" }, cache: "no-store", signal,
+  }, fetcher);
   if (!response.ok) throw new FeedHTTPError(response.status);
-  const bytes = await readLimitedBody(response, maxBytes);
-  try { return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as unknown; }
-  catch { throw new InvalidFeedError(); }
-}
-
-function validateRootPointer(metadataValue: unknown, manifestValue: unknown): void {
-  const metadata = requireRecord(metadataValue);
-  const pointer = requireRecord(metadata.aed_candidate_snapshot);
-  const manifest = requireRecord(manifestValue);
-  if (metadata.region !== "dachlilu" || pointer.manifest !== "aed/manifest.json") throw new CoverageUnavailableError();
-  if (pointer.status !== manifest.status || pointer.snapshot_id !== (manifest.snapshot_id ?? null)) throw new InvalidFeedError();
-}
-
-function readyManifest(value: unknown, now: number): Manifest {
-  const item = requireRecord(value);
-  if (item.schema_version !== SCHEMA || item.status !== "ready" || item.region !== "dachlilu") throw new CoverageUnavailableError();
-  if (typeof item.snapshot_id !== "string" || !/^aed-[0-9a-f]{20}$/u.test(item.snapshot_id)) throw new InvalidFeedError();
-  if (item.cell_size_degrees !== CELL_SIZE || item.shard_size_degrees !== 1 || item.max_source_age_hours !== MAX_AGE_HOURS) throw new InvalidFeedError();
-  if (typeof item.coverage_id !== "string" || !/^[0-9a-f]{64}$/u.test(item.coverage_id)) throw new InvalidFeedError();
-  if (!sameStringSet(item.allowed_candidate_fields, ["id", "latitude", "longitude", "tags"])
-    || !sameStringSet(item.allowed_osm_tags, [...ALLOWED_TAGS])) throw new InvalidFeedError();
-  const dataUntil = timestamp(item.osm_data_until);
-  if (dataUntil === null || timestamp(item.generated_at) === null || dataUntil > now + 60_000
-    || now - dataUntil > item.max_source_age_hours * 3_600_000) throw new CoverageUnavailableError();
-  return item as unknown as Manifest;
-}
-
-function validateIndex(value: unknown, manifest: Manifest): Index {
-  const item = requireRecord(value);
-  if (item.schema_version !== SCHEMA || item.region !== "dachlilu" || item.snapshot_id !== manifest.snapshot_id
-    || item.coverage_id !== manifest.coverage_id || item.osm_data_until !== manifest.osm_data_until
-    || item.cell_size_degrees !== CELL_SIZE || item.shard_size_degrees !== 1
-    || !Array.isArray(item.cells) || !isStringRecord(item.shards)) throw new InvalidFeedError();
-  const seen = new Set<string>();
-  for (const cell of item.cells) {
-    if (!isRecord(cell) || typeof cell.id !== "string" || !/^-?\d+:-?\d+$/u.test(cell.id) || seen.has(cell.id)) throw new InvalidFeedError();
-    seen.add(cell.id);
-    if (cell.status === "complete_with_candidates") {
-      if (typeof cell.shard_id !== "string" || item.shards[cell.shard_id] === undefined || cell.shard_id !== shardForCell(cell.id)) throw new InvalidFeedError();
-    } else if (cell.status !== "complete_empty" && cell.status !== "unavailable") throw new InvalidFeedError();
-    else if (cell.shard_id !== undefined) throw new InvalidFeedError();
+  const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(await readLimitedBody(response, MAX_METADATA_BYTES)));
+  if (!isRecord(value) || value.status !== "ok" || value.region !== "dachlilu"
+    || typeof value.generated_at !== "string" || typeof value.osm_data_until !== "string"
+    || !isRecord(value.pmtiles) || value.pmtiles.file !== PMTILES_PATH
+    || !Number.isSafeInteger(value.pmtiles.size_bytes) || (value.pmtiles.size_bytes as number) < 127
+    || !isRecord(value.features) || !isRecord(value.features.defibrillators)
+    || !Number.isSafeInteger(value.features.defibrillators.count) || (value.features.defibrillators.count as number) < 0
+    || !isRecord(value.extracts)) throw new CoverageUnavailableError();
+  const generatedAt = timestamp(value.generated_at);
+  const dataUntil = timestamp(value.osm_data_until);
+  if (generatedAt === null || dataUntil === null || generatedAt > now + 60_000
+    || dataUntil > now + 60_000 || now - dataUntil > MAX_SOURCE_AGE_HOURS * 3_600_000) throw new CoverageUnavailableError();
+  for (const country of REQUIRED_EXTRACTS) {
+    const extract = value.extracts[country];
+    const sourceDate = isRecord(extract) ? timestamp(extract.osm_data_timestamp) : null;
+    if (!isRecord(extract) || !EXTRACT_STATUSES.has(String(extract.status)) || sourceDate === null
+      || sourceDate > now + 60_000 || now - sourceDate > MAX_SOURCE_AGE_HOURS * 3_600_000) throw new CoverageUnavailableError();
   }
-  for (const [id, path] of Object.entries(item.shards)) {
-    if (!/^-?\d+_-?\d+$/u.test(id) || path !== shardPathFor(manifest.snapshot_id, id)) throw new InvalidFeedError();
-  }
-  return item as unknown as Index;
+  return value as unknown as PipelineMetadata;
 }
 
-function parseCandidate(value: unknown, expectedCell: string): NearbyAedCandidate | null {
-  if (!isRecord(value) || Object.keys(value).some((key) => !["id", "latitude", "longitude", "tags"].includes(key))) return null;
-  if (typeof value.id !== "string" || !/^(node|way|relation)\/[1-9]\d*$/u.test(value.id) || !Number.isSafeInteger(Number(value.id.split("/")[1]))) return null;
-  if (typeof value.latitude !== "number" || typeof value.longitude !== "number") return null;
-  const position = { latitude: value.latitude, longitude: value.longitude };
-  if (!validCoordinate(position) || cellFor(position) !== expectedCell) return null;
-  // Classification is implicit in this dedicated AED feed. The published tag
-  // allowlist intentionally omits emergency=defibrillator.
-  if (!isStringRecord(value.tags)) return null;
-  if (Object.entries(value.tags).some(([key, tag]) => !ALLOWED_TAGS.has(key) || tag.length > 2_048)) return null;
-  const osmType = value.id.split("/")[0] as NearbyAedCandidate["osmType"];
-  return { id: value.id, osmType, coordinateQuality: osmType === "node" ? "exact" : "approximate-center", position, tags: value.tags };
+/** Restrict PMTiles byte reads to one fixed origin and bounded HTTP Range responses. */
+class FixedRangeSource implements Source {
+  constructor(private readonly archiveUrl: URL, private readonly fetcher: typeof fetch, private readonly signal: AbortSignal) {}
+  getKey(): string { return this.archiveUrl.href; }
+  async getBytes(offset: number, length: number, signal?: AbortSignal): Promise<RangeResponse> {
+    if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length <= 0 || length > MAX_RANGE_BYTES) {
+      throw new InvalidFeedError();
+    }
+    const end = offset + length - 1;
+    const response = await fetchWithoutRedirects(this.archiveUrl, {
+      method: "GET", headers: { Accept: "application/octet-stream", Range: `bytes=${offset}-${end}` },
+      cache: "no-store", signal: signal ?? this.signal,
+    }, this.fetcher);
+    // Never allow a server/CDN that ignores Range to make the Worker download the full archive.
+    if (response.status !== 206 || response.headers.get("Content-Range")?.startsWith(`bytes ${offset}-${end}/`) !== true) {
+      try { await response.body?.cancel(); } catch { /* Keep the fixed source error. */ }
+      throw new FeedHTTPError(response.status);
+    }
+    const bytes = await readLimitedBody(response, length);
+    if (bytes.byteLength !== length) throw new InvalidFeedError();
+    const data = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(data).set(bytes);
+    return { data, etag: response.headers.get("ETag") ?? undefined };
+  }
 }
 
-function dedupe(candidates: NearbyAedCandidate[]): NearbyAedCandidate[] {
-  const seen = new Map<string, NearbyAedCandidate>();
-  for (const candidate of candidates) {
-    const previous = seen.get(candidate.id);
-    if (previous && JSON.stringify(previous) !== JSON.stringify(candidate)) throw new InvalidFeedError();
-    seen.set(candidate.id, candidate);
+function candidateFromFeature(feature: GeoJSON.Feature): NearbyAedCandidate | null {
+  if (!feature.properties || feature.geometry?.type !== "Point") return null;
+  const props = feature.properties as Record<string, unknown>;
+  if (props.emergency !== "defibrillator") return null;
+  const osmType = props["@type"] ?? props.type;
+  if (osmType !== "node") return null;
+  const rawId = props["@id"] ?? props.id;
+  const id = typeof rawId === "string" && /^node\/[1-9]\d{0,15}$/u.test(rawId)
+    ? rawId
+    : typeof rawId === "number" && Number.isSafeInteger(rawId) && rawId > 0 ? `node/${rawId}` : null;
+  const coordinates = feature.geometry.coordinates;
+  if (!id || !Array.isArray(coordinates) || coordinates.length < 2
+    || typeof coordinates[0] !== "number" || typeof coordinates[1] !== "number") return null;
+  const position = { longitude: coordinates[0], latitude: coordinates[1] };
+  if (!validCoordinate(position)) throw new InvalidFeedError();
+  const tags: Record<string, string> = {};
+  for (const [key, value] of Object.entries(props)) {
+    if (!ALLOWED_TAGS.has(key)) continue;
+    if (typeof value !== "string" || value.length > 2_048) throw new InvalidFeedError();
+    tags[key] = value;
   }
-  return Array.from(seen.values());
+  return { id, osmType: "node", coordinateQuality: "exact", position, tags };
 }
 
-function cellsForSearch(location: Location, radius: number): string[] {
-  // A conservative rectangle covers the circular query area; every touched cell must be complete.
-  const latDelta = radius / 111_000;
-  const cos = Math.cos(location.latitude * Math.PI / 180);
-  if (Math.abs(cos) < 0.01) throw new CoverageUnavailableError();
-  const lonDelta = radius / (111_000 * Math.abs(cos));
-  const minLat = Math.max(-90, location.latitude - latDelta);
-  const maxLat = Math.min(90, location.latitude + latDelta);
-  const minLon = Math.max(-180, location.longitude - lonDelta);
-  const maxLon = Math.min(180, location.longitude + lonDelta);
-  const result: string[] = [];
-  for (let lat = Math.floor(minLat / CELL_SIZE); lat <= Math.floor(maxLat / CELL_SIZE); lat += 1) {
-    for (let lon = Math.floor(minLon / CELL_SIZE); lon <= Math.floor(maxLon / CELL_SIZE); lon += 1) result.push(lat + ":" + lon);
-  }
-  return result;
+function searchBounds(location: Location, radius: number): { minLat: number; minLon: number; maxLat: number; maxLon: number } {
+  const latitudeDelta = radius / 111_000;
+  const cosine = Math.cos(location.latitude * Math.PI / 180);
+  if (Math.abs(cosine) < 0.01) throw new CoverageUnavailableError();
+  const longitudeDelta = radius / (111_000 * Math.abs(cosine));
+  return {
+    minLat: Math.max(-90, location.latitude - latitudeDelta), maxLat: Math.min(90, location.latitude + latitudeDelta),
+    minLon: Math.max(-180, location.longitude - longitudeDelta), maxLon: Math.min(180, location.longitude + longitudeDelta),
+  };
 }
-function cellFor(point: SearchCoordinate): string { return Math.floor(point.latitude / CELL_SIZE) + ":" + Math.floor(point.longitude / CELL_SIZE); }
-function indexPathFor(snapshot: string): string { return "aed/snapshots/" + snapshot + "/index.json"; }
-function shardPathFor(snapshot: string, shard: string): string { return "aed/snapshots/" + snapshot + "/shards/" + shard + ".json"; }
-function shardForCell(cellId: string): string {
-  const [latCell, lonCell] = cellId.split(":").map(Number);
-  return `${Math.floor((latCell + 0.5) * CELL_SIZE)}_${Math.floor((lonCell + 0.5) * CELL_SIZE)}`;
+function boundsFitArchive(bounds: ReturnType<typeof searchBounds>, metadata: PipelineMetadata): boolean {
+  // Header bounds are checked again after opening the archive; this first check rejects obvious non-DACH locations.
+  return metadata.region === "dachlilu" && bounds.minLat >= 45 && bounds.maxLat <= 56
+    && bounds.minLon >= 5 && bounds.maxLon <= 18;
 }
-function sameStringSet(value: unknown, expected: string[]): boolean {
-  return Array.isArray(value) && value.length === expected.length
-    && value.every((item) => typeof item === "string")
-    && new Set(value).size === expected.length
-    && expected.every((item) => value.includes(item));
+function boundsFitHeader(bounds: ReturnType<typeof searchBounds>, header: Awaited<ReturnType<PMTiles["getHeader"]>>): boolean {
+  return bounds.minLon >= header.minLon && bounds.maxLon <= header.maxLon
+    && bounds.minLat >= header.minLat && bounds.maxLat <= header.maxLat;
 }
-function timestamp(value: unknown): number | null {
-  if (typeof value !== "string" || !/(?:Z|[+-]\d{2}:\d{2})$/u.test(value)) return null;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : null;
+function tilesForBounds(bounds: ReturnType<typeof searchBounds>, zoom: number): Array<{ z: number; x: number; y: number }> {
+  const nw = tileFor(bounds.minLon, bounds.maxLat, zoom);
+  const se = tileFor(bounds.maxLon, bounds.minLat, zoom);
+  const tiles: Array<{ z: number; x: number; y: number }> = [];
+  for (let y = nw.y; y <= se.y; y += 1) for (let x = nw.x; x <= se.x; x += 1) tiles.push({ z: zoom, x, y });
+  return tiles;
+}
+function tileFor(longitude: number, latitude: number, zoom: number): { x: number; y: number } {
+  const size = 2 ** zoom;
+  const lat = Math.max(-85.05112878, Math.min(85.05112878, latitude));
+  const radians = lat * Math.PI / 180;
+  return {
+    x: Math.max(0, Math.min(size - 1, Math.floor((longitude + 180) / 360 * size))),
+    y: Math.max(0, Math.min(size - 1, Math.floor((1 - Math.asinh(Math.tan(radians)) / Math.PI) / 2 * size))),
+  };
+}
+function distanceMeters(from: SearchCoordinate, to: SearchCoordinate): number {
+  const radians = (degrees: number) => degrees * Math.PI / 180;
+  const latDelta = radians(to.latitude - from.latitude);
+  const lonDelta = radians(to.longitude - from.longitude);
+  const value = Math.sin(latDelta / 2) ** 2 + Math.cos(radians(from.latitude)) * Math.cos(radians(to.latitude)) * Math.sin(lonDelta / 2) ** 2;
+  return 12_742_000 * Math.asin(Math.sqrt(Math.min(1, value)));
+}
+async function snapshotId(metadata: PipelineMetadata): Promise<string> {
+  const identity = `${metadata.generated_at}\0${metadata.osm_data_until}\0${metadata.pmtiles.size_bytes}`;
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(identity)));
+  return "aed-" + Array.from(digest.slice(0, 10), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 function parseLocation(bytes: Uint8Array): Location | null {
   let value: unknown;
@@ -286,10 +290,10 @@ function validCoordinate(point: SearchCoordinate): boolean {
     && Number.isFinite(point.longitude) && point.longitude >= -180 && point.longitude <= 180;
 }
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
-function requireRecord(value: unknown): Record<string, unknown> { if (!isRecord(value)) throw new InvalidFeedError(); return value; }
-function isStringRecord(value: unknown): value is Record<string, string> {
-  return isRecord(value) && Object.keys(value).length <= 100_000
-    && Object.entries(value).every(([key, item]) => key.length <= 128 && typeof item === "string" && item.length <= 2_048);
+function timestamp(value: unknown): number | null {
+  if (typeof value !== "string" || !/(?:Z|[+-]\d{2}:\d{2})$/u.test(value)) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 function isCrossOrigin(request: Request, origin: string): boolean {
   const header = request.headers.get("Origin");

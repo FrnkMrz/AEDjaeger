@@ -2,7 +2,7 @@
 
 Sammlung von Informationen, Links und Ideen für eine sehr einfache mobile App, mit der Menschen Defibrillatoren (AEDs) in OpenStreetMap erfassen und bestehende Einträge verbessern können.
 
-**Stand:** 8. November 2026 · **Phase:** Manueller Fotoablauf und regionaler AED-Feed-Consumer in Umsetzung · **Sprache:** Deutsch
+**Stand:** 9. November 2026 · **Phase:** Manueller Fotoablauf mit AED-Suche im PMTiles-Archiv · **Sprache:** Deutsch
 
 Vorbild ist [Hydrantenjäger](https://hydrantenjaeger.de), insbesondere die einfache Bedienung unterwegs. Die App startet als lokaler, simulierter Prototyp. Der Produktname lautet in allen Sprachen **AEDjaeger**.
 
@@ -25,7 +25,7 @@ Absolute Einfachheit ist das oberste Ziel. Die Person bestätigt selbst, dass AE
 
 ## Technische Richtung
 
-PWA mit kleinem Serverdienst; Code auf GitHub, gemeinsames Hosting von Oberfläche und API auf Cloudflare Workers mit Static Assets. Im Pilot bleibt das Foto samt EXIF auf dem Gerät und es gibt keinen externen Bilddienst. Die Umgebungssuche konsumiert den versionierten AED-Snapshot der OpenFireMap-Pipeline. Der Feed muss in der Pipeline veröffentlicht und sein regionaler Coverage-Nachweis geprüft werden; AEDjaeger fällt bei veralteten, fehlenden oder unvollständigen Daten geschlossen aus und nutzt Overpass nicht als Ersatz. Die Implementierung und Prüfgrenzen stehen in [OSM-Datenzugriff](docs/osm.md) und [Architektur](docs/architektur.md).
+PWA mit kleinem Serverdienst; Code auf GitHub, gemeinsames Hosting von Oberfläche und API auf Cloudflare Workers mit Static Assets. Im Pilot bleibt das Foto samt EXIF auf dem Gerät und es gibt keinen externen Bilddienst. Die Umgebungssuche liest die AED-Ebene direkt aus dem PMTiles-Kartenarchiv der OpenFireMap-Pipeline und fragt nur die Kacheln am bestätigten Foto-Standort ab. Overpass ist kein Laufzeitbestandteil. Die Implementierung und Prüfgrenzen stehen in [OSM-Datenzugriff](docs/osm.md) und [Architektur](docs/architektur.md).
 
 ## Sprachen und Gamification
 

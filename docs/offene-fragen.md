@@ -19,7 +19,7 @@ Stand: 8.11.2026. Fotoaufnahme und maximale Einfachheit sind festgelegt: **Foto 
 ## Nächste praktische Prüfungen
 
 1. Phase 1 (PR #47) auf Android und iPhone prüfen: manuelle Sichtbestätigung, lokales Foto-GPS, ausdrückliche Standortwahl bei fehlendem GPS und Datum bei alten oder datumsfreien Kamera- wie Galerieaufnahmen. Die App verlangt in diesen Fällen eine ausdrückliche Datumsbestätigung. Der Server nimmt vergangene bestätigte Beobachtungsdaten an, weist ungültige und zukünftige Daten ab.
-2. Pipeline-PR #63 ist gemergt. Die schreibgeschützte Live-Prüfung vom 9.11.2026 ergab: `metadata.json` ist erreichbar (HTTP 200), enthält aber keinen AED-Snapshot-Verweis; `aed/manifest.json` liefert HTTP 404. Noch offen ist daher ein erfolgreicher Pipeline-Lauf mit Veröffentlichung unter dem festen Vertrag sowie die Prüfung, dass Region `dachlilu` vollständige Coverage und akzeptables Alter enthält. Der Consumer stoppt bei `unavailable`, stale, schema mismatch oder incomplete coverage; es gibt keinen Overpass-Fallback. Die offizielle OSM-API dient vor bestätigtem Testserver-Schreiben nur dem gezielten Frische-/Versionscheck des konkreten Objekts.
+2. Die Suche ist auf die AED-Ebene im vorhandenen PMTiles-Kartenarchiv umgestellt; ein separates AED-Manifest und die Overpass-API werden nicht benötigt. Noch offen ist die praktische Live-Prüfung des begrenzten HTTP-Range-Abrufs und die Ende-zu-Ende-Prüfung auf einem Mobilgerät. Der Consumer stoppt bei fehlenden oder veralteten Metadaten, unvollständigen Länderextrakten, ungültigem Archiv oder nicht abgedecktem Suchbereich; es gibt keinen Overpass-Fallback. Die offizielle OSM-API dient vor bestätigtem Testserver-Schreiben nur dem gezielten Frische-/Versionscheck des konkreten Objekts.
 3. Den Abgleich mit simulierten Kandidaten testen: keine Treffer, eindeutiger Treffer, mehrere nahe Treffer, unvollständiger regionaler Bestand, veralteter Snapshot und offline/Netzabbruch. Ein unvollständiger oder veralteter Datenstand darf keine Neuanlage als sicher darstellen.
 4. Erst nach erfolgreicher Suche mit einer vollständigen regionalen Datenquelle die Vorschau und anschließend separat freigegebene OSM-Dev-Schreibwege prüfen. Produktives OSM bleibt in Tests ausgeschlossen.
 
@@ -29,7 +29,7 @@ Für einen echten Login muss eine **separate OAuth-Anwendung auf dem OSM-Entwick
 
 ## Noch zu entscheiden
 
-- Kann die Pipeline die deklarierte Feed-Altersgrenze (derzeit `max_source_age_hours`, maximal 48 Stunden) dauerhaft einhalten und den Coverage-Nachweis für `dachlilu` zuverlässig erzeugen? AEDjaeger stoppt andernfalls geschlossen; ein Live-Feed-Check steht noch aus.
+- Funktioniert der Live-Range-Abruf des PMTiles-Archivs auf dem bereitgestellten Worker und auf einem Mobilgerät durchgängig? Bis dahin ist die lokale Build-Prüfung kein Nachweis für einen erfolgreichen echten OSM-Abgleich.
 - Welcher eng begrenzte OSM-API-Abgleich ist für gezielte Versionsprüfung und den späteren bestätigten Schreibvorgang nötig? Er darf keine flächige Ersatzsuche werden.
 - `OSM_DEV_WRITES_ENABLED` bleibt aus. Vor einem echten Testserver-Schreibvorgang braucht es eine separate ausdrückliche Freigabe und einen konkreten Vorschlag.
 - Vor einem Testserver-Schreiben muss die Standortbestätigung auf dem Mobilgerät nochmals geprüft werden; die Korrektur erfolgt über die verschiebbare Karte.
