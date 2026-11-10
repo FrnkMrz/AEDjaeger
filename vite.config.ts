@@ -24,6 +24,14 @@ export default defineConfig({
           fileName: "precache-manifest.json",
           source: JSON.stringify(appAssets),
         });
+        // Die laufende App fragt diese kleine Datei ab und vergleicht die Revision mit ihrer eigenen.
+        // Weicht sie ab, wurde nach dem Start eine neuere Version veröffentlicht (Update-Hinweis).
+        // Der Service Worker legt die Datei bewusst nicht in den Cache (siehe public/sw.js).
+        this.emitFile({
+          type: "asset",
+          fileName: "version.json",
+          source: JSON.stringify({ revision: buildRevision }),
+        });
       },
     },
   ],

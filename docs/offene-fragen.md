@@ -2,6 +2,10 @@
 
 Stand: **10.11.2026**. Der aktuelle nächste Schritt ist ein echter, lesender Handytest des nach PR #49 deployten AED-Abgleichs. Diese Liste ersetzt ältere Statusangaben in diesem Dokument; frühere Einträge bleiben nur als historische Begründung erhalten.
 
+## Update-Hinweis für die PWA (10.11.2026)
+
+Die App zeigt „Neue Version verfügbar – Neu laden“, sobald `/version.json` eine andere Revision nennt als die laufende App. Automatisch getestet sind die Erkennung, der Service Worker und die Sperre beim Speichern (Unit- und E2E-Tests). Außerdem lief ein echter Ablauf mit zwei Builds und echtem Service Worker in dieser Umgebung durch. **Offen:** ein Test auf einem echten Handy (Abschnitt A14 und A15 der [Pilot-Abnahme](pilot-abnahme.md)). Bekannte Grenze: Handys, die noch eine Version vor diesem Update-Hinweis laufen haben, bekommen das Banner erst, nachdem sie einmal neu gestartet haben und diese Version geladen ist.
+
 ## Fotoprüfung per OpenAI (Entscheidung vom 10.11.2026)
 
 **Anlass:** Im Handytest ließ sich ein Screenshot mit Karnevalsbildern nach „AED oder Gehäuse gesehen – weiter“ in den Ablauf bringen. Die reine Selbstbestätigung hielt falsche Fotos nicht auf.

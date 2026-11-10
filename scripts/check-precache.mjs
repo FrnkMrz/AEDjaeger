@@ -18,4 +18,11 @@ if (!entries.some((assetPath) => assetPath.endsWith(".js")) || !entries.some((as
   throw new Error("The precache manifest must include the app's JavaScript and CSS bundles.");
 }
 
+// Die App erkennt neue Versionen über dist/version.json. Fehlt sie oder hat sie ein unbrauchbares
+// Format, würde der Update-Hinweis still ausfallen; deshalb scheitert schon der Build.
+const version = JSON.parse(await readFile(join(outputDirectory, "version.json"), "utf8"));
+if (typeof version?.revision !== "string" || !/^[a-z0-9]{4,32}$/u.test(version.revision)) {
+  throw new Error("dist/version.json must contain a lowercase alphanumeric revision.");
+}
+
 console.log(`Precache manifest verified (${entries.length} app assets).`);
