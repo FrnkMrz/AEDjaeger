@@ -9,8 +9,11 @@ type PixelPoint = { x: number; y: number };
  * Ein zusätzlicher Punkt auf der Karte, zum Beispiel ein bereits in OpenStreetMap
  * eingetragener AED aus der Umgebungssuche. Der Text in `label` (z. B. „1“) erscheint
  * im Marker, damit die Person ihn dem gleich nummerierten Eintrag in der Liste zuordnen kann.
+ *
+ * `kind: "origin"` kennzeichnet den gesuchten Standort selbst. Er wird als roter Punkt gezeichnet
+ * und ist – wie alle Marker – fest an seine Koordinate gebunden, wandert also beim Verschieben mit.
  */
-export type MapMarker = { position: Coordinate; label: string };
+export type MapMarker = { position: Coordinate; label: string; kind?: "origin" };
 
 type PickerOptions = {
   mapLabel: string;
@@ -20,6 +23,12 @@ type PickerOptions = {
   initialZoom?: number;
   /** Feste Zusatzmarker (bekannte AEDs). Sie bewegen sich mit der Karte, nicht mit dem Mittelpunkt. */
   markers?: readonly MapMarker[];
+  /**
+   * Blendet den festen roten Mittelpunkt aus. Nötig für reine Übersichtskarten: Dort wählt
+   * niemand einen Punkt, und ein in der Bildmitte „klebender“ Punkt würde nach dem Verschieben
+   * eine falsche Stelle als Standort anzeigen. Der Standort kommt dann als Marker (kind "origin").
+   */
+  hideCrosshair?: boolean;
   onPositionChange: (position: Coordinate) => void;
   onZoomChange?: (zoom: number) => void;
 };
@@ -113,6 +122,7 @@ export function createPositionPicker(
   const crosshair = document.createElement("span");
   crosshair.className = "position-map-crosshair";
   crosshair.setAttribute("aria-hidden", "true");
+  crosshair.hidden = options.hideCrosshair === true;
   const attribution = document.createElement("a");
   attribution.className = "position-map-attribution";
   attribution.href = "https://www.openstreetmap.org/copyright";
@@ -163,7 +173,7 @@ export function createPositionPicker(
     markerLayer.replaceChildren(...markers.map((marker) => {
       const pixel = projectCoordinate(marker.position, zoom);
       const element = document.createElement("span");
-      element.className = "position-map-marker";
+      element.className = marker.kind === "origin" ? "position-map-marker position-map-marker-origin" : "position-map-marker";
       element.textContent = marker.label;
       element.style.left = `${pixel.x - left}px`;
       element.style.top = `${pixel.y - top}px`;

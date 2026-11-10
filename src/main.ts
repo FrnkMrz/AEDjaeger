@@ -520,7 +520,10 @@ function render(restoreFlowFocus = false): void {
         tileErrorLabel: tv("newPositionMapTileError"),
         // So weit herauszoomen, dass Standort und alle Treffer gleichzeitig sichtbar sind.
         initialZoom: zoomToFitMarkers(state.location, markers, bounds.width || 300, bounds.height || 225),
-        markers,
+        // Der gesuchte Standort ist hier ein fest verankerter roter Marker und NICHT der
+        // Bildmittelpunkt. So bleibt er beim Verschieben oder Zoomen an der richtigen Stelle.
+        markers: [{ position: state.location, label: "", kind: "origin" }, ...markers],
+        hideCrosshair: true,
         onPositionChange() {},
       });
     }

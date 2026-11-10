@@ -267,7 +267,21 @@ test("a user-confirmed location search shows nearby candidates without writing t
   await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
   // Bei Treffern zeigt die App eine Umgebungskarte mit einem nummerierten Marker je Treffer.
   await expect(page.locator("#candidate-overview-map")).toBeVisible();
-  await expect(page.locator("#candidate-overview-map .position-map-marker")).toHaveText(["1"]);
+  await expect(page.locator("#candidate-overview-map .position-map-marker:not(.position-map-marker-origin)")).toHaveText(["1"]);
+  // Der gesuchte Standort ist ein fest verankerter roter Marker. Beim Verschieben der Karte
+  // muss er mitwandern – sonst würde er eine falsche Stelle als Standort anzeigen.
+  const origin = page.locator("#candidate-overview-map .position-map-marker-origin");
+  await expect(origin).toHaveCount(1);
+  await expect(page.locator("#candidate-overview-map .position-map-crosshair")).toBeHidden();
+  const originBefore = await origin.boundingBox();
+  const candidateBefore = await page.locator("#candidate-overview-map .position-map-marker").last().boundingBox();
+  await page.locator("#candidate-overview-map").focus();
+  await page.keyboard.press("ArrowRight");
+  const originAfter = await origin.boundingBox();
+  const candidateAfter = await page.locator("#candidate-overview-map .position-map-marker").last().boundingBox();
+  // Die Pfeiltaste verschiebt den Karteninhalt um 32 Pixel – der Standortmarker wandert mit.
+  expect(originAfter!.x).toBeCloseTo(originBefore!.x + 32, 0);
+  expect(candidateAfter!.x - originAfter!.x).toBeCloseTo(candidateBefore!.x - originBefore!.x, 0);
   await expect(page.locator(".candidate-item strong")).toContainText("1. Rathaus");
   expect(searchRequests).toBe(1);
 
