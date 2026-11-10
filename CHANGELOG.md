@@ -7,6 +7,8 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 > Die jüngsten Einträge am Anfang beschreiben den aktuellen Pilotstand. Ältere Einträge darunter dokumentieren frühere, inzwischen teilweise abgelöste Zwischenstände und sind keine Beschreibung des aktuellen Laufzeitverhaltens.
 
 ### Added
+- Ergänzt einen lesenden Live-Check der AED-Datenquelle (`npm run check:live-search` und manueller GitHub-Workflow). Er prüft Metadaten, Datenalter, HTTP-Range und die Ebene `defibrillators` an einer Testkoordinate; er ist vorbereitet, aber noch nicht ausgeführt.
+- Ergänzt die Pilot-Abnahme mit Checklisten für Handytest, Live-Check, kontrollierten OSM-Dev-Schreibtest, Rückweg und Kriterien für `v0.1.0`.
 - Ergänzt eine aktuelle, vollständige Übergabe mit Produktentscheidungen, Datenquelle, Deploy-Stand, Sicherheitsgrenzen und konkretem nächstem Handytest.
 - Liest AED-Kandidaten direkt aus der `defibrillators`-Ebene des OpenFireMap-PMTiles-Archivs. Der Worker prüft den Datenstand und liest für den Foto-Standort nur die benötigten Zoom-14-Kacheln über begrenzte HTTP-Range-Anfragen.
 - Verwendet kein Overpass für die Umgebungssuche. Fehlende, veraltete, unvollständige oder ungültige Archivdaten bleiben ein Suchfehler und werden nie als Beleg für einen freien Standort behandelt.
@@ -15,6 +17,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Entfernt die externe OpenAI-Bildanalyse samt Anbieter-, Budget- und Browsercode. Der alte Analyse-Endpunkt antwortet aus Kompatibilitätsgründen mit HTTP 410, ohne den Request-Body zu lesen.
 
 ### Changed
+- Entfernt automatisch klingende Formulierungen aus der Pilot-Oberfläche: Das Beispielergebnis für eine Neuanlage heißt jetzt „Beispiel: AED im Eingangsbereich“ und sagt nicht mehr „erkannt“. Die Roadmap beschreibt die automatische Erkennung als nicht im Pilot.
 - Stellt die AED-Suche von einem nicht veröffentlichten Zusatz-Feed auf die bereits vorhandene AED-Vektorebene im PMTiles-Archiv um.
 - Führt nach der Fotoauswahl eine ausdrückliche Sichtbestätigung ein. Foto und EXIF bleiben lokal; Foto-GPS wird zuerst genutzt, Handy-GPS oder Kartenposition nur nach bewusster Auswahl.
 - Fragt bei Kamera- und Galerie-Fotos das Beobachtungsdatum ausdrücklich ab, wenn EXIF fehlt oder nicht dem heutigen lokalen Kalenderdatum entspricht. Datumsvorschlag, Eingabegrenze und Validierung verwenden dieselbe Gerätezeitzone; ein altes oder undatiertes Foto wird nicht stillschweigend als heutige Vor-Ort-Prüfung behandelt.
