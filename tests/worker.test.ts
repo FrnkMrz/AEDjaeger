@@ -46,6 +46,32 @@ describe("Cloudflare Worker shell", () => {
     expect(env.ASSETS.fetch).not.toHaveBeenCalled();
   });
 
+  // Die Fotoprüfung ist ohne Betreiber-Konfiguration aus: Es darf kein Foto verarbeitet und
+  // kein OpenAI-Aufruf gestartet werden. Der Test läuft ohne Netzwerk (kein fetch im Worker-Pfad).
+  it("keeps the photo check closed until the operator configures it", async () => {
+    const env = environment();
+    const outgoingFetch = vi.spyOn(globalThis, "fetch");
+    const response = await worker.fetch(new Request("https://aedjaeger.test/api/vision/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    }), env);
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "analysis_unavailable" });
+    expect(outgoingFetch).not.toHaveBeenCalled();
+    expect(env.ASSETS.fetch).not.toHaveBeenCalled();
+    outgoingFetch.mockRestore();
+  });
+
+  it("allows only POST for the photo check route", async () => {
+    const env = environment();
+    const response = await worker.fetch(new Request("https://aedjaeger.test/api/vision/analyze"), env);
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get("Allow")).toBe("POST");
+  });
+
   it("does not start OSM login when the Worker has no server-side configuration", async () => {
     const env = environment();
     const response = await worker.fetch(new Request("https://aedjaeger.test/api/auth/osm/start"), env);

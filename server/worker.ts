@@ -9,6 +9,7 @@ import { handleStaticCandidateSearch } from "./osm/staticCandidateSearchRoute";
 import { handleDevelopmentCheckDate } from "./osm/developmentWriteRoute";
 import { handleDevelopmentCreateNode } from "./osm/developmentCreateNodeRoute";
 import { handleTestDiagnostic } from "./testDiagnostics";
+import { handleVisionAnalysis } from "./vision/analyzeRoute";
 
 type StaticAssets = { fetch(request: Request): Promise<Response> };
 type WorkerEnvironment = {
@@ -22,6 +23,13 @@ type WorkerEnvironment = {
   OSM_DEV_REDIRECT_URI?: string;
   OSM_DEV_WRITES_ENABLED?: string;
   OSM_OAUTH_ENCRYPTION_KEY?: string;
+  // Fotoprüfung (optional). OPENAI_API_KEY ist ein Secret und gehört nur ins Cloudflare-Dashboard.
+  OPENAI_API_KEY?: string;
+  AI_ANALYSIS_ENABLED?: string;
+  AI_ANALYSIS_ALLOWED_OSM_SUBJECTS?: string;
+  AI_ANALYSIS_COST_RESERVATION_MICROS?: string;
+  AI_ANALYSIS_USER_DAILY_LIMIT_MICROS?: string;
+  AI_ANALYSIS_GLOBAL_DAILY_LIMIT_MICROS?: string;
 };
 
 type OSMAuthConfiguration = {
@@ -73,9 +81,11 @@ const worker = {
     if (pathname === "/api/osm/candidates/search") return handleStaticCandidateSearch(request, environment);
     if (pathname === "/api/osm/development/check-date") return handleDevelopmentCheckDate(request, environment);
     if (pathname === "/api/osm/development/create-node") return handleDevelopmentCreateNode(request, environment);
-    // Older installed PWAs may still call this endpoint. Retire it without parsing or consuming
-    // their image body so no photo can reach an external image provider during the migration.
-    if (pathname === "/api/vision/analyze") return jsonResponse({ error: "feature_removed" }, 410);
+    // Fotoprüfung: Die Route ist standardmäßig AUS. Sie arbeitet nur, wenn der Betreiber
+    // AI_ANALYSIS_ENABLED, OPENAI_API_KEY, die Zulassungsliste und die Kostenlimits gesetzt hat
+    // (siehe server/vision/analyzeRoute.ts). Ohne diese Werte antwortet sie mit 503 und es
+    // verlässt kein Foto das Gerät; die App fällt dann auf die Selbstbestätigung zurück.
+    if (pathname === "/api/vision/analyze") return handleVisionAnalysis(request, environment);
     if (pathname === "/api" || pathname.startsWith("/api/")) return jsonResponse({ error: "not_found" }, 404);
     return environment.ASSETS.fetch(request);
   },
