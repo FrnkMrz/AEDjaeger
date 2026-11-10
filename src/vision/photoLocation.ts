@@ -31,8 +31,15 @@ export async function readPhotoLocation(file: File, readGps: GpsReader = gps): P
   }
 }
 
-/** Read only the capture date locally; it prevents an old or undated photo from silently becoming today's check. */
-export async function readPhotoDate(file: File): Promise<string | undefined> {
+/** Aufnahmezeitpunkt eines Fotos: Kalendertag für OSM und genaue Zeit für die „gerade eben“-Prüfung. */
+export type PhotoCapture = { date: string; timeMs: number };
+
+/**
+ * Liest nur den Aufnahmezeitpunkt lokal aus den EXIF-Daten. Nichts davon verlässt das Gerät.
+ * `date` ist der Kalendertag, den die Kamera angezeigt hat. `timeMs` ist derselbe Zeitpunkt in
+ * Millisekunden; damit erkennt die App, ob das Foto erst vor wenigen Minuten entstanden ist.
+ */
+export async function readPhotoCapture(file: File): Promise<PhotoCapture | undefined> {
   try {
     const metadata = await exifr.parse(file, ["DateTimeOriginal"]);
     const value = metadata?.DateTimeOriginal;
@@ -41,8 +48,13 @@ export async function readPhotoDate(file: File): Promise<string | undefined> {
     const year = value.getFullYear();
     const month = String(value.getMonth() + 1).padStart(2, "0");
     const day = String(value.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
+    return { date: `${year}-${month}-${day}`, timeMs: value.getTime() };
   } catch {
     return undefined;
   }
+}
+
+/** Read only the capture date locally; it prevents an old or undated photo from silently becoming today's check. */
+export async function readPhotoDate(file: File): Promise<string | undefined> {
+  return (await readPhotoCapture(file))?.date;
 }

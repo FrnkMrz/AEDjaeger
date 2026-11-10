@@ -3,12 +3,12 @@ import { endOSMSession, loadOSMSession } from "./auth/osmSession";
 import { analysisResult, chooseCandidate, confirmationResult, recoveryResult, type CandidateId, type DemoScenario, type DevelopmentWriteRequest, type FlowState } from "./domain/workflow";
 import { translate, translations, type Language, type TranslationKey } from "./i18n/translations";
 import { translateFlow, type FlowMessageKey } from "./i18n/flowTranslations";
-import { readPhotoDate, readPhotoLocation } from "./vision/photoLocation";
+import { readPhotoCapture, readPhotoLocation } from "./vision/photoLocation";
 import { assessCandidateSearch } from "./domain/assessCandidateSearch";
 import { createPositionPicker, zoomToFitMarkers, type Coordinate, type MapMarker } from "./map/positionPicker";
 import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
 import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } from "./osm/candidateSearch";
-import { isCalendarDate, isValidObservedDate, localCalendarDate } from "./domain/localDate";
+import { isCalendarDate, isFreshCapture, isValidObservedDate, localCalendarDate, photoDateNeedsConfirmation } from "./domain/localDate";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root element was not found.");
@@ -115,13 +115,6 @@ function t(key: TranslationKey, values?: Record<string, number | string>): strin
   return values ? translated.replace(/\{(\w+)\}/gu, (_, name: string) => String(values[name] ?? "")) : translated;
 }
 function tv(key: FlowMessageKey, values?: Record<string, number | string>): string { return translateFlow(language, key, values); }
-function formatFeedDate(value: string): string {
-  const parsed = new Date(value);
-  return Number.isFinite(parsed.getTime())
-    ? new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(parsed)
-    : value;
-}
-
 type DiagnosticEvent =
   | "test_run_started" | "test_run_abandoned" | "photo_selected" | "demo_started" | "demo_result_shown" | "demo_confirmed"
   | "live_flow_blocked" | "sighting_confirmed"
@@ -309,7 +302,7 @@ function statusContent(): string {
           const reviewAction = candidate.osmType === "node"
             ? `<button class="button button-secondary" data-action="preview-candidate" data-candidate-id="${escapeHtml(candidate.id)}">${tv("selectCandidate")}</button>`
             : `<span class="supporting-copy">${tv("previewUnsupportedShort")}</span>`;
-          return `<li class="candidate-item"><strong>${escapeHtml(label)}</strong>${distance}<a href="https://www.openstreetmap.org/${escapeHtml(candidate.id)}" target="_blank" rel="noopener noreferrer">${escapeHtml(candidate.id)} ↗</a>${reviewAction}</li>`;
+          return `<li class="candidate-item"><strong>${escapeHtml(label)}</strong>${distance}<a href="https://www.openstreetmap.org/${escapeHtml(candidate.id)}" target="_blank" rel="noopener noreferrer">${tv("candidateOpenMap")} ↗</a>${reviewAction}</li>`;
         }).join("");
       let outcome: string;
       if (search.status === "partial" || assessment.kind === "search-incomplete") outcome = tv("searchPartial");
@@ -343,10 +336,9 @@ function statusContent(): string {
           : `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`
         : "";
       const locationSource = activeSearchLocationSource === "photo" ? "locationSourcePhoto" : activeSearchLocationSource === "map" ? "locationSourceMap" : "locationSourcePhone";
-      const snapshotStatus = search.dataUntil
-        ? `<p class="supporting-copy">${tv("searchDataUntil", { date: formatFeedDate(search.dataUntil), snapshot: escapeHtml(search.snapshotId ?? "") })}</p>`
-        : "";
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p><p class="supporting-copy">${tv(locationSource)}</p>${overviewMap}${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}${snapshotStatus}</div></div>${newEntryAction}${retry}${startNewEntry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      // Bewusst keine technische Zeile mehr zu Datenstand und Snapshot-Kennung: Sie half bei der
+      // Fehlersuche, aber nicht der Person vor Ort. Zu alte Daten sperrt der Server ohnehin.
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p><p class="supporting-copy">${tv(locationSource)}</p>${overviewMap}${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}</div></div>${newEntryAction}${retry}${startNewEntry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     }
     case "new-aed-preview": {
       const point = state.result.kind === "ready" ? state.result.position : state.returnState.location;
@@ -390,7 +382,7 @@ function statusContent(): string {
       const noWriteNotice = developmentSession ? copy.testOnly : tv("previewNoWrite");
       const recoverableWrite = state.writeStatus === "sending" || state.writeStatus === "uncertain";
       const navigation = recoverableWrite ? "" : `<button class="button button-quiet" data-action="back-to-candidates">${tv("previewBack")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("previewTitle")}</h2><p>${tv("previewTarget", { target: escapeHtml(state.candidateLabel) })}</p><p><a href="https://www.openstreetmap.org/${escapeHtml(state.candidateId)}" target="_blank" rel="noopener noreferrer">${escapeHtml(state.candidateId)} ↗</a></p>${content}<p class="simulation-note">${noWriteNotice}</p>${writeStatus}</div></div>${writeAction}${navigation}`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("previewTitle")}</h2><p>${tv("previewTarget", { target: escapeHtml(state.candidateLabel) })}</p><p><a href="https://www.openstreetmap.org/${escapeHtml(state.candidateId)}" target="_blank" rel="noopener noreferrer">${tv("candidateOpenMap")} ↗</a></p>${content}<p class="simulation-note">${noWriteNotice}</p>${writeStatus}</div></div>${writeAction}${navigation}`;
     }
     case "development-write-recovery": {
       const copy = developmentWriteCopy[language];
@@ -398,7 +390,7 @@ function statusContent(): string {
         ? `<button class="button button-secondary" data-action="retry-development-write">${copy.retry}</button>`
         : "";
       const targetLink = state.request.kind === "check-date"
-        ? `<p><a href="https://www.openstreetmap.org/${escapeHtml(state.request.target)}" target="_blank" rel="noopener noreferrer">${escapeHtml(state.request.target)} ↗</a></p>`
+        ? `<p><a href="https://www.openstreetmap.org/${escapeHtml(state.request.target)}" target="_blank" rel="noopener noreferrer">${tv("candidateOpenMap")} ↗</a></p>`
         : `<p>${state.request.latitude.toFixed(5)}, ${state.request.longitude.toFixed(5)}</p>`;
       const recoveryMessage = state.request.kind === "create-node" && state.writeStatus === "complete" ? copy.created : copy[state.writeStatus];
       return `<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("previewTitle")}</h2><p>${tv("previewTarget", { target: escapeHtml(state.request.candidateLabel) })}</p>${targetLink}<p class="simulation-note" role="status">${recoveryMessage}</p></div></div>${retry}`;
@@ -785,13 +777,21 @@ async function onPhotoSelected(event: Event): Promise<void> {
   const photoUrl = URL.createObjectURL(file);
   let photoLocation: SearchLocation | undefined;
   let photoDate: string | undefined;
+  let photoCapturedAtMs: number | undefined;
   try {
     const image = new Image();
     image.src = photoUrl;
     await image.decode();
     // Read only GPS and capture date locally; neither metadata nor image leaves the device.
     photoLocation = await readPhotoLocation(file);
-    photoDate = await readPhotoDate(file);
+    const capture = await readPhotoCapture(file);
+    photoDate = capture?.date;
+    // Zeitpunkt der Aufnahme für die „gerade eben“-Prüfung:
+    // 1. Die EXIF-Aufnahmezeit hat Vorrang – sie stammt von der Kamera selbst.
+    // 2. Fehlt sie, zählt NUR bei „AED fotografieren“ (Kamera-Eingabe) die Dateizeit, denn die
+    //    Datei ist dann soeben entstanden. Bei „Foto auswählen“ sagt die Dateizeit nichts über
+    //    die Aufnahme aus (z. B. ein gerade erst gespeichertes altes Bild) und wird ignoriert.
+    photoCapturedAtMs = capture?.timeMs ?? (input.id === "camera-input" ? file.lastModified : undefined);
   } catch {
     URL.revokeObjectURL(photoUrl);
     if (selectionVersion === photoSelectionVersion) {
@@ -814,7 +814,10 @@ async function onPhotoSelected(event: Event): Promise<void> {
   selectedPhotoLocation = photoLocation;
   const today = localCalendarDate();
   observedOn = photoDate ?? today;
-  photoDateRequiresConfirmation = photoDate === undefined || photoDate !== today;
+  // Ob nach dem Beobachtungsdatum gefragt wird, entscheidet photoDateNeedsConfirmation:
+  // Ein gerade eben aufgenommenes Foto ohne eigenes Datum gilt als heutige Beobachtung. Nennt das
+  // Foto dagegen selbst einen anderen Tag als heute, bleibt die ausdrückliche Bestätigung bestehen.
+  photoDateRequiresConfirmation = photoDateNeedsConfirmation(photoDate, today, isFreshCapture(photoCapturedAtMs));
   activeSearchLocation = undefined;
   activeSearchLocationSource = undefined;
   mapLocationOverride = undefined;
