@@ -36,6 +36,7 @@ Die Karte ist Hilfsmittel für die Standortkorrektur, nicht der Startbildschirm.
 
 - PR [#49](https://github.com/FrnkMrz/AEDjaeger/pull/49) („AED-Umgebungssuche direkt aus PMTiles lesen“) wurde am **9. November 2026** gemergt. Merge-Commit: [00c953b](https://github.com/FrnkMrz/AEDjaeger/commit/00c953bdab32bc94909c031a3df2294fd56730c1).
 - Der GitHub-Actions-Lauf [#234](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42672639423) war erfolgreich; CI und Cloudflare-Deploy sind grün. Die App wurde auf die bestehende workers.dev-Adresse deployed.
+- Seither sind die PRs #50 bis #54 gemergt (Übergabe, Pilot-Abnahme und Live-Check, Höchstalter 5 Tage, Rückmeldungen aus dem Handytest). Der jüngste Lauf auf `main` ist CI [#248](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42853298091) (Merge von PR #54, Commit `b322116`, 10.11.2026): `validate` und `deploy` sind grün.
 - Der aktuelle Stand ersetzt die Overpass-Umgebungssuche durch den AED-Layer im bestehenden OpenFireMap-PMTiles-Archiv. Die konkrete Live-Suche nach diesem Deploy wurde auf einem echten Handy noch nicht als erfolgreich bestätigt.
 - OSM-Schreiben bleibt gesperrt. Der nächste Test ist daher ein **lesender** Abgleich, keine Neuanlage und kein Update.
 - Ein bereits früher beobachteter Fehler „Umgebungssuche vorübergehend nicht erreichbar“ gehört zu einem älteren Suchlauf. Er muss nach dem neuen Deploy erneut geprüft werden; er beweist nicht, dass der neue PMTiles-Zugriff funktioniert oder fehlschlägt.
@@ -52,7 +53,7 @@ OpenStreetMap Devs begrenzter `/api/0.6/map.json`-Endpunkt dient zusätzlich daz
 
 ## Was der Nutzer als Nächstes tun soll
 
-Die vollständige Abnahme (Handytest, Live-Check, Dev-Schreibtest, Rückweg, Release-Kriterien) steht in [Pilot-Abnahme](pilot-abnahme.md). Der Live-Check ist vorbereitet (`npm run check:live-search` oder GitHub-Workflow „Live-Check AED-Datenquelle“), wurde aber noch nicht ausgeführt.
+Die vollständige Abnahme (Handytest, Live-Check, Dev-Schreibtest, Rückweg, Release-Kriterien) steht in [Pilot-Abnahme](pilot-abnahme.md). Der Live-Check (`npm run check:live-search` oder GitHub-Workflow „Live-Check AED-Datenquelle“) lief am 10.11.2026 zweimal erfolgreich ([Lauf #2](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42789878021): Datenstand 36 Stunden alt, 28 Features in der Testkachel bei Nürnberg). B1 bis B4 sind damit bestanden. Offen ist B5, eine zweite Koordinate.
 
 
 1. Auf dem Handy die App unter [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev) öffnen und auf dem OSM-Testserver anmelden.

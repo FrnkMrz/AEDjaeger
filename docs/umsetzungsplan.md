@@ -4,13 +4,13 @@
 
 Stand: 10.11.2026. Der aktuelle nächste Schritt ist ein lesender Praxistest auf dem Handy: OSM-Dev-Login, Foto mit GPS, Sichtbestätigung und PMTiles-Suche. Kein OSM-Schreibvorgang ist freigegeben. Die Produktentscheidungen, Grenzen der Datenquelle und Übergabe stehen in [Übergabe](uebergabe.md); der technische Datenvertrag steht in [OSM-Datenzugriff](osm.md).
 
-> **Ergänzung (10.11.2026):** Die Abnahmeschritte sind in [Pilot-Abnahme](pilot-abnahme.md) festgehalten. Der Live-Check der Datenquelle ist vorbereitet, aber noch nicht ausgeführt.
+> **Ergänzung (10.11.2026):** Die Abnahmeschritte sind in [Pilot-Abnahme](pilot-abnahme.md) festgehalten. Der Live-Check der Datenquelle lief am 10.11.2026 zweimal erfolgreich (B1 bis B4); offen ist B5, eine zweite Koordinate.
 
 ## Veröffentlichung auf Cloudflare
 
 Die GitHub-Actions-Workflowdatei `.github/workflows/ci.yml` prüft PRs und Pushes. Nach erfolgreichem CI auf einem Push zu `main` (einschließlich Merge-Commit) startet der Cloudflare-Deploy automatisch. Der manuelle `workflow_dispatch`-Lauf veröffentlicht nur, wenn `deploy_to_workers` ausdrücklich bestätigt wird. Der Deploy verwendet die GitHub-Umgebung `production`, serialisiert Deployments und veröffentlicht die Workers-App unter ihrer bestehenden workers.dev-Adresse. Er startet keine OpenFireMap-Pipeline, führt keine D1-Migrationen aus und verändert keine OSM-Daten.
 
-Der jüngste Merge von PR #49 löste den automatischen Deploy aus; GitHub-Actions-Lauf [#234](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42672639423) war erfolgreich. Die Umgebung benötigt das Secret `CLOUDFLARE_API_TOKEN` und die Variable `CLOUDFLARE_ACCOUNT_ID`. Sie sollen ausschließlich in den GitHub-Environment-Einstellungen gespeichert werden. Eine zusätzliche Deploy-Freigabe hängt von den aktuellen Repository-Environment-Regeln ab; der Merge-Deploy #234 ist bereits erfolgreich durchgelaufen.
+Der Merge von PR #49 löste den automatischen Deploy aus; GitHub-Actions-Lauf [#234](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42672639423) war erfolgreich. Der jüngste Deploy stammt vom Merge von PR #54 (CI [#248](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42853298091), 10.11.2026) und war ebenfalls erfolgreich. Die Umgebung benötigt das Secret `CLOUDFLARE_API_TOKEN` und die Variable `CLOUDFLARE_ACCOUNT_ID`. Sie sollen ausschließlich in den GitHub-Environment-Einstellungen gespeichert werden. Eine zusätzliche Deploy-Freigabe hängt von den aktuellen Repository-Environment-Regeln ab; der Merge-Deploy #234 ist bereits erfolgreich durchgelaufen.
 
 ## Reihenfolge und aktueller Stand
 
