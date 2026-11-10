@@ -39,3 +39,25 @@ export function isFreshCapture(capturedAtMs: number | undefined, nowMs: number =
   const ageMs = nowMs - capturedAtMs;
   return ageMs <= FRESH_CAPTURE_WINDOW_MS && ageMs >= -FRESH_CAPTURE_FUTURE_TOLERANCE_MS;
 }
+
+/**
+ * Entscheidet, ob die Person das Beobachtungsdatum ausdrücklich bestätigen muss.
+ *
+ * Regeln, von oben nach unten:
+ *  1. Das Foto nennt selbst einen Kalendertag (EXIF):
+ *     - derselbe Tag wie heute → keine Abfrage.
+ *     - ein anderer Tag → IMMER Abfrage, auch wenn das Foto „gerade eben“ entstanden ist.
+ *       Grund: Kurz vor Mitternacht kann eine leicht vorgehende Kamera-Uhr schon das Datum von
+ *       morgen liefern. Ohne Abfrage käme ein Prüfdatum in der Zukunft in den OSM-Vorschlag.
+ *  2. Das Foto nennt keinen Kalendertag:
+ *     - gerade eben aufgenommen (5-Minuten-Regel) → keine Abfrage, es gilt das heutige Datum.
+ *     - sonst → Abfrage.
+ *
+ * @param photoDate       Kalendertag aus dem Foto (JJJJ-MM-TT) oder undefined, wenn keiner vorliegt.
+ * @param today           Heutiger Kalendertag des Geräts (JJJJ-MM-TT).
+ * @param capturedJustNow Ergebnis von isFreshCapture für dieses Foto.
+ */
+export function photoDateNeedsConfirmation(photoDate: string | undefined, today: string, capturedJustNow: boolean): boolean {
+  if (photoDate !== undefined) return photoDate !== today;
+  return !capturedJustNow;
+}

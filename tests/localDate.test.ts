@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { isFreshCapture, isValidObservedDate, localCalendarDate } from "../src/domain/localDate";
+import { isFreshCapture, isValidObservedDate, localCalendarDate, photoDateNeedsConfirmation } from "../src/domain/localDate";
 
 describe("local calendar dates", () => {
   afterEach(() => vi.unstubAllEnvs());
@@ -44,5 +44,30 @@ describe("gerade eben aufgenommene Fotos (5-Minuten-Regel)", () => {
   it("gilt ohne oder mit ungültiger Zeitangabe nie als frisch", () => {
     expect(isFreshCapture(undefined, now)).toBe(false);
     expect(isFreshCapture(Number.NaN, now)).toBe(false);
+  });
+});
+
+describe("Abfrage des Beobachtungsdatums", () => {
+  const today = "2026-11-10";
+
+  it("fragt nicht, wenn das Foto das heutige Datum trägt", () => {
+    expect(photoDateNeedsConfirmation(today, today, false)).toBe(false);
+    expect(photoDateNeedsConfirmation(today, today, true)).toBe(false);
+  });
+
+  it("fragt nicht bei einem gerade eben aufgenommenen Foto ohne Datum", () => {
+    expect(photoDateNeedsConfirmation(undefined, today, true)).toBe(false);
+  });
+
+  it("fragt bei einem Foto ohne Datum, das nicht gerade eben aufgenommen wurde", () => {
+    expect(photoDateNeedsConfirmation(undefined, today, false)).toBe(true);
+  });
+
+  it("fragt immer, wenn das Foto einen anderen Tag nennt – auch wenn es frisch ist", () => {
+    // Kamera-Uhr geht kurz vor Mitternacht vor und liefert schon das Datum von morgen.
+    expect(photoDateNeedsConfirmation("2026-11-11", today, true)).toBe(true);
+    // Foto von 23:58 Uhr, App um 00:01 Uhr geöffnet: gestern, aber noch „frisch“.
+    expect(photoDateNeedsConfirmation("2026-11-09", today, true)).toBe(true);
+    expect(photoDateNeedsConfirmation("2024-10-20", today, false)).toBe(true);
   });
 });

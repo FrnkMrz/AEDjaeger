@@ -8,7 +8,7 @@ import { assessCandidateSearch } from "./domain/assessCandidateSearch";
 import { createPositionPicker, zoomToFitMarkers, type Coordinate, type MapMarker } from "./map/positionPicker";
 import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
 import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } from "./osm/candidateSearch";
-import { isCalendarDate, isFreshCapture, isValidObservedDate, localCalendarDate } from "./domain/localDate";
+import { isCalendarDate, isFreshCapture, isValidObservedDate, localCalendarDate, photoDateNeedsConfirmation } from "./domain/localDate";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root element was not found.");
@@ -814,11 +814,10 @@ async function onPhotoSelected(event: Event): Promise<void> {
   selectedPhotoLocation = photoLocation;
   const today = localCalendarDate();
   observedOn = photoDate ?? today;
-  // Ein Foto aus den letzten 5 Minuten ist eine Beobachtung von heute: keine Datumsabfrage.
-  // Alle anderen Fotos ohne Datum oder mit einem anderen Tag brauchen weiter die ausdrückliche
-  // Bestätigung, damit ein altes Bild nicht stillschweigend als heutige Vor-Ort-Prüfung gilt.
-  const capturedJustNow = isFreshCapture(photoCapturedAtMs);
-  photoDateRequiresConfirmation = !capturedJustNow && (photoDate === undefined || photoDate !== today);
+  // Ob nach dem Beobachtungsdatum gefragt wird, entscheidet photoDateNeedsConfirmation:
+  // Ein gerade eben aufgenommenes Foto ohne eigenes Datum gilt als heutige Beobachtung. Nennt das
+  // Foto dagegen selbst einen anderen Tag als heute, bleibt die ausdrückliche Bestätigung bestehen.
+  photoDateRequiresConfirmation = photoDateNeedsConfirmation(photoDate, today, isFreshCapture(photoCapturedAtMs));
   activeSearchLocation = undefined;
   activeSearchLocationSource = undefined;
   mapLocationOverride = undefined;
