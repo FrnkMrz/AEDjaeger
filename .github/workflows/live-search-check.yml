@@ -1,0 +1,25 @@
+# Manueller Live-Check der AED-Datenquelle (OpenFireMap-PMTiles).
+#
+# Dieser Workflow ist rein lesend: Er startet nur auf ausdrückliche Anforderung
+# (workflow_dispatch), hat keine Secrets, kein Environment und keinen Deploy.
+# Er verändert weder OpenStreetMap, noch Cloudflare, noch die Datenpipeline.
+# Er sendet nur GET- und Range-Anfragen an pipeline.openfiremap.org.
+name: Live-Check AED-Datenquelle
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-search-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check:live-search

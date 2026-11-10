@@ -13,6 +13,7 @@
     "worker:check": "node scripts/run-wrangler.mjs check",
     "worker:deploy": "node scripts/run-wrangler.mjs deploy",
     "test:worker-http": "node scripts/check-worker-http.mjs",
+    "check:live-search": "node scripts/check-live-search.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "preview": "vite preview"
