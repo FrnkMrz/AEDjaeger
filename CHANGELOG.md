@@ -7,6 +7,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 > Die jüngsten Einträge am Anfang beschreiben den aktuellen Pilotstand. Ältere Einträge darunter dokumentieren frühere, inzwischen teilweise abgelöste Zwischenstände und sind keine Beschreibung des aktuellen Laufzeitverhaltens.
 
 ### Added
+- Zeigt bei Treffern der Umgebungssuche eine Karte der Umgebung: roter Punkt für den gesuchten Standort, nummerierte Marker für die gefundenen AED-Einträge. Die Nummern stimmen mit der Trefferliste überein; beim Setzen eines neuen AED-Punkts bleiben die Marker sichtbar.
 - Ergänzt einen lesenden Live-Check der AED-Datenquelle (`npm run check:live-search` und manueller GitHub-Workflow). Er prüft Metadaten, Datenalter, HTTP-Range und die Ebene `defibrillators` an einer Testkoordinate; er ist vorbereitet, aber noch nicht ausgeführt.
 - Ergänzt die Pilot-Abnahme mit Checklisten für Handytest, Live-Check, kontrollierten OSM-Dev-Schreibtest, Rückweg und Kriterien für `v0.1.0`.
 - Ergänzt eine aktuelle, vollständige Übergabe mit Produktentscheidungen, Datenquelle, Deploy-Stand, Sicherheitsgrenzen und konkretem nächstem Handytest.
@@ -17,6 +18,8 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Entfernt die externe OpenAI-Bildanalyse samt Anbieter-, Budget- und Browsercode. Der alte Analyse-Endpunkt antwortet aus Kompatibilitätsgründen mit HTTP 410, ohne den Request-Body zu lesen.
 
 ### Changed
+- Verlangt für jede Neuanlage zwei getrennte, ausdrückliche Bestätigungen: zuerst „Hier fehlt ein AED – neu eintragen“ bzw. „Keiner davon – neuen AED eintragen“, danach in der Vorschau den Haken „vor Ort geprüft“. Ohne den ersten Schritt erscheinen weder Karte noch Vorbereitung; ohne den zweiten bleibt das Speichern gesperrt.
+- Kürzt die Texte im Foto- und Suchablauf in allen sechs Sprachen deutlich und entfernt wiederholte Hinweise. Fehler- und Unvollständigkeitsmeldungen sagen weiterhin, dass sie kein Beleg für einen fehlenden AED sind.
 - Erhöht das zulässige Höchstalter der AED-Archivdaten für die Umgebungssuche von 48 Stunden auf 5 Tage (120 Stunden), in der Suchroute und im Live-Check. Ein einzelner ausgefallener Pipeline-Lauf sperrt die Suche damit nicht mehr; ältere Daten bleiben ein Suchfehler und nie ein Beleg für einen freien Standort.
 - Entfernt automatisch klingende Formulierungen aus der Pilot-Oberfläche: Das Beispielergebnis für eine Neuanlage heißt jetzt „Beispiel: AED im Eingangsbereich“ und sagt nicht mehr „erkannt“. Die Roadmap beschreibt die automatische Erkennung als nicht im Pilot.
 - Stellt die AED-Suche von einem nicht veröffentlichten Zusatz-Feed auf die bereits vorhandene AED-Vektorebene im PMTiles-Archiv um.

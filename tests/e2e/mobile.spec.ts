@@ -265,7 +265,10 @@ test("a user-confirmed location search shows nearby candidates without writing t
   await expect(page.locator(".candidate-list")).toContainText("Rathaus");
   await expect(page.locator(".candidate-list a")).toHaveAttribute("href", "https://www.openstreetmap.org/node/123");
   await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
-  await expect(page.locator(".capture-content")).toContainText("Die Suche hat nichts in OpenStreetMap geändert.");
+  // Bei Treffern zeigt die App eine Umgebungskarte mit einem nummerierten Marker je Treffer.
+  await expect(page.locator("#candidate-overview-map")).toBeVisible();
+  await expect(page.locator("#candidate-overview-map .position-map-marker")).toHaveText(["1"]);
+  await expect(page.locator(".candidate-item strong")).toContainText("1. Rathaus");
   expect(searchRequests).toBe(1);
 
   await page.getByRole("button", { name: "Als noch vorhanden bestätigen" }).click();
@@ -298,7 +301,7 @@ test("a photo without GPS does not silently search the phone location", async ({
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
   const dateConfirm = page.locator('[data-action="confirm-photo-date"]');
   if (await dateConfirm.isVisible()) await dateConfirm.click();
-  await expect(page.getByText(/Dieses Foto enthält keine GPS-Koordinaten/u)).toBeVisible();
+  await expect(page.getByText(/Das Foto hat keine GPS-Daten/u)).toBeVisible();
   await expect(page.locator("[data-action='use-phone-location']")).toBeVisible();
   expect(searchRequests).toBe(0);
 
@@ -429,6 +432,11 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
   await beginNearbySearch(page);
+  // Erste Bestätigung: Ohne den ausdrücklichen Tastendruck gibt es weder Karte noch Neuanlage.
+  await expect(page.locator(".capture-content")).toContainText("Kein AED-Eintrag in der Nähe gefunden.");
+  await expect(page.locator("#new-aed-position-map")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Neuen AED vorbereiten" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Hier fehlt ein AED – neu eintragen" }).click();
   await expect(page.getByRole("button", { name: "Neuen AED vorbereiten" })).toBeVisible();
   await expect(page.locator("#new-aed-position-map")).toBeVisible();
   await expect(page.locator(".position-map-attribution")).toContainText("OpenStreetMap contributors");
@@ -486,8 +494,21 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
     createRequest = route.request().postDataJSON() as Record<string, unknown>;
     await route.fulfill({ json: { status: "complete", node_id: "456", version: 1 } });
   });
+  // Zweite Bestätigung: Der Speichern-Knopf bleibt gesperrt, bis der Haken „vor Ort geprüft“ sitzt.
+  const createButton = page.getByRole("button", { name: "Testserver: AED eintragen" });
+  await expect(createButton).toBeDisabled();
+  // Auch ein erzwungener Klick ohne Haken darf nichts senden.
+  await page.evaluate(() => {
+    const button = document.querySelector<HTMLButtonElement>('[data-action="create-development-node"]')!;
+    button.disabled = false;
+    button.click();
+  });
+  await expect(page.getByRole("heading", { name: "Vorschau für neuen AED" })).toBeVisible();
+  expect(createRequest).toBeUndefined();
+  await page.locator("#new-aed-absence-confirmed").check();
+  await expect(createButton).toBeEnabled();
   const createResponse = page.waitForResponse("**/api/osm/development/create-node");
-  await page.getByRole("button", { name: "Testserver: AED eintragen" }).click();
+  await createButton.click();
   await expect.poll(() => createRequest).toBeDefined();
   const createResponseBody = await createResponse.then((response) => response.json() as Promise<Record<string, unknown>>);
   expect(createResponseBody).toEqual({ status: "complete", node_id: "456", version: 1 });
@@ -522,13 +543,18 @@ test("a reviewed nearby AED can be rejected before preparing a separate new entr
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
   await beginNearbySearch(page);
   await expect(page.getByRole("button", { name: "Als noch vorhanden bestätigen" })).toBeVisible();
-  await expect(page.locator(".capture-content")).toContainText("Zwei AEDs stehen selten so nah.");
-  await page.getByRole("button", { name: "Keiner davon ist der fotografierte AED" }).click();
+  await expect(page.locator("#candidate-overview-map")).toBeVisible();
+  await expect(page.locator("#new-aed-position-map")).toHaveCount(0);
+  await page.getByRole("button", { name: "Keiner davon – neuen AED eintragen" }).click();
   await expect(page.locator("#new-aed-position-map")).toBeVisible();
+  // Der abgelehnte Treffer bleibt beim Setzen des neuen Punkts als Marker sichtbar.
+  await expect(page.locator("#new-aed-position-map .position-map-marker")).toHaveText(["1"]);
   await page.locator("#new-aed-position-confirmed").check();
   await page.getByRole("button", { name: "Neuen AED vorbereiten" }).click();
   await expect(page.getByRole("heading", { name: "Vorschau für neuen AED" })).toBeVisible();
   await expect(page.locator(".capture-content")).toContainText("Die angezeigten nahen AED-Einträge wurden als andere Geräte bestätigt.");
+  await expect(page.getByRole("button", { name: "Testserver: AED eintragen" })).toBeDisabled();
+  await page.locator("#new-aed-absence-confirmed").check();
   await page.getByRole("button", { name: "Testserver: AED eintragen" }).click();
   await expect.poll(() => createRequest).toBeDefined();
   expect(createRequest).toMatchObject({ confirmed: true, confirmed_different_candidate_ids: ["node/123"] });
@@ -547,7 +573,7 @@ test("a partial nearby search never offers a new AED preview", async ({ page, co
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
   await beginNearbySearch(page);
-  await expect(page.locator(".capture-content")).toContainText("Die Suche war unvollständig.");
+  await expect(page.locator(".capture-content")).toContainText("Suche unvollständig.");
   await expect(page.getByRole("button", { name: "Neuen AED vorbereiten" })).toHaveCount(0);
   expect(searchRequests).toBe(1);
 });
@@ -630,9 +656,8 @@ test("a denied phone location still allows choosing and searching an explicit ma
   const map = page.locator("#search-location-map");
   await expect(map).toBeVisible();
   expect(await page.evaluate(() => (window as typeof window & { __locationRequests: number }).__locationRequests)).toBe(0);
-  await expect(page.locator(".capture-content")).toContainText("nicht an deinem Standort");
-  await expect(page.locator(".capture-content")).toContainText("Handy-Standort wird nicht abgefragt");
-  await expect(page.locator("#search-location-coordinates")).toContainText("Noch kein AED-Standort ausgewählt");
+  await expect(page.locator(".capture-content")).toContainText("Verschiebe die Karte zum AED");
+  await expect(page.locator("#search-location-coordinates")).toContainText("Noch kein Standort gewählt");
   const search = page.locator('[data-action="confirm-map-location"]');
   await expect(search).toBeDisabled();
   for (let zoom = 0; zoom < 8; zoom += 1) await page.getByRole("button", { name: "Karte vergrößern" }).click();
@@ -707,7 +732,7 @@ test("an incomplete search cannot suggest a new AED and offers a retry", async (
   await expect(page.getByRole("button", { name: "Standort und AEDs erneut suchen" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Standort und AEDs erneut suchen" })).toBeVisible({ timeout: 3_000 });
   await page.getByRole("button", { name: "Standort und AEDs erneut suchen" }).click();
-  await expect(page.locator(".capture-content")).toContainText("Im abgedeckten Bereich wurde kein passender AED-Eintrag gefunden.");
+  await expect(page.locator(".capture-content")).toContainText("Kein AED-Eintrag in der Nähe gefunden.");
   expect(searchRequests).toBe(4);
 });
 
@@ -731,7 +756,7 @@ test("an imprecise phone fix is not sent and retry acquires a fresh location", a
 
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 15 });
   await page.getByRole("button", { name: "Standort und AEDs erneut suchen" }).click();
-  await expect(page.locator(".capture-content")).toContainText("Im abgedeckten Bereich wurde kein passender AED-Eintrag gefunden.");
+  await expect(page.locator(".capture-content")).toContainText("Kein AED-Eintrag in der Nähe gefunden.");
   expect(searchRequests).toBe(1);
 });
 

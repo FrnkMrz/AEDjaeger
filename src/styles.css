@@ -184,3 +184,10 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
 .diagnostics-opt-in span { display: grid; gap: 4px; }
 .diagnostics-opt-in strong { color: var(--ink); font-size: 12px; }
 .diagnostics-opt-in small { color: var(--muted); font-size: 11px; line-height: 1.45; }
+
+/* Zusatzmarker auf der Karte: nummerierte, bereits in OpenStreetMap eingetragene AEDs. */
+.position-map-markers { position: absolute; inset: 0; pointer-events: none; }
+.position-map-marker { position: absolute; display: grid; place-items: center; width: 24px; height: 24px; border: 2px solid #fff; border-radius: 50%; color: #fff; background: #176b4b; box-shadow: 0 1px 5px #17281b88; font: 700 12px/1 system-ui, sans-serif; transform: translate(-50%, -50%); }
+.candidate-list + .supporting-copy { margin-top: 10px; }
+/* Gesperrte Knöpfe (z. B. Speichern vor der zweiten Bestätigung) sind sichtbar blasser. */
+.button:disabled { opacity: .45; cursor: not-allowed; }

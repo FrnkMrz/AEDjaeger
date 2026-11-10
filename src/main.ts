@@ -5,7 +5,7 @@ import { translate, translations, type Language, type TranslationKey } from "./i
 import { translateFlow, type FlowMessageKey } from "./i18n/flowTranslations";
 import { readPhotoDate, readPhotoLocation } from "./vision/photoLocation";
 import { assessCandidateSearch } from "./domain/assessCandidateSearch";
-import { createPositionPicker, type Coordinate } from "./map/positionPicker";
+import { createPositionPicker, zoomToFitMarkers, type Coordinate, type MapMarker } from "./map/positionPicker";
 import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
 import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } from "./osm/candidateSearch";
 import { isCalendarDate, isValidObservedDate, localCalendarDate } from "./domain/localDate";
@@ -226,6 +226,37 @@ function hasActivePhotoDraft(current: FlowState): boolean {
   return current.kind !== "ready" && current.kind !== "saved";
 }
 
+/**
+ * Sagt, ob der Bereich „neuen AED eintragen“ (Karte + Positionsbestätigung) geöffnet ist.
+ *
+ * Sicherheitsregel: Eine Neuanlage braucht immer ZWEI getrennte, ausdrückliche Bestätigungen.
+ * Diese Funktion prüft die ERSTE davon:
+ *  - Suche ohne Treffer: Die Person hat „Hier fehlt ein AED – neu eintragen“ gedrückt.
+ *  - Suche mit Treffern: Die Person hat „Keiner davon – neuen AED eintragen“ gedrückt.
+ * Die ZWEITE Bestätigung folgt in der Vorschau direkt vor dem Speichern (Haken „vor Ort geprüft“).
+ * Eine unvollständige oder fehlgeschlagene Suche öffnet den Bereich nie.
+ */
+function newEntryPanelOpen(current: FlowState): boolean {
+  if (current.kind !== "candidate-result" || current.search.status !== "complete") return false;
+  if (current.assessment.kind === "new-entry-eligible") return current.newEntryRequested === true;
+  return current.assessment.kind === "candidate-review" && current.noneOfTheseConfirmed === true;
+}
+
+/**
+ * Baut die nummerierten Kartenmarker für die angezeigten Suchtreffer.
+ * Die Nummer (1, 2, 3 …) ist dieselbe wie in der Trefferliste, damit man Karte und Liste
+ * leicht zuordnen kann. Es werden nur die tatsächlich angezeigten Treffer markiert.
+ */
+function reviewedCandidateMarkers(current: FlowState): MapMarker[] {
+  if (current.kind !== "candidate-result" || current.assessment.kind !== "candidate-review") return [];
+  const markers: MapMarker[] = [];
+  current.assessment.candidates.forEach((ranked, index) => {
+    const candidate = current.search.candidates.find((item) => item.id === ranked.id);
+    if (candidate) markers.push({ position: candidate.position, label: String(index + 1) });
+  });
+  return markers;
+}
+
 function statusContent(): string {
   const photoUrl = getPhotoUrl(state);
   const photoMarkup = photoUrl ? `<img class="photo-preview" src="${escapeHtml(photoUrl)}" alt="${t("photoAlt")}" />` : "";
@@ -268,8 +299,12 @@ function statusContent(): string {
       } else if (assessment.kind === "search-incomplete") {
         for (const candidate of search.candidates) candidatesToShow.push({ candidate });
       }
-      const candidates = candidatesToShow.map(({ candidate, distanceMeters }) => {
-          const label = candidate.tags.name || candidate.tags["defibrillator:location"] || candidate.id;
+      // Nur bei einer vollständigen Trefferprüfung gibt es Kartenmarker; dann bekommt jeder
+      // Listeneintrag dieselbe Nummer wie sein Marker auf der Karte.
+      const numbered = assessment.kind === "candidate-review";
+      const candidates = candidatesToShow.map(({ candidate, distanceMeters }, index) => {
+          const name = candidate.tags.name || candidate.tags["defibrillator:location"] || candidate.id;
+          const label = numbered ? `${index + 1}. ${name}` : name;
           const distance = distanceMeters === undefined ? "" : `<span>${escapeHtml(tv("distance", { distance: Math.round(distanceMeters) }))}</span>`;
           const reviewAction = candidate.osmType === "node"
             ? `<button class="button button-secondary" data-action="preview-candidate" data-candidate-id="${escapeHtml(candidate.id)}">${tv("selectCandidate")}</button>`
@@ -283,14 +318,24 @@ function statusContent(): string {
       else if (assessment.kind === "location-too-uncertain") outcome = tv("locationUncertain");
       else outcome = tv("searchFailedResult");
       const selectedPosition = newAedPositionOverride ?? state.location;
-      const mayPrepareNewEntry = search.status === "complete"
-        && (assessment.kind === "new-entry-eligible" || assessment.kind === "candidate-review" && state.noneOfTheseConfirmed);
+      const mayPrepareNewEntry = newEntryPanelOpen(state);
       const newEntryAction = mayPrepareNewEntry
-        ? `<section class="position-picker-panel" aria-labelledby="new-aed-position-title"><h3 id="new-aed-position-title">${tv("newPositionMapLabel")}</h3><p class="position-picker-help">${tv("newPositionMapHelp")}</p><p class="position-map-privacy">${tv("newPositionMapPrivacy")}</p><div id="new-aed-position-map" class="position-map" role="application" tabindex="0" aria-label="${tv("newPositionMapLabel")}"></div><p class="position-map-coordinates" id="new-aed-position-coordinates" aria-live="polite">${tv("newPreviewCoordinates", { latitude: selectedPosition.latitude.toFixed(5), longitude: selectedPosition.longitude.toFixed(5) })}</p><div class="position-confirmation"><label for="new-aed-position-confirmed"><input id="new-aed-position-confirmed" type="checkbox" /><span id="new-aed-position-label">${tv("newPositionConfirm", { latitude: selectedPosition.latitude.toFixed(5), longitude: selectedPosition.longitude.toFixed(5) })}</span></label><button class="button button-primary" data-action="preview-new-aed">${tv("newPreviewAction")}</button></div></section>`
+        ? `<section class="position-picker-panel" aria-labelledby="new-aed-position-title"><h3 id="new-aed-position-title">${tv("newPositionMapLabel")}</h3><p class="position-picker-help">${tv("newPositionMapHelp")}</p><div id="new-aed-position-map" class="position-map" role="application" tabindex="0" aria-label="${tv("newPositionMapLabel")}"></div><p class="position-map-coordinates" id="new-aed-position-coordinates" aria-live="polite">${tv("newPreviewCoordinates", { latitude: selectedPosition.latitude.toFixed(5), longitude: selectedPosition.longitude.toFixed(5) })}</p><div class="position-confirmation"><label for="new-aed-position-confirmed"><input id="new-aed-position-confirmed" type="checkbox" /><span id="new-aed-position-label">${tv("newPositionConfirm", { latitude: selectedPosition.latitude.toFixed(5), longitude: selectedPosition.longitude.toFixed(5) })}</span></label><button class="button button-primary" data-action="preview-new-aed">${tv("newPreviewAction")}</button></div></section>`
         : "";
-      const rejectNearbyCandidates = search.status === "complete" && assessment.kind === "candidate-review" && !state.noneOfTheseConfirmed
-        ? `<p class="supporting-copy">${tv("noneMatchHelp")}</p><button class="button button-secondary" data-action="none-of-these">${tv("noneMatchAction")}</button>`
-        : state.noneOfTheseConfirmed ? `<p class="supporting-copy">${tv("noneMatchHelp")}</p>` : "";
+      // Erste von zwei Bestätigungen für eine Neuanlage (siehe newEntryPanelOpen):
+      // Erst dieser bewusste Tastendruck öffnet Karte und Positionsbestätigung.
+      const startNewEntry = search.status !== "complete" || mayPrepareNewEntry
+        ? ""
+        : assessment.kind === "candidate-review"
+          ? `<button class="button button-quiet" data-action="none-of-these">${tv("noneMatchAction")}</button>`
+          : assessment.kind === "new-entry-eligible"
+            ? `<button class="button button-quiet" data-action="start-new-entry">${tv("newEntryStart")}</button>`
+            : "";
+      // Übersichtskarte: zeigt den gesuchten Standort (roter Punkt) und die nummerierten Treffer.
+      // Sie entfällt, sobald der Neuanlage-Bereich offen ist – dessen Karte zeigt dieselben Marker.
+      const overviewMap = numbered && candidatesToShow.length > 0 && !mayPrepareNewEntry
+        ? `<div id="candidate-overview-map" class="position-map" role="application" tabindex="0" aria-label="${tv("overviewMapLabel")}"></div><p class="position-map-privacy">${tv("overviewMapLegend")}</p>`
+        : "";
       const retryWaitSeconds = state.retryAvailableAt === undefined ? 0 : Math.max(0, Math.ceil((state.retryAvailableAt - Date.now()) / 1000));
       const retry = search.status === "partial" || assessment.kind === "search-incomplete"
         ? retryWaitSeconds > 0
@@ -301,7 +346,7 @@ function statusContent(): string {
       const snapshotStatus = search.dataUntil
         ? `<p class="supporting-copy">${tv("searchDataUntil", { date: formatFeedDate(search.dataUntil), snapshot: escapeHtml(search.snapshotId ?? "") })}</p>`
         : "";
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p><p class="supporting-copy">${tv(locationSource)}</p>${snapshotStatus}${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}<p class="simulation-note">${tv("searchNoWrite")}</p></div></div>${rejectNearbyCandidates}${newEntryAction}${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p><p class="supporting-copy">${tv(locationSource)}</p>${overviewMap}${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}${snapshotStatus}</div></div>${newEntryAction}${retry}${startNewEntry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     }
     case "new-aed-preview": {
       const point = state.result.kind === "ready" ? state.result.position : state.returnState.location;
@@ -316,8 +361,10 @@ function statusContent(): string {
       const canCreate = developmentSession && developmentWriteAvailable && state.result.kind === "ready";
       const statusCopy = state.writeStatus === "complete" ? copy.created : state.writeStatus ? copy[state.writeStatus] : "";
       const writeStatus = state.writeStatus ? `<p role="status" class="simulation-note">${statusCopy}</p>` : "";
+      // Zweite von zwei Bestätigungen für eine Neuanlage: Ohne diesen Haken bleibt der
+      // Speichern-Knopf gesperrt. Der Klick-Handler prüft den Haken zusätzlich noch einmal.
       const writeAction = canCreate && !state.writeStatus
-        ? `<button class="button button-primary" data-action="create-development-node">${copy.createAction}</button>`
+        ? `<div class="position-confirmation"><label for="new-aed-absence-confirmed"><input id="new-aed-absence-confirmed" type="checkbox" /><span>${tv("newAbsenceConfirm")}</span></label></div><button class="button button-primary" data-action="create-development-node" disabled>${copy.createAction}</button>`
         : state.writeStatus === "uncertain" && state.operationId
           ? `<button class="button button-secondary" data-action="retry-development-write">${copy.retry}</button>`
           : "";
@@ -459,11 +506,32 @@ function render(restoreFlowFocus = false): void {
     }
   }
 
-  if (state.kind === "candidate-result" && state.search.status === "complete"
-    && (state.assessment.kind === "new-entry-eligible" || state.assessment.kind === "candidate-review" && state.noneOfTheseConfirmed)) {
+  if (state.kind === "candidate-result" && !newEntryPanelOpen(state)) {
+    // Übersichtskarte bei Treffern: nur zum Ansehen. Verschieben ändert keine Auswahl,
+    // deshalb macht onPositionChange hier bewusst nichts.
+    const overviewContainer = app!.querySelector<HTMLDivElement>("#candidate-overview-map");
+    if (overviewContainer) {
+      const markers = reviewedCandidateMarkers(state);
+      const bounds = overviewContainer.getBoundingClientRect();
+      activePositionPicker = createPositionPicker(overviewContainer, state.location, {
+        mapLabel: tv("overviewMapLabel"),
+        zoomInLabel: tv("newPositionMapZoomIn"),
+        zoomOutLabel: tv("newPositionMapZoomOut"),
+        tileErrorLabel: tv("newPositionMapTileError"),
+        // So weit herauszoomen, dass Standort und alle Treffer gleichzeitig sichtbar sind.
+        initialZoom: zoomToFitMarkers(state.location, markers, bounds.width || 300, bounds.height || 225),
+        markers,
+        onPositionChange() {},
+      });
+    }
+  }
+
+  if (newEntryPanelOpen(state) && state.kind === "candidate-result") {
     const mapContainer = app!.querySelector<HTMLDivElement>("#new-aed-position-map");
     if (mapContainer) {
       activePositionPicker = createPositionPicker(mapContainer, newAedPositionOverride ?? state.location, {
+        // Bereits eingetragene AEDs bleiben beim Setzen des neuen Punkts sichtbar.
+        markers: reviewedCandidateMarkers(state),
         mapLabel: tv("newPositionMapLabel"),
         zoomInLabel: tv("newPositionMapZoomIn"),
         zoomOutLabel: tv("newPositionMapZoomOut"),
@@ -480,6 +548,14 @@ function render(restoreFlowFocus = false): void {
       });
     }
   }
+
+  // Zweite Bestätigung in der Neuanlage-Vorschau: Der Speichern-Knopf wird erst aktiv,
+  // wenn der Haken „vor Ort geprüft“ gesetzt ist, und wieder gesperrt, wenn er entfernt wird.
+  const absenceConfirmation = app!.querySelector<HTMLInputElement>("#new-aed-absence-confirmed");
+  absenceConfirmation?.addEventListener("change", () => {
+    const createButton = app!.querySelector<HTMLButtonElement>('[data-action="create-development-node"]');
+    if (createButton) createButton.disabled = !absenceConfirmation.checked;
+  });
 
   document.querySelector<HTMLButtonElement>("#open-info")?.addEventListener("click", () => {
     document.querySelector<HTMLDialogElement>("#info-dialog")?.showModal();
@@ -818,8 +894,13 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     // A corrected map point and a fresh server-side OSM check are still required before upload.
     newAedPositionOverride = undefined;
     state = { ...state, noneOfTheseConfirmed: true };
+  } else if (action === "start-new-entry" && state.kind === "candidate-result" && state.search.status === "complete" && state.assessment.kind === "new-entry-eligible") {
+    // Erste Bestätigung bei einer Suche ohne Treffer: Die Person sagt ausdrücklich,
+    // dass hier ein AED fehlt. Erst danach erscheinen Karte und Positionsbestätigung.
+    newAedPositionOverride = undefined;
+    state = { ...state, newEntryRequested: true };
   } else if (action === "preview-new-aed" && state.kind === "candidate-result") {
-    if (state.search.status !== "complete" || (state.assessment.kind !== "new-entry-eligible" && !(state.assessment.kind === "candidate-review" && state.noneOfTheseConfirmed))) return;
+    if (!newEntryPanelOpen(state)) return;
     const positionConfirmed = app!.querySelector<HTMLInputElement>("#new-aed-position-confirmed")?.checked === true;
     const result = previewNewAed({
       searchStatus: state.search.status,
@@ -843,6 +924,9 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     state = state.returnState;
   } else if (action === "create-development-node" && state.kind === "new-aed-preview") {
     if (!developmentSession || !developmentWriteAvailable || !crypto.randomUUID || state.result.kind !== "ready" || state.writeStatus) return;
+    // Zweite Bestätigung: Ohne gesetzten Haken „vor Ort geprüft“ wird nichts gesendet,
+    // auch wenn der Knopf (z. B. per Tastatur oder Skript) trotzdem ausgelöst wurde.
+    if (app!.querySelector<HTMLInputElement>("#new-aed-absence-confirmed")?.checked !== true) return;
     const preview = state;
     if (preview.result.kind !== "ready") return;
     const operationId = crypto.randomUUID();

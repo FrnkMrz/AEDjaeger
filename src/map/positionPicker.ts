@@ -4,12 +4,22 @@ export interface Coordinate {
 }
 
 type PixelPoint = { x: number; y: number };
+
+/**
+ * Ein zusätzlicher Punkt auf der Karte, zum Beispiel ein bereits in OpenStreetMap
+ * eingetragener AED aus der Umgebungssuche. Der Text in `label` (z. B. „1“) erscheint
+ * im Marker, damit die Person ihn dem gleich nummerierten Eintrag in der Liste zuordnen kann.
+ */
+export type MapMarker = { position: Coordinate; label: string };
+
 type PickerOptions = {
   mapLabel: string;
   zoomInLabel: string;
   zoomOutLabel: string;
   tileErrorLabel: string;
   initialZoom?: number;
+  /** Feste Zusatzmarker (bekannte AEDs). Sie bewegen sich mit der Karte, nicht mit dem Mittelpunkt. */
+  markers?: readonly MapMarker[];
   onPositionChange: (position: Coordinate) => void;
   onZoomChange?: (zoom: number) => void;
 };
@@ -49,6 +59,32 @@ export function moveMapCenter(position: Coordinate, dragX: number, dragY: number
 }
 
 /**
+ * Wählt eine Zoomstufe, bei der Mittelpunkt und alle Marker gleichzeitig sichtbar sind.
+ *
+ * Idee: Wir starten nah (Zoom 19) und zoomen so lange heraus, bis der am weitesten
+ * entfernte Marker innerhalb des sichtbaren Kartenfensters liegt. `padding` hält etwas
+ * Abstand zum Rand, damit kein Marker abgeschnitten wird.
+ */
+export function zoomToFitMarkers(
+  center: Coordinate,
+  markers: readonly MapMarker[],
+  width: number,
+  height: number,
+  padding = 36,
+): number {
+  for (let zoom = MAX_ZOOM; zoom > MIN_ZOOM; zoom -= 1) {
+    const centerPixel = projectCoordinate(center, zoom);
+    const allVisible = markers.every((marker) => {
+      const pixel = projectCoordinate(marker.position, zoom);
+      return Math.abs(pixel.x - centerPixel.x) <= width / 2 - padding
+        && Math.abs(pixel.y - centerPixel.y) <= height / 2 - padding;
+    });
+    if (allVisible) return zoom;
+  }
+  return MIN_ZOOM;
+}
+
+/**
  * A small pan-only picker keeps the selected point fixed under the crosshair.
  * It loads only tiles intersecting the visible viewport from the standard OSM tile service.
  */
@@ -62,6 +98,11 @@ export function createPositionPicker(
   let pointer: { id: number; x: number; y: number; moved: boolean } | undefined;
   const tileLayer = document.createElement("div");
   tileLayer.className = "position-map-tiles";
+  // Eigene Ebene für die Zusatzmarker. Sie liegt über den Kacheln und unter dem roten Mittelpunkt.
+  const markerLayer = document.createElement("div");
+  markerLayer.className = "position-map-markers";
+  markerLayer.setAttribute("aria-hidden", "true");
+  const markers = options.markers ?? [];
   const status = document.createElement("span");
   status.className = "position-map-status";
   status.setAttribute("role", "status");
@@ -80,11 +121,12 @@ export function createPositionPicker(
   attribution.textContent = "© OpenStreetMap contributors";
   attribution.setAttribute("aria-label", "© OpenStreetMap contributors");
 
-  container.replaceChildren(tileLayer, crosshair, controls, attribution, status);
+  container.replaceChildren(tileLayer, markerLayer, crosshair, controls, attribution, status);
   container.setAttribute("aria-label", options.mapLabel);
 
   function renderTiles(): void {
     tileLayer.style.transform = "";
+    markerLayer.style.transform = "";
     const bounds = container.getBoundingClientRect();
     const width = Math.max(1, bounds.width);
     const height = Math.max(1, bounds.height);
@@ -116,6 +158,17 @@ export function createPositionPicker(
       }
     }
     tileLayer.replaceChildren(...images);
+    // Zusatzmarker an ihre Pixelposition im aktuellen Kartenausschnitt setzen.
+    // `textContent` statt innerHTML: Beschriftungen werden nie als HTML interpretiert.
+    markerLayer.replaceChildren(...markers.map((marker) => {
+      const pixel = projectCoordinate(marker.position, zoom);
+      const element = document.createElement("span");
+      element.className = "position-map-marker";
+      element.textContent = marker.label;
+      element.style.left = `${pixel.x - left}px`;
+      element.style.top = `${pixel.y - top}px`;
+      return element;
+    }));
     status.hidden = true;
   }
 
@@ -146,7 +199,11 @@ export function createPositionPicker(
     const dragX = event.clientX - pointer.x;
     const dragY = event.clientY - pointer.y;
     if (Math.abs(dragX) + Math.abs(dragY) > 3) pointer.moved = true;
-    if (pointer.moved) tileLayer.style.transform = `translate(${dragX}px, ${dragY}px)`;
+    if (pointer.moved) {
+      // Kacheln und Zusatzmarker gemeinsam verschieben, damit die Marker an ihrem Ort „kleben“.
+      tileLayer.style.transform = `translate(${dragX}px, ${dragY}px)`;
+      markerLayer.style.transform = `translate(${dragX}px, ${dragY}px)`;
+    }
   }
 
   function onKeyDown(event: KeyboardEvent): void {
