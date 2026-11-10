@@ -15,7 +15,13 @@ const DATA_ORIGIN = "https://pipeline.openfiremap.org/";
 const PMTILES_PATH = "openfiremap.pmtiles";
 const AED_LAYER = "defibrillators";
 const AED_ZOOM = 14;
-const MAX_SOURCE_AGE_HOURS = 48;
+// Höchstalter der OSM-Daten im Archiv: 5 Tage (120 Stunden). Produktentscheidung vom
+// 10.11.2026: 48 Stunden waren zu knapp, weil schon ein einzelner ausgefallener
+// Pipeline-Lauf die Suche gesperrt hätte. Ältere Daten bleiben ein Suchfehler
+// (fail-closed) und gelten nie als Beleg, dass an einem Ort kein AED existiert.
+// Vor einer Neuanlage prüft die Schreibroute den Kartenausschnitt ohnehin erneut live.
+// Derselbe Wert steht in scripts/check-live-search.mjs und muss synchron bleiben.
+const MAX_SOURCE_AGE_HOURS = 5 * 24;
 const MAX_ACCURACY = 100;
 const SEARCH_RADIUS = 100;
 const MAX_REQUEST_BYTES = 1_024;

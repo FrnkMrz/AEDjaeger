@@ -55,7 +55,7 @@ Ausführung entweder
 | --- | --- | --- | --- |
 | B1 | Der Check endet mit Exit-Code 0 | Ausgabe „Live-Check bestanden (nur lesend)“ | `[ ]` |
 | B2 | Range-Unterstützung | Kein Fehler „Range-Anfrage wurde nicht korrekt beantwortet“ | `[ ]` |
-| B3 | Datenstand | „OSM-Datenstand bis …“ mit Alter unter 48 Stunden | `[ ]` |
+| B3 | Datenstand | „OSM-Datenstand bis …“ mit Alter unter 5 Tagen (120 Stunden) | `[ ]` |
 | B4 | Ebene `defibrillators` | Anzahl an Features in der Testkachel; keine Meldung „Ebene fehlt“ | `[ ]` |
 | B5 | Zweite Koordinate (z. B. Hamburg oder Wien) | Ebenfalls bestanden, sofern die Kachel Daten enthält | `[ ]` |
 

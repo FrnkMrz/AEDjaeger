@@ -195,8 +195,8 @@ describe("PMTiles AED candidate search", () => {
     expect(await response.json()).toEqual({ error: "coverage_unavailable" });
   });
 
-  it("fails closed when source extracts exceed the 48-hour freshness limit", async () => {
-    const fetcher = fetchArchive({ dataUntil: new Date(now - 48 * 60 * 60_000 - 1).toISOString() });
+  it("fails closed when source extracts exceed the 5-day (120-hour) freshness limit", async () => {
+    const fetcher = fetchArchive({ dataUntil: new Date(now - 120 * 60 * 60_000 - 1).toISOString() });
     const response = await handleStaticCandidateSearch(request(), { DB: database() }, { fetch: fetcher, now: () => now });
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: "coverage_unavailable" });

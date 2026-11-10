@@ -32,7 +32,8 @@ const DATA_ORIGIN = "https://pipeline.openfiremap.org/";
 const PMTILES_PATH = "openfiremap.pmtiles";
 const AED_LAYER = "defibrillators";
 const AED_ZOOM = 14;
-const MAX_SOURCE_AGE_HOURS = 48;
+// 5 Tage (120 Stunden), wie in der Route. Produktentscheidung vom 10.11.2026.
+const MAX_SOURCE_AGE_HOURS = 5 * 24;
 const MAX_TILE_BYTES = 1 * 1_024 * 1_024;
 const MAX_METADATA_BYTES = 256 * 1_024;
 const REQUIRED_EXTRACTS = ["germany", "austria", "switzerland", "luxembourg", "liechtenstein"];
