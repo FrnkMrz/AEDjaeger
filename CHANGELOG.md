@@ -7,6 +7,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 > Die jüngsten Einträge am Anfang beschreiben den aktuellen Pilotstand. Ältere Einträge darunter dokumentieren frühere, inzwischen teilweise abgelöste Zwischenstände und sind keine Beschreibung des aktuellen Laufzeitverhaltens.
 
 ### Added
+- Ergänzt eine aktuelle, vollständige Übergabe mit Produktentscheidungen, Datenquelle, Deploy-Stand, Sicherheitsgrenzen und konkretem nächstem Handytest.
 - Liest AED-Kandidaten direkt aus der `defibrillators`-Ebene des OpenFireMap-PMTiles-Archivs. Der Worker prüft den Datenstand und liest für den Foto-Standort nur die benötigten Zoom-14-Kacheln über begrenzte HTTP-Range-Anfragen.
 - Verwendet kein Overpass für die Umgebungssuche. Fehlende, veraltete, unvollständige oder ungültige Archivdaten bleiben ein Suchfehler und werden nie als Beleg für einen freien Standort behandelt.
 
