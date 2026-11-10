@@ -26,6 +26,9 @@ export function validateHeader(
 
 export function countLayerFeatures(tileBytes: ArrayBuffer): number | null;
 
+/** Liest eine Antwort stückweise und bricht ab, sobald sie größer als maxBytes wird. */
+export function readLimited(response: Response, maxBytes: number): Promise<Uint8Array>;
+
 export type ArchiveReader = {
   getHeader(): Promise<Parameters<typeof validateHeader>[0]>;
   getZxy(z: number, x: number, y: number, signal?: AbortSignal): Promise<{ data: ArrayBuffer } | undefined>;

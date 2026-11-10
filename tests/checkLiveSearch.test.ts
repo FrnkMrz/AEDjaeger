@@ -3,6 +3,7 @@ import { PbfWriter } from "pbf";
 import {
   countLayerFeatures,
   parseCliArguments,
+  readLimited,
   runLiveSearchCheck,
   tileForCoordinate,
   validateHeader,
@@ -182,5 +183,31 @@ describe("Gesamtablauf mit Fakes", () => {
       latitude: 49.4456, longitude: 11.0825, nowMs: NOW,
       fetchImpl: fakeFetch({ metadataStatus: 503 }), openArchive: fakeArchive(encodeTile({ defibrillators: 1 })),
     })).rejects.toThrow("HTTP 503");
+  });
+});
+
+describe("readLimited (Größenbegrenzung beim Lesen)", () => {
+  it("liefert eine Antwort innerhalb der Grenze vollständig zurück", async () => {
+    const bytes = await readLimited(new Response(new Uint8Array([1, 2, 3])), 3);
+    expect(Array.from(bytes)).toEqual([1, 2, 3]);
+  });
+
+  it("bricht den Datenstrom ab, sobald die Grenze überschritten ist, statt alles zu laden", async () => {
+    // Der Fake-Server würde endlos Daten liefern. Nur ein stückweises Lesen mit Abbruch
+    // kann hier überhaupt fertig werden; ein komplettes Einlesen würde nie enden.
+    let delivered = 0;
+    let cancelled = false;
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) { delivered += 1; controller.enqueue(new Uint8Array(1_024)); },
+      cancel() { cancelled = true; },
+    });
+    await expect(readLimited(new Response(endless), 4_096)).rejects.toThrow("größer als erlaubt");
+    expect(cancelled).toBe(true);
+    expect(delivered).toBeLessThan(20);
+  });
+
+  it("lehnt eine zu groß angekündigte Antwort ab, ohne den Inhalt zu lesen", async () => {
+    const response = new Response(new Uint8Array(10), { headers: { "Content-Length": "999999" } });
+    await expect(readLimited(response, 100)).rejects.toThrow("größer als erlaubt");
   });
 });

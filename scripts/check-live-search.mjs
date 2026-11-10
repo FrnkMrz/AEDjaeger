@@ -240,10 +240,48 @@ async function requestOrFail(fetchImpl, url, headers, signal) {
   return fetchImpl(url, { method: "GET", headers, redirect: "error", signal });
 }
 
-/** Liest eine Antwort nur bis zur erlaubten Größe, damit ein falscher Server nicht viel Speicher belegt. */
-async function readLimited(response, maxBytes) {
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.byteLength > maxBytes) throw new LiveCheckError("Die Antwort ist größer als erlaubt.");
+/**
+ * Liest eine Antwort nur bis zur erlaubten Größe, damit ein falscher Server nicht viel Speicher belegt.
+ *
+ * Wichtig: Wir lesen den Datenstrom stückweise und brechen sofort ab, sobald die Grenze
+ * überschritten ist. `response.arrayBuffer()` würde dagegen erst die komplette Antwort
+ * herunterladen und die Größe erst danach prüfen – dann wäre die Grenze wirkungslos.
+ * Das Vorgehen entspricht `readLimitedBody` in server/osm/staticCandidateSearchRoute.ts.
+ */
+export async function readLimited(response, maxBytes) {
+  const tooLarge = () => new LiveCheckError("Die Antwort ist größer als erlaubt.");
+  // Schneller Vorab-Check: Kündigt der Server schon eine zu große Antwort an, lesen wir gar nicht erst.
+  const announcedLength = response.headers.get("Content-Length");
+  if (announcedLength !== null && (!/^\d+$/u.test(announcedLength) || Number(announcedLength) > maxBytes)) {
+    await response.body?.cancel().catch(() => undefined);
+    throw tooLarge();
+  }
+  if (!response.body) return new Uint8Array();
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const part = await reader.read();
+      if (part.done) break;
+      total += part.value.byteLength;
+      if (total > maxBytes) {
+        // Verbindung beenden, statt den Rest der übergroßen Antwort noch zu laden.
+        await reader.cancel().catch(() => undefined);
+        throw tooLarge();
+      }
+      chunks.push(part.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  // Die gesammelten Teilstücke zu einem zusammenhängenden Byte-Feld zusammensetzen.
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
   return bytes;
 }
 
