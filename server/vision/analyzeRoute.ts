@@ -121,6 +121,26 @@ export async function handleVisionAnalysis(
   }
 }
 
+/**
+ * Sagt der App vorab, ob die Fotoprüfung für dieses Konto überhaupt läuft.
+ *
+ * Warum vorab? Die App zeigt nur dann den Hinweis „Foto geht an OpenAI“ und die Prüf-Schaltfläche,
+ * wenn die Prüfung wirklich aktiv ist. Sonst bliebe der bisherige Ablauf (Selbstbestätigung) unverändert
+ * und niemand sieht einen Hinweis auf eine Funktion, die gar nicht läuft.
+ *
+ * Die Funktion gibt nur Ja/Nein zurück und verrät weder Schlüssel noch Limits noch die Zulassungsliste.
+ * Sie nutzt exakt dieselben Bedingungen wie handleVisionAnalysis, damit „verfügbar“ nie mehr verspricht,
+ * als die Route später hält.
+ */
+export function isPhotoCheckAvailable(
+  environment: VisionRouteEnvironment,
+  session: { subject: string; environment: "production" | "development" },
+): boolean {
+  const limits = getAnalysisLimits(environment);
+  if (!limits || !environment.DB || !environment.OPENAI_API_KEY?.trim()) return false;
+  return limits.allowedSubjects.includes(`${session.environment}:${session.subject}`);
+}
+
 class BodyTooLargeError extends Error {}
 
 async function readLimitedBody(request: Request, maximumBytes: number): Promise<Uint8Array> {

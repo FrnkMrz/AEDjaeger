@@ -9,7 +9,7 @@ import { handleStaticCandidateSearch } from "./osm/staticCandidateSearchRoute";
 import { handleDevelopmentCheckDate } from "./osm/developmentWriteRoute";
 import { handleDevelopmentCreateNode } from "./osm/developmentCreateNodeRoute";
 import { handleTestDiagnostic } from "./testDiagnostics";
-import { handleVisionAnalysis } from "./vision/analyzeRoute";
+import { handleVisionAnalysis, isPhotoCheckAvailable } from "./vision/analyzeRoute";
 
 type StaticAssets = { fetch(request: Request): Promise<Response> };
 type WorkerEnvironment = {
@@ -208,7 +208,10 @@ async function getSession(request: Request, environment: WorkerEnvironment): Pro
   if (!token || !environment.DB) return jsonResponse({ authenticated: false, loginAvailable, developmentLoginAvailable, developmentSession: false, developmentWriteAvailable }, 200);
   try {
     const session = await findOSMSession(environment.DB, token, Date.now());
-    return jsonResponse({ authenticated: session !== null, loginAvailable, developmentLoginAvailable, developmentSession: session?.environment === "development", developmentWriteAvailable }, 200);
+    // „photoCheckAvailable“ erscheint nur, wenn die Fotoprüfung für dieses Konto aktiv ist.
+    // Fehlt das Feld, gilt für die App „aus“ – so ändert sich für alle anderen nichts.
+    const photoCheckAvailable = session !== null && isPhotoCheckAvailable(environment, session);
+    return jsonResponse({ authenticated: session !== null, loginAvailable, developmentLoginAvailable, developmentSession: session?.environment === "development", developmentWriteAvailable, ...(photoCheckAvailable ? { photoCheckAvailable: true } : {}) }, 200);
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
