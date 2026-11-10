@@ -1,8 +1,10 @@
 # OSM-Datenmodell und technische Grundlagen
 
-Stand: 17.10.2026. Fachliche Grundlage: [deutsche Tagging-Seite](https://wiki.openstreetmap.org/wiki/DE:Tag:emergency=defibrillator) und [englische Tagging-Seite](https://wiki.openstreetmap.org/wiki/Tag:emergency=defibrillator). Die UI-Zuordnung ist unser Entwurf.
+Stand: **10.11.2026**. Fachliche Grundlage: [deutsche Tagging-Seite](https://wiki.openstreetmap.org/wiki/DE:Tag:emergency=defibrillator) und [englische Tagging-Seite](https://wiki.openstreetmap.org/wiki/Tag:emergency=defibrillator). Die UI-Zuordnung ist unser Entwurf.
 
-> **Aktueller Pilot (8.11.2026):** Die Person bestätigt selbst, dass ein AED oder AED-Gehäuse im Foto sichtbar ist. Das Foto wird nicht an einen Bilddienst gesendet. Historische Abschnitte zur früher geplanten KI-Bildanalyse beschreiben keinen aktuellen Produktablauf.
+> **Aktueller Pilot:** Die Person bestätigt selbst, dass ein AED oder AED-Gehäuse im Foto sichtbar ist. Das Foto wird nicht an einen Bilddienst gesendet. PR #49 hat die Umgebungssuche auf das bestehende OpenFireMap-PMTiles-Archiv umgestellt; der Stand wurde am 9.11.2026 gemergt und erfolgreich deployed. Der reale Handy-Suchlauf nach dem Deploy ist noch offen. `OSM_DEV_WRITES_ENABLED` bleibt aus. Frühere Abschnitte zur geplanten KI-Bildanalyse oder Overpass-Laufzeit beschreiben historische Zwischenstände.
+
+Für die kompakte Übergabe siehe [Übergabe](uebergabe.md). `pipeline.openfiremap.org` ist für AEDjaeger ausschließlich der Host der lesend genutzten PMTiles-Datei und Metadaten. AEDjaeger löst keinen Pipeline-Lauf aus und hat keine Verbindung zu Proxmox oder VM102. Leere PMTiles-Suchen werden in einer angemeldeten Dev-Sitzung zusätzlich mit einem begrenzten OSM-Dev-`map.json`-Abruf abgesichert; dieser Endpunkt ist kein Overpass-Fallback und ersetzt keine Kandidatensuche.
 
 ## Mögliche Datenfelder im Hintergrund
 
