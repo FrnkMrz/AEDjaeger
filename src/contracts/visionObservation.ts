@@ -4,6 +4,13 @@
  * These fields describe what a model claims to see. They are not trusted facts,
  * OSM tags, or permission to create/update an object.
  */
+/**
+ * Kennung des Bildmodells. Sie steht an EINER Stelle, weil Server (OpenAI-Aufruf) und Browser
+ * (Prüfung der Serverantwort) denselben Wert brauchen. Ein Tippfehler an einer der beiden Seiten
+ * würde sonst jede Fotoprüfung stillschweigend scheitern lassen.
+ */
+export const VISION_MODEL = "gpt-6-luna";
+
 export const VISION_SCENES = [
   "device_visible",
   "enclosure_visible",

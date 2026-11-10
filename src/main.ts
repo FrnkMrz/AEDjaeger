@@ -4,6 +4,8 @@ import { analysisResult, chooseCandidate, confirmationResult, recoveryResult, ty
 import { translate, translations, type Language, type TranslationKey } from "./i18n/translations";
 import { translateFlow, type FlowMessageKey } from "./i18n/flowTranslations";
 import { readPhotoCapture, readPhotoLocation } from "./vision/photoLocation";
+import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservation } from "./vision/analyzePhoto";
+import { isAedRecognized } from "./contracts/visionObservation";
 import { assessCandidateSearch } from "./domain/assessCandidateSearch";
 import { createPositionPicker, zoomToFitMarkers, type Coordinate, type MapMarker } from "./map/positionPicker";
 import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
@@ -41,6 +43,13 @@ let productionLoginAvailable = false;
 let developmentLoginAvailable = false;
 let developmentSession = false;
 let developmentWriteAvailable = false;
+// Fotoprüfung: Nur wenn der Server sie für dieses Konto freigibt, bietet die App den Foto-Upload an.
+let photoCheckAvailable = false;
+// Die gewählte Foto-Datei bleibt nur im Arbeitsspeicher, solange das Foto aktiv ist. Sie wird
+// ausschließlich für die Fotoprüfung gebraucht und in releasePhoto() wieder verworfen.
+let selectedPhotoFile: File | undefined;
+// Eine Kennung pro Foto: Ein zweiter Tipp auf dieselbe Prüfung erzeugt so keine zweite Abrechnung.
+let photoCheckRequestId: string | undefined;
 let oauthReturnFailed = new URLSearchParams(window.location.search).get("login") === "error";
 let analysisTimer: number | undefined;
 let saveTimer: number | undefined;
@@ -260,11 +269,27 @@ function statusContent(): string {
       // The first pilot deliberately relies on the person's on-site confirmation, not a model.
       // The image and its remaining metadata stay in this browser; only selected coordinates
       // leave it later when the person explicitly starts a location search.
+      //
+      // Neu: Gibt der Server die Fotoprüfung für dieses Konto frei, ersetzt „AED gesehen – Foto
+      // prüfen“ die reine Selbstbestätigung. Dann ehrlich anzeigen, dass das Foto (ohne Standort und
+      // Metadaten) das Gerät verlässt. Ist die Prüfung gescheitert (photoCheck „unavailable“),
+      // gilt wieder die Selbstbestätigung samt Hinweis, damit die App nicht an OpenAI hängt.
+      const useCheck = !demoMode && photoCheckAvailable && state.photoCheck !== "unavailable" && selectedPhotoFile !== undefined;
       const photoAction = demoMode
         ? `<button class="button button-primary" data-action="analyze">${t("demoAnalyze")}</button>`
-        : `<button class="button button-primary" data-action="confirm-sighting">${tv("sightingConfirm")}</button>`;
-      return `${photoMarkup}${photoAction}<p class="supporting-copy">${tv("photoStaysLocal")}</p>${demoMode ? `<p class="simulation-note">${t("testPhotoNotice")}</p>` : ""}<button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
+        : useCheck
+          ? `<button class="button button-primary" data-action="check-photo">${tv("photoCheckAction")}</button>`
+          : `<button class="button button-primary" data-action="confirm-sighting">${tv("sightingConfirm")}</button>`;
+      const photoNote = useCheck
+        ? `<p class="supporting-copy">${tv("photoCheckNotice")}</p>`
+        : `${state.photoCheck === "unavailable" ? `<p class="supporting-copy">${tv("photoCheckUnavailable")}</p>` : ""}<p class="supporting-copy">${tv("photoStaysLocal")}</p>`;
+      return `${photoMarkup}${photoAction}${photoNote}${demoMode ? `<p class="simulation-note">${t("testPhotoNotice")}</p>` : ""}<button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
     }
+    case "photo-checking":
+      return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv("photoChecking")}</span></div>`;
+    case "photo-rejected":
+      // Nur „Anderes Foto“ geht weiter: Ein Foto ohne erkennbaren AED soll nicht in die Suche laufen.
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv(state.reason === "unclear" ? "photoUnclearTitle" : "photoRejectedTitle")}</h2><p>${tv(state.reason === "unclear" ? "photoUnclearBody" : "photoRejectedBody")}</p></div></div><button class="button button-primary" data-action="retake">${t("retake")}</button>`;
     case "photo-date":
       return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("photoDateTitle")}</h2><p>${tv("photoDateHelp")}</p><label for="photo-observed-on">${tv("photoDateLabel")}</label><input id="photo-observed-on" type="date" value="${escapeHtml(state.suggestedDate)}" max="${localCalendarDate()}" /></div></div><button class="button button-primary" data-action="confirm-photo-date">${tv("photoDateConfirm")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     case "analyzing":
@@ -446,7 +471,7 @@ function render(restoreFlowFocus = false): void {
     <div class="page-shell">
       <header class="topbar"><a class="brand" href="/" aria-label="${t("appName")}" ${hasUnresolvedSave(state) ? 'aria-disabled="true"' : ""}><span class="brand-mark">${icon("check")}</span><span>${t("appName")}</span></a><div class="topbar-actions"><button class="info-link" id="open-info" type="button"><span class="info-mark" aria-hidden="true">i</span><span>${t("aboutButton")}</span></button><label class="language-picker"><span class="sr-only">${t("language")}</span><select id="language" aria-label="${t("language")}">${supportedLanguages.map((code) => `<option value="${code}" ${language === code ? "selected" : ""}>${languageNames[code]}</option>`).join("")}</select><span class="language-globe" aria-hidden="true">◎</span></label></div></header>
       ${authenticated ? `<main>
-        <section class="hero ${isReady ? "" : "hero-compact"}"><div class="hero-kicker"><span></span>${t("eyebrow")}</div><h1>${isReady ? t("title") : state.kind === "analyzing" || state.kind === "candidate-searching" || state.kind === "sending" ? t("checking") : t("tagline")}</h1>${isReady ? `<p>${t("intro")}</p>` : ""}</section>
+        <section class="hero ${isReady ? "" : "hero-compact"}"><div class="hero-kicker"><span></span>${t("eyebrow")}</div><h1>${isReady ? t("title") : state.kind === "analyzing" || state.kind === "photo-checking" || state.kind === "candidate-searching" || state.kind === "sending" ? t("checking") : t("tagline")}</h1>${isReady ? `<p>${t("intro")}</p>` : ""}</section>
         <section class="capture-card" aria-live="polite" aria-atomic="false">
           <div class="capture-content">${isReady ? `<div class="empty-illustration" aria-hidden="true"><span class="device-card"><span class="device-heart">♥</span><span class="device-zap">ϟ</span></span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>` : statusContent()}</div>
           ${isReady ? `<div class="capture-actions"><label class="button button-primary camera-label">${icon("camera")}<span>${t("camera")}</span><input id="camera-input" type="file" accept="image/*" capture="environment" /></label><label class="button button-secondary camera-label">${t("choosePhoto")}<input id="file-input" type="file" accept="image/*" /></label><p class="supporting-copy">${t("privacy")}</p></div>` : ""}
@@ -623,6 +648,7 @@ async function refreshAccountState(focusSelector?: string): Promise<void> {
     developmentLoginAvailable = status.developmentLoginAvailable;
     developmentSession = status.developmentSession;
     developmentWriteAvailable = status.developmentWriteAvailable;
+    photoCheckAvailable = status.photoCheckAvailable;
     accountState = status.authenticated ? "signed-in" : !productionLoginAvailable && !developmentLoginAvailable ? "not-configured" : failedOAuthReturn ? "login-error" : "signed-out";
     if (state.kind === "photo" && accountState === "not-configured") recordDiagnostic("live_flow_blocked");
   } catch {
@@ -730,7 +756,9 @@ function focusCurrentState(): void {
   }
   const focusTargets: Record<FlowState["kind"], string> = {
     ready: "#camera-input",
-    photo: '[data-action="confirm-sighting"]',
+    photo: '[data-action="confirm-sighting"], [data-action="check-photo"]',
+    "photo-checking": ".loading-row",
+    "photo-rejected": ".result-message h2",
     "photo-date": "#photo-observed-on",
     analyzing: ".loading-row",
     "location-choice": ".result-message h2",
@@ -812,6 +840,9 @@ async function onPhotoSelected(event: Event): Promise<void> {
   // The open disclosure is an explicit user choice; carry that preview mode into this photo.
   demoMode = demoMode || (document.querySelector<HTMLDetailsElement>(".demo-panel")?.open ?? false);
   selectedPhotoLocation = photoLocation;
+  // Für die optionale Fotoprüfung merken: die Datei und eine neue Anfragekennung pro Foto.
+  selectedPhotoFile = file;
+  photoCheckRequestId = createVisionRequestId();
   const today = localCalendarDate();
   observedOn = photoDate ?? today;
   // Ob nach dem Beobachtungsdatum gefragt wird, entscheidet photoDateNeedsConfirmation:
@@ -851,10 +882,9 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
   } else if (action === "confirm-sighting" && state.kind === "photo" && accountState === "signed-in") {
     // This is a human sighting confirmation only. It neither claims an automatic recognition
     // result nor permits an OSM edit; the separate OSM proposal and confirmation remain later.
-    if (photoDateRequiresConfirmation) {
-      state = { kind: "photo-date", photoUrl: state.photoUrl, suggestedDate: observedOn };
-      render(true);
-    } else continueAfterSighting(state.photoUrl);
+    proceedAfterSighting(state.photoUrl);
+  } else if (action === "check-photo" && state.kind === "photo" && accountState === "signed-in" && photoCheckAvailable) {
+    void runPhotoCheck(state.photoUrl);
   } else if (action === "confirm-photo-date" && state.kind === "photo-date" && accountState === "signed-in") {
     const dateInput = app!.querySelector<HTMLInputElement>("#photo-observed-on");
     if (!dateInput || !isValidObservedDate(dateInput.value)) return;
@@ -1106,6 +1136,58 @@ function getPhoneLocation(): Promise<SearchLocation> {
   });
 }
 
+/**
+ * Geht nach bestätigter Sichtbarkeit weiter: erst ggf. die Datumsfrage, dann Standort und Suche.
+ * Beide Wege (Selbstbestätigung und bestandene Fotoprüfung) nutzen dieselbe Fortsetzung, damit
+ * die Datums- und Standortregeln überall gleich gelten.
+ */
+function proceedAfterSighting(photoUrl: string): void {
+  if (photoDateRequiresConfirmation) {
+    state = { kind: "photo-date", photoUrl, suggestedDate: observedOn };
+    render(true);
+  } else continueAfterSighting(photoUrl);
+}
+
+/**
+ * Fotoprüfung per OpenAI (nur nach ausdrücklichem Tippen und nur, wenn der Server sie freigibt).
+ *
+ * Ablauf: Foto lokal verkleinern und ohne EXIF/GPS neu kodieren → an den eigenen Server senden →
+ * Ergebnis auswerten.
+ *  - AED oder Gehäuse erkannt: weiter wie nach der Selbstbestätigung.
+ *  - Kein AED / nicht eindeutig: Sackgasse mit „Anderes Foto“ (kein Weiterklicken).
+ *  - Jeder technische Fehler (Limit, Ausfall, Timeout, ungültige Antwort): Rückfall auf die
+ *    Selbstbestätigung. Ein Ausfall des Dienstes darf die App nicht lahmlegen; die Person bleibt
+ *    weiter diejenige, die bestätigt, dass AED oder Gehäuse zu sehen ist.
+ * Standort und Konto verlassen das Gerät dabei nie: Das Bild enthält nach dem Neukodieren keine Metadaten.
+ */
+async function runPhotoCheck(photoUrl: string): Promise<void> {
+  const file = selectedPhotoFile;
+  const requestId = photoCheckRequestId;
+  if (!file || !requestId) return;
+  state = { kind: "photo-checking", photoUrl };
+  render(true);
+  let outcome: "recognized" | "not-aed" | "unclear" | "unavailable";
+  try {
+    const image = await preparePhotoForAnalysis(file);
+    const observation = await requestVisionObservation(image, fetch, requestId);
+    outcome = isAedRecognized(observation) ? "recognized" : observation.scene === "unclear" ? "unclear" : "not-aed";
+  } catch {
+    // Jeder Fehler (VisionClientError oder unerwartet) führt nur zum Rückfall, nie zu einem Absturz.
+    outcome = "unavailable";
+  }
+  // Wurde das Foto inzwischen verworfen oder ersetzt, darf das späte Ergebnis nichts mehr ändern.
+  if (state.kind !== "photo-checking" || state.photoUrl !== photoUrl || selectedPhotoFile !== file) return;
+  if (outcome === "recognized") {
+    proceedAfterSighting(photoUrl);
+  } else if (outcome === "unavailable") {
+    state = { kind: "photo", photoUrl, photoCheck: "unavailable" };
+    render(true);
+  } else {
+    state = { kind: "photo-rejected", photoUrl, reason: outcome };
+    render(true);
+  }
+}
+
 function continueAfterSighting(photoUrl: string): void {
   recordDiagnostic("sighting_confirmed");
   if (selectedPhotoLocation) {
@@ -1123,6 +1205,8 @@ function releasePhoto(): void {
   const photoUrl = getPhotoUrl(state);
   if (photoUrl?.startsWith("blob:")) URL.revokeObjectURL(photoUrl);
   selectedPhotoLocation = undefined;
+  selectedPhotoFile = undefined;
+  photoCheckRequestId = undefined;
   photoDateRequiresConfirmation = false;
   observedOn = localCalendarDate();
   activeSearchLocation = undefined;

@@ -1,6 +1,6 @@
-import { IMAGE_ISSUES, parseVisionObservation, VISION_SCENES, type VisionObservation } from "../../src/contracts/visionObservation";
+import { IMAGE_ISSUES, parseVisionObservation, VISION_MODEL, VISION_SCENES, type VisionObservation } from "../../src/contracts/visionObservation";
 
-export const OPENAI_VISION_MODEL = "gpt-6-luna";
+export const OPENAI_VISION_MODEL = VISION_MODEL;
 
 export const MAX_VISION_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_OUTPUT_TOKENS = 2_000;
