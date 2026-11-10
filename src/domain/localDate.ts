@@ -17,3 +17,25 @@ export function isCalendarDate(value: unknown): value is string {
 export function isValidObservedDate(value: string, now: Date = new Date()): boolean {
   return isCalendarDate(value) && value <= localCalendarDate(now);
 }
+
+/** Ein Foto gilt als „gerade eben aufgenommen“, wenn es höchstens so alt ist (5 Minuten). */
+export const FRESH_CAPTURE_WINDOW_MS = 5 * 60_000;
+/** Kleine Toleranz, falls die Kamera-Uhr der Geräte-Uhr minimal vorausgeht. */
+const FRESH_CAPTURE_FUTURE_TOLERANCE_MS = 60_000;
+
+/**
+ * Prüft, ob ein Foto in den letzten 5 Minuten aufgenommen wurde.
+ *
+ * Wozu: Bei einem gerade eben aufgenommenen Foto ist klar, dass die Person den AED heute
+ * vor Ort gesehen hat. Dann fragt die App nicht mehr nach dem Beobachtungsdatum.
+ * Ältere Fotos, Fotos ohne verlässliche Zeitangabe und Zeitangaben aus der Zukunft gelten
+ * nicht als frisch – dort bleibt die ausdrückliche Datumsbestätigung bestehen.
+ *
+ * @param capturedAtMs Aufnahmezeitpunkt in Millisekunden (wie Date.getTime()).
+ * @param nowMs        Aktuelle Zeit; nur für Tests überschreibbar.
+ */
+export function isFreshCapture(capturedAtMs: number | undefined, nowMs: number = Date.now()): boolean {
+  if (capturedAtMs === undefined || !Number.isFinite(capturedAtMs)) return false;
+  const ageMs = nowMs - capturedAtMs;
+  return ageMs <= FRESH_CAPTURE_WINDOW_MS && ageMs >= -FRESH_CAPTURE_FUTURE_TOLERANCE_MS;
+}

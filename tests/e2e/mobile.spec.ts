@@ -142,12 +142,49 @@ test("a camera input photo with an old EXIF date requires confirmation", async (
   expect(searchRequests).toBe(0);
 });
 
-test("a camera input photo without EXIF date requires explicit observation-date confirmation", async ({ page }) => {
+test("a fresh camera photo without EXIF date skips the observation-date question", async ({ page }) => {
+  await page.goto("/");
+  // Eine im Browser erzeugte Datei trägt die aktuelle Zeit als Dateizeit – wie ein Foto,
+  // das die Kamera gerade eben aufgenommen hat. Sie enthält keine EXIF-Daten.
+  await page.evaluate(() => {
+    const file = new File(['<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#176b4b"/></svg>'], "kamera.svg", { type: "image/svg+xml" });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    const input = document.querySelector<HTMLInputElement>("#camera-input")!;
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
+  // Keine Datumsabfrage: Es geht direkt mit der Standortwahl weiter.
+  await expect(page.getByRole("heading", { name: "Standort für die Suche wählen" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Wann hast du den AED gesehen?" })).toHaveCount(0);
+});
+
+test("a fresh file chosen from the gallery without EXIF date still asks for the observation date", async ({ page }) => {
+  await page.goto("/");
+  // Bei „Foto auswählen“ sagt die Dateizeit nichts über die Aufnahme aus (z. B. ein gerade erst
+  // gespeichertes altes Bild). Die 5-Minuten-Regel darf hier ohne EXIF-Zeit nicht greifen.
+  await page.evaluate(() => {
+    const file = new File(['<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#176b4b"/></svg>'], "galerie.svg", { type: "image/svg+xml" });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    const input = document.querySelector<HTMLInputElement>("#file-input")!;
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
+  await expect(page.getByRole("heading", { name: "Wann hast du den AED gesehen?" })).toBeVisible();
+});
+
+test("an older camera input photo without EXIF date requires explicit observation-date confirmation", async ({ page }) => {
   let searchRequests = 0;
   await page.route("**/api/osm/candidates/search", async (route) => {
     searchRequests += 1;
     await route.fulfill({ json: { status: "complete", coverage_radius_meters: 112, candidates: [] } });
   });
+  // Die Testdatei kann (z. B. in der CI direkt nach dem Auschecken) erst wenige Minuten alt sein.
+  // Die Browser-Uhr läuft deshalb 10 Minuten vor, damit die Datei sicher älter als 5 Minuten wirkt.
+  await page.clock.install({ time: Date.now() + 10 * 60_000 });
   await page.goto("/");
   await page.locator("#camera-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();

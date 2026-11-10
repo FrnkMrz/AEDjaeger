@@ -3,12 +3,12 @@ import { endOSMSession, loadOSMSession } from "./auth/osmSession";
 import { analysisResult, chooseCandidate, confirmationResult, recoveryResult, type CandidateId, type DemoScenario, type DevelopmentWriteRequest, type FlowState } from "./domain/workflow";
 import { translate, translations, type Language, type TranslationKey } from "./i18n/translations";
 import { translateFlow, type FlowMessageKey } from "./i18n/flowTranslations";
-import { readPhotoDate, readPhotoLocation } from "./vision/photoLocation";
+import { readPhotoCapture, readPhotoLocation } from "./vision/photoLocation";
 import { assessCandidateSearch } from "./domain/assessCandidateSearch";
 import { createPositionPicker, zoomToFitMarkers, type Coordinate, type MapMarker } from "./map/positionPicker";
 import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
 import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } from "./osm/candidateSearch";
-import { isCalendarDate, isValidObservedDate, localCalendarDate } from "./domain/localDate";
+import { isCalendarDate, isFreshCapture, isValidObservedDate, localCalendarDate } from "./domain/localDate";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root element was not found.");
@@ -785,13 +785,21 @@ async function onPhotoSelected(event: Event): Promise<void> {
   const photoUrl = URL.createObjectURL(file);
   let photoLocation: SearchLocation | undefined;
   let photoDate: string | undefined;
+  let photoCapturedAtMs: number | undefined;
   try {
     const image = new Image();
     image.src = photoUrl;
     await image.decode();
     // Read only GPS and capture date locally; neither metadata nor image leaves the device.
     photoLocation = await readPhotoLocation(file);
-    photoDate = await readPhotoDate(file);
+    const capture = await readPhotoCapture(file);
+    photoDate = capture?.date;
+    // Zeitpunkt der Aufnahme für die „gerade eben“-Prüfung:
+    // 1. Die EXIF-Aufnahmezeit hat Vorrang – sie stammt von der Kamera selbst.
+    // 2. Fehlt sie, zählt NUR bei „AED fotografieren“ (Kamera-Eingabe) die Dateizeit, denn die
+    //    Datei ist dann soeben entstanden. Bei „Foto auswählen“ sagt die Dateizeit nichts über
+    //    die Aufnahme aus (z. B. ein gerade erst gespeichertes altes Bild) und wird ignoriert.
+    photoCapturedAtMs = capture?.timeMs ?? (input.id === "camera-input" ? file.lastModified : undefined);
   } catch {
     URL.revokeObjectURL(photoUrl);
     if (selectionVersion === photoSelectionVersion) {
@@ -814,7 +822,11 @@ async function onPhotoSelected(event: Event): Promise<void> {
   selectedPhotoLocation = photoLocation;
   const today = localCalendarDate();
   observedOn = photoDate ?? today;
-  photoDateRequiresConfirmation = photoDate === undefined || photoDate !== today;
+  // Ein Foto aus den letzten 5 Minuten ist eine Beobachtung von heute: keine Datumsabfrage.
+  // Alle anderen Fotos ohne Datum oder mit einem anderen Tag brauchen weiter die ausdrückliche
+  // Bestätigung, damit ein altes Bild nicht stillschweigend als heutige Vor-Ort-Prüfung gilt.
+  const capturedJustNow = isFreshCapture(photoCapturedAtMs);
+  photoDateRequiresConfirmation = !capturedJustNow && (photoDate === undefined || photoDate !== today);
   activeSearchLocation = undefined;
   activeSearchLocationSource = undefined;
   mapLocationOverride = undefined;
