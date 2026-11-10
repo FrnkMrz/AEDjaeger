@@ -1,16 +1,16 @@
 # Umsetzung durch einen AI-Agenten
 
-> **Aktueller Stand (10.11.2026):** Der Pilot kommt ohne externe Bilddienste aus. Die Person bestätigt AED/Gehäuse-Sichtbarkeit, Foto/EXIF bleiben lokal, Foto-GPS hat Vorrang. Die Umgebungssuche nutzt das vorhandene PMTiles-Archiv, nicht Overpass. PR #49 ist gemergt und der Cloudflare-Deploy #234 erfolgreich; die reale mobile Suche nach diesem Deploy ist noch offen. `OSM_DEV_WRITES_ENABLED` bleibt aus.
+> **Aktueller Stand (10.11.2026):** Optionale Fotoprüfung per OpenAI (nur bei Betreiber-Freigabe, Rückfall auf die Selbstbestätigung). Ohne Freigabe kommt der Pilot ohne externe Bilddienste aus; Foto/EXIF bleiben lokal, Foto-GPS hat Vorrang. Die Umgebungssuche nutzt das vorhandene PMTiles-Archiv, nicht Overpass. PR #49 ist gemergt und der Cloudflare-Deploy #234 erfolgreich; die reale mobile Suche nach diesem Deploy ist noch offen. `OSM_DEV_WRITES_ENABLED` bleibt aus.
 
 Stand: 10.11.2026. Der aktuelle nächste Schritt ist ein lesender Praxistest auf dem Handy: OSM-Dev-Login, Foto mit GPS, Sichtbestätigung und PMTiles-Suche. Kein OSM-Schreibvorgang ist freigegeben. Die Produktentscheidungen, Grenzen der Datenquelle und Übergabe stehen in [Übergabe](uebergabe.md); der technische Datenvertrag steht in [OSM-Datenzugriff](osm.md).
 
-> **Ergänzung (10.11.2026):** Die Abnahmeschritte sind in [Pilot-Abnahme](pilot-abnahme.md) festgehalten. Der Live-Check der Datenquelle ist vorbereitet, aber noch nicht ausgeführt.
+> **Ergänzung (10.11.2026):** Die Abnahmeschritte sind in [Pilot-Abnahme](pilot-abnahme.md) festgehalten. Der Live-Check der Datenquelle lief am 10.11.2026 zweimal erfolgreich (B1 bis B4); offen ist B5, eine zweite Koordinate.
 
 ## Veröffentlichung auf Cloudflare
 
 Die GitHub-Actions-Workflowdatei `.github/workflows/ci.yml` prüft PRs und Pushes. Nach erfolgreichem CI auf einem Push zu `main` (einschließlich Merge-Commit) startet der Cloudflare-Deploy automatisch. Der manuelle `workflow_dispatch`-Lauf veröffentlicht nur, wenn `deploy_to_workers` ausdrücklich bestätigt wird. Der Deploy verwendet die GitHub-Umgebung `production`, serialisiert Deployments und veröffentlicht die Workers-App unter ihrer bestehenden workers.dev-Adresse. Er startet keine OpenFireMap-Pipeline, führt keine D1-Migrationen aus und verändert keine OSM-Daten.
 
-Der jüngste Merge von PR #49 löste den automatischen Deploy aus; GitHub-Actions-Lauf [#234](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42672639423) war erfolgreich. Die Umgebung benötigt das Secret `CLOUDFLARE_API_TOKEN` und die Variable `CLOUDFLARE_ACCOUNT_ID`. Sie sollen ausschließlich in den GitHub-Environment-Einstellungen gespeichert werden. Eine zusätzliche Deploy-Freigabe hängt von den aktuellen Repository-Environment-Regeln ab; der Merge-Deploy #234 ist bereits erfolgreich durchgelaufen.
+Der Merge von PR #49 löste den automatischen Deploy aus; GitHub-Actions-Lauf [#234](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42672639423) war erfolgreich. Der jüngste Deploy stammt vom Merge von PR #54 (CI [#248](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42853298091), 10.11.2026) und war ebenfalls erfolgreich. Die Umgebung benötigt das Secret `CLOUDFLARE_API_TOKEN` und die Variable `CLOUDFLARE_ACCOUNT_ID`. Sie sollen ausschließlich in den GitHub-Environment-Einstellungen gespeichert werden. Eine zusätzliche Deploy-Freigabe hängt von den aktuellen Repository-Environment-Regeln ab; der Merge-Deploy #234 ist bereits erfolgreich durchgelaufen.
 
 ## Reihenfolge und aktueller Stand
 
@@ -47,7 +47,7 @@ Das [AED-Signalnetz](gamification.md) bleibt für Nutzende im Pilot vollständig
 
 **Historischer Bericht:** Die folgenden Hinweise dokumentieren abgeschlossene frühe Tests. Sie sind kein aktueller Auftrag, keine Laufzeitfunktion und keine Voraussetzung für den Pilot. Weitere externe Bildtests sind nicht Teil des Produkts.
 
-Die früheren externen Bildtests und ihr Bewertungsbogen sind als Recherche dokumentiert, aber kein Teil des jetzigen Umsetzungsplans. Im aktuellen Ablauf bleibt das Foto samt EXIF auf dem Gerät; die Person bestätigt selbst, ob AED oder AED-Gehäuse sichtbar sind. Diese Bestätigung ist keine automatische Erkennung und darf nicht als solche bezeichnet werden.
+Die früheren externen Bildtests und ihr Bewertungsbogen sind als Recherche dokumentiert, aber kein Teil des jetzigen Umsetzungsplans. Im aktuellen Ablauf bestätigt die Person selbst, ob AED oder AED-Gehäuse sichtbar sind. Diese Bestätigung ist keine automatische Erkennung und darf nicht als solche bezeichnet werden. Die optionale Fotoprüfung per OpenAI (seit 10.11.2026) ist ein zusätzlicher Filter; ohne Freigabe bleibt das Foto samt EXIF auf dem Gerät.
 
 Mit zunächst etwa 30–50 eigenen oder rechtmäßig nutzbaren Bildern anfangen. Positive Fälle: verschiedene Geräte, durch Glas sichtbare Geräte, Außenwand und Innenraum. Negative oder unklare Fälle: Wegweiser, geschlossener Kasten, leere Halterung, Poster, Bildschirmfoto, Feuerlöscher, mehrere Geräte, Reflexionen, Dunkelheit und Unschärfe.
 
@@ -71,7 +71,7 @@ Abnahme: Auf einem einfachen Fall ist nach dem Foto nur eine Speicherbestätigun
 
 Die damalige Umsetzung enthielt einen OpenAI-Adapter und eine Overpass-Suche. Beides wurde durch spätere Produktentscheidungen aus dem aktiven Fotoablauf entfernt. Der Pilot übermittelt kein Bild an Anbieter und sucht AEDs direkt im Layer `defibrillators` des bestehenden OpenFireMap-PMTiles-Archivs. Der Worker validiert Metadaten, Länderextrakte, Alter und Archivabdeckung und liest benötigte Kacheln per HTTP Range. Fehler oder unvollständige Daten sperren eine Neuanlage. Ein Live-Range-Abruf und der mobile Ende-zu-Ende-Ablauf sind noch zu prüfen. OSM-Schreibrouten bleiben separat über `OSM_DEV_WRITES_ENABLED` abgeschaltet. Schlüssel, Koordinaten, Fotos und Antworttexte gehören nicht in Logs.
 
-Abnahme: Fotos und EXIF bleiben lokal; es gibt keine Bilddienst- oder Anbieter-API. Die Umgebungssuche startet nur nach ausdrücklichem Tastendruck. GPS-Koordinaten werden zuerst lokal dem Foto entnommen; bei fehlenden Koordinaten wird der Handy-Standort nur nach ausdrücklicher Auswahl abgefragt. Ein verweigerter Standortzugriff sendet keine Suchanfrage. Die Person bestätigt selbst, ob ein AED-Gerät oder AED-Gehäuse sichtbar ist; bloßes Schild, leere Halterung oder unklare Fotos gelten nicht automatisch als AED. Mögliche Feed-Treffer verlangen menschliche Prüfung. Ein fehlgeschlagener, veralteter oder unvollständiger Snapshot erzeugt keinen Neuanlagevorschlag. Foto- und Token-Inhalte erscheinen nicht in Logs.
+Abnahme: Fotos und EXIF bleiben lokal, solange die optionale Fotoprüfung aus ist; mit Freigabe gehen Fotos nur nach ausdrücklichem Tippen, verkleinert und ohne EXIF/GPS an OpenAI. Die Umgebungssuche startet nur nach ausdrücklichem Tastendruck. GPS-Koordinaten werden zuerst lokal dem Foto entnommen; bei fehlenden Koordinaten wird der Handy-Standort nur nach ausdrücklicher Auswahl abgefragt. Ein verweigerter Standortzugriff sendet keine Suchanfrage. Die Person bestätigt selbst, ob ein AED-Gerät oder AED-Gehäuse sichtbar ist; bloßes Schild, leere Halterung oder unklare Fotos gelten nicht automatisch als AED. Mögliche Feed-Treffer verlangen menschliche Prüfung. Ein fehlgeschlagener, veralteter oder unvollständiger Snapshot erzeugt keinen Neuanlagevorschlag. Foto- und Token-Inhalte erscheinen nicht in Logs.
 
 ## Phase 4: OSM-Schreiben in der Testumgebung
 

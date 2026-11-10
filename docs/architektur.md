@@ -1,6 +1,6 @@
 # Architektur und Bedienung für AEDjaeger
 
-> **Aktueller Stand (10.11.2026):** Pilot ohne externe Bilddienste/OpenAI; die Person bestätigt AED oder Gehäuse selbst, Foto/EXIF bleiben lokal. Die Umgebungssuche liest die `defibrillators`-Ebene aus dem vorhandenen OpenFireMap-PMTiles-Archiv, ohne Overpass. PR #49 ist gemergt; CI und Cloudflare-Deploy #234 waren erfolgreich. Der Live-Abgleich nach diesem Deploy auf einem echten Handy ist noch zu bestätigen. `OSM_DEV_WRITES_ENABLED` ist aus.
+> **Aktueller Stand (10.11.2026):** Optionale Fotoprüfung per OpenAI (nur bei Betreiber-Freigabe), sonst Selbstbestätigung; Foto/EXIF bleiben lokal, solange die Prüfung aus ist. Die Umgebungssuche liest die `defibrillators`-Ebene aus dem vorhandenen OpenFireMap-PMTiles-Archiv, ohne Overpass. PR #49 ist gemergt; CI und Cloudflare-Deploy #234 waren erfolgreich. Der Live-Abgleich nach diesem Deploy auf einem echten Handy ist noch zu bestätigen. `OSM_DEV_WRITES_ENABLED` ist aus.
 
 Stand: **10.11.2026**. Die App läuft unter [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev). Die automatische Bereitstellung auf Cloudflare startet nach einem erfolgreichen CI-Lauf bei Push/Merge auf `main`; Deployments bleiben auf die konfigurierte `production`-Umgebung und workers.dev beschränkt. Der letzte bekannte Stand von PR #49 wurde mit Commit `00c953b` gemergt; Actions-Lauf #234 meldet erfolgreiche Prüfung und Bereitstellung. OSM-Änderungen sind unabhängig davon weiterhin abgeschaltet. Es wurde kein produktives OSM-Objekt verändert.
 
@@ -49,7 +49,7 @@ Offene Aufnahme fortsetzen       Konto
 
 Nach der ersten bewussten Betätigung öffnet die Kamera. Für wiederkehrende Nutzer kann die App direkt eine Kameraansicht anbieten, soweit der Browser dies erlaubt. Browserberechtigungen und gelegentlich erneute OSM-Anmeldung lassen sich nicht vollständig wegdesignen.
 
-**Aktueller Pilot:** Es gibt keine Bildanalyse und keinen externen Bilddienst. Nach der Fotoauswahl bestätigt die Person selbst, ob ein AED-Gerät oder AED-Gehäuse sichtbar ist. Das Foto bleibt lokal. Erst danach wird die Umgebungssuche angeboten; Foto-GPS wird lokal aus EXIF gelesen und hat Vorrang. Ein Handy-Standort oder Kartenpunkt wird nur nach bewusster Auswahl verwendet.
+**Aktueller Pilot:** Die Fotoprüfung per OpenAI ist optional und standardmäßig aus (Route `/api/vision/analyze`, nur mit `OPENAI_API_KEY`, `AI_ANALYSIS_ENABLED`, Zulassungsliste und Tages-Kostenlimits). Ist sie für das Konto freigegeben, meldet `/api/auth/session` das Feld `photoCheckAvailable`. Der Browser verkleinert das Foto, kodiert es ohne EXIF/GPS als JPEG neu und sendet es nur nach ausdrücklichem Tippen an den eigenen Worker; der Worker reserviert zuerst Budget in D1 (`analysis_budget_reservations`) und ruft erst dann OpenAI auf (`store: false`, keine Werkzeuge). Ergebnis: AED oder Gehäuse erkannt → weiter; „kein AED“ oder „nicht eindeutig“ → gesperrt; Fehler, Limit oder Ausfall → Rückfall auf die Selbstbestätigung. Ist die Prüfung aus, bestätigt die Person selbst, ob ein AED-Gerät oder AED-Gehäuse sichtbar ist, und das Foto bleibt lokal. Erst danach wird die Umgebungssuche angeboten; Foto-GPS wird lokal aus EXIF gelesen und hat Vorrang. Ein Handy-Standort oder Kartenpunkt wird nur nach bewusster Auswahl verwendet.
 
 ### Während der Prüfung
 
@@ -252,7 +252,7 @@ Der aktuelle Pilot ruft keine kostenpflichtige KI-API auf und benötigt weder KI
 
 ### Fotos und personenbezogene Daten
 
-Das ausgewählte Foto und seine EXIF-Daten bleiben auf dem Gerät. EXIF-GPS wird lokal gelesen; nur die ausgewählten Koordinaten werden nach dem ausdrücklichen Suchstart an den AEDjaeger-Worker übermittelt. Das Bild selbst wird weder an AEDjaeger noch an einen KI-Anbieter gesendet und nicht in OSM hochgeladen. Die App speichert kein Foto dauerhaft. Lokale Entwürfe haben einen sichtbaren Löschweg; bei Verlust des Browser-Speichers kann ein nicht abgeschlossener Entwurf dennoch verloren gehen.
+Das ausgewählte Foto und seine EXIF-Daten bleiben auf dem Gerät. EXIF-GPS wird lokal gelesen; nur die ausgewählten Koordinaten werden nach dem ausdrücklichen Suchstart an den AEDjaeger-Worker übermittelt. Das Bild selbst wird nur bei freigegebener Fotoprüfung und nach ausdrücklichem Tippen verkleinert und ohne EXIF/GPS an den Worker und von dort an OpenAI gesendet; sonst verlässt es das Gerät nicht. Es wird nie in OSM hochgeladen und vom Worker nicht gespeichert. Die App speichert kein Foto dauerhaft. Lokale Entwürfe haben einen sichtbaren Löschweg; bei Verlust des Browser-Speichers kann ein nicht abgeschlossener Entwurf dennoch verloren gehen.
 
 OSM-Bearbeitungen sind öffentliche Beiträge. Das ist beim ersten Verbinden des Kontos verständlich zu erklären. Private Fotos gehören nicht in ein öffentliches Test-Repository; echte Testbilder benötigen geklärte Nutzungsrechte und sollen möglichst keine Personen zeigen.
 

@@ -1,6 +1,6 @@
 # Pilot-Abnahme: Checklisten für Handy, Datenquelle, OSM-Test und Release
 
-Stand: 10.11.2026. Dieses Dokument beschreibt die Prüfungen, die der Projektinitiator bzw. eine Testperson durchführt. Es ist **vorbereitet, aber noch nicht ausgeführt**. Insbesondere der Live-Check der Datenquelle und alle Handytests stehen noch aus.
+Stand: 10.11.2026. Dieses Dokument beschreibt die Prüfungen, die der Projektinitiator bzw. eine Testperson durchführt. Der Live-Check der Datenquelle (Abschnitt B) lief am 10.11.2026 erfolgreich, mit Ausnahme von B5. Die vollständige Handytest-Abnahme (Abschnitt A), der OSM-Dev-Schreibtest (Abschnitt C) und die Release-Kriterien (Abschnitt E) stehen noch aus.
 
 Grundregeln für alle Abschnitte:
 
@@ -53,11 +53,13 @@ Ausführung entweder
 
 | Nr | Prüfpunkt | Erwartetes Ergebnis | Ergebnis |
 | --- | --- | --- | --- |
-| B1 | Der Check endet mit Exit-Code 0 | Ausgabe „Live-Check bestanden (nur lesend)“ | `[ ]` |
-| B2 | Range-Unterstützung | Kein Fehler „Range-Anfrage wurde nicht korrekt beantwortet“ | `[ ]` |
-| B3 | Datenstand | „OSM-Datenstand bis …“ mit Alter unter 5 Tagen (120 Stunden) | `[ ]` |
-| B4 | Ebene `defibrillators` | Anzahl an Features in der Testkachel; keine Meldung „Ebene fehlt“ | `[ ]` |
-| B5 | Zweite Koordinate (z. B. Hamburg oder Wien) | Ebenfalls bestanden, sofern die Kachel Daten enthält | `[ ]` |
+| B1 | Der Check endet mit Exit-Code 0 | Ausgabe „Live-Check bestanden (nur lesend)“ | `[x]` Lauf #2, 10.11.2026 |
+| B2 | Range-Unterstützung | Kein Fehler „Range-Anfrage wurde nicht korrekt beantwortet“ | `[x]` Lauf #2: Kachel kam per Range-Anfrage, kein Fehler |
+| B3 | Datenstand | „OSM-Datenstand bis …“ mit Alter unter 5 Tagen (120 Stunden) | `[x]` Lauf #2: Datenstand 08.11.2026 21:21 UTC, Alter 36,0 Stunden |
+| B4 | Ebene `defibrillators` | Anzahl an Features in der Testkachel; keine Meldung „Ebene fehlt“ | `[x]` Lauf #2: 28 Features in Kachel Zoom 14, 8696/5595 |
+| B5 | Zweite Koordinate (z. B. Hamburg oder Wien) | Ebenfalls bestanden, sofern die Kachel Daten enthält | `[ ]` offen: bisher nur die Standardkoordinate (Nürnberg Hbf) geprüft |
+
+Belege: [Lauf #2 vom 10.11.2026, 09:20 UTC](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42789878021) (Stand nach der Anhebung des Höchstalters auf 120 Stunden, Commit `ee1dc41`). Lauf [#1](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42784569321) bestand ebenfalls, noch mit der alten Grenze von 48 Stunden. Beide Läufe sind Stichproben zu einem Zeitpunkt und belegen die Verfügbarkeit nicht für später. Für B5 den Workflow oder `npm run check:live-search -- --lat <Breite> --lon <Länge>` mit einer zweiten Koordinate ausführen. Das Skript kennt die Koordinate als Option, der GitHub-Workflow hat dafür bisher keine Eingabe.
 
 Bei einem Fehler gilt: Eine Fehlermeldung zu fehlenden Kacheln oder Ebenen ist **kein Beleg**, dass an dieser Stelle kein AED existiert. Die App sperrt in diesem Fall korrekt die Suche und den Neuanlagevorschlag.
 
@@ -106,9 +108,27 @@ Der Tag `v0.1.0` wird nur gesetzt, wenn alle folgenden Punkte erfüllt sind:
 
 Ohne diese Punkte wird weder ein Tag noch ein GitHub-Release erstellt.
 
+## F. Fotoprüfung per OpenAI (nur bei Betreiber-Freigabe)
+
+Voraussetzung: Der Betreiber hat die Fotoprüfung im Cloudflare-Dashboard eingerichtet (siehe [offene Fragen](offene-fragen.md#betreiber-einrichtung-der-fotoprüfung)). Die Prüfung kostet Geld; die Testperson nutzt nur eigens aufgenommene, unbedenkliche Fotos ohne erkennbare Personen.
+
+| Nr | Schritt | Erwartetes Ergebnis | Ergebnis |
+| --- | --- | --- | --- |
+| F1 | Startseite öffnen, angemeldet mit einem zugelassenen Konto | Hinweis „Das Foto geht ohne Standort und Metadaten zur Prüfung an OpenAI.“ statt der Zusage „bleibt auf deinem Gerät“ | `[ ]` |
+| F2 | Mit einem nicht zugelassenen Konto anmelden | Bisheriger Ablauf mit „AED oder Gehäuse gesehen – weiter“; kein Foto verlässt das Gerät | `[ ]` |
+| F3 | Foto eines echten AED oder Gehäuses wählen, „AED gesehen – Foto prüfen“ tippen | Ladeanzeige, danach weiter zu Datumsfrage bzw. Standort und Suche | `[ ]` |
+| F4 | Screenshot, Foto eines anderen Gegenstands (z. B. Schuhe) wählen und prüfen | „Kein AED erkennbar“; nur „Anderes Foto“ ist möglich, keine Suche | `[ ]` |
+| F5 | Unscharfes oder sehr weit entferntes AED-Foto prüfen | „Nicht eindeutig“ oder erkannt; bei „nicht eindeutig“ nur „Anderes Foto“ | `[ ]` |
+| F6 | Flugmodus während der Prüfung einschalten | Hinweis „Die Prüfung ist gerade nicht möglich“ und die Selbstbestätigung steht bereit | `[ ]` |
+| F7 | Tageslimit erreichen (Limit vorübergehend sehr klein setzen) | Rückfall auf die Selbstbestätigung, keine Fehlermeldung mit Zahlen oder Kosten | `[ ]` |
+| F8 | Eine Stichprobe von mindestens 20 echten AED-Fotos und 20 Fotos ohne AED prüfen | Anzahl falsch gesperrter AED-Fotos und durchgelassener Fremdfotos notieren | `[ ]` |
+| F9 | Abrechnung im OpenAI-Konto nach den Tests ansehen | Kosten liegen im erwarteten Rahmen (je Prüfung grob unter 0,01 US-Dollar laut früherem Test) | `[ ]` |
+
+Hinweise: F1 bis F7 prüfen Verhalten, F8 die Trefferqualität. Zeigt F8 viele falsch gesperrte AED-Fotos, ist die Sperre „kein AED“ zu streng und wird mit dem Projektinhaber neu bewertet. Bei jedem Fehler Uhrzeit und genaue Meldung notieren, keinen Schlüssel teilen.
+
 ## Was diese Abnahme nicht abdeckt
 
-- Automatische Bilderkennung ist nicht Teil des Pilots und wird nicht geprüft.
+- Die Trefferqualität der Fotoprüfung (wie oft sie echte AED-Fotos fälschlich sperrt oder fremde Fotos durchlässt) ist nicht belegt. Abschnitt F verlangt dazu eine Stichprobe mit echten Fotos.
 - Die Live-Verfügbarkeit des PMTiles-Archivs hängt von `pipeline.openfiremap.org` ab. Der Check misst nur den Stand zum Zeitpunkt des Laufs.
 - Eine Stichprobe an einer Koordinate ist kein Nachweis für die gesamte Region.
 - Produktions-OSM wird in keinem Abschnitt geschrieben.

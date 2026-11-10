@@ -46,6 +46,32 @@ describe("Cloudflare Worker shell", () => {
     expect(env.ASSETS.fetch).not.toHaveBeenCalled();
   });
 
+  // Die Fotoprüfung ist ohne Betreiber-Konfiguration aus: Es darf kein Foto verarbeitet und
+  // kein OpenAI-Aufruf gestartet werden. Der Test läuft ohne Netzwerk (kein fetch im Worker-Pfad).
+  it("keeps the photo check closed until the operator configures it", async () => {
+    const env = environment();
+    const outgoingFetch = vi.spyOn(globalThis, "fetch");
+    const response = await worker.fetch(new Request("https://aedjaeger.test/api/vision/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    }), env);
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "analysis_unavailable" });
+    expect(outgoingFetch).not.toHaveBeenCalled();
+    expect(env.ASSETS.fetch).not.toHaveBeenCalled();
+    outgoingFetch.mockRestore();
+  });
+
+  it("allows only POST for the photo check route", async () => {
+    const env = environment();
+    const response = await worker.fetch(new Request("https://aedjaeger.test/api/vision/analyze"), env);
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get("Allow")).toBe("POST");
+  });
+
   it("does not start OSM login when the Worker has no server-side configuration", async () => {
     const env = environment();
     const response = await worker.fetch(new Request("https://aedjaeger.test/api/auth/osm/start"), env);
@@ -158,6 +184,55 @@ describe("Cloudflare Worker shell", () => {
 
     const otherOrigin = await worker.fetch(new Request("https://other.example/api/auth/session"), env);
     expect(await otherOrigin.json()).toEqual({ authenticated: false, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false, developmentWriteAvailable: false });
+  });
+
+  // Hilfsfunktion: eine Datenbank, die jede Sitzungsabfrage mit demselben Konto beantwortet.
+  function sessionDatabase(subject: string, osmEnvironment: "development" | "production"): D1Database {
+    const statement: D1Statement = {
+      bind: () => statement,
+      run: async () => ({ success: true }),
+      first: async <T>() => ({ osm_subject: subject, osm_environment: osmEnvironment }) as T,
+    };
+    return { prepare: () => statement };
+  }
+
+  describe("photo check availability in the session status", () => {
+    const sessionRequest = () => new Request("https://aedjaeger.test/api/auth/session", { headers: { Cookie: `aedjaeger_osm_session=${"a".repeat(43)}` } });
+    // Vollständige Betreiber-Konfiguration: nur dann darf „verfügbar“ gemeldet werden.
+    const configured = {
+      OPENAI_API_KEY: "sk-test-not-a-real-key",
+      AI_ANALYSIS_ENABLED: "true",
+      AI_ANALYSIS_ALLOWED_OSM_SUBJECTS: "development:42",
+      AI_ANALYSIS_COST_RESERVATION_MICROS: "20000",
+      AI_ANALYSIS_USER_DAILY_LIMIT_MICROS: "200000",
+      AI_ANALYSIS_GLOBAL_DAILY_LIMIT_MICROS: "1000000",
+    };
+
+    it("reports the photo check only for an allowed account with complete configuration", async () => {
+      const env = { ...environment(), ...configured, DB: sessionDatabase("42", "development") };
+      const body = await (await worker.fetch(sessionRequest(), env)).json();
+      expect(body).toMatchObject({ authenticated: true, photoCheckAvailable: true });
+    });
+
+    it.each([
+      ["a missing API key", { OPENAI_API_KEY: undefined }],
+      ["a disabled switch", { AI_ANALYSIS_ENABLED: "false" }],
+      ["a missing budget limit", { AI_ANALYSIS_GLOBAL_DAILY_LIMIT_MICROS: undefined }],
+      ["an account that is not on the allow list", { AI_ANALYSIS_ALLOWED_OSM_SUBJECTS: "development:7" }],
+      ["the same subject on the other OSM server", { AI_ANALYSIS_ALLOWED_OSM_SUBJECTS: "production:42" }],
+    ])("omits the flag for %s", async (_name, override) => {
+      const env = { ...environment(), ...configured, ...override, DB: sessionDatabase("42", "development") };
+      const body = await (await worker.fetch(sessionRequest(), env)).json();
+      expect(body).toMatchObject({ authenticated: true });
+      expect(body).not.toHaveProperty("photoCheckAvailable");
+    });
+
+    it("never exposes configuration values in the session status", async () => {
+      const env = { ...environment(), ...configured, DB: sessionDatabase("42", "development") };
+      const text = await (await worker.fetch(sessionRequest(), env)).text();
+      expect(text).not.toContain("sk-test");
+      expect(text).not.toContain("development:42");
+    });
   });
 
   it("keeps login and logout methods narrow", async () => {

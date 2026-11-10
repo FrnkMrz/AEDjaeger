@@ -17,6 +17,8 @@ describe("OSM session status", () => {
       developmentLoginAvailable: false,
       developmentSession: true,
       developmentWriteAvailable: true,
+      // Nicht gesendet = Fotoprüfung aus.
+      photoCheckAvailable: false,
     });
   });
 

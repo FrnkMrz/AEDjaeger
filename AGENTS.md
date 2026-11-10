@@ -11,19 +11,19 @@ Lies vor Implementierungsaufträgen die relevanten Abschnitte in `docs/architekt
 - Oberfläche und API sind für Cloudflare Workers mit Static Assets vorgesehen. Starte Prototyp und kleinen Pilot mit Workers Free und der `workers.dev`-Adresse. Aktiviere keinen Paid-Tarif, kaufe keine Domain und füge keine kostenpflichtigen Dienste hinzu, ohne dass der Nutzer dies ausdrücklich beauftragt.
 - Die erste Version unterstützt Deutsch, Englisch, Polnisch, Japanisch, Französisch und Spanisch. Keine sichtbaren, unübersetzten Platzhaltertexte in diesen Sprachen ausliefern.
 - Im Pilot bleibt Gamification für Nutzende unsichtbar. Intern dürfen nur erfolgreiche Vor-Ort-Prüfungen nach bestätigtem OSM-Vorgang gezählt werden. Keine Punkteanzeige, Rangliste, öffentliche Fortschrittskarte oder Teilen-Funktion ohne neue Produktentscheidung.
-- Der Pilot läuft ohne externe Bilddienste und ohne OpenAI. Der Nutzer bestätigt selbst, dass AED oder AED-Gehäuse im Foto sichtbar ist; das Foto bleibt auf dem Gerät.
-- Eine automatische Bilderkennung darf später ausschließlich lokal auf dem Gerät erprobt werden und benötigt eine eigene Produktentscheidung und Abnahme. Chat-Abos und Anbieter-APIs sind keine Laufzeitvoraussetzung.
+- Fotoprüfung (Produktentscheidung vom 10.11.2026, ersetzt den Beschluss „ohne OpenAI“ vom 9.11.2026): Eine **optionale** Prüfung per OpenAI filtert Fotos ohne erkennbaren AED aus. Der Betreiber schaltet sie über Worker-Secrets und -Variablen ein und aus (`OPENAI_API_KEY`, `AI_ANALYSIS_ENABLED`, Zulassungsliste, Tages-Kostenlimits). Ist sie aus, bleibt das Foto auf dem Gerät und die Person bestätigt selbst, dass AED oder AED-Gehäuse sichtbar ist. Ist sie an, geht das Foto erst nach ausdrücklichem Tippen, verkleinert und ohne EXIF/GPS an OpenAI; die App weist vorher darauf hin. Standort und Konto gehen nicht mit.
+- Ergebnisregeln der Fotoprüfung: Bei „kein AED“ oder „nicht eindeutig“ ist der Weg gesperrt („Anderes Foto“). Bei Ausfall, Limit oder fehlerhafter Antwort gilt der Rückfall auf die Selbstbestätigung, damit ein Ausfall des Anbieters die App nicht lahmlegt. Die App nennt das Ergebnis nie eine sichere Erkennung und stützt keinen OSM-Eintrag allein darauf. Eine lokale Bilderkennung bleibt möglich und braucht eine eigene Produktentscheidung und Abnahme. Chat-Abos sind keine Laufzeitvoraussetzung.
 - Die Anwendung heißt in allen Sprachen „AEDjaeger“. Der Name wird ohne Umlaute geschrieben; Domain und Lizenz bleiben offen.
 
 ## Sicherheit und Daten
 
-- Die Person vor Ort bestätigt ausdrücklich die Sichtbarkeit eines AED oder AED-Gehäuses. Bis zu einer gesondert abgenommenen lokalen Erkennung behauptet die App keine automatische Bilderkennung.
+- Die Person vor Ort bleibt verantwortlich: Mit dem Tippen auf „AED gesehen“ bzw. „AED oder Gehäuse gesehen – weiter“ bestätigt sie ausdrücklich, dass AED oder AED-Gehäuse sichtbar ist. Die Fotoprüfung ist nur ein zusätzlicher Filter und behauptet keine sichere Erkennung.
 - API-Schlüssel und OAuth-Tokens gehören ausschließlich in serverseitige Secrets. Niemals in Browsercode, Build-Ausgaben, Logs, Commits, Screenshots oder Fehlermeldungen schreiben.
 - Nutzerbestätigung muss sich auf den konkreten erkannten AED und die konkrete vorgeschlagene Änderung beziehen. Ohne Bestätigung keine OSM-Schreiboperation.
 - Produktions-OSM darf in normalen Tests, CI, Vorschauen und Agentenläufen nie verändert werden. Verwende Mocks oder die OSM-Entwicklungsinstanz und prüfe die Zielumgebung vor jedem Integrationstest.
 - Bei „noch vorhanden“ darf ausschließlich das fachlich freigegebene Prüfdatum gesetzt werden. Keine anderen Tags überschreiben. Bei Neuanlagen zuerst die erfolgreiche Suche im relevanten Gebiet bestätigen; fehlgeschlagene oder unvollständige Suche ist kein Beleg, dass kein AED existiert.
 - Behalte Fotos nur so lange wie für den konkreten Vorgang nötig. Keine dauerhaft gespeicherten Fotos oder unnötigen EXIF-, GPS-, Konto- oder Bewegungsdaten. Logs enthalten keine Fotos, Tokens oder vollständigen Antworten mit möglicherweise personenbezogenen Inhalten.
-- Keine kostenpflichtigen Modellaufrufe, Käufe, Tarifwechsel, öffentlichen Deployments oder Änderungen an echten OSM-Daten ohne ausdrücklichen Auftrag.
+- Keine kostenpflichtigen Modellaufrufe, Käufe, Tarifwechsel, öffentlichen Deployments oder Änderungen an echten OSM-Daten ohne ausdrücklichen Auftrag. Die freigegebene Fotoprüfung im Betrieb läuft innerhalb der gesetzten Limits. Tests, CI, Vorschauen und Agentenläufe rufen die echte OpenAI-API nie auf (nur Mocks); `OPENAI_API_KEY` gehört nie in Code, Logs, Screenshots oder Chats.
 
 ## Umsetzung
 

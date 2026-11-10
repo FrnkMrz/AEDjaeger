@@ -1148,3 +1148,183 @@ test("the ready screen introduction keeps readable contrast", async ({ page }) =
   const introduction = page.locator(".hero p");
   await expect.poll(() => introduction.evaluate((element) => getComputedStyle(element).color)).toBe("rgb(98, 109, 102)");
 });
+
+// ---------------------------------------------------------------------------------------------
+// Fotoprüfung per OpenAI (optional, nur wenn der Server sie für das Konto freigibt)
+//
+// Alle Tests ersetzen den Server-Endpunkt durch einen Mock. Es wird nie echtes OpenAI aufgerufen,
+// kein Geld ausgegeben und nichts an OpenStreetMap gesendet.
+// ---------------------------------------------------------------------------------------------
+
+/** Eine gültige Beobachtung; einzelne Felder lassen sich pro Test überschreiben. */
+function visionObservation(scene: string) {
+  return { scene, device_count: scene === "device_visible" ? 1 : 0, readable_text: [], manufacturer: null, model: null, location_clues: [], image_issues: [] };
+}
+
+/** Meldet in der Sitzung, dass die Fotoprüfung für dieses Konto aktiv ist. */
+async function enablePhotoCheck(page: import("@playwright/test").Page): Promise<void> {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
+    authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false, photoCheckAvailable: true,
+  } }));
+}
+
+test("a passed photo check continues like a confirmed sighting and uploads no metadata", async ({ page }) => {
+  await enablePhotoCheck(page);
+  const uploads: Record<string, unknown>[] = [];
+  await page.route("**/api/vision/analyze", async (route) => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    uploads.push(body);
+    await route.fulfill({ json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("device_visible") } });
+  });
+  const searchLocations: { latitude: number; longitude: number }[] = [];
+  await page.route("**/api/osm/candidates/search", async (route) => {
+    searchLocations.push(route.request().postDataJSON());
+    await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } });
+  });
+  await page.goto("/");
+  // Schon auf der Startseite darf die Zusage „bleibt auf dem Gerät“ nicht mehr stehen.
+  await expect(page.locator(".capture-actions")).toContainText("OpenAI");
+  await expect(page.locator(".capture-actions")).not.toContainText("nicht an einen Bilddienst gesendet");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
+
+  // Der Hinweis auf OpenAI steht VOR dem Tippen; die alte Zusage „bleibt auf dem Gerät“ ist weg.
+  await expect(page.locator(".capture-content")).toContainText("Das Foto geht ohne Standort und Metadaten zur Prüfung an OpenAI.");
+  await expect(page.locator(".capture-content")).not.toContainText("nicht an einen Bilddienst gesendet");
+  expect(uploads).toHaveLength(0);
+
+  await page.getByRole("button", { name: "AED gesehen – Foto prüfen" }).click();
+  // Die Prüfung läuft asynchron: erst warten, bis die Ladeanzeige weg ist, dann erst eine
+  // mögliche Datumsfrage beantworten (sonst würde der Test sie zu früh als „nicht da“ werten).
+  await expect(page.locator(".loading-row")).toHaveCount(0);
+  const dateConfirm = page.locator('[data-action="confirm-photo-date"]');
+  if (await dateConfirm.isVisible()) await dateConfirm.click();
+  await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
+
+  // Genau ein Upload, nur drei Felder, JPEG ohne EXIF-Block (und damit ohne GPS).
+  expect(uploads).toHaveLength(1);
+  expect(Object.keys(uploads[0]).sort()).toEqual(["content_type", "image_base64", "request_id"]);
+  expect(uploads[0].content_type).toBe("image/jpeg");
+  // atob statt Buffer: Die Testdateien kennen keine Node-Typen.
+  const decoded = atob(uploads[0].image_base64 as string);
+  expect(decoded.includes("Exif")).toBe(false);
+  // Der Standort für die Suche stammt weiterhin lokal aus dem Originalfoto.
+  expect(searchLocations).toHaveLength(1);
+  expect(searchLocations[0].latitude).toBeCloseTo(52.52, 5);
+});
+
+test("a photo without a recognizable AED is blocked and cannot start a search", async ({ page }) => {
+  await enablePhotoCheck(page);
+  let searches = 0;
+  await page.route("**/api/osm/candidates/search", async (route) => { searches += 1; await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }); });
+  await page.route("**/api/vision/analyze", async (route) => {
+    const body = route.request().postDataJSON() as { request_id: string };
+    await route.fulfill({ json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("other_object") } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
+  await page.getByRole("button", { name: "AED gesehen – Foto prüfen" }).click();
+
+  await expect(page.getByRole("heading", { name: "Kein AED erkennbar" })).toBeVisible();
+  // Kein Weg an der Prüfung vorbei: weder Selbstbestätigung noch Suche.
+  await expect(page.locator('[data-action="confirm-sighting"]')).toHaveCount(0);
+  await expect(page.locator('[data-action="check-photo"]')).toHaveCount(0);
+  expect(searches).toBe(0);
+
+  await page.getByRole("button", { name: "Anderes Foto" }).click();
+  await expect(page.locator("#camera-input")).toBeAttached();
+});
+
+test("an unclear photo asks for a closer picture", async ({ page }) => {
+  await enablePhotoCheck(page);
+  await page.route("**/api/vision/analyze", async (route) => {
+    const body = route.request().postDataJSON() as { request_id: string };
+    await route.fulfill({ json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("unclear") } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
+  await page.getByRole("button", { name: "AED gesehen – Foto prüfen" }).click();
+  await expect(page.getByRole("heading", { name: "Nicht eindeutig" })).toBeVisible();
+  await expect(page.locator('[data-action="confirm-sighting"]')).toHaveCount(0);
+});
+
+for (const failure of [
+  { name: "the daily budget is used up", status: 429, body: { error: "analysis_budget_exceeded" } },
+  { name: "the provider is down", status: 502, body: { error: "analysis_failed" } },
+  { name: "the response is malformed", status: 200, body: { unexpected: true } },
+]) {
+  test(`when ${failure.name}, the person can still confirm the sighting themselves`, async ({ page }) => {
+    await enablePhotoCheck(page);
+    await page.route("**/api/vision/analyze", (route) => route.fulfill({ status: failure.status, json: failure.body }));
+    await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }));
+    await page.goto("/");
+    await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
+    await page.getByRole("button", { name: "AED gesehen – Foto prüfen" }).click();
+
+    // Rückfall: Hinweis und die bekannte Selbstbestätigung, kein erneuter Upload-Knopf.
+    await expect(page.locator(".capture-content")).toContainText("Die Prüfung ist gerade nicht möglich.");
+    await expect(page.locator('[data-action="check-photo"]')).toHaveCount(0);
+    // Der Upload kann schon gelaufen sein: Die Zusage „bleibt auf dem Gerät“ darf nicht erscheinen.
+    await expect(page.locator(".capture-content")).not.toContainText("nicht an einen Bilddienst gesendet");
+    await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
+    const dateConfirm = page.locator('[data-action="confirm-photo-date"]');
+    if (await dateConfirm.isVisible()) await dateConfirm.click();
+    await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
+  });
+}
+
+test("without the server flag the photo never leaves the device", async ({ page }) => {
+  let uploads = 0;
+  await page.route("**/api/vision/analyze", async (route) => { uploads += 1; await route.fulfill({ status: 503, json: { error: "analysis_unavailable" } }); });
+  await page.goto("/");
+  // Ohne Freigabe bleibt auch die Startseite bei der Zusage „bleibt auf dem Gerät“.
+  await expect(page.locator(".capture-actions")).toContainText("nicht an einen Bilddienst gesendet");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
+  // Bisheriger Ablauf: Selbstbestätigung und Zusage „bleibt auf dem Gerät“.
+  await expect(page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" })).toBeVisible();
+  await expect(page.locator(".capture-content")).toContainText("nicht an einen Bilddienst gesendet");
+  await expect(page.locator('[data-action="check-photo"]')).toHaveCount(0);
+  expect(uploads).toBe(0);
+});
+
+test("the photo check texts exist in all six languages", async ({ page }) => {
+  await enablePhotoCheck(page);
+  const expectedActions: Record<string, string> = {
+    de: "AED gesehen – Foto prüfen", en: "I see an AED — check photo", pl: "Widzę AED — sprawdź zdjęcie",
+    ja: "AEDを確認 — 写真を確認する", fr: "Je vois un DAE — vérifier la photo", es: "Veo un DEA — comprobar la foto",
+  };
+  await page.goto("/");
+  for (const code of languageCodes) {
+    await page.locator("#language").selectOption(code);
+    await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
+    await expect(page.getByRole("button", { name: expectedActions[code] })).toBeVisible();
+    await expect(page.locator(".capture-content")).toContainText("OpenAI");
+    await page.locator('[data-action="retake"]').click();
+  }
+});
+
+// Der Info-Dialog ist immer erreichbar. Er darf deshalb nie zusagen, dass Fotos immer lokal bleiben
+// oder dass es keine automatische Prüfung gibt, weil das bei aktiver Fotoprüfung falsch wäre.
+test("the info dialog tells the truth about the optional photo check in all six languages", async ({ page }) => {
+  await enablePhotoCheck(page);
+  await page.goto("/");
+  // Aussagen, die mit aktiver Fotoprüfung falsch wären (je Sprache ein Auszug). Der Demo-Text
+  // „Beispielszenarien laufen lokal …“ gehört nicht dazu: Er beschreibt nur die Demo, die nie hochlädt.
+  const falseClaims = [
+    "Das Foto bleibt lokal; OSM-Änderungen", "Photos stay local; OSM", "Zdjęcia pozostają lokalnie; zmiany",
+    "写真は端末内に残り、OSMへの変更", "Les photos restent locales ; les modifications", "Las fotos permanecen locales; los cambios",
+    "Automatische Erkennung ist nicht im Pilot", "Automatic recognition is not part of the pilot",
+    "Automatyczne rozpoznawanie nie jest częścią pilotażu", "自動認識はパイロットに含まれません",
+    "La reconnaissance automatique ne fait pas partie du pilote", "El reconocimiento automático no forma parte del piloto",
+  ];
+  for (const language of languageCodes) {
+    await page.locator("#language").selectOption(language);
+    await page.locator("#open-info").click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    // Der optionale OpenAI-Weg wird in jeder Sprache genannt.
+    await expect(dialog).toContainText("OpenAI");
+    for (const claim of falseClaims) await expect(dialog).not.toContainText(claim);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+  }
+});
