@@ -4,7 +4,7 @@ import { analysisResult, chooseCandidate, confirmationResult, recoveryResult, ty
 import { translate, translations, type Language, type TranslationKey } from "./i18n/translations";
 import { translateFlow, type FlowMessageKey } from "./i18n/flowTranslations";
 import { readPhotoCapture, readPhotoLocation } from "./vision/photoLocation";
-import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservation } from "./vision/analyzePhoto";
+import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservation, VisionClientError } from "./vision/analyzePhoto";
 import { isAedRecognized } from "./contracts/visionObservation";
 import { startUpdateWatcher } from "./pwa/updateCheck";
 import { assessCandidateSearch } from "./domain/assessCandidateSearch";
@@ -290,7 +290,8 @@ function statusContent(): string {
       const photoNote = useCheck
         ? `<p class="supporting-copy">${tv("photoCheckNotice")}</p>`
         : state.photoCheck === "unavailable"
-          ? `<p class="supporting-copy">${tv("photoCheckUnavailable")}</p>`
+          // Der Fehlercode steht klein darunter, damit sich im Pilot eingrenzen lässt, warum die Prüfung scheiterte.
+          ? `<p class="supporting-copy">${tv("photoCheckUnavailable")}</p>${state.photoCheckCode ? `<p class="supporting-copy photo-check-code">${escapeHtml(tv("photoCheckCode", { code: state.photoCheckCode }))}</p>` : ""}`
           : `<p class="supporting-copy">${tv("photoStaysLocal")}</p>`;
       return `${photoMarkup}${photoAction}${photoNote}${demoMode ? `<p class="simulation-note">${t("testPhotoNotice")}</p>` : ""}<button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
     }
@@ -1228,25 +1229,38 @@ async function runPhotoCheck(photoUrl: string): Promise<void> {
   state = { kind: "photo-checking", photoUrl };
   render(true);
   let outcome: "recognized" | "not-aed" | "unclear" | "unavailable";
+  let failureCode: string | undefined;
   try {
     const image = await preparePhotoForAnalysis(file);
     const observation = await requestVisionObservation(image, fetch, requestId);
     outcome = isAedRecognized(observation) ? "recognized" : observation.scene === "unclear" ? "unclear" : "not-aed";
-  } catch {
+  } catch (error) {
     // Jeder Fehler (VisionClientError oder unerwartet) führt nur zum Rückfall, nie zu einem Absturz.
     outcome = "unavailable";
+    failureCode = describePhotoCheckFailure(error);
   }
   // Wurde das Foto inzwischen verworfen oder ersetzt, darf das späte Ergebnis nichts mehr ändern.
   if (state.kind !== "photo-checking" || state.photoUrl !== photoUrl || selectedPhotoFile !== file) return;
   if (outcome === "recognized") {
     proceedAfterSighting(photoUrl);
   } else if (outcome === "unavailable") {
-    state = { kind: "photo", photoUrl, photoCheck: "unavailable" };
+    state = { kind: "photo", photoUrl, photoCheck: "unavailable", ...(failureCode ? { photoCheckCode: failureCode } : {}) };
     render(true);
   } else {
     state = { kind: "photo-rejected", photoUrl, reason: outcome };
     render(true);
   }
+}
+
+/**
+ * Macht aus einem Fehler der Fotoprüfung einen kurzen Code für die Anzeige, zum Beispiel
+ * „analysis_failed (HTTP 502, OpenAI 401, invalid_api_key)“. Es kommen nur geprüfte, feste Kennungen
+ * vor; Fehlertexte, Fotos und Schlüssel sind nie darin.
+ */
+function describePhotoCheckFailure(error: unknown): string {
+  if (error instanceof VisionClientError) return error.detail ? `${error.code} (${error.detail})` : error.code;
+  // Unerwarteter Fehler im Browser: nur der Typname, falls er wie ein Typname aussieht.
+  return error instanceof Error && /^[A-Za-z]{1,40}$/u.test(error.name) ? `unexpected_error (${error.name})` : "unexpected_error";
 }
 
 function continueAfterSighting(photoUrl: string): void {

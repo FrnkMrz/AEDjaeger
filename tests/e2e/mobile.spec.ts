@@ -1248,9 +1248,10 @@ test("an unclear photo asks for a closer picture", async ({ page }) => {
 });
 
 for (const failure of [
-  { name: "the daily budget is used up", status: 429, body: { error: "analysis_budget_exceeded" } },
-  { name: "the provider is down", status: 502, body: { error: "analysis_failed" } },
-  { name: "the response is malformed", status: 200, body: { unexpected: true } },
+  { name: "the daily budget is used up", status: 429, body: { error: "analysis_budget_exceeded" }, code: "analysis_budget_exceeded (HTTP 429)" },
+  { name: "the provider is down", status: 502, body: { error: "analysis_failed", detail_status: 401, detail_code: "invalid_api_key" }, code: "analysis_failed (HTTP 502, OpenAI 401, invalid_api_key)" },
+  { name: "the budget table is missing", status: 503, body: { error: "analysis_budget_unavailable", detail_code: "missing_table" }, code: "analysis_budget_unavailable (HTTP 503, missing_table)" },
+  { name: "the response is malformed", status: 200, body: { unexpected: true }, code: "invalid_response (unexpected_shape)" },
 ]) {
   test(`when ${failure.name}, the person can still confirm the sighting themselves`, async ({ page }) => {
     await enablePhotoCheck(page);
@@ -1263,6 +1264,8 @@ for (const failure of [
     // Rückfall: Hinweis und die bekannte Selbstbestätigung, kein erneuter Upload-Knopf.
     await expect(page.locator(".capture-content")).toContainText("Die Prüfung ist gerade nicht möglich.");
     await expect(page.locator('[data-action="check-photo"]')).toHaveCount(0);
+    // Ein kurzer Fehlercode nennt die Ursache, damit sich ein Ausfall im Pilot eingrenzen lässt.
+    await expect(page.locator(".photo-check-code")).toHaveText(`Fehlercode: ${failure.code}`);
     // Der Upload kann schon gelaufen sein: Die Zusage „bleibt auf dem Gerät“ darf nicht erscheinen.
     await expect(page.locator(".capture-content")).not.toContainText("nicht an einen Bilddienst gesendet");
     await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
@@ -1424,4 +1427,37 @@ test("the update banner fits a narrow phone screen", async ({ page }) => {
   await page.locator("#language").selectOption("fr");
   await expect(page.locator("#update-banner")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+});
+
+test("a crashed worker shows the HTTP status instead of a bare failure", async ({ page }) => {
+  await enablePhotoCheck(page);
+  // Cloudflare liefert bei einem abgestürzten Worker eine HTML-Fehlerseite statt JSON.
+  await page.route("**/api/vision/analyze", (route) => route.fulfill({ status: 500, contentType: "text/html", body: "<html>Error 1102</html>" }));
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
+  await page.getByRole("button", { name: "AED gesehen – Foto prüfen" }).click();
+  await expect(page.locator(".photo-check-code")).toHaveText("Fehlercode: invalid_response (HTTP 500)");
+});
+
+test("a lost connection during the check shows a client-side code", async ({ page }) => {
+  await enablePhotoCheck(page);
+  await page.route("**/api/vision/analyze", (route) => route.abort("connectionreset"));
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
+  await page.getByRole("button", { name: "AED gesehen – Foto prüfen" }).click();
+  await expect(page.locator(".photo-check-code")).toHaveText("Fehlercode: analysis_failed (client_network)");
+});
+
+test("the error code is translated and hidden when the check works", async ({ page }) => {
+  await enablePhotoCheck(page);
+  await page.route("**/api/vision/analyze", (route) => route.fulfill({ status: 502, json: { error: "analysis_failed", detail_code: "timeout" } }));
+  await page.goto("/");
+  const labels: Record<string, string> = { de: "Fehlercode:", en: "Error code:", pl: "Kod błędu:", ja: "エラーコード:", fr: "Code d’erreur :", es: "Código de error:" };
+  for (const code of languageCodes) {
+    await page.locator("#language").selectOption(code);
+    await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
+    await page.locator('[data-action="check-photo"]').click();
+    await expect(page.locator(".photo-check-code")).toContainText(`${labels[code]} analysis_failed (HTTP 502, timeout)`);
+    await page.locator('[data-action="retake"]').click();
+  }
 });

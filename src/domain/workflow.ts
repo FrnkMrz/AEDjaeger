@@ -35,7 +35,8 @@ export type DevelopmentWriteRequest = {
 export type FlowState =
   | { kind: "ready" }
   // photoCheck "unavailable": Die automatische Fotoprüfung ist gescheitert; die Person bestätigt dann selbst.
-  | { kind: "photo"; photoUrl: string; photoCheck?: "unavailable" }
+  // photoCheckCode: kurzer Hinweis zur Ursache des Fehlschlags (nur Anzeige, siehe VisionClientError.detail).
+  | { kind: "photo"; photoUrl: string; photoCheck?: "unavailable"; photoCheckCode?: string }
   // Das Foto wird (nach ausdrücklichem Tippen) zur Prüfung an OpenAI gesendet.
   | { kind: "photo-checking"; photoUrl: string }
   // Die Prüfung hat klar „kein AED“ oder „nicht eindeutig“ gemeldet: nur „Anderes Foto“ geht weiter.

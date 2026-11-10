@@ -50,6 +50,53 @@ describe("requestVisionObservation", () => {
     await expect(requestVisionObservation(image, claimUncertain)).rejects.toMatchObject({ code: "analysis_claim_uncertain" });
   });
 
+  describe("failure details for the on-screen error code", () => {
+    const fail = async (response: Response | Error): Promise<VisionClientError> => {
+      const fetcher = response instanceof Error ? vi.fn<typeof fetch>().mockRejectedValue(response) : vi.fn<typeof fetch>().mockResolvedValue(response);
+      try {
+        await requestVisionObservation(image, fetcher, "a".repeat(32));
+      } catch (error) {
+        return error as VisionClientError;
+      }
+      throw new Error("Der Aufruf hätte fehlschlagen müssen.");
+    };
+    const json = (body: unknown, status: number) => new Response(JSON.stringify(body), { status });
+
+    it("names the provider status and code the server reported", async () => {
+      const error = await fail(json({ error: "analysis_failed", detail_status: 401, detail_code: "invalid_api_key" }, 502));
+      expect(error).toMatchObject({ code: "analysis_failed", detail: "HTTP 502, OpenAI 401, invalid_api_key" });
+    });
+
+    it("names a storage problem without a provider status", async () => {
+      const error = await fail(json({ error: "analysis_budget_unavailable", detail_code: "missing_table" }, 503));
+      expect(error).toMatchObject({ code: "analysis_budget_unavailable", detail: "HTTP 503, missing_table" });
+    });
+
+    it("reports a response that is not JSON with its HTTP status", async () => {
+      // So sieht ein abgestürzter Worker oder eine Fehlerseite von Cloudflare aus.
+      const error = await fail(new Response("<html>Error 1102</html>", { status: 500 }));
+      expect(error).toMatchObject({ code: "invalid_response", detail: "HTTP 500" });
+    });
+
+    it("tells a client timeout from a lost connection", async () => {
+      expect(await fail(new DOMException("aborted", "AbortError"))).toMatchObject({ code: "analysis_failed", detail: "client_timeout" });
+      expect(await fail(new TypeError("Load failed"))).toMatchObject({ code: "analysis_failed", detail: "client_network" });
+    });
+
+    it("ignores unsafe or out-of-range details from the server", async () => {
+      const error = await fail(json({ error: "analysis_failed", detail_status: 99999, detail_code: "<script>alert(1)</script>" }, 502));
+      expect(error.detail).toBe("HTTP 502");
+      expect(await fail(json({ error: "analysis_failed", detail_status: "401", detail_code: "Has Spaces" }, 502))).toMatchObject({ detail: "HTTP 502" });
+    });
+
+    it("says what is wrong with a response that has a good HTTP status", async () => {
+      expect(await fail(json({ unexpected: true }, 200))).toMatchObject({ detail: "unexpected_shape" });
+      expect(await fail(json({ request_id: "b".repeat(32), model: "gpt-6-luna", observation }, 200))).toMatchObject({ detail: "request_id_mismatch" });
+      expect(await fail(json({ request_id: "a".repeat(32), model: "gpt-6-sol", observation }, 200))).toMatchObject({ detail: "model_mismatch:gpt-6-sol" });
+      expect(await fail(json({ request_id: "a".repeat(32), model: "gpt-6-luna", observation: { ...observation, scene: "guess" } }, 200))).toMatchObject({ detail: "observation_invalid" });
+    });
+  });
+
   it("does not retry a network failure because the server may already have reserved the call", async () => {
     const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new TypeError("connection lost"));
     await expect(requestVisionObservation(image, fetcher)).rejects.toBeInstanceOf(VisionClientError);
