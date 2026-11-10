@@ -2,6 +2,37 @@
 
 Stand: **10.11.2026**. Der aktuelle nächste Schritt ist ein echter, lesender Handytest des nach PR #49 deployten AED-Abgleichs. Diese Liste ersetzt ältere Statusangaben in diesem Dokument; frühere Einträge bleiben nur als historische Begründung erhalten.
 
+## Fotoprüfung per OpenAI (Entscheidung vom 10.11.2026)
+
+**Anlass:** Im Handytest ließ sich ein Screenshot mit Karnevalsbildern nach „AED oder Gehäuse gesehen – weiter“ in den Ablauf bringen. Die reine Selbstbestätigung hielt falsche Fotos nicht auf.
+
+**Entscheidung des Projektinhabers:** Die Fotoprüfung per OpenAI wird wieder eingebaut (die Anbindung war am 9.11.2026 mit PR #47 entfernt worden). Festgelegt: Bei „kein AED“ oder „nicht eindeutig“ ist der Weg gesperrt („Anderes Foto“). Bei Ausfall, Limit oder Fehler gilt der Rückfall auf die Selbstbestätigung. Vor dem Upload entfernt der Browser EXIF und GPS und verkleinert das Bild; ein Hinweis nennt OpenAI vor dem Tippen. `AGENTS.md` und die Docs sind angepasst.
+
+**Umgesetzt:** Der alte Server-Teil (Route, OpenAI-Client, Budget in D1) kam aus der Historie zurück (Commit `314abdc`), der Sitzungsstatus meldet `photoCheckAvailable`, und der Browser bietet die Prüfung nur dann an. E2E-Tests mocken den Server; kein Test ruft OpenAI auf.
+
+### Betreiber-Einrichtung der Fotoprüfung
+
+Die Prüfung bleibt aus, bis alle Punkte im Cloudflare-Dashboard (Worker `aedjaeger`) gesetzt sind. Fehlt einer, bleibt der bisherige Ablauf unverändert.
+
+| Name | Art | Bedeutung |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | Secret | Schlüssel für die OpenAI API; nie in Chat, Code oder Logs |
+| `AI_ANALYSIS_ENABLED` | Variable | `true` schaltet die Prüfung ein |
+| `AI_ANALYSIS_ALLOWED_OSM_SUBJECTS` | Variable | erlaubte Konten, kommagetrennt, höchstens 100, Format `development:<Kennung>` oder `production:<Kennung>` |
+| `AI_ANALYSIS_COST_RESERVATION_MICROS` | Variable | reservierte Kosten je Prüfung in Millionstel US-Dollar (20000 = 0,02 US-Dollar) |
+| `AI_ANALYSIS_USER_DAILY_LIMIT_MICROS` | Variable | Tageslimit je Konto (z. B. 200000 = 0,20 US-Dollar) |
+| `AI_ANALYSIS_GLOBAL_DAILY_LIMIT_MICROS` | Variable | Tageslimit insgesamt (z. B. 1000000 = 1 US-Dollar) |
+
+Beispielwerte sind Vorschläge, keine geprüften Vorgaben. Die Reservierung muss kleiner oder gleich beiden Limits sein, sonst bleibt die Prüfung aus.
+
+Vor dem ersten Einsatz zu klären (vom Projektinhaber):
+
+1. **D1-Tabelle:** Die Budget-Tabelle kommt aus den Migrationen `0001_analysis_budget.sql` und `0002_analysis_provider_started.sql`. Der Deploy führt keine Migrationen aus; ob sie auf der echten Datenbank liegen, ist nicht belegt. Prüfen mit `npx wrangler d1 migrations list aedjaeger-pilot --remote`. Fehlt die Tabelle, bietet die App die Prüfung an, fällt aber bei jedem Versuch auf die Selbstbestätigung zurück.
+2. **Modell:** Der Code verwendet `gpt-6-luna` (Festlegung aus `docs/architektur.md`). Ob die OpenAI API dieses Modell heute noch unter diesem Namen anbietet, ist in dieser Umgebung nicht geprüft.
+3. **Schlüssel und Konto:** Der alte Schlüssel kann inzwischen gedreht oder gelöscht sein. Ausgabenlimit im OpenAI-Konto setzen.
+4. **Datenschutzhinweis:** Der Hinweis in der App nennt OpenAI als Empfänger. Ob zusätzlich ein Eintrag in einer Datenschutzerklärung nötig ist, hängt von der Veröffentlichung ab und ist offen.
+5. **Trefferqualität:** Wie oft die Prüfung echte AED-Fotos sperrt, ist unbekannt. Abschnitt F der [Pilot-Abnahme](pilot-abnahme.md) beschreibt die Stichprobe.
+
 ## Neu vorbereitet (10.11.2026)
 
 - Die Abnahme ist in [Pilot-Abnahme](pilot-abnahme.md) beschrieben: Handytest, Live-Check, kontrollierter OSM-Dev-Schreibtest, Rückweg und Kriterien für `v0.1.0`.
@@ -57,7 +88,7 @@ Für eine leere Suche im OSM-Dev-Test bestätigt ein begrenzter, authentifiziert
 - Fotoaufnahme und Einfachheit stehen im Mittelpunkt: Foto → Sichtbarkeit selbst bestätigen → Umgebung abgleichen → vorhandenen AED prüfen oder neuen vorbereiten → Änderung ausdrücklich bestätigen.
 - Anmeldung mit OpenStreetMap ist Voraussetzung für alle Arbeitsfunktionen.
 - Foto/EXIF bleiben lokal; Foto-GPS hat Vorrang. Handy-GPS oder Kartenposition nur nach bewusster Auswahl.
-- Pilot ohne OpenAI oder andere externe Bilddienste und ohne automatische Bilderkennung.
+- Fotoprüfung per OpenAI, optional und nur bei Betreiber-Freigabe (Entscheidung vom 10.11.2026, ersetzt „ohne OpenAI“). Ohne Freigabe bleibt das Foto lokal und die Person bestätigt selbst.
 - Deutsch, Englisch, Polnisch, Japanisch, Französisch und Spanisch.
 - Gamification bleibt im Pilot unsichtbar; keine öffentliche Teil- oder Ranglistenfunktion.
 - Cloudflare Workers Free und bestehende workers.dev-Adresse; keine zusätzlichen Kosten oder Domain ohne Auftrag.

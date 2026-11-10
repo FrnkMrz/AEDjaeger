@@ -1,12 +1,12 @@
 # Produktkonzept: Foto machen, AED eintragen oder bestätigen
 
-Stand: 8.11.2026. **Aktueller Pilotentscheid:** AEDjaeger läuft ohne OpenAI und ohne andere externe Bilddienste. Die Person vor Ort bestätigt selbst, ob ein AED-Gerät oder AED-Gehäuse im ausgewählten Foto sichtbar ist. Das Foto bleibt lokal. Frühere Modelltests weiter unten sind historische Erkundungen, keine Laufzeitvoraussetzung.
+Stand: 8.11.2026. **Aktueller Pilotentscheid (10.11.2026):** Eine optionale Fotoprüfung per OpenAI sortiert Fotos ohne erkennbaren AED aus; der Betreiber schaltet sie ein und aus. Ohne Freigabe läuft AEDjaeger wie bisher ohne externen Bilddienst, die Person bestätigt selbst, ob ein AED-Gerät oder AED-Gehäuse im Foto sichtbar ist, und das Foto bleibt lokal. Mit Freigabe geht das Foto nach ausdrücklichem Tippen ohne EXIF/GPS an OpenAI. Frühere Modelltests weiter unten sind historische Erkundungen, keine Laufzeitvoraussetzung.
 
 ## Oberstes Ziel: absolute Einfachheit
 
 Ich stehe vor einem AED, mache ein Foto und die App erledigt die Zuordnung zu OpenStreetMap. Sie trägt ein neues Gerät ein oder bestätigt, dass ein vorhandenes noch da ist. Nur wirklich notwendige offene Fragen gehen an mich zurück.
 
-Das Foto ist der Einstieg und hilft der Person, den konkreten AED zu prüfen. Die Anwendung behauptet keine automatische Bilderkennung. Der normale Ablauf benötigt weder eine Kartensuche noch ein vollständiges Formular.
+Das Foto ist der Einstieg und hilft der Person, den konkreten AED zu prüfen. Die Anwendung behauptet keine sichere Erkennung: Die Fotoprüfung ist ein Filter, die Person bestätigt weiterhin selbst. Der normale Ablauf benötigt weder eine Kartensuche noch ein vollständiges Formular.
 
 ## Der normale Ablauf
 

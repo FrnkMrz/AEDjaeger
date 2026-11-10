@@ -27,7 +27,7 @@ Absolute Einfachheit ist das oberste Ziel. Die Person bestätigt selbst, dass AE
 
 ## Technische Richtung
 
-PWA mit kleinem Serverdienst; Code auf GitHub, gemeinsames Hosting von Oberfläche und API auf Cloudflare Workers mit Static Assets. Im Pilot bleibt das Foto samt EXIF auf dem Gerät und es gibt keinen externen Bilddienst. Die Umgebungssuche liest die AED-Ebene direkt aus dem bestehenden OpenFireMap-PMTiles-Archiv und fragt nur die Kacheln am bestätigten Foto-Standort ab. Overpass ist kein Laufzeitbestandteil. AEDjaeger liest die Datei nur; es startet oder betreibt keine Datenpipeline. Die Implementierung und Prüfgrenzen stehen in [OSM-Datenzugriff](docs/osm.md) und [Architektur](docs/architektur.md).
+PWA mit kleinem Serverdienst; Code auf GitHub, gemeinsames Hosting von Oberfläche und API auf Cloudflare Workers mit Static Assets. Das Foto samt EXIF bleibt auf dem Gerät. Nur wenn der Betreiber die optionale Fotoprüfung für ein Konto freigibt, sendet die App das Foto nach ausdrücklichem Tippen verkleinert und ohne EXIF/GPS an OpenAI; Standort und Konto gehen nicht mit. Die Umgebungssuche liest die AED-Ebene direkt aus dem bestehenden OpenFireMap-PMTiles-Archiv und fragt nur die Kacheln am bestätigten Foto-Standort ab. Overpass ist kein Laufzeitbestandteil. AEDjaeger liest die Datei nur; es startet oder betreibt keine Datenpipeline. Die Implementierung und Prüfgrenzen stehen in [OSM-Datenzugriff](docs/osm.md) und [Architektur](docs/architektur.md).
 
 ## Sprachen und Gamification
 

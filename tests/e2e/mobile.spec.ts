@@ -1182,6 +1182,9 @@ test("a passed photo check continues like a confirmed sighting and uploads no me
     await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } });
   });
   await page.goto("/");
+  // Schon auf der Startseite darf die Zusage „bleibt auf dem Gerät“ nicht mehr stehen.
+  await expect(page.locator(".capture-actions")).toContainText("OpenAI");
+  await expect(page.locator(".capture-actions")).not.toContainText("nicht an einen Bilddienst gesendet");
   await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
 
   // Der Hinweis auf OpenAI steht VOR dem Tippen; die alte Zusage „bleibt auf dem Gerät“ ist weg.
@@ -1271,6 +1274,8 @@ test("without the server flag the photo never leaves the device", async ({ page 
   let uploads = 0;
   await page.route("**/api/vision/analyze", async (route) => { uploads += 1; await route.fulfill({ status: 503, json: { error: "analysis_unavailable" } }); });
   await page.goto("/");
+  // Ohne Freigabe bleibt auch die Startseite bei der Zusage „bleibt auf dem Gerät“.
+  await expect(page.locator(".capture-actions")).toContainText("nicht an einen Bilddienst gesendet");
   await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
   // Bisheriger Ablauf: Selbstbestätigung und Zusage „bleibt auf dem Gerät“.
   await expect(page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" })).toBeVisible();

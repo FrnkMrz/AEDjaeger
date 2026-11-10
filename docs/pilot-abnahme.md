@@ -108,9 +108,27 @@ Der Tag `v0.1.0` wird nur gesetzt, wenn alle folgenden Punkte erfüllt sind:
 
 Ohne diese Punkte wird weder ein Tag noch ein GitHub-Release erstellt.
 
+## F. Fotoprüfung per OpenAI (nur bei Betreiber-Freigabe)
+
+Voraussetzung: Der Betreiber hat die Fotoprüfung im Cloudflare-Dashboard eingerichtet (siehe [offene Fragen](offene-fragen.md#betreiber-einrichtung-der-fotoprüfung)). Die Prüfung kostet Geld; die Testperson nutzt nur eigens aufgenommene, unbedenkliche Fotos ohne erkennbare Personen.
+
+| Nr | Schritt | Erwartetes Ergebnis | Ergebnis |
+| --- | --- | --- | --- |
+| F1 | Startseite öffnen, angemeldet mit einem zugelassenen Konto | Hinweis „Das Foto geht ohne Standort und Metadaten zur Prüfung an OpenAI.“ statt der Zusage „bleibt auf deinem Gerät“ | `[ ]` |
+| F2 | Mit einem nicht zugelassenen Konto anmelden | Bisheriger Ablauf mit „AED oder Gehäuse gesehen – weiter“; kein Foto verlässt das Gerät | `[ ]` |
+| F3 | Foto eines echten AED oder Gehäuses wählen, „AED gesehen – Foto prüfen“ tippen | Ladeanzeige, danach weiter zu Datumsfrage bzw. Standort und Suche | `[ ]` |
+| F4 | Screenshot, Foto eines anderen Gegenstands (z. B. Schuhe) wählen und prüfen | „Kein AED erkennbar“; nur „Anderes Foto“ ist möglich, keine Suche | `[ ]` |
+| F5 | Unscharfes oder sehr weit entferntes AED-Foto prüfen | „Nicht eindeutig“ oder erkannt; bei „nicht eindeutig“ nur „Anderes Foto“ | `[ ]` |
+| F6 | Flugmodus während der Prüfung einschalten | Hinweis „Die Prüfung ist gerade nicht möglich“ und die Selbstbestätigung steht bereit | `[ ]` |
+| F7 | Tageslimit erreichen (Limit vorübergehend sehr klein setzen) | Rückfall auf die Selbstbestätigung, keine Fehlermeldung mit Zahlen oder Kosten | `[ ]` |
+| F8 | Eine Stichprobe von mindestens 20 echten AED-Fotos und 20 Fotos ohne AED prüfen | Anzahl falsch gesperrter AED-Fotos und durchgelassener Fremdfotos notieren | `[ ]` |
+| F9 | Abrechnung im OpenAI-Konto nach den Tests ansehen | Kosten liegen im erwarteten Rahmen (je Prüfung grob unter 0,01 US-Dollar laut früherem Test) | `[ ]` |
+
+Hinweise: F1 bis F7 prüfen Verhalten, F8 die Trefferqualität. Zeigt F8 viele falsch gesperrte AED-Fotos, ist die Sperre „kein AED“ zu streng und wird mit dem Projektinhaber neu bewertet. Bei jedem Fehler Uhrzeit und genaue Meldung notieren, keinen Schlüssel teilen.
+
 ## Was diese Abnahme nicht abdeckt
 
-- Automatische Bilderkennung ist nicht Teil des Pilots und wird nicht geprüft.
+- Die Trefferqualität der Fotoprüfung (wie oft sie echte AED-Fotos fälschlich sperrt oder fremde Fotos durchlässt) ist nicht belegt. Abschnitt F verlangt dazu eine Stichprobe mit echten Fotos.
 - Die Live-Verfügbarkeit des PMTiles-Archivs hängt von `pipeline.openfiremap.org` ab. Der Check misst nur den Stand zum Zeitpunkt des Laufs.
 - Eine Stichprobe an einer Koordinate ist kein Nachweis für die gesamte Region.
 - Produktions-OSM wird in keinem Abschnitt geschrieben.
