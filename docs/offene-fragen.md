@@ -19,7 +19,7 @@ Stand: **10.11.2026**. Der aktuelle nächste Schritt ist ein echter, lesender Ha
 ## Stand nach PR #54 (10.11.2026, abends)
 
 - Gemergt und deployt: PR #51 bis #54. Einzelheiten, Entscheidungen und offene Punkte stehen in der [Übergabe](uebergabe.md).
-- Der Live-Check der Datenquelle lief zweimal erfolgreich gegen echte Daten. Der Abschnitt „Neu vorbereitet“ oben ist in diesem Punkt überholt.
+- Der Live-Check der Datenquelle lief zweimal erfolgreich gegen echte Daten; der Abschnitt „Neu vorbereitet“ oben nennt die Einzelwerte (B1 bis B4 bestanden, B5 offen).
 - Die Umgebungssuche lieferte auf dem Handy des Projektinhabers einen echten Treffer.
 - Offen: erneuter Handytest der Änderungen aus PR #53 und #54 auf Android und iPhone, danach Entscheidung über den OSM-Dev-Schreibtest und `v0.1.0`.
 
