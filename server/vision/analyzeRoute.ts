@@ -95,17 +95,17 @@ export async function handleVisionAnalysis(
     if (!reservation.reserved) {
       return jsonResponse({ error: reservation.reason === "duplicate" ? "duplicate_request" : "analysis_budget_exceeded" }, reservation.reason === "duplicate" ? 409 : 429);
     }
-  } catch {
+  } catch (error) {
     // Fail closed: no provider call unless D1 confirmed a reservation first.
-    return jsonResponse({ error: "analysis_budget_unavailable" }, 503);
+    return failure("analysis_budget_unavailable", 503, undefined, { detailCode: describeStorageFailure(error) });
   }
 
   try {
     const claimed = await markAnalysisProviderStarted(environment.DB, budgetUserId, payload.requestId, now);
     if (!claimed) return jsonResponse({ error: "duplicate_request" }, 409);
-  } catch {
+  } catch (error) {
     // D1 may have committed the claim before losing its reply; this state must not be retried blindly.
-    return jsonResponse({ error: "analysis_claim_uncertain" }, 503);
+    return failure("analysis_claim_uncertain", 503, undefined, { detailCode: describeStorageFailure(error) });
   }
 
   try {
@@ -117,8 +117,33 @@ export async function handleVisionAnalysis(
   } catch (error) {
     const status = error instanceof VisionAnalysisError && error.code === "invalid_image" ? 400 : 502;
     const code = error instanceof VisionAnalysisError && error.code === "invalid_image" ? "invalid_image" : "analysis_failed";
-    return jsonResponse({ error: code, request_id: payload.requestId }, status);
+    const detail = error instanceof VisionAnalysisError ? error.detail : {};
+    return failure(code, status, payload.requestId, { detailStatus: detail.providerStatus, detailCode: detail.providerCode });
   }
+}
+
+/**
+ * Antwortet mit einem Fehler und schreibt dieselben Eckdaten ins Betriebsprotokoll.
+ *
+ * Warum? Ohne Hinweis lässt sich ein Ausfall im Pilot nicht eingrenzen: „Prüfung nicht möglich“ kann
+ * ein ungültiger Schlüssel, ein unbekanntes Modell, ein Zeitlimit oder eine fehlende Datenbanktabelle
+ * sein. Übernommen werden nur feste Kennungen und Statuszahlen, nie Fehlertexte, Fotos, Schlüssel
+ * oder Kontodaten. Die Kennungen gehen auch an die App, damit sie dort auf dem Handy lesbar sind.
+ */
+function failure(error: string, status: number, requestId: string | undefined, hint: { detailStatus?: number; detailCode?: string } = {}): Response {
+  console.error(JSON.stringify({ event: "vision_analysis_failed", error, status, detail_status: hint.detailStatus, detail_code: hint.detailCode }));
+  return jsonResponse({
+    error,
+    ...(requestId ? { request_id: requestId } : {}),
+    ...(hint.detailStatus ? { detail_status: hint.detailStatus } : {}),
+    ...(hint.detailCode ? { detail_code: hint.detailCode } : {}),
+  }, status);
+}
+
+/** Ordnet einen Datenbankfehler einer festen Kennung zu, ohne seinen Text weiterzugeben. */
+function describeStorageFailure(error: unknown): string {
+  // D1 meldet eine fehlende Tabelle als „no such table“; das ist der häufigste Einrichtungsfehler.
+  return error instanceof Error && /no such table/iu.test(`${error.message} ${(error.cause as Error | undefined)?.message ?? ""}`) ? "missing_table" : "storage_error";
 }
 
 /**

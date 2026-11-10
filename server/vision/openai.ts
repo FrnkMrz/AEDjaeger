@@ -10,13 +10,43 @@ const PNG_CRC_LOOKUP = createPngCrcTable();
 
 export type SupportedImageType = (typeof ALLOWED_IMAGE_TYPES)[number];
 
+/**
+ * Kurze, geprüfte Hinweise zur Fehlerursache. Sie enthalten nie Fehlertexte, Anfrageinhalte oder
+ * Schlüssel, sondern nur feste Kennungen wie „invalid_api_key“ oder „timeout“, damit sich ein
+ * Ausfall im Pilot diagnostizieren lässt, ohne Daten preiszugeben.
+ */
+export type VisionFailureDetail = { providerStatus?: number; providerCode?: string };
+
 export class VisionAnalysisError extends Error {
   constructor(
     readonly code: "invalid_image" | "missing_secret" | "provider_error" | "invalid_provider_response",
     message: string,
+    readonly detail: VisionFailureDetail = {},
   ) {
     super(message);
     this.name = "VisionAnalysisError";
+  }
+}
+
+// Nur kleine, kleingeschriebene Kennungen sind erlaubt. Alles andere (Sätze, Schlüssel, Namen) wird verworfen.
+const SAFE_TOKEN = /^[a-z0-9_.-]{1,48}$/u;
+
+/** Gibt die Kennung nur zurück, wenn sie wie ein fester Code aussieht und nicht wie ein Schlüssel. */
+export function safeProviderToken(value: unknown): string | undefined {
+  return typeof value === "string" && SAFE_TOKEN.test(value) && !value.startsWith("sk-") ? value : undefined;
+}
+
+/**
+ * Liest aus einer Fehlerantwort von OpenAI nur `error.code` oder `error.type` (zum Beispiel
+ * „invalid_api_key“, „model_not_found“, „insufficient_quota“). Die Fehlermeldung selbst wird nie gelesen.
+ */
+async function readProviderErrorToken(response: Response): Promise<string | undefined> {
+  try {
+    const body: unknown = JSON.parse((await response.text()).slice(0, 8_192));
+    const error = isRecord(body) && isRecord(body.error) ? body.error : undefined;
+    return safeProviderToken(error?.code) ?? safeProviderToken(error?.type);
+  } catch {
+    return undefined;
   }
 }
 
@@ -125,44 +155,51 @@ export async function analyzeAedPhoto(
       }),
       signal: AbortSignal.timeout(25_000),
     });
-  } catch {
+  } catch (error) {
     // Network errors are normalized so callers do not accidentally log secret-bearing requests.
-    throw new VisionAnalysisError("provider_error", "Die Bildanalyse ist vorübergehend fehlgeschlagen.");
+    // Nur die Art des Fehlers (Zeitlimit oder Netz) wird weitergegeben, nie seine Meldung.
+    const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+    throw new VisionAnalysisError("provider_error", "Die Bildanalyse ist vorübergehend fehlgeschlagen.", { providerCode: timedOut ? "timeout" : "network_error" });
   }
 
   if (!response.ok) {
-    // Provider error bodies can contain request details. Keep them out of logs and UI messages.
-    throw new VisionAnalysisError("provider_error", "Die Bildanalyse ist vorübergehend fehlgeschlagen.");
+    // Provider error bodies can contain request details. Keep them out of logs and UI messages:
+    // nur HTTP-Status und eine geprüfte Kennung (error.code / error.type) werden übernommen.
+    throw new VisionAnalysisError("provider_error", "Die Bildanalyse ist vorübergehend fehlgeschlagen.", {
+      providerStatus: response.status,
+      providerCode: await readProviderErrorToken(response),
+    });
   }
 
   let providerResponse: unknown;
   try {
     providerResponse = await response.json();
   } catch {
-    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte keine lesbare Antwort.");
+    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte keine lesbare Antwort.", { providerCode: "unreadable_response" });
   }
 
   // A syntactically valid JSON fragment is not usable if generation was interrupted.
   if (!isRecord(providerResponse) || providerResponse.status !== "completed") {
-    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse wurde nicht vollständig abgeschlossen.");
+    const reason = isRecord(providerResponse) && isRecord(providerResponse.incomplete_details) ? safeProviderToken(providerResponse.incomplete_details.reason) : undefined;
+    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse wurde nicht vollständig abgeschlossen.", { providerCode: reason ? `incomplete_${reason}` : "incomplete" });
   }
 
   const outputText = extractOutputText(providerResponse);
 
   if (!outputText) {
-    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte keine Beobachtung.");
+    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte keine Beobachtung.", { providerCode: "no_output" });
   }
 
   let decoded: unknown;
   try {
     decoded = JSON.parse(outputText);
   } catch {
-    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte ein ungültiges Format.");
+    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte ein ungültiges Format.", { providerCode: "invalid_json" });
   }
 
   const observation = parseVisionObservation(decoded);
   if (!observation.ok) {
-    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte ungültige Beobachtungen.");
+    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte ungültige Beobachtungen.", { providerCode: "schema_mismatch" });
   }
   return observation.value;
 }

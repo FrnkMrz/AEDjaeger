@@ -206,6 +206,61 @@ describe("server-side GPT-6 Luna vision adapter", () => {
     });
   });
 
+  describe("failure details for diagnosis", () => {
+    // Gibt den geworfenen Fehler zurück. Ein Aufruf, der unerwartet gelingt, lässt den Test fehlschlagen.
+    const call = async (fetcher: typeof fetch): Promise<VisionAnalysisError> => {
+      try {
+        await analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", fetcher);
+      } catch (error) {
+        return error as VisionAnalysisError;
+      }
+      throw new Error("Der Aufruf hätte fehlschlagen müssen.");
+    };
+
+    it("keeps only the HTTP status and a safe error code from a provider error", async () => {
+      const error = await call(vi.fn<typeof fetch>().mockResolvedValue(providerResponse({ error: { code: "invalid_api_key", type: "invalid_request_error", message: "Incorrect API key provided: sk-secret-value" } }, 401)));
+      expect(error.detail).toEqual({ providerStatus: 401, providerCode: "invalid_api_key" });
+      // Die Fehlermeldung des Anbieters wird nie gelesen und taucht nirgends auf.
+      expect(JSON.stringify([error.message, error.detail])).not.toContain("sk-secret-value");
+    });
+
+    it("falls back to the error type and to the status alone", async () => {
+      const typeOnly = await call(vi.fn<typeof fetch>().mockResolvedValue(providerResponse({ error: { type: "insufficient_quota", message: "x" } }, 429)));
+      expect(typeOnly.detail).toEqual({ providerStatus: 429, providerCode: "insufficient_quota" });
+      const notJson = await call(vi.fn<typeof fetch>().mockResolvedValue(new Response("<html>bad gateway</html>", { status: 502 })));
+      expect(notJson.detail).toEqual({ providerStatus: 502, providerCode: undefined });
+    });
+
+    it.each([
+      ["a sentence", "Incorrect API key provided"],
+      ["an upper-case token", "INVALID_API_KEY"],
+      ["a key-like value", "sk-proj-abcdef0123456789"],
+      ["an overlong value", "a".repeat(49)],
+      ["a non-string value", 42],
+    ])("drops %s instead of passing it on", async (_name, code) => {
+      const error = await call(vi.fn<typeof fetch>().mockResolvedValue(providerResponse({ error: { code, type: code } }, 400)));
+      expect(error.detail.providerCode).toBeUndefined();
+    });
+
+    it("tells a timeout from other network failures", async () => {
+      const timeout = await call(vi.fn<typeof fetch>().mockRejectedValue(new DOMException("timed out", "TimeoutError")));
+      expect(timeout.detail).toEqual({ providerCode: "timeout" });
+      const network = await call(vi.fn<typeof fetch>().mockRejectedValue(new TypeError("fetch failed")));
+      expect(network.detail).toEqual({ providerCode: "network_error" });
+    });
+
+    it("names why a successful HTTP response was still unusable", async () => {
+      const incomplete = await call(vi.fn<typeof fetch>().mockResolvedValue(providerResponse({ status: "incomplete", incomplete_details: { reason: "max_output_tokens" } })));
+      expect(incomplete.detail.providerCode).toBe("incomplete_max_output_tokens");
+      const noOutput = await call(vi.fn<typeof fetch>().mockResolvedValue(providerResponse({ status: "completed", output: [] })));
+      expect(noOutput.detail.providerCode).toBe("no_output");
+      const badJson = await call(vi.fn<typeof fetch>().mockResolvedValue(providerResponse({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "not json" }] }] })));
+      expect(badJson.detail.providerCode).toBe("invalid_json");
+      const wrongShape = await call(vi.fn<typeof fetch>().mockResolvedValue(outputResponse({ scene: "guess" })));
+      expect(wrongShape.detail.providerCode).toBe("schema_mismatch");
+    });
+  });
+
   it("does not expose provider error details to callers", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(providerResponse({ error: { message: "secret and request content" } }, 500));
 

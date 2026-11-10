@@ -29,6 +29,26 @@ Die Prüfung bleibt aus, bis alle Punkte im Cloudflare-Dashboard (Worker `aedjae
 
 Beispielwerte sind Vorschläge, keine geprüften Vorgaben. Die Reservierung muss kleiner oder gleich beiden Limits sein, sonst bleibt die Prüfung aus.
 
+### Fehlercodes der Fotoprüfung lesen
+
+Scheitert die Prüfung, zeigt die App unter „Die Prüfung ist gerade nicht möglich“ eine kleine Zeile „Fehlercode: …“ und bietet die Selbstbestätigung an. Derselbe Code steht im Betriebsprotokoll des Workers (Cloudflare-Dashboard, Worker `aedjaeger`, Logs; Ereignis `vision_analysis_failed`). Er enthält nur feste Kennungen und Statuszahlen, nie Fehlertexte, Fotos, Schlüssel oder Konten.
+
+| Code (Beispiel) | Bedeutung | Maßnahme |
+| --- | --- | --- |
+| `analysis_budget_unavailable (HTTP 503, missing_table)` | Die Budget-Tabelle fehlt in D1 | Migrationen `0001` und `0002` anwenden (`npx wrangler d1 migrations apply aedjaeger-pilot --remote`, vorher mit `migrations list` prüfen) |
+| `analysis_budget_unavailable (HTTP 503, storage_error)` | D1 antwortet mit einem anderen Fehler | Cloudflare-Status und Logs prüfen |
+| `analysis_budget_exceeded (HTTP 429)` | Tages- oder Kontolimit erreicht | Limit prüfen oder bis zum nächsten UTC-Tag warten |
+| `analysis_not_allowed (HTTP 403)` | Konto steht nicht in `AI_ANALYSIS_ALLOWED_OSM_SUBJECTS` | Eintrag im Format `development:<Kennung>` bzw. `production:<Kennung>` prüfen |
+| `analysis_failed (HTTP 502, OpenAI 401, invalid_api_key)` | OpenAI lehnt den Schlüssel ab | Schlüssel erneuern und als Secret setzen |
+| `analysis_failed (HTTP 502, OpenAI 404, model_not_found)` | Modellname gibt es nicht (mehr) | Modell in `src/contracts/visionObservation.ts` prüfen |
+| `analysis_failed (HTTP 502, OpenAI 429, insufficient_quota)` | OpenAI-Guthaben oder Limit erschöpft | Abrechnung und Ausgabenlimit bei OpenAI prüfen |
+| `analysis_failed (HTTP 502, timeout)` | OpenAI antwortete nicht innerhalb von 25 Sekunden | Später erneut versuchen |
+| `analysis_failed (HTTP 502, incomplete_…)`, `no_output`, `invalid_json`, `schema_mismatch` | OpenAI antwortete, aber mit unbrauchbarem Inhalt | Meldung an den Entwickler mit dem genauen Code |
+| `invalid_response (HTTP 500)` oder `(HTTP 503)` | Keine JSON-Antwort: der Worker ist abgestürzt oder hat ein Limit überschritten, zum Beispiel die CPU-Zeit im Workers-Free-Tarif | Worker-Logs prüfen; ist es die CPU-Zeit, den Server-Weg des Fotos schlanker machen oder den Tarif neu bewerten (Entscheidung des Projektinhabers) |
+| `invalid_response (model_mismatch:…)` | Server und App kennen verschiedene Modellnamen | Beide Seiten nutzen `VISION_MODEL`; nach einem Teil-Deploy erneut laden |
+| `analysis_failed (client_network)` / `(client_timeout)` | Verbindung zum Worker abgebrochen bzw. 35 Sekunden überschritten | Netz prüfen und erneut versuchen |
+| `image_processing_failed`, `image_too_large`, `invalid_image` | Das Foto ließ sich im Browser nicht verkleinern oder ist zu groß | Anderes Foto wählen |
+
 Vor dem ersten Einsatz zu klären (vom Projektinhaber):
 
 1. **D1-Tabelle:** Die Budget-Tabelle kommt aus den Migrationen `0001_analysis_budget.sql` und `0002_analysis_provider_started.sql`. Der Deploy führt keine Migrationen aus; ob sie auf der echten Datenbank liegen, ist nicht belegt. Prüfen mit `npx wrangler d1 migrations list aedjaeger-pilot --remote`. Fehlt die Tabelle, bietet die App die Prüfung an, fällt aber bei jedem Versuch auf die Selbstbestätigung zurück.

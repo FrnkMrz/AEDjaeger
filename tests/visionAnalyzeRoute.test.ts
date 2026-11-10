@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleVisionAnalysis, type VisionRouteEnvironment } from "../server/vision/analyzeRoute";
+import { VisionAnalysisError } from "../server/vision/openai";
 import type { D1Database, D1Result, D1Statement } from "../server/storage/d1";
 import type { VisionObservation } from "../src/contracts/visionObservation";
 
@@ -20,7 +21,7 @@ const observation: VisionObservation = {
   image_issues: [],
 };
 
-function createDatabase(options: { authenticated?: boolean; environment?: "production" | "development"; reserved?: boolean; runError?: boolean; claimError?: boolean; duplicate?: "reserved" | "started" } = {}) {
+function createDatabase(options: { authenticated?: boolean; environment?: "production" | "development"; reserved?: boolean; runError?: boolean; runErrorMessage?: string; claimError?: boolean; duplicate?: "reserved" | "started" } = {}) {
   const calls: string[] = [];
   const budgetIdentities: string[] = [];
   let reservationDay: string | undefined;
@@ -40,7 +41,7 @@ function createDatabase(options: { authenticated?: boolean; environment?: "produ
             reservationDay = String(boundValues[3]);
             reservationCost = Number(boundValues[4]);
           }
-          if (options.runError && query.includes("INSERT INTO analysis_budget_reservations")) throw new Error("private D1 diagnostic");
+          if (options.runError && query.includes("INSERT INTO analysis_budget_reservations")) throw new Error(options.runErrorMessage ?? "private D1 diagnostic");
           if (options.claimError && query.includes("provider_started_at IS NULL")) throw new Error("private D1 claim diagnostic");
           const changes = query.includes("INSERT INTO analysis_budget_reservations") ? (options.reserved === false ? 0 : 1) : 1;
           return { success: true, meta: { changes } } as D1Result<T>;
@@ -285,8 +286,55 @@ describe("protected image analysis route", () => {
     const response = await handleVisionAnalysis(analysisRequest(), environment(database), { analyze });
 
     expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ error: "analysis_claim_uncertain" });
+    // Zusätzlich zur festen Fehlerkennung nennt die Antwort nur eine Kategorie, nie den Datenbanktext.
+    expect(await response.json()).toEqual({ error: "analysis_claim_uncertain", detail_code: "storage_error" });
     expect(analyze).not.toHaveBeenCalled();
+  });
+
+  describe("failure diagnostics", () => {
+    // Die Betriebsprotokoll-Zeile ersetzt console.error, damit der Test sie auswerten kann und nichts ausgibt.
+    const logged = (spy: { mock: { calls: unknown[][] } }) => spy.mock.calls.map((call) => String(call[0])).join("\n");
+
+    it("names a missing budget table without exposing the database message", async () => {
+      const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      try {
+        const { database } = createDatabase({ runError: true, runErrorMessage: "D1_ERROR: no such table: analysis_budget_reservations: SQLITE_ERROR" });
+        const analyze = successfulAnalysis();
+        const response = await handleVisionAnalysis(analysisRequest(), environment(database), { analyze });
+        const body = await response.text();
+
+        expect(response.status).toBe(503);
+        expect(JSON.parse(body)).toEqual({ error: "analysis_budget_unavailable", detail_code: "missing_table" });
+        expect(body).not.toContain("SQLITE");
+        expect(body).not.toContain("analysis_budget_reservations");
+        expect(analyze).not.toHaveBeenCalled();
+        expect(logged(log)).toContain('"event":"vision_analysis_failed"');
+        expect(logged(log)).toContain("missing_table");
+        expect(logged(log)).not.toContain("SQLITE");
+      } finally {
+        log.mockRestore();
+      }
+    });
+
+    it("passes the provider status and a safe provider code to the app and the log", async () => {
+      const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      try {
+        const { database } = createDatabase();
+        const analyze = vi.fn(async () => { throw new VisionAnalysisError("provider_error", "internal text server-only-test-key", { providerStatus: 401, providerCode: "invalid_api_key" }); });
+        const response = await handleVisionAnalysis(analysisRequest(), environment(database), { analyze });
+        const body = await response.text();
+
+        expect(response.status).toBe(502);
+        expect(JSON.parse(body)).toEqual({ error: "analysis_failed", request_id: "request_1234567890", detail_status: 401, detail_code: "invalid_api_key" });
+        // Die interne Meldung der Ausnahme gelangt weder in die Antwort noch ins Protokoll.
+        expect(body).not.toContain("server-only-test-key");
+        expect(logged(log)).toContain("invalid_api_key");
+        expect(logged(log)).not.toContain("server-only-test-key");
+        expect(logged(log)).not.toContain("request_1234567890");
+      } finally {
+        log.mockRestore();
+      }
+    });
   });
 
   it("keeps provider errors, photos and secrets out of the response", async () => {

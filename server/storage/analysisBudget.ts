@@ -78,12 +78,13 @@ export async function reserveAnalysisBudget(
         request.costMicros,
       )
       .run();
-  } catch {
+  } catch (cause) {
     // D1 can reject the promise (for example on a constraint error), bypassing `success`.
     // If the insert committed before its reply was lost, let the caller resume
     // this still-unclaimed reservation with the same request ID.
     if (await findResumableReservation(database, request)) return { reserved: true };
-    throw new Error("Die Analyse konnte nicht sicher reserviert werden.");
+    // `cause` bleibt nur für die Fehlerklassifizierung im Aufrufer (z. B. „no such table“) erhalten und wird nie ausgegeben.
+    throw new Error("Die Analyse konnte nicht sicher reserviert werden.", { cause });
   }
 
   if (!result.success) {
@@ -121,9 +122,9 @@ export async function markAnalysisProviderStarted(
       .run();
     if (!result.success) throw new Error();
     return (result.meta?.changes ?? 0) === 1;
-  } catch {
+  } catch (cause) {
     // No provider call may begin unless D1 confirms this one-time claim.
-    throw new Error("Der Analyseaufruf konnte nicht sicher vorbereitet werden.");
+    throw new Error("Der Analyseaufruf konnte nicht sicher vorbereitet werden.", { cause });
   }
 }
 
@@ -152,8 +153,8 @@ async function findExistingReservation(database: D1Database, userId: string, req
       )
       .bind(userId, requestId)
       .first<ExistingReservation>();
-  } catch {
-    throw new Error("Die Analyse konnte nicht sicher reserviert werden.");
+  } catch (cause) {
+    throw new Error("Die Analyse konnte nicht sicher reserviert werden.", { cause });
   }
 }
 

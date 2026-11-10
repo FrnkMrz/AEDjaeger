@@ -196,6 +196,9 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
 .position-map-marker-origin::after { position: absolute; inset: 5px; border-radius: 50%; background: #fff; content: ""; }
 .position-map-crosshair[hidden] { display: none; }
 
+/* Fehlercode der Fotoprüfung: klein und umbrechbar, damit er auch auf schmalen Bildschirmen lesbar bleibt. */
+.photo-check-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; overflow-wrap: anywhere; }
+
 /* Hinweis auf eine neue App-Version. Er liegt außerhalb von #app und bleibt beim Scrollen oben sichtbar. */
 .update-banner { position: sticky; top: 0; z-index: 60; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 14px; padding: 10px 16px; background: var(--green-dark); color: #fff; font-size: 14px; line-height: 1.4; text-align: center; }
 .update-banner-button { min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; background: #fff; color: var(--green-dark); font: inherit; font-weight: 700; cursor: pointer; }
