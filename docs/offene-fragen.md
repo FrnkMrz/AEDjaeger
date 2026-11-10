@@ -2,6 +2,12 @@
 
 Stand: **10.11.2026**. Der aktuelle nächste Schritt ist ein echter, lesender Handytest des nach PR #49 deployten AED-Abgleichs. Diese Liste ersetzt ältere Statusangaben in diesem Dokument; frühere Einträge bleiben nur als historische Begründung erhalten.
 
+## Neu vorbereitet (10.11.2026)
+
+- Die Abnahme ist in [Pilot-Abnahme](pilot-abnahme.md) beschrieben: Handytest, Live-Check, kontrollierter OSM-Dev-Schreibtest, Rückweg und Kriterien für `v0.1.0`.
+- Der Live-Check der Datenquelle ist **vorbereitet, noch nicht ausgeführt**: `npm run check:live-search` bzw. der manuelle Workflow „Live-Check AED-Datenquelle“. Ein Lauf aus dieser Agentenumgebung scheiterte bei der Namensauflösung des Datenhosts (`ENOTFOUND`); das Ergebnis sagt nichts über die Live-Verfügbarkeit.
+- Offen bleiben: Handytest auf Android und iPhone, Live-Check mit echten Daten, Freigabe für einen Dev-Schreibtest und die Entscheidung über `v0.1.0`.
+
 ## Aktueller Stand
 
 - PR [#49](https://github.com/FrnkMrz/AEDjaeger/pull/49) zur Suche im OpenFireMap-PMTiles-Archiv ist am 9.11.2026 gemergt.

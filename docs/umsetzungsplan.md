@@ -4,6 +4,8 @@
 
 Stand: 10.11.2026. Der aktuelle nächste Schritt ist ein lesender Praxistest auf dem Handy: OSM-Dev-Login, Foto mit GPS, Sichtbestätigung und PMTiles-Suche. Kein OSM-Schreibvorgang ist freigegeben. Die Produktentscheidungen, Grenzen der Datenquelle und Übergabe stehen in [Übergabe](uebergabe.md); der technische Datenvertrag steht in [OSM-Datenzugriff](osm.md).
 
+> **Ergänzung (10.11.2026):** Die Abnahmeschritte sind in [Pilot-Abnahme](pilot-abnahme.md) festgehalten. Der Live-Check der Datenquelle ist vorbereitet, aber noch nicht ausgeführt.
+
 ## Veröffentlichung auf Cloudflare
 
 Die GitHub-Actions-Workflowdatei `.github/workflows/ci.yml` prüft PRs und Pushes. Nach erfolgreichem CI auf einem Push zu `main` (einschließlich Merge-Commit) startet der Cloudflare-Deploy automatisch. Der manuelle `workflow_dispatch`-Lauf veröffentlicht nur, wenn `deploy_to_workers` ausdrücklich bestätigt wird. Der Deploy verwendet die GitHub-Umgebung `production`, serialisiert Deployments und veröffentlicht die Workers-App unter ihrer bestehenden workers.dev-Adresse. Er startet keine OpenFireMap-Pipeline, führt keine D1-Migrationen aus und verändert keine OSM-Daten.

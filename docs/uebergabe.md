@@ -52,6 +52,9 @@ OpenStreetMap Devs begrenzter `/api/0.6/map.json`-Endpunkt dient zusätzlich daz
 
 ## Was der Nutzer als Nächstes tun soll
 
+Die vollständige Abnahme (Handytest, Live-Check, Dev-Schreibtest, Rückweg, Release-Kriterien) steht in [Pilot-Abnahme](pilot-abnahme.md). Der Live-Check ist vorbereitet (`npm run check:live-search` oder GitHub-Workflow „Live-Check AED-Datenquelle“), wurde aber noch nicht ausgeführt.
+
+
 1. Auf dem Handy die App unter [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev) öffnen und auf dem OSM-Testserver anmelden.
 2. Ein echtes AED-Foto auswählen, bei dem GPS-Metadaten vorhanden sind; danach AED/Gehäuse-Sichtbarkeit bestätigen.
 3. Die Umkreissuche starten. Prüfen, ob die App die Position aus dem Foto meldet und ob nahe AED-Kandidaten erscheinen.
