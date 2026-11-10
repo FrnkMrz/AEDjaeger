@@ -21,8 +21,8 @@ Getestet werden Android Chrome, iPhone Safari und die installierte PWA. Die Test
 | A3 | Ein Foto mit GPS-Daten auswählen | Die App meldet „Standort aus dem Foto verwendet“ | `[ ]` |
 | A4 | Sichtbestätigung setzen (AED oder Gehäuse ist sichtbar) | Erst nach dem Haken geht es weiter; die App behauptet keine automatische Erkennung | `[ ]` |
 | A5 | Umgebungssuche starten | Ladeanzeige, danach Kandidatenliste oder „keine Treffer nach vollständiger Suche“ | `[ ]` |
-| A6 | Mehrere nahe Treffer ansehen (falls vorhanden) | Alle Treffer sind einzeln wählbar; keine Auswahl erfolgt automatisch | `[ ]` |
-| A7 | Option „Keiner davon ist der fotografierte AED“ wählen (falls Treffer vorhanden) | Ausdrückliche Bestätigung nötig; keine Schreiboperation ohne weitere Bestätigung | `[ ]` |
+| A6 | Treffer ansehen (falls vorhanden) | Eine Umgebungskarte zeigt den gesuchten Standort (rot) und nummerierte Marker; die Nummern passen zur Trefferliste. Keine Auswahl erfolgt automatisch | `[ ]` |
+| A7 | Neuanlage anstoßen: bei Treffern „Keiner davon – neuen AED eintragen“, ohne Treffer „Hier fehlt ein AED – neu eintragen“ | Erst nach diesem Tastendruck erscheinen Karte und Positionsbestätigung (erste Bestätigung). In der Vorschau bleibt das Speichern gesperrt, bis der Haken „vor Ort geprüft“ gesetzt ist (zweite Bestätigung) | `[ ]` |
 | A8 | Kamera-Berechtigung verweigern und erneut versuchen | Verständlicher Hinweis, kein Absturz; die App bietet die Fotoauswahl an | `[ ]` |
 | A9 | Standort-Berechtigung verweigern und Kartenposition wählen | Suche startet erst nach bewusster Kartenauswahl; keine Standortdaten werden gesendet | `[ ]` |
 | A10 | Offline-Start der installierten PWA (Flugmodus) | Die Oberfläche startet aus dem Cache; die Suche zeigt einen Fehler statt eines leeren Ergebnisses | `[ ]` |

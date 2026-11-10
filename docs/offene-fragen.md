@@ -16,6 +16,12 @@ Stand: **10.11.2026**. Der aktuelle nächste Schritt ist ein echter, lesender Ha
 - Auf einem echten Handy ist nach diesem Deploy noch kein erfolgreicher Live-Abgleich bestätigt.
 - OSM-Schreibzugriffe bleiben mit `OSM_DEV_WRITES_ENABLED` abgeschaltet. Es fand kein produktiver OSM-Schreibvorgang statt.
 
+## Rückmeldung aus dem ersten Handytest (10.11.2026)
+
+- Umgesetzt: Umgebungskarte bei Treffern, zwei getrennte Bestätigungen für jede Neuanlage, deutlich kürzere Texte im Foto- und Suchablauf.
+- Entscheidung: Eine Neuanlage braucht in beiden Fällen (Suche ohne Treffer und „keiner davon“) zwei ausdrückliche Bestätigungen.
+- Offen: erneuter Handytest dieser Änderungen; die gekürzten Texte in Englisch, Polnisch, Japanisch, Französisch und Spanisch sind nicht muttersprachlich geprüft.
+
 ## Als Nächstes: Handytest
 
 1. App auf dem Handy öffnen und am OSM-Testserver anmelden.

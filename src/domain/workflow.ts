@@ -16,6 +16,11 @@ export type CandidateResultState = {
   location: SearchLocation;
   /** Explicitly records that the person reviewed all nearby entries and none is this AED. */
   noneOfTheseConfirmed?: boolean;
+  /**
+   * Erste von zwei Bestätigungen für eine Neuanlage nach einer Suche ohne Treffer:
+   * Die Person hat ausdrücklich gewählt, dass hier ein AED fehlt und neu eingetragen werden soll.
+   */
+  newEntryRequested?: boolean;
   retryAvailableAt?: number;
 };
 
