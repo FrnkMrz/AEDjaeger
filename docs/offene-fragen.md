@@ -5,13 +5,13 @@ Stand: **10.11.2026**. Der aktuelle nächste Schritt ist ein echter, lesender Ha
 ## Neu vorbereitet (10.11.2026)
 
 - Die Abnahme ist in [Pilot-Abnahme](pilot-abnahme.md) beschrieben: Handytest, Live-Check, kontrollierter OSM-Dev-Schreibtest, Rückweg und Kriterien für `v0.1.0`.
-- Der Live-Check der Datenquelle ist **vorbereitet, noch nicht ausgeführt**: `npm run check:live-search` bzw. der manuelle Workflow „Live-Check AED-Datenquelle“. Ein Lauf aus dieser Agentenumgebung scheiterte bei der Namensauflösung des Datenhosts (`ENOTFOUND`); das Ergebnis sagt nichts über die Live-Verfügbarkeit.
-- Offen bleiben: Handytest auf Android und iPhone, Live-Check mit echten Daten, Freigabe für einen Dev-Schreibtest und die Entscheidung über `v0.1.0`.
+- Der Live-Check der Datenquelle (`npm run check:live-search` bzw. der manuelle Workflow „Live-Check AED-Datenquelle“) lief am 10.11.2026 zweimal erfolgreich auf GitHub ([Lauf #2](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42789878021): Datenstand 36 Stunden alt, 28 Features in der Testkachel bei Nürnberg). B1 bis B4 der Pilot-Abnahme sind bestanden. Ein früherer Versuch aus der Agentenumgebung scheiterte bei der Namensauflösung des Datenhosts (`ENOTFOUND`); das lag an deren Netzwerk und sagt nichts über die Verfügbarkeit des Datenhosts.
+- Offen bleiben: B5 (Live-Check mit einer zweiten Koordinate), Handytest auf Android und iPhone, Freigabe für einen Dev-Schreibtest und die Entscheidung über `v0.1.0`.
 
 ## Aktueller Stand
 
 - PR [#49](https://github.com/FrnkMrz/AEDjaeger/pull/49) zur Suche im OpenFireMap-PMTiles-Archiv ist am 9.11.2026 gemergt.
-- GitHub Actions [Lauf #234](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42672639423) war erfolgreich; CI und Cloudflare-Deploy sind grün.
+- GitHub Actions [Lauf #234](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42672639423) war erfolgreich; CI und Cloudflare-Deploy sind grün. Der jüngste Lauf auf `main` ist CI [#248](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42853298091) (PR #54, Commit `b322116`); `validate` und `deploy` sind grün.
 - App-Adresse: [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev).
 - Auf einem echten Handy ist nach diesem Deploy noch kein erfolgreicher Live-Abgleich bestätigt.
 - OSM-Schreibzugriffe bleiben mit `OSM_DEV_WRITES_ENABLED` abgeschaltet. Es fand kein produktiver OSM-Schreibvorgang statt.

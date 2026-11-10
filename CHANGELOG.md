@@ -9,7 +9,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 ### Added
 - Ergänzt ein App-Symbol für die installierte PWA: weißes Herz mit Blitz auf dem Grün der App, als PNG in 192 und 512 Pixeln, als eigene „maskable“-Variante für Android und als `apple-touch-icon` für iPhone und iPad.
 - Zeigt bei Treffern der Umgebungssuche eine Karte der Umgebung: roter Punkt für den gesuchten Standort, nummerierte Marker für die gefundenen AED-Einträge. Die Nummern stimmen mit der Trefferliste überein; beim Setzen eines neuen AED-Punkts bleiben die Marker sichtbar.
-- Ergänzt einen lesenden Live-Check der AED-Datenquelle (`npm run check:live-search` und manueller GitHub-Workflow). Er prüft Metadaten, Datenalter, HTTP-Range und die Ebene `defibrillators` an einer Testkoordinate; er ist vorbereitet, aber noch nicht ausgeführt.
+- Ergänzt einen lesenden Live-Check der AED-Datenquelle (`npm run check:live-search` und manueller GitHub-Workflow). Er prüft Metadaten, Datenalter, HTTP-Range und die Ebene `defibrillators` an einer Testkoordinate. Er lief am 10.11.2026 zweimal erfolgreich (Datenstand 36 Stunden alt, 28 Features in der Testkachel bei Nürnberg); eine zweite Koordinate (B5) ist noch offen.
 - Ergänzt die Pilot-Abnahme mit Checklisten für Handytest, Live-Check, kontrollierten OSM-Dev-Schreibtest, Rückweg und Kriterien für `v0.1.0`.
 - Ergänzt eine aktuelle, vollständige Übergabe mit Produktentscheidungen, Datenquelle, Deploy-Stand, Sicherheitsgrenzen und konkretem nächstem Handytest.
 - Liest AED-Kandidaten direkt aus der `defibrillators`-Ebene des OpenFireMap-PMTiles-Archivs. Der Worker prüft den Datenstand und liest für den Foto-Standort nur die benötigten Zoom-14-Kacheln über begrenzte HTTP-Range-Anfragen.

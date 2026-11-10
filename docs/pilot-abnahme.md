@@ -1,6 +1,6 @@
 # Pilot-Abnahme: Checklisten für Handy, Datenquelle, OSM-Test und Release
 
-Stand: 10.11.2026. Dieses Dokument beschreibt die Prüfungen, die der Projektinitiator bzw. eine Testperson durchführt. Es ist **vorbereitet, aber noch nicht ausgeführt**. Insbesondere der Live-Check der Datenquelle und alle Handytests stehen noch aus.
+Stand: 10.11.2026. Dieses Dokument beschreibt die Prüfungen, die der Projektinitiator bzw. eine Testperson durchführt. Der Live-Check der Datenquelle (Abschnitt B) lief am 10.11.2026 erfolgreich, mit Ausnahme von B5. Die vollständige Handytest-Abnahme (Abschnitt A), der OSM-Dev-Schreibtest (Abschnitt C) und die Release-Kriterien (Abschnitt E) stehen noch aus.
 
 Grundregeln für alle Abschnitte:
 
@@ -53,11 +53,13 @@ Ausführung entweder
 
 | Nr | Prüfpunkt | Erwartetes Ergebnis | Ergebnis |
 | --- | --- | --- | --- |
-| B1 | Der Check endet mit Exit-Code 0 | Ausgabe „Live-Check bestanden (nur lesend)“ | `[ ]` |
-| B2 | Range-Unterstützung | Kein Fehler „Range-Anfrage wurde nicht korrekt beantwortet“ | `[ ]` |
-| B3 | Datenstand | „OSM-Datenstand bis …“ mit Alter unter 5 Tagen (120 Stunden) | `[ ]` |
-| B4 | Ebene `defibrillators` | Anzahl an Features in der Testkachel; keine Meldung „Ebene fehlt“ | `[ ]` |
-| B5 | Zweite Koordinate (z. B. Hamburg oder Wien) | Ebenfalls bestanden, sofern die Kachel Daten enthält | `[ ]` |
+| B1 | Der Check endet mit Exit-Code 0 | Ausgabe „Live-Check bestanden (nur lesend)“ | `[x]` Lauf #2, 10.11.2026 |
+| B2 | Range-Unterstützung | Kein Fehler „Range-Anfrage wurde nicht korrekt beantwortet“ | `[x]` Lauf #2: Kachel kam per Range-Anfrage, kein Fehler |
+| B3 | Datenstand | „OSM-Datenstand bis …“ mit Alter unter 5 Tagen (120 Stunden) | `[x]` Lauf #2: Datenstand 08.11.2026 21:21 UTC, Alter 36,0 Stunden |
+| B4 | Ebene `defibrillators` | Anzahl an Features in der Testkachel; keine Meldung „Ebene fehlt“ | `[x]` Lauf #2: 28 Features in Kachel Zoom 14, 8696/5595 |
+| B5 | Zweite Koordinate (z. B. Hamburg oder Wien) | Ebenfalls bestanden, sofern die Kachel Daten enthält | `[ ]` offen: bisher nur die Standardkoordinate (Nürnberg Hbf) geprüft |
+
+Belege: [Lauf #2 vom 10.11.2026, 09:20 UTC](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42789878021) (Stand nach der Anhebung des Höchstalters auf 120 Stunden, Commit `ee1dc41`). Lauf [#1](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42784569321) bestand ebenfalls, noch mit der alten Grenze von 48 Stunden. Beide Läufe sind Stichproben zu einem Zeitpunkt und belegen die Verfügbarkeit nicht für später. Für B5 den Workflow oder `npm run check:live-search -- --lat <Breite> --lon <Länge>` mit einer zweiten Koordinate ausführen. Das Skript kennt die Koordinate als Option, der GitHub-Workflow hat dafür bisher keine Eingabe.
 
 Bei einem Fehler gilt: Eine Fehlermeldung zu fehlenden Kacheln oder Ebenen ist **kein Beleg**, dass an dieser Stelle kein AED existiert. Die App sperrt in diesem Fall korrekt die Suche und den Neuanlagevorschlag.
 
