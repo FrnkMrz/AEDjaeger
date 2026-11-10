@@ -1301,3 +1301,30 @@ test("the photo check texts exist in all six languages", async ({ page }) => {
     await page.locator('[data-action="retake"]').click();
   }
 });
+
+// Der Info-Dialog ist immer erreichbar. Er darf deshalb nie zusagen, dass Fotos immer lokal bleiben
+// oder dass es keine automatische Prüfung gibt, weil das bei aktiver Fotoprüfung falsch wäre.
+test("the info dialog tells the truth about the optional photo check in all six languages", async ({ page }) => {
+  await enablePhotoCheck(page);
+  await page.goto("/");
+  // Aussagen, die mit aktiver Fotoprüfung falsch wären (je Sprache ein Auszug). Der Demo-Text
+  // „Beispielszenarien laufen lokal …“ gehört nicht dazu: Er beschreibt nur die Demo, die nie hochlädt.
+  const falseClaims = [
+    "Das Foto bleibt lokal; OSM-Änderungen", "Photos stay local; OSM", "Zdjęcia pozostają lokalnie; zmiany",
+    "写真は端末内に残り、OSMへの変更", "Les photos restent locales ; les modifications", "Las fotos permanecen locales; los cambios",
+    "Automatische Erkennung ist nicht im Pilot", "Automatic recognition is not part of the pilot",
+    "Automatyczne rozpoznawanie nie jest częścią pilotażu", "自動認識はパイロットに含まれません",
+    "La reconnaissance automatique ne fait pas partie du pilote", "El reconocimiento automático no forma parte del piloto",
+  ];
+  for (const language of languageCodes) {
+    await page.locator("#language").selectOption(language);
+    await page.locator("#open-info").click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    // Der optionale OpenAI-Weg wird in jeder Sprache genannt.
+    await expect(dialog).toContainText("OpenAI");
+    for (const claim of falseClaims) await expect(dialog).not.toContainText(claim);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+  }
+});

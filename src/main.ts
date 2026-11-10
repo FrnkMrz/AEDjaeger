@@ -493,7 +493,7 @@ function render(restoreFlowFocus = false): void {
           <section class="info-section roadmap-section"><h3>${t("roadmapTitle")}</h3><p>${t("roadmapIntro")}</p><ol class="roadmap-list">
             <li class="roadmap-item roadmap-current"><span class="roadmap-status">${t("roadmapNow")}</span><h4>${t("roadmapDemoTitle")}</h4><p>${t("roadmapDemoBody")}</p></li>
             <li class="roadmap-item roadmap-next"><span class="roadmap-status">${t("roadmapNext")}</span><h4>${t("roadmapMobileTitle")}</h4><p>${t("roadmapMobileBody")}</p></li>
-            <li class="roadmap-item"><span class="roadmap-status">${t("roadmapLater")}</span><h4>${t("roadmapImagesTitle")}</h4><p>${t("roadmapImagesBody")}</p></li>
+            <li class="roadmap-item"><span class="roadmap-status">${t("roadmapNow")}</span><h4>${t("roadmapImagesTitle")}</h4><p>${t("roadmapImagesBody")}</p></li>
             <li class="roadmap-item"><span class="roadmap-status">${t("roadmapNext")}</span><h4>${t("roadmapApiTitle")}</h4><p>${t("roadmapApiBody")}</p></li>
             <li class="roadmap-item"><span class="roadmap-status">${t("roadmapLater")}</span><h4>${t("roadmapOsmTitle")}</h4><p>${t("roadmapOsmBody")}</p></li>
           </ol></section>
