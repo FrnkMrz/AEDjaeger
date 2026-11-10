@@ -1,6 +1,6 @@
 # AEDjaeger – Übergabe an den nächsten Agenten
 
-Stand: **10. November 2026**  
+Stand: **10. November 2026, abends** (nach PR #54)  
 Repository: [FrnkMrz/AEDjaeger](https://github.com/FrnkMrz/AEDjaeger)  
 App: [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev)
 
@@ -34,12 +34,46 @@ Die Karte ist Hilfsmittel für die Standortkorrektur, nicht der Startbildschirm.
 
 ## Was aktuell tatsächlich läuft
 
-- PR [#49](https://github.com/FrnkMrz/AEDjaeger/pull/49) („AED-Umgebungssuche direkt aus PMTiles lesen“) wurde am **9. November 2026** gemergt. Merge-Commit: [00c953b](https://github.com/FrnkMrz/AEDjaeger/commit/00c953bdab32bc94909c031a3df2294fd56730c1).
-- Der GitHub-Actions-Lauf [#234](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42672639423) war erfolgreich; CI und Cloudflare-Deploy sind grün. Die App wurde auf die bestehende workers.dev-Adresse deployed.
-- Der aktuelle Stand ersetzt die Overpass-Umgebungssuche durch den AED-Layer im bestehenden OpenFireMap-PMTiles-Archiv. Die konkrete Live-Suche nach diesem Deploy wurde auf einem echten Handy noch nicht als erfolgreich bestätigt.
-- OSM-Schreiben bleibt gesperrt. Der nächste Test ist daher ein **lesender** Abgleich, keine Neuanlage und kein Update.
-- Ein bereits früher beobachteter Fehler „Umgebungssuche vorübergehend nicht erreichbar“ gehört zu einem älteren Suchlauf. Er muss nach dem neuen Deploy erneut geprüft werden; er beweist nicht, dass der neue PMTiles-Zugriff funktioniert oder fehlschlägt.
+Am 10. November 2026 wurden vier PRs gemergt. Jeder Merge deployt automatisch auf `workers.dev`.
 
+| PR | Inhalt |
+| --- | --- |
+| [#51](https://github.com/FrnkMrz/AEDjaeger/pull/51) | Lesender Live-Check der Datenquelle (`npm run check:live-search`, Workflow „Live-Check AED-Datenquelle“), `docs/pilot-abnahme.md`, neutrale UI-Texte ohne „erkannt“ |
+| [#52](https://github.com/FrnkMrz/AEDjaeger/pull/52) | Höchstalter der Archivdaten von 48 Stunden auf **5 Tage (120 Stunden)** erhöht |
+| [#53](https://github.com/FrnkMrz/AEDjaeger/pull/53) | Umgebungskarte bei Treffern, zwei Bestätigungen für jede Neuanlage, gekürzte Texte, PWA-Symbol |
+| [#54](https://github.com/FrnkMrz/AEDjaeger/pull/54) | Keine Datumsabfrage bei frischen Fotos, keine technischen Zeilen im Suchergebnis |
+
+Belegt:
+
+- Der Live-Check lief zweimal erfolgreich gegen echte Daten (GitHub-Actions-Läufe [42784569321](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42784569321) und 42789878021): Metadaten gültig, HTTP-Range funktioniert, 28 Features in der Testkachel Nürnberg Hbf.
+- Der Projektinhaber hat die App auf dem Handy bedient. Die Umgebungssuche lieferte dort einen echten Treffer („AED, ungefähr 2 m entfernt“, Standort aus dem Foto). Damit ist die mobile PMTiles-Suche grundsätzlich bestätigt.
+- Lokal und in der CI: 205 Unit-Tests und 47 E2E-Tests bestanden (Stand PR #54).
+
+Nicht belegt:
+
+- Der Deploy für den Merge von PR #54 ([CI-Lauf 42853298091](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42853298091)) lief beim Schreiben dieser Übergabe noch. Zuerst prüfen, ob er grün ist.
+- Die Änderungen aus PR #53 und #54 hat noch niemand auf einem echten Handy gesehen. Der letzte Handy-Screenshot zeigte einen älteren, zwischengespeicherten Stand.
+- OSM-Schreiben bleibt gesperrt (`OSM_DEV_WRITES_ENABLED` aus). Es gab keinen OSM-Schreibvorgang, weder auf dem Testserver noch produktiv.
+
+## Entscheidungen des Projektinhabers vom 10. November 2026
+
+- **Datenalter:** Archivdaten dürfen bis zu 5 Tage alt sein. Ältere Daten bleiben ein Suchfehler.
+- **Neuanlage:** Jede Neuanlage braucht zwei getrennte, ausdrückliche Bestätigungen – sowohl nach einer Suche ohne Treffer als auch nach „keiner davon“. Erste: „Hier fehlt ein AED – neu eintragen“ bzw. „Keiner davon – neuen AED eintragen“. Zweite: Haken „vor Ort geprüft“ in der Vorschau; ohne ihn bleibt das Speichern gesperrt.
+- **Karte:** Findet die Suche AEDs, zeigt die App eine Karte der Umgebung mit dem gesuchten Standort (rot) und nummerierten Markern.
+- **Einfachheit geht vor:** So wenig Text wie möglich. Keine technischen Angaben („Log-Info“) auf dem Bildschirm, also kein Datenstand, keine Snapshot-Kennung, keine Kennungen wie `node/123`.
+- **Datumsabfrage:** Bei einem gerade eben aufgenommenen Foto (höchstens 5 Minuten alt) entfällt die Abfrage des Beobachtungsdatums. Umsetzung: Die Regel ersetzt nur ein fehlendes Datum; nennt das Foto selbst einen anderen Tag als heute, bleibt die Abfrage. Bei „Foto auswählen“ ohne EXIF-Zeit zählt die Dateizeit nicht.
+- **PWA-Symbol:** weißes Herz mit Blitz auf dem App-Grün (`public/aed-icon.svg`, PNGs in 192/512, maskable, `apple-touch-icon`).
+
+## Bekannte offene Punkte
+
+- Die Texte in Englisch, Polnisch, Japanisch, Französisch und Spanisch sind sachlich abgeglichen, aber nicht muttersprachlich geprüft.
+- Startseite, Info-Dialog und Fehlermeldungen wurden nicht gekürzt. Der Projektinhaber hat offengelassen, ob weitere Bildschirme zu voll sind.
+- Die Zeile „Standort aus dem Foto verwendet“ steht noch im Suchergebnis. Sie blieb bewusst, kann aber auf Wunsch entfallen.
+- Die Übersichtskarte lädt Kacheln von `tile.openstreetmap.org`, sobald Treffer angezeigt werden.
+- Die zweite Bestätigung für Neuanlagen wirkt nur im Browser; die Schreibroute des Testservers kennt den Haken nicht.
+- Die Konstanten in `scripts/check-live-search.mjs` sind aus `server/osm/staticCandidateSearchRoute.ts` kopiert und müssen synchron bleiben.
+- Für einen späteren Produktivbetrieb fehlt eine Absicherung gegen Dubletten bei bis zu 5 Tage alten Daten; auf dem Testserver prüft die Schreibroute den Kartenausschnitt vor einer Neuanlage erneut.
+- Punkt B5 der Pilot-Abnahme (Live-Check an einer zweiten Koordinate) steht aus; der Workflow hat dafür noch keine Eingabefelder.
 ## Wie die Datenquelle funktioniert – und was sie nicht bedeutet
 
 AEDjaeger fragt direkt das bestehende Archiv unter [pipeline.openfiremap.org/openfiremap.pmtiles](https://pipeline.openfiremap.org/openfiremap.pmtiles) ab. Der Worker lädt nicht die gesamte Datei: Er prüft frische Metadaten und liest nur die benötigten Zoom-14-Kacheln um den gewählten Standort per HTTP Range aus der Ebene `defibrillators`. Dabei werden Datenalter, Länderextrakte, Abdeckung und Antworten kontrolliert. Ein Fehler oder eine unvollständige Abdeckung sperrt die Suche bzw. Neuanlage.
@@ -52,26 +86,25 @@ OpenStreetMap Devs begrenzter `/api/0.6/map.json`-Endpunkt dient zusätzlich daz
 
 ## Was der Nutzer als Nächstes tun soll
 
-Die vollständige Abnahme (Handytest, Live-Check, Dev-Schreibtest, Rückweg, Release-Kriterien) steht in [Pilot-Abnahme](pilot-abnahme.md). Der Live-Check ist vorbereitet (`npm run check:live-search` oder GitHub-Workflow „Live-Check AED-Datenquelle“), wurde aber noch nicht ausgeführt.
+1. App auf dem Handy ganz schließen und neu öffnen, damit der Service Worker den aktuellen Stand lädt. Für das neue Symbol die App vom Startbildschirm entfernen und neu installieren.
+2. Abschnitt A der [Pilot-Abnahme](pilot-abnahme.md) durchgehen, mit Blick auf die neuen Punkte: Umgebungskarte bei Treffern, zwei Bestätigungen vor einer Neuanlage, keine Datumsabfrage direkt nach dem Fotografieren, keine technischen Zeilen im Suchergebnis, Textmenge.
+3. Android und iPhone prüfen; bisher gibt es nur Rückmeldungen von einem Gerät.
+4. Erst danach und nur mit ausdrücklicher Freigabe: kontrollierter OSM-Dev-Schreibtest nach Abschnitt C der Pilot-Abnahme. Den Schalter `OSM_DEV_WRITES_ENABLED` setzt der Projektinhaber selbst, nie ein Agent.
+5. Wenn A bis C bestanden sind: Entscheidung über `v0.1.0`. Der Tag entsteht nur auf Auftrag und nur auf einem gemergten `main`-Commit.
 
-
-1. Auf dem Handy die App unter [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev) öffnen und auf dem OSM-Testserver anmelden.
-2. Ein echtes AED-Foto auswählen, bei dem GPS-Metadaten vorhanden sind; danach AED/Gehäuse-Sichtbarkeit bestätigen.
-3. Die Umkreissuche starten. Prüfen, ob die App die Position aus dem Foto meldet und ob nahe AED-Kandidaten erscheinen.
-4. Nur die Anzeige und den Abgleich prüfen. **Nicht erwarten, dass bereits in OSM geschrieben wird:** Dev-Schreiben ist noch abgeschaltet.
-5. Bei einem Fehler Zeitpunkt, genaue Fehlermeldung und ob „Standort aus dem Foto verwendet“ angezeigt wurde notieren. Keine Tokens oder Schlüssel teilen.
-
-Wenn die Suche gelingt, nächste technische Etappe: den gefundenen Kandidaten verständlich anzeigen und den Weg „vorhanden bestätigen“ bzw. „keinen der Treffer erkannt“ → Standort prüfen → Neuanlage vorbereiten Ende-zu-Ende gegen OSM Dev validieren. Erst danach und nur nach ausdrücklicher Freigabe den Dev-Schreibschalter aktivieren und eine einzelne kontrollierte Teständerung mit dem Nutzer durchführen. Produktions-OSM bleibt tabu.
-
+Bei einem Fehler Zeitpunkt, genaue Meldung und einen Screenshot notieren. Keine Tokens oder Schlüssel teilen.
 ## Arbeitsanweisung für den nächsten Agenten
 
-- Beginne mit dem **aktuellen `main`** und lies zuerst [Architektur](architektur.md), [Konzept](konzept.md), [OSM-Datenzugriff](osm.md), [Umsetzungsplan](umsetzungsplan.md) und [offene Fragen](offene-fragen.md).
-- Überprüfe GitHub PR-/Actions-Stand und den tatsächlichen Cloudflare-Stand, bevor du Fehler als aktuell annimmst. Die Unterhaltung enthält ältere, inzwischen überholte Screenshots und Fehler.
-- Konzentriere dich auf den nächsten Nutzerablauf: reale mobile PMTiles-Suche nach dem Deploy. Keine neuen Pipeline-/VM-Aufgaben, keine automatische KI, keine Anbieter-API und keine allgemeinen Umbauten ohne konkreten Blocker.
-- Ändere Dateien auf einem eigenen `codex/*`-Branch und eröffne erst nach vollständiger Prüfung einen detailliert beschriebenen PR gegen `main`. Nie direkt auf `main` pushen; niemals selbst mergen oder Releases/Tags erstellen.
-- Halte `CHANGELOG.md` und `docs/offene-fragen.md` aktuell. Schreibe Code und Dokumentation verständlich auf Deutsch und kommentiere nicht offensichtliche Sicherheits- und OSM-Regeln.
-- Keine kostenpflichtigen Aufrufe, Secrets, öffentlichen Deployments oder OSM-Schreibvorgänge ohne ausdrücklichen Auftrag.
-
+- Beginne mit dem **aktuellen `main`** und lies zuerst `AGENTS.md`, dann [Pilot-Abnahme](pilot-abnahme.md), [offene Fragen](offene-fragen.md), [Architektur](architektur.md), [Konzept](konzept.md), [OSM-Datenzugriff](osm.md) und [Umsetzungsplan](umsetzungsplan.md).
+- Prüfe zuerst den GitHub-Actions-Stand auf `main` (CI und Deploy), bevor du einen Fehler als aktuell annimmst.
+- Der Projektinhaber gibt Rückmeldungen direkt aus dem Handytest, oft knapp und mit Screenshot. Ist eine Anmerkung mehrdeutig, frage einmal gezielt nach, statt zu raten.
+- Arbeitsweise, die sich bewährt hat: kleine Änderung → alle Prüfungen lokal → Commit auf dem Arbeitsbranch → Projektinhaber fragen → PR gegen `main` mit den sechs Abschnitten aus `AGENTS.md` → PR beobachten und Befunde des Codex-Review-Bots prüfen und beheben. Der Bot prüft nur beim Öffnen eines PRs oder nach dem Kommentar `@codex review`. Mergen, Tags und Releases bleiben beim Projektinhaber.
+- Nach einem Merge den Arbeitsbranch frisch von `main` neu aufsetzen; nie auf gemergter Historie weiterarbeiten. Nie direkt auf `main` pushen.
+- Prüfbefehle: `npm test`, `npm run build`, `npm run worker:check`, `npm run test:worker-http`, `npm run test:e2e`. Tests, die Dateien mit Node lesen, sind `.mjs`-Dateien, weil die Typprüfung keine Node-Typen kennt.
+- UI-Texte stehen in `src/i18n/translations.ts` (Start, Info, Demo) und `src/i18n/flowTranslations.ts` (Foto- und Suchablauf). Jede Änderung gilt für alle sechs Sprachen; `tests/translations.test.ts` listet die Schlüssel.
+- Neuen Code ausführlich auf Deutsch kommentieren, so dass ein Einsteiger die Logik versteht; bestehende Kommentare erhalten.
+- Halte `CHANGELOG.md` und `docs/offene-fragen.md` aktuell.
+- Keine neuen Pipeline-/VM-Aufgaben, keine automatische Bilderkennung, keine Anbieter-API, keine kostenpflichtigen Aufrufe, keine Secrets, keine OSM-Schreibvorgänge ohne ausdrücklichen Auftrag. Produktions-OSM bleibt tabu.
 ## Weiterlesen
 
 - [Produktkonzept](konzept.md)
