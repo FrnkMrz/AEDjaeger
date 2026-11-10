@@ -6,6 +6,7 @@ import { translateFlow, type FlowMessageKey } from "./i18n/flowTranslations";
 import { readPhotoCapture, readPhotoLocation } from "./vision/photoLocation";
 import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservation } from "./vision/analyzePhoto";
 import { isAedRecognized } from "./contracts/visionObservation";
+import { startUpdateWatcher } from "./pwa/updateCheck";
 import { assessCandidateSearch } from "./domain/assessCandidateSearch";
 import { createPositionPicker, zoomToFitMarkers, type Coordinate, type MapMarker } from "./map/positionPicker";
 import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
@@ -50,6 +51,8 @@ let photoCheckAvailable = false;
 let selectedPhotoFile: File | undefined;
 // Eine Kennung pro Foto: Ein zweiter Tipp auf dieselbe Prüfung erzeugt so keine zweite Abrechnung.
 let photoCheckRequestId: string | undefined;
+// Update-Hinweis: wird true, sobald der Wächter eine neuere veröffentlichte Version erkennt.
+let updateAvailable = false;
 let oauthReturnFailed = new URLSearchParams(window.location.search).get("login") === "error";
 let analysisTimer: number | undefined;
 let saveTimer: number | undefined;
@@ -615,8 +618,60 @@ function render(restoreFlowFocus = false): void {
   document.querySelector<HTMLInputElement>("#file-input")?.addEventListener("change", onPhotoSelected);
   document.querySelectorAll<HTMLElement>("[data-action]").forEach((button) => button.addEventListener("click", () => handleAction(button.dataset.action, button)));
   bindAccountPanel();
+  renderUpdateBanner();
 
   if (restoreFlowFocus) focusCurrentState();
+}
+
+/**
+ * Sagt, ob ein Neuladen jetzt etwas Laufendes zerstören würde.
+ * Beim Speichern (auch bei unklarem Ergebnis), beim Foto-Prüfen und bei einer offenen Wiederherstellung
+ * bleibt der Knopf gesperrt, damit kein Vorgang doppelt oder halb ausgeführt wird.
+ */
+function reloadBlocked(): boolean {
+  return hasUnresolvedSave(state)
+    || state.kind === "photo-checking"
+    || (state.kind === "development-write-recovery" && (state.writeStatus === "uncertain" || state.writeStatus === "sending"));
+}
+
+/**
+ * Zeigt oder entfernt den Hinweis „Neue Version verfügbar“.
+ *
+ * Das Banner liegt bewusst AUSSERHALB von #app. render() baut #app oft komplett neu auf; ein Banner
+ * darin würde bei jedem Neuaufbau verschwinden oder den Tastaturfokus verlieren. Hier wird es nur
+ * dann neu geschrieben, wenn sich sein Inhalt ändert.
+ *
+ * Neu geladen wird nie automatisch: Ein Neuladen verwirft das aktuelle Foto und den Entwurf. Die Person
+ * entscheidet, und das Banner sagt ihr, was dabei verloren geht.
+ */
+let renderedUpdateBanner = "";
+function renderUpdateBanner(): void {
+  let banner = document.querySelector<HTMLElement>("#update-banner");
+  if (!updateAvailable) {
+    banner?.remove();
+    renderedUpdateBanner = "";
+    return;
+  }
+  if (!banner) {
+    banner = document.createElement("div");
+    banner.id = "update-banner";
+    banner.className = "update-banner";
+    banner.setAttribute("role", "status");
+    banner.addEventListener("click", (event) => {
+      // Der Zustand wird beim Klick erneut geprüft: Er kann sich seit dem Zeichnen geändert haben.
+      if ((event.target as HTMLElement).closest(".update-banner-button") && !reloadBlocked()) window.location.reload();
+    });
+    app!.before(banner);
+    renderedUpdateBanner = "";
+  }
+  const blocked = reloadBlocked();
+  const note = blocked ? tv("updateWaitSave") : hasActivePhotoDraft(state) ? tv("updateLosesPhoto") : "";
+  const markup = `<span>${tv("updateAvailable")}${note ? ` ${note}` : ""}</span><button class="update-banner-button" type="button" ${blocked ? "disabled" : ""}>${tv("updateReload")}</button>`;
+  // Nur schreiben, wenn sich etwas geändert hat, damit der Fokus auf dem Knopf erhalten bleibt.
+  if (markup !== renderedUpdateBanner) {
+    banner.innerHTML = markup;
+    renderedUpdateBanner = markup;
+  }
 }
 
 function bindAccountPanel(): void {
@@ -1228,5 +1283,7 @@ if ("serviceWorker" in navigator && import.meta.env.PROD) {
     const workerUrl = new URL("/sw.js", window.location.origin);
     workerUrl.searchParams.set("revision", __AEDJAEGER_BUILD_REVISION__);
     navigator.serviceWorker.register(workerUrl).catch(() => undefined);
+    // Merkt, wenn nach dem Start eine neuere Version veröffentlicht wird, und zeigt dann das Banner.
+    startUpdateWatcher({ runningRevision: __AEDJAEGER_BUILD_REVISION__, onUpdate: () => { updateAvailable = true; renderUpdateBanner(); } });
   });
 }

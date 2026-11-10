@@ -1328,3 +1328,100 @@ test("the info dialog tells the truth about the optional photo check in all six 
     await expect(dialog).toBeHidden();
   }
 });
+
+// ---------------------------------------------------------------------------------------------
+// Update-Hinweis: Die App erkennt über /version.json, dass eine neuere Version veröffentlicht ist.
+// Die Tests ersetzen nur diese Datei; es wird nichts deployt.
+// ---------------------------------------------------------------------------------------------
+
+/** Lässt die App glauben, es sei eine andere Version veröffentlicht als die, die gerade läuft. */
+async function publishNewVersion(page: import("@playwright/test").Page): Promise<void> {
+  await page.route("**/version.json", (route) => route.fulfill({ json: { revision: "zzzz9999" } }));
+}
+
+test("a newer published version shows a banner and never reloads by itself", async ({ page }) => {
+  await publishNewVersion(page);
+  await page.goto("/");
+  // Markierung im Fenster: Sie überlebt kein Neuladen und beweist, dass die App nicht von selbst neu lädt.
+  await page.evaluate(() => { (window as unknown as { __notReloaded: boolean }).__notReloaded = true; });
+
+  const banner = page.locator("#update-banner");
+  await expect(banner).toContainText("Neue Version verfügbar.");
+  await expect(banner).toHaveAttribute("role", "status");
+  // Ohne Foto geht nichts verloren: kein Warnhinweis.
+  await expect(banner).not.toContainText("Foto geht dabei verloren");
+
+  await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
+  await expect(banner).toContainText("Das aktuelle Foto geht dabei verloren.");
+  expect(await page.evaluate(() => (window as unknown as { __notReloaded?: boolean }).__notReloaded)).toBe(true);
+
+  // Erst der Tipp auf „Neu laden“ lädt neu, und das Foto ist danach weg.
+  await Promise.all([page.waitForEvent("load"), banner.getByRole("button", { name: "Neu laden" }).click()]);
+  expect(await page.evaluate(() => (window as unknown as { __notReloaded?: boolean }).__notReloaded)).toBeUndefined();
+  await expect(page.locator("#camera-input")).toBeAttached();
+});
+
+test("no banner appears while the published version matches the running one", async ({ page }) => {
+  // Die echte version.json aus dem Build: Sie nennt dieselbe Revision wie die laufende App.
+  const versionResponse = page.waitForResponse("**/version.json");
+  await page.goto("/");
+  expect((await versionResponse).ok()).toBe(true);
+  await expect(page.locator("#update-banner")).toHaveCount(0);
+});
+
+test("a failing version check never shows a banner", async ({ page }) => {
+  await page.route("**/version.json", (route) => route.fulfill({ status: 503, body: "unavailable" }));
+  const versionResponse = page.waitForResponse("**/version.json");
+  await page.goto("/");
+  await versionResponse;
+  await expect(page.locator("#update-banner")).toHaveCount(0);
+});
+
+test("the reload button stays blocked while a save result is unclear", async ({ page }) => {
+  await publishNewVersion(page);
+  await page.goto("/");
+  await expect(page.locator("#update-banner")).toBeVisible();
+  await page.getByText("Vorschau testen", { exact: true }).click();
+  await page.locator("#scenario").selectOption("upload-unclear");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
+  await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
+  await expect(page.getByRole("heading", { name: "Ergebnis noch unklar" })).toBeVisible();
+
+  // Ungeklärtes Speichern: Neuladen wäre gefährlich, der Knopf ist gesperrt und der Grund steht da.
+  const banner = page.locator("#update-banner");
+  await expect(banner.getByRole("button", { name: "Neu laden" })).toBeDisabled();
+  await expect(banner).toContainText("Neu laden geht, sobald das Speichern abgeschlossen ist.");
+
+  // Nach der Statusprüfung ist der Vorgang abgeschlossen und der Knopf wieder frei.
+  await page.getByRole("button", { name: "Vorgangsstatus prüfen" }).click();
+  await expect(page.getByRole("heading", { name: "Vorschau abgeschlossen" })).toBeVisible();
+  await expect(banner.getByRole("button", { name: "Neu laden" })).toBeEnabled();
+});
+
+test("the update banner exists in all six languages", async ({ page }) => {
+  await publishNewVersion(page);
+  await page.goto("/");
+  const expected: Record<string, { text: string; button: string }> = {
+    de: { text: "Neue Version verfügbar.", button: "Neu laden" },
+    en: { text: "A new version is available.", button: "Reload" },
+    pl: { text: "Dostępna jest nowa wersja.", button: "Odśwież" },
+    ja: { text: "新しいバージョンがあります。", button: "再読み込み" },
+    fr: { text: "Une nouvelle version est disponible.", button: "Recharger" },
+    es: { text: "Hay una nueva versión disponible.", button: "Recargar" },
+  };
+  for (const code of languageCodes) {
+    await page.locator("#language").selectOption(code);
+    await expect(page.locator("#update-banner")).toContainText(expected[code].text);
+    await expect(page.locator("#update-banner").getByRole("button", { name: expected[code].button })).toBeVisible();
+  }
+});
+
+test("the update banner fits a narrow phone screen", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await publishNewVersion(page);
+  await page.goto("/");
+  await page.locator("#language").selectOption("fr");
+  await expect(page.locator("#update-banner")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+});

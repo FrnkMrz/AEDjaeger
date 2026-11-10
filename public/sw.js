@@ -31,7 +31,9 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
 
   // Fotos, API calls and all cross-origin traffic must never enter the offline cache.
-  if (request.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
+  // /version.json ebenfalls nicht: Die App fragt damit ab, ob eine neuere Version veröffentlicht wurde.
+  // Ein zwischengespeicherter Stand würde diese Frage für immer mit „alt“ beantworten.
+  if (request.method !== "GET" || url.origin !== self.location.origin || url.pathname.startsWith("/api/") || url.pathname === "/version.json") return;
 
   if (request.mode === "navigate") {
     event.respondWith(

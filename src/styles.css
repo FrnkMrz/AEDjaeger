@@ -195,3 +195,9 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
 .position-map-marker-origin { width: 22px; height: 22px; border-width: 3px; background: #cb3c32; }
 .position-map-marker-origin::after { position: absolute; inset: 5px; border-radius: 50%; background: #fff; content: ""; }
 .position-map-crosshair[hidden] { display: none; }
+
+/* Hinweis auf eine neue App-Version. Er liegt außerhalb von #app und bleibt beim Scrollen oben sichtbar. */
+.update-banner { position: sticky; top: 0; z-index: 60; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 14px; padding: 10px 16px; background: var(--green-dark); color: #fff; font-size: 14px; line-height: 1.4; text-align: center; }
+.update-banner-button { min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; background: #fff; color: var(--green-dark); font: inherit; font-weight: 700; cursor: pointer; }
+.update-banner-button:disabled { opacity: 0.6; cursor: not-allowed; }
+.update-banner-button:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
