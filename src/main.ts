@@ -115,13 +115,6 @@ function t(key: TranslationKey, values?: Record<string, number | string>): strin
   return values ? translated.replace(/\{(\w+)\}/gu, (_, name: string) => String(values[name] ?? "")) : translated;
 }
 function tv(key: FlowMessageKey, values?: Record<string, number | string>): string { return translateFlow(language, key, values); }
-function formatFeedDate(value: string): string {
-  const parsed = new Date(value);
-  return Number.isFinite(parsed.getTime())
-    ? new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(parsed)
-    : value;
-}
-
 type DiagnosticEvent =
   | "test_run_started" | "test_run_abandoned" | "photo_selected" | "demo_started" | "demo_result_shown" | "demo_confirmed"
   | "live_flow_blocked" | "sighting_confirmed"
@@ -309,7 +302,7 @@ function statusContent(): string {
           const reviewAction = candidate.osmType === "node"
             ? `<button class="button button-secondary" data-action="preview-candidate" data-candidate-id="${escapeHtml(candidate.id)}">${tv("selectCandidate")}</button>`
             : `<span class="supporting-copy">${tv("previewUnsupportedShort")}</span>`;
-          return `<li class="candidate-item"><strong>${escapeHtml(label)}</strong>${distance}<a href="https://www.openstreetmap.org/${escapeHtml(candidate.id)}" target="_blank" rel="noopener noreferrer">${escapeHtml(candidate.id)} ↗</a>${reviewAction}</li>`;
+          return `<li class="candidate-item"><strong>${escapeHtml(label)}</strong>${distance}<a href="https://www.openstreetmap.org/${escapeHtml(candidate.id)}" target="_blank" rel="noopener noreferrer">${tv("candidateOpenMap")} ↗</a>${reviewAction}</li>`;
         }).join("");
       let outcome: string;
       if (search.status === "partial" || assessment.kind === "search-incomplete") outcome = tv("searchPartial");
@@ -343,10 +336,9 @@ function statusContent(): string {
           : `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`
         : "";
       const locationSource = activeSearchLocationSource === "photo" ? "locationSourcePhoto" : activeSearchLocationSource === "map" ? "locationSourceMap" : "locationSourcePhone";
-      const snapshotStatus = search.dataUntil
-        ? `<p class="supporting-copy">${tv("searchDataUntil", { date: formatFeedDate(search.dataUntil), snapshot: escapeHtml(search.snapshotId ?? "") })}</p>`
-        : "";
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p><p class="supporting-copy">${tv(locationSource)}</p>${overviewMap}${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}${snapshotStatus}</div></div>${newEntryAction}${retry}${startNewEntry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      // Bewusst keine technische Zeile mehr zu Datenstand und Snapshot-Kennung: Sie half bei der
+      // Fehlersuche, aber nicht der Person vor Ort. Zu alte Daten sperrt der Server ohnehin.
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p><p class="supporting-copy">${tv(locationSource)}</p>${overviewMap}${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}</div></div>${newEntryAction}${retry}${startNewEntry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     }
     case "new-aed-preview": {
       const point = state.result.kind === "ready" ? state.result.position : state.returnState.location;
@@ -390,7 +382,7 @@ function statusContent(): string {
       const noWriteNotice = developmentSession ? copy.testOnly : tv("previewNoWrite");
       const recoverableWrite = state.writeStatus === "sending" || state.writeStatus === "uncertain";
       const navigation = recoverableWrite ? "" : `<button class="button button-quiet" data-action="back-to-candidates">${tv("previewBack")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("previewTitle")}</h2><p>${tv("previewTarget", { target: escapeHtml(state.candidateLabel) })}</p><p><a href="https://www.openstreetmap.org/${escapeHtml(state.candidateId)}" target="_blank" rel="noopener noreferrer">${escapeHtml(state.candidateId)} ↗</a></p>${content}<p class="simulation-note">${noWriteNotice}</p>${writeStatus}</div></div>${writeAction}${navigation}`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("previewTitle")}</h2><p>${tv("previewTarget", { target: escapeHtml(state.candidateLabel) })}</p><p><a href="https://www.openstreetmap.org/${escapeHtml(state.candidateId)}" target="_blank" rel="noopener noreferrer">${tv("candidateOpenMap")} ↗</a></p>${content}<p class="simulation-note">${noWriteNotice}</p>${writeStatus}</div></div>${writeAction}${navigation}`;
     }
     case "development-write-recovery": {
       const copy = developmentWriteCopy[language];
@@ -398,7 +390,7 @@ function statusContent(): string {
         ? `<button class="button button-secondary" data-action="retry-development-write">${copy.retry}</button>`
         : "";
       const targetLink = state.request.kind === "check-date"
-        ? `<p><a href="https://www.openstreetmap.org/${escapeHtml(state.request.target)}" target="_blank" rel="noopener noreferrer">${escapeHtml(state.request.target)} ↗</a></p>`
+        ? `<p><a href="https://www.openstreetmap.org/${escapeHtml(state.request.target)}" target="_blank" rel="noopener noreferrer">${tv("candidateOpenMap")} ↗</a></p>`
         : `<p>${state.request.latitude.toFixed(5)}, ${state.request.longitude.toFixed(5)}</p>`;
       const recoveryMessage = state.request.kind === "create-node" && state.writeStatus === "complete" ? copy.created : copy[state.writeStatus];
       return `<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("previewTitle")}</h2><p>${tv("previewTarget", { target: escapeHtml(state.request.candidateLabel) })}</p>${targetLink}<p class="simulation-note" role="status">${recoveryMessage}</p></div></div>${retry}`;

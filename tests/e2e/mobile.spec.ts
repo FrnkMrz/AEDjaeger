@@ -629,20 +629,27 @@ test("a partial nearby search never offers a new AED preview", async ({ page, co
   expect(searchRequests).toBe(1);
 });
 
-test("the search result identifies the static snapshot and its OSM data date", async ({ page, context }) => {
+test("the search result hides technical snapshot details and raw OSM identifiers", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
-    status: "complete", coverage_radius_meters: 112, candidates: [],
+    status: "complete", coverage_radius_meters: 112,
+    candidates: [{ id: "node/123", osmType: "node", coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Rathaus" } }],
     snapshot_id: "aed-0123456789abcdef0123", data_until: "2026-11-08T12:00:00.000Z",
   } }));
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
   await beginNearbySearch(page);
-  await expect(page.locator(".capture-content")).toContainText("Datenstand des regionalen AED-Index");
-  await expect(page.locator(".capture-content")).toContainText("aed-0123456789abcdef0123");
+  // Technische Angaben (Datenstand, Snapshot-Kennung, OSM-Kennung) gehören nicht auf den Bildschirm.
+  await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
+  await expect(page.locator(".capture-content")).not.toContainText("Datenstand");
+  await expect(page.locator(".capture-content")).not.toContainText("aed-0123456789abcdef0123");
+  await expect(page.locator(".capture-content")).not.toContainText("node/123");
+  // Der Link zum Eintrag bleibt, nur mit verständlichem Text statt der Kennung.
+  await expect(page.locator(".candidate-list a")).toHaveText("In OpenStreetMap ansehen ↗");
+  await expect(page.locator(".candidate-list a")).toHaveAttribute("href", "https://www.openstreetmap.org/node/123");
 });
 
 test("an unavailable regional snapshot cannot offer a new AED", async ({ page, context }) => {

@@ -19,6 +19,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Entfernt die externe OpenAI-Bildanalyse samt Anbieter-, Budget- und Browsercode. Der alte Analyse-Endpunkt antwortet aus Kompatibilitätsgründen mit HTTP 410, ohne den Request-Body zu lesen.
 
 ### Changed
+- Entfernt technische Angaben aus dem Suchergebnis: Die Zeile zu Datenstand und Snapshot-Kennung entfällt, und Links zeigen „In OpenStreetMap ansehen“ statt Kennungen wie `node/123`. Zu alte Archivdaten sperren die Suche weiterhin serverseitig.
 - Fragt bei einem gerade eben aufgenommenen Foto (höchstens 5 Minuten alt) nicht mehr nach dem Beobachtungsdatum. Maßgeblich ist die EXIF-Aufnahmezeit; fehlt sie, zählt nur bei „AED fotografieren“ die Dateizeit. Ältere Fotos und ausgewählte Fotos ohne Aufnahmezeit brauchen weiter die ausdrückliche Datumsbestätigung.
 - Verlangt für jede Neuanlage zwei getrennte, ausdrückliche Bestätigungen: zuerst „Hier fehlt ein AED – neu eintragen“ bzw. „Keiner davon – neuen AED eintragen“, danach in der Vorschau den Haken „vor Ort geprüft“. Ohne den ersten Schritt erscheinen weder Karte noch Vorbereitung; ohne den zweiten bleibt das Speichern gesperrt.
 - Kürzt die Texte im Foto- und Suchablauf in allen sechs Sprachen deutlich und entfernt wiederholte Hinweise. Fehler- und Unvollständigkeitsmeldungen sagen weiterhin, dass sie kein Beleg für einen fehlenden AED sind.
