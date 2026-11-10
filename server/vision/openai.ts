@@ -1,4 +1,5 @@
 import { IMAGE_ISSUES, parseVisionObservation, VISION_MODEL, VISION_SCENES, type VisionObservation } from "../../src/contracts/visionObservation";
+import { explainObservationMismatch, normalizeProviderObservation } from "./normalizeObservation";
 
 export const OPENAI_VISION_MODEL = VISION_MODEL;
 
@@ -131,7 +132,9 @@ export async function analyzeAedPhoto(
               "enclosure_visible (ein als AED-Gehäuse erkennbarer Kasten, auch wenn das Gerät darin nicht sichtbar ist), " +
               "sign_only (nur ein AED-Hinweis), empty_holder (eine eindeutig leere Halterung), " +
               "multiple_devices (mehrere Geräte), other_object (anderer Gegenstand) " +
-              "oder unclear. Zähle nur sichtbare Geräte; trenne Hersteller und Modell nur bei klarer Beschriftung. " +
+              "oder unclear. device_count zählt ausschließlich sichtbare AED-Geräte (Defibrillatoren); andere Geräte wie " +
+              "Steckdosen, Laptops oder Kopfhörer zählen nicht und ergeben bei other_object die Zahl 0. " +
+              "Trenne Hersteller und Modell nur bei klarer Beschriftung und gib Textfragmente ohne Zeilenumbrüche an. " +
               "Nenne höchstens vier kurze, nicht leere Textfragmente, Hersteller und Modell knapp sowie höchstens drei " +
               "kurze Lagehinweise. Verwende für Hersteller und Modell null, wenn keine lesbare Angabe sichtbar ist; " +
               "gib dafür niemals einen leeren Text zurück. Fasse nichts zu langen Sätzen zusammen und markiere Bildprobleme.",
@@ -197,9 +200,12 @@ export async function analyzeAedPhoto(
     throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte ein ungültiges Format.", { providerCode: "invalid_json" });
   }
 
-  const observation = parseVisionObservation(decoded);
+  // Nebenfelder werden zuerst aufbereitet (Zeilenumbrüche, Längen, Zählung). Für den Filter zählt nur die
+  // Szene; fehlerhafte Felder sollen nicht den ganzen Vorgang scheitern lassen (siehe normalizeObservation.ts).
+  const normalized = normalizeProviderObservation(decoded);
+  const observation = parseVisionObservation(normalized);
   if (!observation.ok) {
-    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte ungültige Beobachtungen.", { providerCode: "schema_mismatch" });
+    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte ungültige Beobachtungen.", { providerCode: explainObservationMismatch(normalized) });
   }
   return observation.value;
 }

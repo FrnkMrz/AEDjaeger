@@ -166,14 +166,10 @@ describe("server-side GPT-6 Luna vision adapter", () => {
     );
   });
 
-  it("rejects whitespace-only observations at the runtime boundary", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      outputResponse({ ...validObservation, manufacturer: "   " }),
-    );
-
-    await expect(analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", fetcher)).rejects.toMatchObject({
-      code: "invalid_provider_response",
-    });
+  it("treats a whitespace-only label as unreadable instead of failing the whole check", async () => {
+    // Früher scheiterte der Vorgang hier. Für den Filter zählt nur die Szene; ein leeres Etikett heißt „nicht lesbar“.
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(outputResponse({ ...validObservation, manufacturer: "   " }));
+    await expect(analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", fetcher)).resolves.toMatchObject({ scene: "device_visible", manufacturer: null });
   });
 
   it.each([null, { status: "completed", output: {} }, { status: "completed", output: [{ type: "message", content: {} }] }])(
@@ -196,14 +192,10 @@ describe("server-side GPT-6 Luna vision adapter", () => {
     });
   });
 
-  it("rejects contradictory subject and device-count observations", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      outputResponse({ ...validObservation, scene: "sign_only", device_count: 1 }),
-    );
-
-    await expect(analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", fetcher)).rejects.toMatchObject({
-      code: "invalid_provider_response",
-    });
+  it("lets the scene decide when the device count contradicts it", async () => {
+    // Auf dem Foto liegen andere Geräte: Die Szene „nur Schild“ gilt, gezählt werden nur AED, also 0.
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(outputResponse({ ...validObservation, scene: "sign_only", device_count: 1 }));
+    await expect(analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", fetcher)).resolves.toMatchObject({ scene: "sign_only", device_count: 0 });
   });
 
   describe("failure details for diagnosis", () => {
@@ -256,8 +248,12 @@ describe("server-side GPT-6 Luna vision adapter", () => {
       expect(noOutput.detail.providerCode).toBe("no_output");
       const badJson = await call(vi.fn<typeof fetch>().mockResolvedValue(providerResponse({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "not json" }] }] })));
       expect(badJson.detail.providerCode).toBe("invalid_json");
+      // Felder fehlen: Das Modell hat die vorgegebene Form nicht eingehalten.
       const wrongShape = await call(vi.fn<typeof fetch>().mockResolvedValue(outputResponse({ scene: "guess" })));
-      expect(wrongShape.detail.providerCode).toBe("schema_mismatch");
+      expect(wrongShape.detail.providerCode).toBe("schema_unexpected_keys");
+      // Alle Felder da, aber ein Szenenwert, den es nicht gibt.
+      const wrongScene = await call(vi.fn<typeof fetch>().mockResolvedValue(outputResponse({ ...validObservation, scene: "guess" })));
+      expect(wrongScene.detail.providerCode).toBe("schema_invalid_scene");
     });
   });
 

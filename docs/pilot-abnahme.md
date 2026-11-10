@@ -119,12 +119,14 @@ Voraussetzung: Der Betreiber hat die Fotoprüfung im Cloudflare-Dashboard einger
 | F1 | Startseite öffnen, angemeldet mit einem zugelassenen Konto | Hinweis „Das Foto geht ohne Standort und Metadaten zur Prüfung an OpenAI.“ statt der Zusage „bleibt auf deinem Gerät“ | `[ ]` |
 | F2 | Mit einem nicht zugelassenen Konto anmelden | Bisheriger Ablauf mit „AED oder Gehäuse gesehen – weiter“; kein Foto verlässt das Gerät | `[ ]` |
 | F3 | Foto eines echten AED oder Gehäuses wählen, „AED gesehen – Foto prüfen“ tippen | Ladeanzeige, danach weiter zu Datumsfrage bzw. Standort und Suche | `[ ]` |
-| F4 | Screenshot, Foto eines anderen Gegenstands (z. B. Schuhe) wählen und prüfen | „Kein AED erkennbar“; nur „Anderes Foto“ ist möglich, keine Suche | `[ ]` |
-| F5 | Unscharfes oder sehr weit entferntes AED-Foto prüfen | „Nicht eindeutig“ oder erkannt; bei „nicht eindeutig“ nur „Anderes Foto“ | `[ ]` |
+| F4 | Screenshot, Foto eines anderen Gegenstands (z. B. Schuhe) wählen und prüfen | „Kein AED erkennbar“; „Anderes Foto“ ist der Standardweg, keine Suche, keine einfache Selbstbestätigung | `[ ]` |
+| F5 | Unscharfes oder sehr weit entferntes AED-Foto prüfen | „Nicht eindeutig“ oder erkannt; bei „nicht eindeutig“ „Anderes Foto“ oder die Ausnahme (F10) | `[ ]` |
 | F6 | Flugmodus während der Prüfung einschalten | Hinweis „Die Prüfung ist gerade nicht möglich“ und die Selbstbestätigung steht bereit | `[ ]` |
 | F7 | Tageslimit erreichen (Limit vorübergehend sehr klein setzen) | Rückfall auf die Selbstbestätigung, keine Fehlermeldung mit Zahlen oder Kosten | `[ ]` |
 | F8 | Eine Stichprobe von mindestens 20 echten AED-Fotos und 20 Fotos ohne AED prüfen | Anzahl falsch gesperrter AED-Fotos und durchgelassener Fremdfotos notieren | `[ ]` |
 | F9 | Abrechnung im OpenAI-Konto nach den Tests ansehen | Kosten liegen im erwarteten Rahmen (je Prüfung grob unter 0,01 US-Dollar laut früherem Test) | `[ ]` |
+| F10 | Bei „Kein AED erkennbar“ „Trotzdem: Hier ist ein AED“ tippen | Rückfrage „Wirklich ein AED?“; erst „Ja, AED oder Gehäuse ist zu sehen – weiter“ führt weiter, „Anderes Foto“ bricht ab | `[ ]` |
+| F11 | Foto mit viel Text (z. B. Flasche mit Etikett) und mehreren Geräten auf dem Tisch prüfen | Kein Fehlercode „schema_mismatch“; die Prüfung liefert „Kein AED erkennbar“ | `[ ]` |
 
 Hinweise: F1 bis F7 prüfen Verhalten, F8 die Trefferqualität. Zeigt F8 viele falsch gesperrte AED-Fotos, ist die Sperre „kein AED“ zu streng und wird mit dem Projektinhaber neu bewertet. Bei jedem Fehler Uhrzeit und genaue Meldung notieren, keinen Schlüssel teilen.
 
