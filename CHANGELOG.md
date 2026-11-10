@@ -7,6 +7,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 > Die jüngsten Einträge am Anfang beschreiben den aktuellen Pilotstand. Ältere Einträge darunter dokumentieren frühere, inzwischen teilweise abgelöste Zwischenstände und sind keine Beschreibung des aktuellen Laufzeitverhaltens.
 
 ### Added
+- Ergänzt ein App-Symbol für die installierte PWA: weißes Herz mit Blitz auf dem Grün der App, als PNG in 192 und 512 Pixeln, als eigene „maskable“-Variante für Android und als `apple-touch-icon` für iPhone und iPad.
 - Zeigt bei Treffern der Umgebungssuche eine Karte der Umgebung: roter Punkt für den gesuchten Standort, nummerierte Marker für die gefundenen AED-Einträge. Die Nummern stimmen mit der Trefferliste überein; beim Setzen eines neuen AED-Punkts bleiben die Marker sichtbar.
 - Ergänzt einen lesenden Live-Check der AED-Datenquelle (`npm run check:live-search` und manueller GitHub-Workflow). Er prüft Metadaten, Datenalter, HTTP-Range und die Ebene `defibrillators` an einer Testkoordinate; er ist vorbereitet, aber noch nicht ausgeführt.
 - Ergänzt die Pilot-Abnahme mit Checklisten für Handytest, Live-Check, kontrollierten OSM-Dev-Schreibtest, Rückweg und Kriterien für `v0.1.0`.
