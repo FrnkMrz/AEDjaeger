@@ -17,6 +17,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Entfernt die externe OpenAI-Bildanalyse samt Anbieter-, Budget- und Browsercode. Der alte Analyse-Endpunkt antwortet aus Kompatibilitätsgründen mit HTTP 410, ohne den Request-Body zu lesen.
 
 ### Changed
+- Erhöht das zulässige Höchstalter der AED-Archivdaten für die Umgebungssuche von 48 Stunden auf 5 Tage (120 Stunden), in der Suchroute und im Live-Check. Ein einzelner ausgefallener Pipeline-Lauf sperrt die Suche damit nicht mehr; ältere Daten bleiben ein Suchfehler und nie ein Beleg für einen freien Standort.
 - Entfernt automatisch klingende Formulierungen aus der Pilot-Oberfläche: Das Beispielergebnis für eine Neuanlage heißt jetzt „Beispiel: AED im Eingangsbereich“ und sagt nicht mehr „erkannt“. Die Roadmap beschreibt die automatische Erkennung als nicht im Pilot.
 - Stellt die AED-Suche von einem nicht veröffentlichten Zusatz-Feed auf die bereits vorhandene AED-Vektorebene im PMTiles-Archiv um.
 - Führt nach der Fotoauswahl eine ausdrückliche Sichtbestätigung ein. Foto und EXIF bleiben lokal; Foto-GPS wird zuerst genutzt, Handy-GPS oder Kartenposition nur nach bewusster Auswahl.

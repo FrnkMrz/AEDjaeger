@@ -85,9 +85,20 @@ describe("Metadaten-Prüfung", () => {
     expect(result.featureCount).toBe(42);
   });
 
-  it("lehnt veraltete OSM-Daten ab (älter als 48 Stunden)", () => {
-    expect(() => validateMetadata(metadata({ osm_data_until: "2026-11-07T11:59:00Z" }), NOW))
-      .toThrow("48 Stunden");
+  it("lehnt veraltete OSM-Daten ab (älter als 5 Tage = 120 Stunden)", () => {
+    expect(() => validateMetadata(metadata({ osm_data_until: "2026-11-05T11:59:00Z" }), NOW))
+      .toThrow("120 Stunden");
+  });
+
+  it("akzeptiert vier Tage alte OSM-Daten, weil die Grenze bei 5 Tagen liegt", () => {
+    // Die Länderextrakte müssen dieselbe Grenze einhalten; hier sind sie ebenfalls vier Tage alt.
+    const fourDaysOld = "2026-11-06T12:00:00Z";
+    const extract = { status: "downloaded", osm_data_timestamp: fourDaysOld };
+    const result = validateMetadata(metadata({
+      osm_data_until: fourDaysOld,
+      extracts: { germany: extract, austria: extract, switzerland: extract, luxembourg: extract, liechtenstein: extract },
+    }), NOW);
+    expect(result.ageHours).toBeCloseTo(96, 5);
   });
 
   it("lehnt einen veralteten Länderextrakt ab, auch wenn osm_data_until frisch ist", () => {
