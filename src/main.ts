@@ -280,9 +280,15 @@ function statusContent(): string {
         : useCheck
           ? `<button class="button button-primary" data-action="check-photo">${tv("photoCheckAction")}</button>`
           : `<button class="button button-primary" data-action="confirm-sighting">${tv("sightingConfirm")}</button>`;
+      // Nach einem gescheiterten Prüfversuch darf NICHT stehen, das Foto bleibe auf dem Gerät: Bei
+      // einer Zeitüberschreitung oder einer ungültigen Antwort kann der Upload bereits erfolgt sein.
+      // Dann nur sagen, dass die Prüfung nicht möglich war. Die lokale Zusage gilt nur, wenn die
+      // Prüfung gar nicht erst angeboten wurde.
       const photoNote = useCheck
         ? `<p class="supporting-copy">${tv("photoCheckNotice")}</p>`
-        : `${state.photoCheck === "unavailable" ? `<p class="supporting-copy">${tv("photoCheckUnavailable")}</p>` : ""}<p class="supporting-copy">${tv("photoStaysLocal")}</p>`;
+        : state.photoCheck === "unavailable"
+          ? `<p class="supporting-copy">${tv("photoCheckUnavailable")}</p>`
+          : `<p class="supporting-copy">${tv("photoStaysLocal")}</p>`;
       return `${photoMarkup}${photoAction}${photoNote}${demoMode ? `<p class="simulation-note">${t("testPhotoNotice")}</p>` : ""}<button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
     }
     case "photo-checking":

@@ -1263,6 +1263,8 @@ for (const failure of [
     // Rückfall: Hinweis und die bekannte Selbstbestätigung, kein erneuter Upload-Knopf.
     await expect(page.locator(".capture-content")).toContainText("Die Prüfung ist gerade nicht möglich.");
     await expect(page.locator('[data-action="check-photo"]')).toHaveCount(0);
+    // Der Upload kann schon gelaufen sein: Die Zusage „bleibt auf dem Gerät“ darf nicht erscheinen.
+    await expect(page.locator(".capture-content")).not.toContainText("nicht an einen Bilddienst gesendet");
     await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
     const dateConfirm = page.locator('[data-action="confirm-photo-date"]');
     if (await dateConfirm.isVisible()) await dateConfirm.click();
