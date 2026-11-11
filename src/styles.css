@@ -159,6 +159,17 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
   .info-dialog-content { padding: 20px 17px; }
 }
 
+/* Sehr schmale Handys (320 px, z. B. iPhone SE): Name, Lampe, Info und Sprachwahl müssen nebeneinander passen,
+   auch wenn die Schrift des Geräts etwas breiter ist als in den Tests. */
+@media (max-width: 360px) {
+  .brand-group { gap: 8px; }
+  .brand { gap: 5px; font-size: 15px; }
+  .brand-mark { width: 24px; height: 24px; border-radius: 8px; }
+  .connection-lamp { width: 12px; height: 12px; }
+  .info-link { padding: 6px 6px; gap: 4px; }
+  .language-picker select { max-width: 84px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }

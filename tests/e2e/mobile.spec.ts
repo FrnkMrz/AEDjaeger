@@ -1916,7 +1916,8 @@ test("the header with the lamp fits a narrow phone screen in all six languages",
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `Überlauf in ${code}`).toBeLessThanOrEqual(320);
     // Die Lampe überlappt weder den Namen noch die Info-Schaltfläche.
     const infoBox = await page.locator("#open-info").boundingBox();
-    expect(box!.x + box!.width).toBeLessThanOrEqual(infoBox!.x);
+    // Mindestens 12 px Luft: Die Schrift eines echten Geräts kann breiter sein als die der Testumgebung.
+    expect(box!.x + box!.width + 12, `Abstand Lampe zu Info in ${code}`).toBeLessThanOrEqual(infoBox!.x);
   }
 });
 
