@@ -118,7 +118,9 @@ test("an older gallery photo requires an explicit observation date before search
   expect(searchRequests).toBe(1);
   await page.locator('[data-action="preview-candidate"]').click();
   await expect(page.getByRole("heading", { name: "Änderungsvorschau" })).toBeVisible();
-  await expect(page.locator(".capture-content")).toContainText("Neu: 2025-10-20");
+  await expect(page.locator(".capture-content")).toContainText("Prüfdatum: 2025-10-20");
+  // Der bisherige Wert steht dabei, weil es einen gibt.
+  await expect(page.locator(".capture-content")).toContainText("Bisher: 2025-01-01");
 });
 
 test("a camera input photo with an old EXIF date requires confirmation", async ({ page }) => {
@@ -300,7 +302,7 @@ test("a user-confirmed location search shows nearby candidates without writing t
 
   await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
   await expect(page.locator(".candidate-list")).toContainText("Rathaus");
-  await expect(page.locator(".candidate-list a")).toHaveAttribute("href", "https://www.openstreetmap.org/node/123");
+  await expect(page.locator(".candidate-list a")).toHaveCount(0);
   await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
   // Bei Treffern zeigt die App eine Umgebungskarte mit einem nummerierten Marker je Treffer.
   await expect(page.locator("#candidate-overview-map")).toBeVisible();
@@ -324,7 +326,10 @@ test("a user-confirmed location search shows nearby candidates without writing t
 
   await page.getByRole("button", { name: "Als noch vorhanden bestätigen" }).click();
   await expect(page.getByRole("heading", { name: "Änderungsvorschau" })).toBeVisible();
-  await expect(page.locator(".capture-content")).toContainText("Einzige vorgeschlagene Änderung: Prüfdatum");
+  await expect(page.locator(".capture-content")).toContainText("Prüfdatum:");
+  // Keine Zusatztexte und keine Verweise nach außen auf der Bestätigungsseite.
+  await expect(page.locator(".capture-content")).not.toContainText("Einzige vorgeschlagene Änderung");
+  await expect(page.locator(".capture-content a")).toHaveCount(0);
   await expect(page.locator(".capture-content")).toContainText("Rathaus <img src=x onerror=alert(2)>");
   await expect(page.locator(".capture-content")).toContainText("Bisher: <img src=x onerror=alert(1)>");
   await expect(page.locator(".capture-content img[onerror]")).toHaveCount(0);
@@ -332,9 +337,10 @@ test("a user-confirmed location search shows nearby candidates without writing t
     const date = new Date();
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   }));
-  await expect(page.locator(".capture-content")).toContainText("Das ist nur eine Vorschau. Es wurde nichts gespeichert oder an OpenStreetMap gesendet.");
+  await expect(page.locator(".capture-content")).toContainText("Nur eine Vorschau. Nichts wurde gespeichert.");
   await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
-  await expect(page.locator("[data-action='back-to-candidates']")).toBeVisible();
+  // Ein einziger Treffer: „Zurück“ zu einer Auswahl hätte keine Bedeutung und entfällt.
+  await expect(page.locator("[data-action='back-to-candidates']")).toHaveCount(0);
   expect(searchRequests).toBe(1);
 });
 
@@ -506,7 +512,7 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   await expect(page.getByRole("heading", { name: "Vorschau für neuen AED" })).toBeVisible();
   await expect(page.locator(".capture-content")).toContainText("Bestätige zuerst, dass der AED genau an diesem GPS-Punkt steht.");
   await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
-  await page.getByRole("button", { name: "Zurück zu den Treffern" }).click();
+  await page.getByRole("button", { name: "Zurück", exact: true }).click();
 
   await page.locator("#new-aed-position-confirmed").check();
   await page.locator("#new-aed-position-map").evaluate((element) => {
@@ -534,8 +540,11 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   await expect(page.locator(".capture-content")).not.toContainText("52.52000, 13.40500");
   await expect(page.locator(".capture-content")).toContainText("emergency=defibrillator");
   await expect(page.locator(".capture-content")).toContainText("check_date=");
-  await expect(page.getByRole("link", { name: "Position auf OpenStreetMap ansehen" })).toHaveAttribute("href", /openstreetmap\.org\/\?mlat=52\.52000/u);
-  await expect(page.locator(".capture-content")).toContainText("Änderungen bleiben auf dem OSM-Testserver.");
+  // Kein Verweis nach außen auf der Vorschau.
+  await expect(page.locator(".capture-content a")).toHaveCount(0);
+  // Mit Speichern-Knopf („Testserver: AED eintragen“) entfällt der Hinweis „nur eine Vorschau“.
+  await expect(page.locator(".capture-content")).not.toContainText("Nur eine Vorschau");
+  await expect(page.getByRole("button", { name: "Testserver: AED eintragen" })).toBeVisible();
   await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
   expect(searchRequests).toBe(1);
   expect(nonSearchOsmRequests).toEqual([]);
@@ -647,9 +656,8 @@ test("the search result hides technical snapshot details and raw OSM identifiers
   await expect(page.locator(".capture-content")).not.toContainText("Datenstand");
   await expect(page.locator(".capture-content")).not.toContainText("aed-0123456789abcdef0123");
   await expect(page.locator(".capture-content")).not.toContainText("node/123");
-  // Der Link zum Eintrag bleibt, nur mit verständlichem Text statt der Kennung.
-  await expect(page.locator(".candidate-list a")).toHaveText("In OpenStreetMap ansehen ↗");
-  await expect(page.locator(".candidate-list a")).toHaveAttribute("href", "https://www.openstreetmap.org/node/123");
+  // Auch keine Verweise nach OpenStreetMap: Der Ablauf bleibt in der App.
+  await expect(page.locator(".candidate-list a")).toHaveCount(0);
 });
 
 test("an unavailable regional snapshot cannot offer a new AED", async ({ page, context }) => {
@@ -853,9 +861,14 @@ test("an authenticated user can end the OSM session without exposing profile dat
   });
   await page.goto("/");
 
-  await expect(page.locator(".account-panel")).toContainText("Mit OpenStreetMap verbunden");
-  await expect(page.locator(".account-panel")).toContainText("Änderungen an OpenStreetMap sind noch deaktiviert");
-  await page.getByRole("button", { name: "Abmelden" }).click();
+  // Angemeldet: kein Textblock auf dem Hauptbildschirm. Die Lampe unten zeigt „verbunden“, „Abmelden“ liegt im Info-Dialog.
+  await expect(page.locator(".account-panel")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Abmelden" })).toBeHidden();
+  await page.locator("#open-info").click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Mit OpenStreetMap verbunden");
+  await expect(dialog).toContainText("Änderungen an OpenStreetMap sind noch deaktiviert");
+  await dialog.getByRole("button", { name: "Abmelden" }).click();
   const signIn = page.getByRole("link", { name: "Mit OpenStreetMap anmelden" });
   await expect(signIn).toBeFocused();
 });
@@ -875,7 +888,8 @@ test("a failed logout keeps a retry action until the OSM session has ended", asy
   });
 
   await page.goto("/");
-  await page.getByRole("button", { name: "Abmelden" }).click();
+  await page.locator("#open-info").click();
+  await page.getByRole("dialog").getByRole("button", { name: "Abmelden" }).click();
   await expect(page.locator(".login-card")).toContainText("Abmeldung fehlgeschlagen. Bitte prüfe deine Verbindung.");
   const retryLogout = page.locator("#osm-sign-out");
   await expect(retryLogout).toBeVisible();
@@ -1534,4 +1548,95 @@ test("the error code is translated and hidden when the check works", async ({ pa
     await expect(page.locator(".photo-check-code")).toContainText(`${labels[code]} analysis_failed (HTTP 502, timeout)`);
     await page.locator('[data-action="retake"]').click();
   }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Aufgeräumte Oberfläche: Verbindungslampe statt Textblock, keine Verweise nach außen, kürzere Vorschau
+// ---------------------------------------------------------------------------------------------
+
+test("a green lamp shows the connection, and it is red when signed out", async ({ page }) => {
+  await page.goto("/");
+  const lamp = page.locator(".footer-lamp");
+  await expect(lamp).toHaveClass(/footer-lamp-on/);
+  // Farbe allein genügt nicht: Die Lampe trägt den Status auch als Text für Screenreader.
+  await expect(lamp).toHaveAttribute("aria-label", "Mit OpenStreetMap verbunden");
+  expect(await lamp.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(31, 157, 85)");
+  // Kein Textblock „Mit OSM-Testserver verbunden“ mehr auf dem Hauptbildschirm.
+  await expect(page.locator("main")).not.toContainText("verbunden");
+
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.reload();
+  await expect(page.locator(".footer-lamp")).toHaveClass(/footer-lamp-off/);
+  await expect(page.locator(".footer-lamp")).toHaveAttribute("aria-label", "Nicht verbunden");
+  expect(await page.locator(".footer-lamp").evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(214, 69, 69)");
+});
+
+test("the lamp label and the logout section exist in all six languages", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true } }));
+  await page.goto("/");
+  for (const code of languageCodes) {
+    await page.locator("#language").selectOption(code);
+    const label = await page.locator(".footer-lamp").getAttribute("aria-label");
+    expect(label, `Lampe in ${code}`).toBeTruthy();
+    await page.locator("#open-info").click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.locator("#osm-sign-out")).toBeVisible();
+    // Lampe und Abschnitt im Info-Dialog nennen denselben Status in derselben Sprache.
+    expect(label).toBe((await dialog.locator(".account-section h3").innerText()).trim());
+    await page.keyboard.press("Escape");
+  }
+});
+
+test("the confirmation page shows only the essentials and offers no way out of the app", async ({ page }) => {
+  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: { status: "complete", coverage_radius_meters: 112, candidates: [
+    { id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", "defibrillator:location": "Links neben dem Garagentor" } },
+  ] } }));
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
+  await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
+  const dateConfirm = page.locator('[data-action="confirm-photo-date"]');
+  if (await dateConfirm.isVisible()) await dateConfirm.click();
+  await page.locator('[data-action="preview-candidate"]').click();
+
+  const content = page.locator(".capture-content");
+  await expect(page.getByRole("heading", { name: "Änderungsvorschau" })).toBeVisible();
+  await expect(content).toContainText("Links neben dem Garagentor");
+  await expect(content).toContainText("Prüfdatum:");
+  // Weg sind: Verweis nach OpenStreetMap, „Ausgewählter AED:“, „Einzige vorgeschlagene Änderung“, „Bisher: nicht gesetzt“.
+  await expect(content.locator("a")).toHaveCount(0);
+  for (const removed of ["In OpenStreetMap", "Ausgewählter AED", "Einzige vorgeschlagene", "Bisher", "nicht gesetzt", "Testserver"]) {
+    await expect(content).not.toContainText(removed);
+  }
+  // Ein einziger Treffer: „Zurück zu den Treffern“ hätte keine Bedeutung und entfällt.
+  await expect(page.locator("[data-action='back-to-candidates']")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Foto verwerfen" })).toBeVisible();
+});
+
+test("with several matches the confirmation page can go back to choose another one", async ({ page }) => {
+  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: { status: "complete", coverage_radius_meters: 112, candidates: [
+    { id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Rathaus" } },
+    { id: "node/124", osmType: "node", version: 3, coordinateQuality: "exact", position: { latitude: 52.52002, longitude: 13.40502 }, tags: { emergency: "defibrillator", name: "Bahnhof" } },
+  ] } }));
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
+  await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
+  const dateConfirm = page.locator('[data-action="confirm-photo-date"]');
+  if (await dateConfirm.isVisible()) await dateConfirm.click();
+  await page.locator('[data-action="preview-candidate"]').first().click();
+  await expect(page.getByRole("heading", { name: "Änderungsvorschau" })).toBeVisible();
+  await page.getByRole("button", { name: "Zurück", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
+});
+
+test("the confirmation page shows the earlier check date only when there is one", async ({ page }) => {
+  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: { status: "complete", coverage_radius_meters: 112, candidates: [
+    { id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2025-01-01" } },
+  ] } }));
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
+  await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
+  const dateConfirm = page.locator('[data-action="confirm-photo-date"]');
+  if (await dateConfirm.isVisible()) await dateConfirm.click();
+  await page.locator('[data-action="preview-candidate"]').click();
+  await expect(page.locator(".capture-content")).toContainText("Bisher: 2025-01-01");
 });

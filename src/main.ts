@@ -17,13 +17,13 @@ const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root element was not found.");
 
 const languageNames: Record<Language, string> = { de: "Deutsch", en: "English", pl: "Polski", ja: "日本語", fr: "Français", es: "Español" };
-const developmentWriteCopy: Record<Language, { action: string; createAction: string; retry: string; sending: string; complete: string; created: string; uncertain: string; conflict: string; failed: string; testOnly: string }> = {
-  de: { action: "Testserver: Prüfdatum speichern", createAction: "Testserver: AED eintragen", retry: "Testserver: Status erneut prüfen", sending: "Testserver: Änderung wird gesendet…", complete: "Testserver: Vor-Ort-Prüfung gespeichert.", created: "Testserver: Neuer AED wurde eingetragen.", uncertain: "Testserver: Ergebnis unklar. Mit derselben Anfrage erneut prüfen; keine neue Änderung wird blind gesendet.", conflict: "Testserver: In der Nähe gibt es einen AED oder der OSM-Eintrag änderte sich. Suche bitte erneut.", failed: "Testserver: Änderung fehlgeschlagen. Bitte Eintrag erneut prüfen.", testOnly: "Änderungen bleiben auf dem OSM-Testserver." },
-  en: { action: "Test server: Save visit date", createAction: "Test server: Add AED", retry: "Test server: Check status again", sending: "Test server: Sending update…", complete: "Test server: Visit confirmation saved.", created: "Test server: New AED added.", uncertain: "Test server: Result is unclear. Check again using the same request; no new edit will be sent blindly.", conflict: "Test server: An AED is nearby or the OSM entry changed. Search again.", failed: "Test server: Update failed. Please check the entry again.", testOnly: "Changes stay on the OSM test server." },
-  pl: { action: "Serwer testowy: zapisz datę kontroli", createAction: "Serwer testowy: dodaj AED", retry: "Serwer testowy: sprawdź ponownie stan", sending: "Serwer testowy: wysyłanie zmiany…", complete: "Serwer testowy: zapisano potwierdzenie kontroli.", created: "Serwer testowy: dodano nowy AED.", uncertain: "Serwer testowy: wynik jest niepewny. Sprawdź ponownie to samo żądanie; nie wyślemy w ciemno nowej zmiany.", conflict: "Serwer testowy: w pobliżu jest AED albo wpis OSM został zmieniony. Wyszukaj ponownie.", failed: "Serwer testowy: nie udało się zapisać zmiany. Sprawdź ponownie wpis.", testOnly: "Zmiany pozostają na serwerze testowym OSM." },
-  ja: { action: "テストサーバー：確認日を保存", createAction: "テストサーバー：AEDを登録", retry: "テストサーバー：状態を再確認", sending: "テストサーバー：変更を送信中…", complete: "テストサーバー：現地確認を保存しました。", created: "テストサーバー：新しいAEDを登録しました。", uncertain: "テストサーバー：結果を確認できません。同じリクエストで再確認してください。新しい変更を無確認で送信しません。", conflict: "テストサーバー：近くにAEDがあるか、OSMの項目が変更されています。再検索してください。", failed: "テストサーバー：変更に失敗しました。項目を再確認してください。", testOnly: "変更はOSMテストサーバーにのみ保存されます。" },
-  fr: { action: "Serveur de test : enregistrer la date", createAction: "Serveur de test : ajouter un DAE", retry: "Serveur de test : vérifier à nouveau", sending: "Serveur de test : envoi de la modification…", complete: "Serveur de test : visite confirmée.", created: "Serveur de test : nouveau DAE ajouté.", uncertain: "Serveur de test : résultat incertain. Vérifiez à nouveau avec la même requête ; aucune nouvelle modification ne sera envoyée à l’aveugle.", conflict: "Serveur de test : un DAE est proche ou la fiche OSM a changé. Relancez la recherche.", failed: "Serveur de test : échec de la modification. Vérifiez à nouveau la fiche.", testOnly: "Les modifications restent sur le serveur de test OSM." },
-  es: { action: "Servidor de pruebas: guardar fecha", createAction: "Servidor de pruebas: añadir DEA", retry: "Servidor de pruebas: comprobar estado", sending: "Servidor de pruebas: enviando cambio…", complete: "Servidor de pruebas: visita confirmada.", created: "Servidor de pruebas: se añadió un DEA.", uncertain: "Servidor de pruebas: resultado incierto. Comprueba de nuevo con la misma solicitud; no enviaremos otro cambio a ciegas.", conflict: "Servidor de pruebas: hay un DEA cerca o la ficha OSM ha cambiado. Vuelve a buscar.", failed: "Servidor de pruebas: no se pudo guardar. Comprueba de nuevo la ficha.", testOnly: "Los cambios solo se guardan en el servidor de pruebas de OSM." },
+const developmentWriteCopy: Record<Language, { action: string; createAction: string; retry: string; sending: string; complete: string; created: string; uncertain: string; conflict: string; failed: string; }> = {
+  de: { action: "Testserver: Prüfdatum speichern", createAction: "Testserver: AED eintragen", retry: "Testserver: Status erneut prüfen", sending: "Testserver: Änderung wird gesendet…", complete: "Testserver: Vor-Ort-Prüfung gespeichert.", created: "Testserver: Neuer AED wurde eingetragen.", uncertain: "Testserver: Ergebnis unklar. Mit derselben Anfrage erneut prüfen; keine neue Änderung wird blind gesendet.", conflict: "Testserver: In der Nähe gibt es einen AED oder der OSM-Eintrag änderte sich. Suche bitte erneut.", failed: "Testserver: Änderung fehlgeschlagen. Bitte Eintrag erneut prüfen." },
+  en: { action: "Test server: Save visit date", createAction: "Test server: Add AED", retry: "Test server: Check status again", sending: "Test server: Sending update…", complete: "Test server: Visit confirmation saved.", created: "Test server: New AED added.", uncertain: "Test server: Result is unclear. Check again using the same request; no new edit will be sent blindly.", conflict: "Test server: An AED is nearby or the OSM entry changed. Search again.", failed: "Test server: Update failed. Please check the entry again." },
+  pl: { action: "Serwer testowy: zapisz datę kontroli", createAction: "Serwer testowy: dodaj AED", retry: "Serwer testowy: sprawdź ponownie stan", sending: "Serwer testowy: wysyłanie zmiany…", complete: "Serwer testowy: zapisano potwierdzenie kontroli.", created: "Serwer testowy: dodano nowy AED.", uncertain: "Serwer testowy: wynik jest niepewny. Sprawdź ponownie to samo żądanie; nie wyślemy w ciemno nowej zmiany.", conflict: "Serwer testowy: w pobliżu jest AED albo wpis OSM został zmieniony. Wyszukaj ponownie.", failed: "Serwer testowy: nie udało się zapisać zmiany. Sprawdź ponownie wpis." },
+  ja: { action: "テストサーバー：確認日を保存", createAction: "テストサーバー：AEDを登録", retry: "テストサーバー：状態を再確認", sending: "テストサーバー：変更を送信中…", complete: "テストサーバー：現地確認を保存しました。", created: "テストサーバー：新しいAEDを登録しました。", uncertain: "テストサーバー：結果を確認できません。同じリクエストで再確認してください。新しい変更を無確認で送信しません。", conflict: "テストサーバー：近くにAEDがあるか、OSMの項目が変更されています。再検索してください。", failed: "テストサーバー：変更に失敗しました。項目を再確認してください。" },
+  fr: { action: "Serveur de test : enregistrer la date", createAction: "Serveur de test : ajouter un DAE", retry: "Serveur de test : vérifier à nouveau", sending: "Serveur de test : envoi de la modification…", complete: "Serveur de test : visite confirmée.", created: "Serveur de test : nouveau DAE ajouté.", uncertain: "Serveur de test : résultat incertain. Vérifiez à nouveau avec la même requête ; aucune nouvelle modification ne sera envoyée à l’aveugle.", conflict: "Serveur de test : un DAE est proche ou la fiche OSM a changé. Relancez la recherche.", failed: "Serveur de test : échec de la modification. Vérifiez à nouveau la fiche." },
+  es: { action: "Servidor de pruebas: guardar fecha", createAction: "Servidor de pruebas: añadir DEA", retry: "Servidor de pruebas: comprobar estado", sending: "Servidor de pruebas: enviando cambio…", complete: "Servidor de pruebas: visita confirmada.", created: "Servidor de pruebas: se añadió un DEA.", uncertain: "Servidor de pruebas: resultado incierto. Comprueba de nuevo con la misma solicitud; no enviaremos otro cambio a ciegas.", conflict: "Servidor de pruebas: hay un DEA cerca o la ficha OSM ha cambiado. Vuelve a buscar.", failed: "Servidor de pruebas: no se pudo guardar. Comprueba de nuevo la ficha." },
 };
 const scenarioKeys: Record<DemoScenario, TranslationKey> = {
   existing: "existingScenario", new: "newScenario", multiple: "multipleScenario", unclear: "unclearScenario", "search-error": "searchErrorScenario", "upload-unclear": "uploadErrorScenario",
@@ -203,16 +203,24 @@ function accountPanel(): string {
   if (accountState === "connection-error") return `<section class="account-panel" aria-live="polite" tabindex="-1"><span>${t("accountConnectionError")}</span><button class="account-button" id="osm-session-retry" type="button">${t("accountRetry")}</button></section>`;
   if ((photoSelectionPending || hasActivePhotoDraft(state)) && accountState !== "signed-in") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountLoginBlocked")}</section>`;
   if (accountState === "login-error") return `<section class="account-panel" aria-live="polite"><p role="alert">${t("accountLoginError")}</p>${signInLinks()}</section>`;
-  if (accountState === "signed-in") {
-    const signedInTitle = developmentSession ? t("accountDevSignedIn") : t("accountSignedIn");
-    const sessionMessage = developmentSession ? t("accountDevNotice") : t("accountIdentityOnly");
-    return `<section class="account-panel" aria-live="polite"><div><strong>${signedInTitle}</strong><p>${sessionMessage}</p></div><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>`;
-  }
+  // Angemeldet: Kein Block auf dem Hauptbildschirm. Der Status steht als Lampe in der Fußzeile, „Abmelden“ im Info-Dialog.
+  if (accountState === "signed-in") return "";
   if (accountState === "logout-error") {
     return `<section class="account-panel" aria-live="polite"><span>${t("accountSignOutError")}</span><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>`;
   }
   return `<section class="account-panel">${signInLinks()}<p>${t("accountIdentityOnly")}</p></section>`;
 }
+/**
+ * Die Lampe in der Fußzeile zeigt, ob die App mit OpenStreetMap verbunden ist: grün = verbunden,
+ * rot = nicht verbunden. Sie ersetzt den früheren Textblock „Mit OSM-Testserver verbunden“.
+ * Für Screenreader trägt sie den Status als Text, denn Farbe allein reicht nicht.
+ */
+function connectionLamp(): string {
+  const connected = accountState === "signed-in";
+  const label = connected ? (developmentSession ? t("accountDevSignedIn") : t("accountSignedIn")) : tv("connectionOff");
+  return `<span class="footer-lamp ${connected ? "footer-lamp-on" : "footer-lamp-off"}" role="img" aria-label="${escapeHtml(label)}"><span aria-hidden="true">✱</span></span>`;
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
 }
@@ -344,7 +352,7 @@ function statusContent(): string {
           const reviewAction = candidate.osmType === "node"
             ? `<button class="button button-secondary" data-action="preview-candidate" data-candidate-id="${escapeHtml(candidate.id)}">${tv("selectCandidate")}</button>`
             : `<span class="supporting-copy">${tv("previewUnsupportedShort")}</span>`;
-          return `<li class="candidate-item"><strong>${escapeHtml(label)}</strong>${distance}<a href="https://www.openstreetmap.org/${escapeHtml(candidate.id)}" target="_blank" rel="noopener noreferrer">${tv("candidateOpenMap")} ↗</a>${reviewAction}</li>`;
+          return `<li class="candidate-item"><strong>${escapeHtml(label)}</strong>${distance}${reviewAction}</li>`;
         }).join("");
       let outcome: string;
       if (search.status === "partial" || assessment.kind === "search-incomplete") outcome = tv("searchPartial");
@@ -386,11 +394,9 @@ function statusContent(): string {
       const point = state.result.kind === "ready" ? state.result.position : state.returnState.location;
       const latitude = point.latitude.toFixed(5);
       const longitude = point.longitude.toFixed(5);
-      // Coordinates are numeric GPS values validated by the location and proposal boundaries.
-      const mapUrl = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=19/${latitude}/${longitude}`;
       const content = state.result.kind === "ready"
-        ? `<p>${tv("newPreviewCoordinates", { latitude, longitude })}</p><p><a href="${mapUrl}" target="_blank" rel="noopener noreferrer">${tv("newPreviewOpenMap")}</a></p><strong>${tv("newPreviewTags")}</strong><ul>${Object.entries(state.result.tags).map(([key, value]) => `<li><code>${escapeHtml(key)}=${escapeHtml(value)}</code></li>`).join("")}</ul><p>${state.result.confirmedDifferentCandidateIds.length > 0 ? tv("newPreviewReviewedCandidates") : tv("newPreviewCaution")}</p>`
-        : `<p>${tv(state.result.reason === "position-not-confirmed" ? "newPositionRequired" : state.result.reason === "search-found-candidate" ? "newPreviewFoundCandidate" : "newPreviewSearchInvalid")}</p><p><a href="${mapUrl}" target="_blank" rel="noopener noreferrer">${tv("newPreviewOpenMap")}</a></p>`;
+        ? `<p>${tv("newPreviewCoordinates", { latitude, longitude })}</p><strong>${tv("newPreviewTags")}</strong><ul>${Object.entries(state.result.tags).map(([key, value]) => `<li><code>${escapeHtml(key)}=${escapeHtml(value)}</code></li>`).join("")}</ul><p>${state.result.confirmedDifferentCandidateIds.length > 0 ? tv("newPreviewReviewedCandidates") : tv("newPreviewCaution")}</p>`
+        : `<p>${tv(state.result.reason === "position-not-confirmed" ? "newPositionRequired" : state.result.reason === "search-found-candidate" ? "newPreviewFoundCandidate" : "newPreviewSearchInvalid")}</p>`;
       const copy = developmentWriteCopy[language];
       const canCreate = developmentSession && developmentWriteAvailable && state.result.kind === "ready";
       const statusCopy = state.writeStatus === "complete" ? copy.created : state.writeStatus ? copy[state.writeStatus] : "";
@@ -402,17 +408,21 @@ function statusContent(): string {
         : state.writeStatus === "uncertain" && state.operationId
           ? `<button class="button button-secondary" data-action="retry-development-write">${copy.retry}</button>`
           : "";
-      const noWriteNotice = developmentSession ? copy.testOnly : tv("previewNoWrite");
+      // Der Hinweis „nur eine Vorschau“ steht nur, wenn es nichts zu speichern gibt. Mit Speichern-Knopf sagt dessen
+      // Beschriftung („Testserver: AED eintragen“) schon, wohin die Änderung geht.
+      const noWriteNotice = writeAction ? "" : `<p class="simulation-note">${tv("previewNoWrite")}</p>`;
+      // „Zurück“ bleibt hier immer: Es führt zur Positionsbestätigung bzw. zur Suche, nicht nur zu Treffern.
       const navigation = state.writeStatus === "sending" || state.writeStatus === "uncertain" ? "" : `<button class="button button-quiet" data-action="back-to-search">${tv("previewBack")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("newPreviewTitle")}</h2>${content}<p class="simulation-note">${noWriteNotice}</p>${writeStatus}</div></div>${writeAction}${navigation}`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("newPreviewTitle")}</h2>${content}${noWriteNotice}${writeStatus}</div></div>${writeAction}${navigation}`;
     }
     case "osm-preview": {
       const { result } = state;
       const candidateId = state.candidateId;
       const candidate = state.returnState.search.candidates.find((item) => item.id === candidateId);
       const canWrite = developmentSession && developmentWriteAvailable && candidate?.osmType === "node" && result.kind === "ready";
+      // Nur das Wesentliche: das neue Prüfdatum. Der bisherige Wert steht nur da, wenn es einen gibt.
       const content = result.kind === "ready"
-        ? `<p><strong>${tv("previewCheckDate")}</strong></p><p>${tv("previewOldDate", { date: escapeHtml(result.changes[0].before ?? tv("previewNoDate")) })}</p><p>${tv("previewNewDate", { date: result.changes[0].after })}</p>`
+        ? `<p><strong>${tv("previewNewDate", { date: result.changes[0].after })}</strong></p>${result.changes[0].before ? `<p>${tv("previewOldDate", { date: escapeHtml(result.changes[0].before) })}</p>` : ""}`
         : `<p>${tv("previewUnsupported")}</p>`;
       const copy = developmentWriteCopy[language];
       const writeStatus = state.writeStatus ? `<p role="status" class="simulation-note">${copy[state.writeStatus]}</p>` : "";
@@ -421,21 +431,24 @@ function statusContent(): string {
         : state.writeStatus === "uncertain" && state.operationId
           ? `<button class="button button-secondary" data-action="retry-development-write">${copy.retry}</button>`
           : "";
-      const noWriteNotice = developmentSession ? copy.testOnly : tv("previewNoWrite");
+      const noWriteNotice = writeAction ? "" : `<p class="simulation-note">${tv("previewNoWrite")}</p>`;
       const recoverableWrite = state.writeStatus === "sending" || state.writeStatus === "uncertain";
-      const navigation = recoverableWrite ? "" : `<button class="button button-quiet" data-action="back-to-candidates">${tv("previewBack")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("previewTitle")}</h2><p>${tv("previewTarget", { target: escapeHtml(state.candidateLabel) })}</p><p><a href="https://www.openstreetmap.org/${escapeHtml(state.candidateId)}" target="_blank" rel="noopener noreferrer">${tv("candidateOpenMap")} ↗</a></p>${content}<p class="simulation-note">${noWriteNotice}</p>${writeStatus}</div></div>${writeAction}${navigation}`;
+      // „Zurück“ gibt es nur, wenn es mehrere Treffer zur Auswahl gab. Bei einem einzigen Treffer hätte es keine Bedeutung.
+      // Gezählt wird wie in der Trefferliste: Bei „candidate-review“ die bewerteten Treffer, sonst alle Suchtreffer.
+      const shownCandidates = state.returnState.assessment.kind === "candidate-review" ? state.returnState.assessment.candidates.length : state.returnState.search.candidates.length;
+      const hasOtherCandidates = shownCandidates > 1;
+      const navigation = recoverableWrite ? "" : `${hasOtherCandidates ? `<button class="button button-quiet" data-action="back-to-candidates">${tv("previewBack")}</button>` : ""}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(state.candidateLabel)}</strong></p>${content}${noWriteNotice}${writeStatus}</div></div>${writeAction}${navigation}`;
     }
     case "development-write-recovery": {
       const copy = developmentWriteCopy[language];
       const retry = state.writeStatus === "uncertain"
         ? `<button class="button button-secondary" data-action="retry-development-write">${copy.retry}</button>`
         : "";
-      const targetLink = state.request.kind === "check-date"
-        ? `<p><a href="https://www.openstreetmap.org/${escapeHtml(state.request.target)}" target="_blank" rel="noopener noreferrer">${tv("candidateOpenMap")} ↗</a></p>`
-        : `<p>${state.request.latitude.toFixed(5)}, ${state.request.longitude.toFixed(5)}</p>`;
+      // Bei einer Neuanlage steht die Position da; bei einem Prüfdatum genügt die Bezeichnung des AED.
+      const targetLink = state.request.kind === "check-date" ? "" : `<p>${state.request.latitude.toFixed(5)}, ${state.request.longitude.toFixed(5)}</p>`;
       const recoveryMessage = state.request.kind === "create-node" && state.writeStatus === "complete" ? copy.created : copy[state.writeStatus];
-      return `<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("previewTitle")}</h2><p>${tv("previewTarget", { target: escapeHtml(state.request.candidateLabel) })}</p>${targetLink}<p class="simulation-note" role="status">${recoveryMessage}</p></div></div>${retry}`;
+      return `<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(state.request.candidateLabel)}</strong></p>${targetLink}<p class="simulation-note" role="status">${recoveryMessage}</p></div></div>${retry}`;
     }
     case "candidate-error": {
       const errorKey: Record<typeof state.reason, FlowMessageKey> = {
@@ -495,7 +508,7 @@ function render(restoreFlowFocus = false): void {
           ${isReady ? `<details class="demo-panel"><summary>${t("demo")}</summary><h2>${t("testStepsTitle")}</h2><p>${t("testSteps")}</p><label for="scenario">${t("scenario")}</label><select id="scenario">${(Object.keys(scenarioKeys) as DemoScenario[]).map((key) => `<option value="${key}" ${scenario === key ? "selected" : ""}>${t(scenarioKeys[key])}</option>`).join("")}</select><label class="diagnostics-opt-in" for="diagnostics-enabled"><input id="diagnostics-enabled" type="checkbox" ${diagnosticsEnabled ? "checked" : ""}><span><strong>${t("testDiagnostics")}</strong><small>${t("testDiagnosticsPrivacy")}</small></span></label></details>` : ""}
         </section>
       </main>${accountPanel()}` : `<main class="login-main">${loginEntry()}</main>`}
-      <footer><span class="footer-symbol" aria-hidden="true">✳</span><span>${t("sourceNote")}</span><span class="demo-badge">DEMO</span></footer>
+      <footer>${connectionLamp()}<span>${t("sourceNote")}</span><span class="demo-badge">DEMO</span></footer>
       <dialog class="info-dialog" id="info-dialog" aria-labelledby="info-title" aria-describedby="info-intro">
         <div class="info-dialog-content">
           <div class="info-dialog-header"><div><p class="eyebrow">${t("appName")}</p><h2 id="info-title">${t("aboutTitle")}</h2></div><form method="dialog"><button class="dialog-close" aria-label="${t("closeInfo")}">×</button></form></div>
@@ -508,6 +521,7 @@ function render(restoreFlowFocus = false): void {
             <li class="roadmap-item"><span class="roadmap-status">${t("roadmapNext")}</span><h4>${t("roadmapApiTitle")}</h4><p>${t("roadmapApiBody")}</p></li>
             <li class="roadmap-item"><span class="roadmap-status">${t("roadmapLater")}</span><h4>${t("roadmapOsmTitle")}</h4><p>${t("roadmapOsmBody")}</p></li>
           </ol></section>
+          ${authenticated ? `<section class="info-section account-section"><h3>${developmentSession ? t("accountDevSignedIn") : t("accountSignedIn")}</h3><p>${developmentSession ? t("accountDevNotice") : t("accountIdentityOnly")}</p><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>` : ""}
         </div>
       </dialog>
     </div>`;
@@ -728,7 +742,7 @@ async function refreshAccountState(focusSelector?: string): Promise<void> {
   render();
   if (focusSelector === "next-action") {
     const nextActionSelector = accountState === "connection-error" ? "#osm-session-retry"
-      : accountState === "signed-in" ? "#osm-sign-out"
+      : accountState === "signed-in" ? "#camera-input"
         : accountState === "signed-out" || accountState === "login-error" ? "#osm-sign-in"
           : "#login-title";
     app!.querySelector<HTMLElement>(nextActionSelector)?.focus();
