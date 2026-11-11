@@ -24,8 +24,6 @@ button, input, select, summary { -webkit-tap-highlight-color: transparent; }
 .topbar { height: 76px; display: flex; align-items: center; justify-content: space-between; }
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
 .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; font: 800 19px "Noto Sans", system-ui, sans-serif; letter-spacing: -.055em; }
-.brand-mark { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 10px; color: white; background: var(--green); }
-.brand-mark svg { width: 18px; }
 .info-link { min-height: 40px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid #dbe7dd; border-radius: 12px; padding: 7px 10px; color: #27523d; background: #fff; font-size: 13px; font-weight: 700; cursor: pointer; }
 .info-mark { width: 18px; height: 18px; display: inline-grid; place-items: center; border-radius: 50%; color: #fff; background: var(--green); font: 700 12px/1 system-ui, sans-serif; }
 .language-picker { position: relative; display: flex; align-items: center; color: var(--muted); }
@@ -116,6 +114,10 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
 .login-credentials-note { margin-top: 15px; }
 /* Verbindungslampe neben dem Namen: grün = mit OpenStreetMap verbunden, rot = nicht verbunden. Der helle Ring hebt sie vom Hintergrund ab. */
 .brand-group { display: flex; align-items: center; gap: 12px; min-width: 0; }
+/* Schaltfläche um die Lampe: Der Punkt bleibt klein, die Tippfläche wächst durch Innenabstand. Der negative Außenabstand
+   gleicht ihn aus, damit das Layout der Kopfzeile unverändert bleibt. */
+.connection-lamp-button { flex: none; display: grid; place-items: center; margin: -12px; padding: 12px; border: 0; border-radius: 50%; background: none; cursor: pointer; }
+.connection-lamp-button:focus-visible { outline: 3px solid #176b4b; outline-offset: -2px; }
 .connection-lamp { flex: none; width: 14px; height: 14px; border-radius: 50%; }
 .connection-lamp-on { background: #1f9d55; box-shadow: 0 0 0 4px rgba(31, 157, 85, 0.2); }
 .connection-lamp-off { background: #d64545; box-shadow: 0 0 0 4px rgba(214, 69, 69, 0.2); }
@@ -147,7 +149,6 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
   .page-shell { width: min(100% - 28px, 520px); }
   .topbar { height: 66px; }
   .brand { gap: 7px; font-size: 17px; }
-  .brand-mark { width: 27px; height: 27px; }
   .topbar-actions { flex: none; gap: 3px; }
   .info-link { min-height: 38px; gap: 5px; padding: 6px 8px; font-size: 12px; }
   .language-picker select { max-width: 96px; padding-right: 21px; padding-left: 6px; font-size: 12px; }
@@ -164,7 +165,6 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
 @media (max-width: 360px) {
   .brand-group { gap: 8px; }
   .brand { gap: 5px; font-size: 15px; }
-  .brand-mark { width: 24px; height: 24px; border-radius: 8px; }
   .connection-lamp { width: 12px; height: 12px; }
   .info-link { padding: 6px 6px; gap: 4px; }
   .language-picker select { max-width: 84px; }

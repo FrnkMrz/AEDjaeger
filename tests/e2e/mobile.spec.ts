@@ -1577,7 +1577,7 @@ test("a green lamp shows the connection, and it is red when signed out", async (
   const lamp = page.locator(".connection-lamp");
   await expect(lamp).toHaveClass(/connection-lamp-on/);
   // Farbe allein genügt nicht: Die Lampe trägt den Status auch als Text für Screenreader.
-  await expect(lamp).toHaveAttribute("aria-label", "Mit OpenStreetMap verbunden");
+  await expect(page.locator("#connection-lamp")).toHaveAttribute("aria-label", "Mit OpenStreetMap verbunden");
   expect(await lamp.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(31, 157, 85)");
   // Kein Textblock „Mit OSM-Testserver verbunden“ mehr auf dem Hauptbildschirm.
   await expect(page.locator("main")).not.toContainText("verbunden");
@@ -1585,7 +1585,7 @@ test("a green lamp shows the connection, and it is red when signed out", async (
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   await page.reload();
   await expect(page.locator(".connection-lamp")).toHaveClass(/connection-lamp-off/);
-  await expect(page.locator(".connection-lamp")).toHaveAttribute("aria-label", "Nicht verbunden");
+  await expect(page.locator("#connection-lamp")).toHaveAttribute("aria-label", "Nicht verbunden");
   expect(await page.locator(".connection-lamp").evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(214, 69, 69)");
 });
 
@@ -1594,7 +1594,7 @@ test("the lamp label and the logout section exist in all six languages", async (
   await page.goto("/");
   for (const code of languageCodes) {
     await page.locator("#language").selectOption(code);
-    const label = await page.locator(".connection-lamp").getAttribute("aria-label");
+    const label = await page.locator("#connection-lamp").getAttribute("aria-label");
     expect(label, `Lampe in ${code}`).toBeTruthy();
     await page.locator("#open-info").click();
     const dialog = page.getByRole("dialog");
@@ -1930,4 +1930,56 @@ test("the header keeps clear of the iPhone status bar and Dynamic Island", async
     const box = await page.locator(selector).boundingBox();
     expect(box!.y, `${selector} unter der Statusleiste`).toBeGreaterThanOrEqual(59);
   }
+});
+
+test("the header has no check mark in front of the name, only the lamp shows the status", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("header .brand-mark")).toHaveCount(0);
+  await expect(page.locator("header .brand svg")).toHaveCount(0);
+  await expect(page.locator("header .connection-lamp")).toBeVisible();
+});
+
+test("tapping the green lamp opens the sign-out section, and signing out only happens on the sign-out button", async ({ page }) => {
+  let signOutRequests = 0;
+  await page.route("**/api/auth/logout", (route) => { signOutRequests += 1; return route.fulfill({ json: { ok: true } }); });
+  await page.goto("/");
+  await expect(page.locator(".connection-lamp-on")).toBeVisible();
+  await page.locator("#connection-lamp").click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.locator("#osm-sign-out")).toBeVisible();
+  await expect(dialog.locator("#osm-sign-out")).toBeFocused();
+  // Das Tippen auf die Lampe meldet noch nicht ab.
+  expect(signOutRequests).toBe(0);
+  await expect(page.locator(".connection-lamp-on")).toBeVisible();
+});
+
+test("tapping the red lamp starts the sign-in", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  // Die Anmeldung geht zu OpenStreetMap. Der Test fängt die Anfrage ab und lässt nichts durch.
+  let signInStarted = false;
+  await page.route("**/api/auth/osm/start", (route) => { signInStarted = true; return route.fulfill({ status: 200, contentType: "text/html", body: "<p>OSM</p>" }); });
+  await page.goto("/");
+  await expect(page.locator(".connection-lamp-off")).toBeVisible();
+  await page.locator("#connection-lamp").click();
+  await expect.poll(() => signInStarted).toBe(true);
+});
+
+test("tapping the red lamp without a sign-in button keeps the person on the login page", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ status: 500, json: {} }));
+  await page.goto("/");
+  await expect(page.locator(".connection-lamp-off")).toBeVisible();
+  await page.locator("#connection-lamp").click();
+  // Der Fokus liegt auf der Anmeldeseite (Überschrift oder Wiederholen-Knopf).
+  await expect(page.locator("#login-title:focus, #osm-session-retry:focus")).toHaveCount(1);
+  expect(new URL(page.url()).pathname).toBe("/");
+});
+
+test("the lamp tap area is large enough for a finger but does not push the header apart", async ({ page }) => {
+  await page.goto("/");
+  const button = await page.locator("#connection-lamp").boundingBox();
+  const dot = await page.locator("header .connection-lamp").boundingBox();
+  expect(button!.width).toBeGreaterThanOrEqual(36);
+  expect(button!.height).toBeGreaterThanOrEqual(36);
+  // Die Tippfläche liegt mittig um den sichtbaren Punkt.
+  expect(Math.abs(button!.x + button!.width / 2 - (dot!.x + dot!.width / 2))).toBeLessThan(1);
 });

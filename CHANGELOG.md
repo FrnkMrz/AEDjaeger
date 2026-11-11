@@ -21,6 +21,10 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Liest AED-Kandidaten direkt aus der `defibrillators`-Ebene des OpenFireMap-PMTiles-Archivs. Der Worker prüft den Datenstand und liest für den Foto-Standort nur die benötigten Zoom-14-Kacheln über begrenzte HTTP-Range-Anfragen.
 - Verwendet kein Overpass für die Umgebungssuche. Fehlende, veraltete, unvollständige oder ungültige Archivdaten bleiben ein Suchfehler und werden nie als Beleg für einen freien Standort behandelt.
 
+### Changed
+- Entfernt das Häkchen-Symbol vor dem Namen in der Kopfzeile: Es zeigte dasselbe wie die grüne Lampe. Die Lampe bleibt als einziger Statusanzeiger.
+- Die Lampe ist jetzt eine Schaltfläche mit größerer Tippfläche. Grün: öffnet den Abschnitt mit „Abmelden“ im Info-Dialog (abgemeldet wird erst mit „Abmelden“). Rot: startet die Anmeldung wie der Anmelde-Knopf; fehlt dieser (Prüfung läuft, Verbindungsfehler), bleibt die Person auf der Anmeldeseite und der passende Knopf bekommt den Fokus.
+
 ### Fixed
 - Hält die Kopfzeile (Name, Verbindungslampe, Info) auf dem iPhone unterhalb von Uhr und Dynamic Island. Bisher lag sie in der installierten App darunter und war unsichtbar; ein e2e-Test prüft den Abstand. Der Update-Hinweis berücksichtigt den Abstand ebenfalls.
 

@@ -226,15 +226,44 @@ function accountPanel(): string {
 }
 /**
  * Die Lampe neben dem Namen in der Kopfzeile zeigt, ob die App mit OpenStreetMap verbunden ist: grün = verbunden,
- * rot = nicht verbunden. Sie ersetzt den früheren Textblock „Mit OSM-Testserver verbunden“.
+ * rot = nicht verbunden. Sie ersetzt den früheren Textblock „Mit OSM-Testserver verbunden“ und das Häkchen vor dem Namen.
  * Sie steht oben, weil dort jeder Bildschirm anfängt; in der Fußzeile lag sie bei längeren Seiten außerhalb des Bildschirms
  * und war zu klein, um aufzufallen.
- * Für Screenreader trägt sie den Status als Text, denn Farbe allein reicht nicht.
+ *
+ * Sie ist zugleich eine Schaltfläche (siehe openAccountFromLamp): Grün führt zum Abmelden, Rot zur Anmeldung.
+ * Der sichtbare Punkt ist klein; die Schaltfläche darum herum vergrößert nur die Tippfläche (siehe styles.css).
+ * Für Screenreader trägt die Schaltfläche den Status als Text, denn Farbe allein reicht nicht.
  */
 function connectionLamp(): string {
   const connected = accountState === "signed-in";
   const label = connected ? (developmentSession ? t("accountDevSignedIn") : t("accountSignedIn")) : tv("connectionOff");
-  return `<span class="connection-lamp ${connected ? "connection-lamp-on" : "connection-lamp-off"}" role="img" aria-label="${escapeHtml(label)}"></span>`;
+  return `<button class="connection-lamp-button" id="connection-lamp" type="button" aria-label="${escapeHtml(label)}"><span class="connection-lamp ${connected ? "connection-lamp-on" : "connection-lamp-off"}" aria-hidden="true"></span></button>`;
+}
+
+/**
+ * Tippen auf die Lampe.
+ * - Verbunden (grün): öffnet den Info-Dialog an der Stelle mit „Abmelden“. Abgemeldet wird erst mit dem Tippen auf
+ *   „Abmelden“, nicht schon durch die Lampe.
+ * - Nicht verbunden (rot): startet die Anmeldung wie der Anmelde-Knopf auf der Anmeldeseite. Wir klicken dafür den
+ *   vorhandenen Knopf, damit es nur einen Weg zur Anmeldung gibt. Gibt es ihn nicht (Prüfung läuft, Verbindungsfehler,
+ *   nicht eingerichtet), bleibt die Person auf der Anmeldeseite und der passende Knopf bekommt den Fokus.
+ */
+function openAccountFromLamp(): void {
+  if (accountState === "signed-in") {
+    const dialog = document.querySelector<HTMLDialogElement>("#info-dialog");
+    if (!dialog) return;
+    if (!dialog.open) dialog.showModal();
+    const signOut = dialog.querySelector<HTMLButtonElement>("#osm-sign-out");
+    signOut?.scrollIntoView({ block: "center" });
+    signOut?.focus();
+    return;
+  }
+  const signIn = app!.querySelector<HTMLAnchorElement>("#osm-sign-in, #osm-dev-sign-in");
+  if (signIn) {
+    signIn.click();
+    return;
+  }
+  app!.querySelector<HTMLElement>("#osm-session-retry, #osm-sign-out, #login-title")?.focus();
 }
 
 function escapeHtml(value: string): string {
@@ -518,7 +547,7 @@ function render(restoreFlowFocus = false): void {
   document.title = `${t("appName")} · ${t("tagline")}`;
   app!.innerHTML = `
     <div class="page-shell">
-      <header class="topbar"><div class="brand-group"><a class="brand" href="/" aria-label="${t("appName")}" ${hasUnresolvedSave(state) ? 'aria-disabled="true"' : ""}><span class="brand-mark">${icon("check")}</span><span>${t("appName")}</span></a>${connectionLamp()}</div><div class="topbar-actions"><button class="info-link" id="open-info" type="button"><span class="info-mark" aria-hidden="true">i</span><span>${t("aboutButton")}</span></button><label class="language-picker"><span class="sr-only">${t("language")}</span><select id="language" aria-label="${t("language")}">${supportedLanguages.map((code) => `<option value="${code}" ${language === code ? "selected" : ""}>${languageNames[code]}</option>`).join("")}</select><span class="language-globe" aria-hidden="true">◎</span></label></div></header>
+      <header class="topbar"><div class="brand-group"><a class="brand" href="/" aria-label="${t("appName")}" ${hasUnresolvedSave(state) ? 'aria-disabled="true"' : ""}><span>${t("appName")}</span></a>${connectionLamp()}</div><div class="topbar-actions"><button class="info-link" id="open-info" type="button"><span class="info-mark" aria-hidden="true">i</span><span>${t("aboutButton")}</span></button><label class="language-picker"><span class="sr-only">${t("language")}</span><select id="language" aria-label="${t("language")}">${supportedLanguages.map((code) => `<option value="${code}" ${language === code ? "selected" : ""}>${languageNames[code]}</option>`).join("")}</select><span class="language-globe" aria-hidden="true">◎</span></label></div></header>
       ${authenticated ? `<main>
         <section class="hero ${isReady ? "" : "hero-compact"}"><div class="hero-kicker"><span></span>${t("eyebrow")}</div><h1>${isReady ? t("title") : state.kind === "analyzing" || state.kind === "photo-checking" || state.kind === "candidate-searching" || state.kind === "sending" ? t("checking") : t("tagline")}</h1>${isReady ? `<p>${t("intro")}</p>` : ""}</section>
         <section class="capture-card" aria-live="polite" aria-atomic="false">
@@ -630,6 +659,7 @@ function render(restoreFlowFocus = false): void {
   document.querySelector<HTMLButtonElement>("#open-info")?.addEventListener("click", () => {
     document.querySelector<HTMLDialogElement>("#info-dialog")?.showModal();
   });
+  document.querySelector<HTMLButtonElement>("#connection-lamp")?.addEventListener("click", openAccountFromLamp);
   document.querySelector<HTMLAnchorElement>(".brand")?.addEventListener("click", (event) => {
     if (!hasUnresolvedSave(state)) return;
 
