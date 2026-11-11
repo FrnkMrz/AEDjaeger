@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { askForLocationOnce, LOCATION_PROMPTED_KEY, readLocationPermission, watchLocationPermission, type LocationPermission } from "../src/location/phoneLocationPermission";
+import { askForLocationOnce, LOCATION_PROMPTED_KEY, phoneLocationFitsPhoto, readLocationPermission, watchLocationPermission, type LocationPermission } from "../src/location/phoneLocationPermission";
 
 /** Ein Ersatz für navigator.permissions, dessen Zustand sich im Test ändern lässt. */
 function fakePermissions(initial: string) {
@@ -119,5 +119,38 @@ describe("askForLocationOnce", () => {
     geo.getCurrentPosition.mockImplementation((_ok: unknown, fail: (error: unknown) => void) => fail({ code: 1 }));
     askForLocationOnce({ permission: "prompt", storage: fakeStorage().api, geolocation: geo, onGranted });
     expect(onGranted).not.toHaveBeenCalled();
+  });
+});
+
+describe("phoneLocationFitsPhoto", () => {
+  const now = Date.UTC(2026, 10, 11, 7, 0, 0);
+  const minutesAgo = (minutes: number) => now - minutes * 60_000;
+
+  it("accepts a camera photo that was taken within the last five minutes", () => {
+    expect(phoneLocationFitsPhoto({ fromCamera: true, capturedAtMs: minutesAgo(0), nowMs: now })).toBe(true);
+    expect(phoneLocationFitsPhoto({ fromCamera: true, capturedAtMs: minutesAgo(4.9), nowMs: now })).toBe(true);
+  });
+
+  it("rejects a camera photo once more than five minutes have passed", () => {
+    // Die Person hat die App nach der Aufnahme im Hintergrund gelassen und steht vielleicht woanders.
+    expect(phoneLocationFitsPhoto({ fromCamera: true, capturedAtMs: minutesAgo(5.1), nowMs: now })).toBe(false);
+    expect(phoneLocationFitsPhoto({ fromCamera: true, capturedAtMs: minutesAgo(60), nowMs: now })).toBe(false);
+  });
+
+  it("changes its answer as time passes for the same photo", () => {
+    const capturedAtMs = minutesAgo(0);
+    expect(phoneLocationFitsPhoto({ fromCamera: true, capturedAtMs, nowMs: now + 60_000 })).toBe(true);
+    expect(phoneLocationFitsPhoto({ fromCamera: true, capturedAtMs, nowMs: now + 10 * 60_000 })).toBe(false);
+  });
+
+  it("never fits a photo that did not come from the camera, however fresh it is", () => {
+    expect(phoneLocationFitsPhoto({ fromCamera: false, capturedAtMs: minutesAgo(0), nowMs: now })).toBe(false);
+  });
+
+  it("does not fit when the capture time is unknown or unreasonable", () => {
+    expect(phoneLocationFitsPhoto({ fromCamera: true, capturedAtMs: undefined, nowMs: now })).toBe(false);
+    expect(phoneLocationFitsPhoto({ fromCamera: true, capturedAtMs: Number.NaN, nowMs: now })).toBe(false);
+    // Weit in der Zukunft (falsch gehende Kamerauhr).
+    expect(phoneLocationFitsPhoto({ fromCamera: true, capturedAtMs: now + 60 * 60_000, nowMs: now })).toBe(false);
   });
 });

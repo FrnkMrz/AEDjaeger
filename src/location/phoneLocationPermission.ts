@@ -11,6 +11,8 @@
  * weder gespeichert noch gesendet.
  */
 
+import { isFreshCapture } from "../domain/localDate";
+
 /** „unknown“: Der Browser kann den Zustand nicht abfragen (Permissions API fehlt). Dann nie automatisch nutzen. */
 export type LocationPermission = "granted" | "denied" | "prompt" | "unknown";
 
@@ -54,6 +56,20 @@ export async function watchLocationPermission(
   } catch {
     return () => undefined;
   }
+}
+
+/**
+ * Passt der Handy-Standort jetzt zum Foto?
+ *
+ * Nur bei einem Foto, das mit der Kamera der App entstand UND höchstens fünf Minuten alt ist. Die Frage
+ * wird bei jeder Fortsetzung neu gestellt, nicht nur bei der Fotoauswahl: Wer die App nach der Aufnahme
+ * zehn Minuten im Hintergrund lässt und erst dann bestätigt, steht vielleicht schon woanders.
+ * Ist die Aufnahmezeit unbekannt, passt der Standort nicht.
+ *
+ * @param nowMs Aktuelle Zeit; nur für Tests überschreibbar.
+ */
+export function phoneLocationFitsPhoto(options: { fromCamera: boolean; capturedAtMs: number | undefined; nowMs?: number }): boolean {
+  return options.fromCamera && isFreshCapture(options.capturedAtMs, options.nowMs ?? Date.now());
 }
 
 export type AskOnceOptions = {

@@ -414,9 +414,13 @@ test("the development-session preview sends one explicitly confirmed, versioned 
     candidates: [{ id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2025-10-20" } }],
   } }));
   const writeRequests: Array<Record<string, unknown>> = [];
+  // Die Antwort wird festgehalten, damit sich der Zustand „wird gesendet“ prüfen lässt.
+  let releaseWrite: () => void = () => undefined;
+  const writeMayFinish = new Promise<void>((resolve) => { releaseWrite = resolve; });
   await page.route("**/api/osm/development/check-date", async (route) => {
     expect(route.request().method()).toBe("POST");
     writeRequests.push(route.request().postDataJSON() as Record<string, unknown>);
+    await writeMayFinish;
     await route.fulfill({ json: { status: "complete", version: 8 } });
   });
 
@@ -426,8 +430,16 @@ test("the development-session preview sends one explicitly confirmed, versioned 
   await beginNearbySearch(page);
   await page.getByRole("button", { name: "Als noch vorhanden bestätigen" }).click();
   await expect(page.getByRole("button", { name: "Testserver: Prüfdatum speichern" })).toBeVisible();
+  // Mit Speichern-Knopf steht kein Hinweis „nur eine Vorschau“.
+  await expect(page.locator(".capture-content")).not.toContainText("Nur eine Vorschau");
   await page.getByRole("button", { name: "Testserver: Prüfdatum speichern" }).click();
+  // Während des Sendens wäre „Nichts wurde gespeichert“ irreführend.
+  await expect(page.getByRole("status")).toContainText("wird gesendet");
+  await expect(page.locator(".capture-content")).not.toContainText("Nur eine Vorschau");
+  releaseWrite();
   await expect(page.getByRole("status")).toContainText("Vor-Ort-Prüfung gespeichert");
+  // Nach dem Speichern darf der Hinweis erst recht nicht neben der Erfolgsmeldung stehen.
+  await expect(page.locator(".capture-content")).not.toContainText("Nur eine Vorschau");
   expect(writeRequests).toHaveLength(1);
   expect(writeRequests[0]).toMatchObject({ confirmed: true, target: "node/123", expected_version: 7, expected_check_date: "2025-10-20" });
   expect(writeRequests[0].operation_id).toMatch(/^[0-9a-f-]{36}$/u);
@@ -573,6 +585,8 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   const createResponseBody = await createResponse.then((response) => response.json() as Promise<Record<string, unknown>>);
   expect(createResponseBody).toEqual({ status: "complete", node_id: "456", version: 1 });
   await expect(page.getByRole("status")).toContainText("Neuer AED wurde eingetragen");
+  // Nach dem Speichern steht „nur eine Vorschau“ nicht neben der Erfolgsmeldung.
+  await expect(page.locator(".capture-content")).not.toContainText("Nur eine Vorschau");
   expect(createRequest).toMatchObject({
     confirmed: true,
     latitude: 52.52,
@@ -1775,4 +1789,36 @@ test.describe("the one-time location request", () => {
     await page.waitForTimeout(500);
     expect(await countGeolocationCalls(page)).toBe(0);
   });
+});
+
+test("a camera photo that became stale while waiting no longer uses the phone location", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
+  let searches = 0;
+  await page.route("**/api/osm/candidates/search", async (route) => { searches += 1; await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }); });
+  // Eine kontrollierbare Uhr: So lässt sich „die App lag zehn Minuten im Hintergrund“ nachstellen.
+  await page.clock.install({ time: new Date("2026-11-11T07:00:00Z") });
+  await page.goto("/");
+  await takeFreshCameraPhotoWithoutGps(page);
+  await expect(page.locator('[data-action="confirm-sighting"]')).toBeVisible();
+
+  // Die Person lässt die App nach der Aufnahme sechs Minuten liegen und bestätigt dann, vielleicht an einem anderen Ort.
+  await page.clock.fastForward("06:00");
+  await page.locator('[data-action="confirm-sighting"]').click();
+  await expect(page.getByRole("heading", { name: "Standort für die Suche wählen" })).toBeVisible();
+  expect(searches).toBe(0);
+});
+
+test("a camera photo that is still fresh at confirmation uses the phone location", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
+  let searches = 0;
+  await page.route("**/api/osm/candidates/search", async (route) => { searches += 1; await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }); });
+  await page.clock.install({ time: new Date("2026-11-11T07:00:00Z") });
+  await page.goto("/");
+  await takeFreshCameraPhotoWithoutGps(page);
+  await page.clock.fastForward("04:00");
+  await page.locator('[data-action="confirm-sighting"]').click();
+  await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
+  expect(searches).toBe(1);
 });

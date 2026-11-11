@@ -7,7 +7,7 @@ import { readPhotoCapture, readPhotoLocation } from "./vision/photoLocation";
 import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservation, VisionClientError } from "./vision/analyzePhoto";
 import { isAedRecognized } from "./contracts/visionObservation";
 import { startUpdateWatcher } from "./pwa/updateCheck";
-import { askForLocationOnce, readLocationPermission, watchLocationPermission, type LocationPermission } from "./location/phoneLocationPermission";
+import { askForLocationOnce, phoneLocationFitsPhoto, readLocationPermission, watchLocationPermission, type LocationPermission } from "./location/phoneLocationPermission";
 import { assessCandidateSearch } from "./domain/assessCandidateSearch";
 import { createPositionPicker, zoomToFitMarkers, type Coordinate, type MapMarker } from "./map/positionPicker";
 import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
@@ -57,9 +57,10 @@ let updateAvailable = false;
 // Standort-Erlaubnis des Handys (nur lesen, nie anfragen). Nur bei „granted“ nutzt die App den Handy-Standort
 // ohne Zwischenfrage, und das nur für ein frisch aufgenommenes Kamerafoto ohne Foto-GPS.
 let phoneLocationPermission: LocationPermission = "unknown";
-// Wahr, wenn das aktuelle Foto gerade eben mit der Kamera der App entstand. Nur dann passt der Handy-Standort
-// zum Foto. Bei Galerie-Fotos oder älteren Aufnahmen kann das Handy längst woanders sein.
-let selectedPhotoPhoneLocationFits = false;
+// Herkunft und Aufnahmezeit des aktuellen Fotos. Daraus entscheidet phoneLocationFitsPhoto bei jeder Fortsetzung
+// neu, ob der Handy-Standort noch zum Foto passt: nur bei einem Kamerafoto, das höchstens fünf Minuten alt ist.
+let selectedPhotoFromCamera = false;
+let selectedPhotoCapturedAtMs: number | undefined;
 // Die einmalige Standortanfrage wird pro Seitenaufruf höchstens einmal versucht (und pro Gerät nur einmal gestellt).
 let locationAskAttempted = false;
 let oauthReturnFailed = new URLSearchParams(window.location.search).get("login") === "error";
@@ -419,7 +420,9 @@ function statusContent(): string {
           : "";
       // Der Hinweis „nur eine Vorschau“ steht nur, wenn es nichts zu speichern gibt. Mit Speichern-Knopf sagt dessen
       // Beschriftung („Testserver: AED eintragen“) schon, wohin die Änderung geht.
-      const noWriteNotice = writeAction ? "" : `<p class="simulation-note">${tv("previewNoWrite")}</p>`;
+      // Der Hinweis „nur eine Vorschau“ gilt nur, wenn gar nichts gespeichert werden kann und kein Vorgang läuft. Nach einem
+      // Speichern (oder währenddessen) wäre er falsch; dann sagt die Statusmeldung, was passiert ist.
+      const noWriteNotice = !canCreate && !state.writeStatus ? `<p class="simulation-note">${tv("previewNoWrite")}</p>` : "";
       // „Zurück“ bleibt hier immer: Es führt zur Positionsbestätigung bzw. zur Suche, nicht nur zu Treffern.
       const navigation = state.writeStatus === "sending" || state.writeStatus === "uncertain" ? "" : `<button class="button button-quiet" data-action="back-to-search">${tv("previewBack")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
       return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("newPreviewTitle")}</h2>${content}${noWriteNotice}${writeStatus}</div></div>${writeAction}${navigation}`;
@@ -440,7 +443,8 @@ function statusContent(): string {
         : state.writeStatus === "uncertain" && state.operationId
           ? `<button class="button button-secondary" data-action="retry-development-write">${copy.retry}</button>`
           : "";
-      const noWriteNotice = writeAction ? "" : `<p class="simulation-note">${tv("previewNoWrite")}</p>`;
+      // Nur wenn nichts gespeichert werden kann und kein Vorgang läuft; sonst wäre „nur eine Vorschau“ nach einem Speichern falsch.
+      const noWriteNotice = !canWrite && !state.writeStatus ? `<p class="simulation-note">${tv("previewNoWrite")}</p>` : "";
       const recoverableWrite = state.writeStatus === "sending" || state.writeStatus === "uncertain";
       // „Zurück“ gibt es nur, wenn es mehrere Treffer zur Auswahl gab. Bei einem einzigen Treffer hätte es keine Bedeutung.
       // Gezählt wird wie in der Trefferliste: Bei „candidate-review“ die bewerteten Treffer, sonst alle Suchtreffer.
@@ -933,8 +937,10 @@ async function onPhotoSelected(event: Event): Promise<void> {
   // The open disclosure is an explicit user choice; carry that preview mode into this photo.
   demoMode = demoMode || (document.querySelector<HTMLDetailsElement>(".demo-panel")?.open ?? false);
   selectedPhotoLocation = photoLocation;
-  // Gerade eben mit der Kamera der App aufgenommen? Dann darf der Handy-Standort fehlendes Foto-GPS ersetzen.
-  selectedPhotoPhoneLocationFits = input.id === "camera-input" && isFreshCapture(photoCapturedAtMs);
+  // Merken, ob und wann das Foto mit der Kamera der App entstand. Ob der Handy-Standort fehlendes Foto-GPS ersetzen
+  // darf, wird erst bei der Fortsetzung geprüft (die Person kann zwischendurch lange warten oder weggehen).
+  selectedPhotoFromCamera = input.id === "camera-input";
+  selectedPhotoCapturedAtMs = photoCapturedAtMs;
   // Für die optionale Fotoprüfung merken: die Datei und eine neue Anfragekennung pro Foto.
   selectedPhotoFile = file;
   photoCheckRequestId = createVisionRequestId();
@@ -1309,7 +1315,7 @@ function continueAfterSighting(photoUrl: string): void {
     activeSearchLocation = selectedPhotoLocation;
     activeSearchLocationSource = "photo";
     void runNearbySearch(photoUrl, selectedPhotoLocation);
-  } else if (selectedPhotoPhoneLocationFits && phoneLocationPermission === "granted") {
+  } else if (phoneLocationPermission === "granted" && phoneLocationFitsPhoto({ fromCamera: selectedPhotoFromCamera, capturedAtMs: selectedPhotoCapturedAtMs })) {
     // Das iPhone liefert Kamerafotos aus dem Browser oft ohne Ortsangabe. Die Person steht gerade am AED und
     // hat dem Handy den Standort einmal erlaubt: Der Handy-Standort ersetzt das fehlende Foto-GPS, ohne
     // Zwischenfrage. Die Anzeige nennt „Handy-Standort verwendet“. Bei Galerie-Fotos und älteren Aufnahmen
@@ -1352,7 +1358,8 @@ function releasePhoto(): void {
   const photoUrl = getPhotoUrl(state);
   if (photoUrl?.startsWith("blob:")) URL.revokeObjectURL(photoUrl);
   selectedPhotoLocation = undefined;
-  selectedPhotoPhoneLocationFits = false;
+  selectedPhotoFromCamera = false;
+  selectedPhotoCapturedAtMs = undefined;
   selectedPhotoFile = undefined;
   photoCheckRequestId = undefined;
   photoDateRequiresConfirmation = false;
