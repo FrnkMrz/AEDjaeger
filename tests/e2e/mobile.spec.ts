@@ -1822,3 +1822,68 @@ test("a camera photo that is still fresh at confirmation uses the phone location
   await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
   expect(searches).toBe(1);
 });
+
+// Wiederholen nach einem Fehlschlag: Ein von der App selbst eingesetzter Handy-Standort gilt nur, solange das Foto frisch ist.
+// Ein ausdrücklich gewählter Handy-Standort wird dagegen wie bisher neu geholt.
+async function setUpFailingFirstSearch(page: import("@playwright/test").Page, context: import("@playwright/test").BrowserContext) {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
+  const requests = { count: 0 };
+  await page.route("**/api/osm/candidates/search", async (route) => {
+    requests.count += 1;
+    if (requests.count === 1) {
+      await route.fulfill({ status: 503, headers: { "Retry-After": "2" }, json: { error: "coverage_unavailable" } });
+      return;
+    }
+    await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } });
+  });
+  await page.clock.install({ time: new Date("2026-11-11T07:00:00Z") });
+  return requests;
+}
+
+test("retrying an automatic phone-location search after the photo went stale asks for the location again", async ({ page, context }) => {
+  const requests = await setUpFailingFirstSearch(page, context);
+  await page.goto("/");
+  await takeFreshCameraPhotoWithoutGps(page);
+  await page.locator('[data-action="confirm-sighting"]').click();
+  // Die automatische Suche mit dem Handy-Standort scheitert zunächst.
+  await expect(page.locator(".capture-content")).toContainText("Die Umgebungssuche ist vorübergehend nicht erreichbar");
+  expect(requests.count).toBe(1);
+
+  // Die Person lässt die App sechs Minuten liegen, geht woanders hin und versucht es erneut.
+  await page.clock.fastForward("06:00");
+  await page.getByRole("button", { name: "Standort und AEDs erneut suchen" }).click();
+  // Der selbst eingesetzte Standort gilt nicht mehr: ausdrückliche Wahl, und es geht keine Suche mit dem neuen Ort raus.
+  await expect(page.getByRole("heading", { name: "Standort für die Suche wählen" })).toBeVisible();
+  expect(requests.count).toBe(1);
+});
+
+test("retrying an automatic phone-location search while the photo is still fresh searches again", async ({ page, context }) => {
+  const requests = await setUpFailingFirstSearch(page, context);
+  await page.goto("/");
+  await takeFreshCameraPhotoWithoutGps(page);
+  await page.locator('[data-action="confirm-sighting"]').click();
+  await expect(page.locator(".capture-content")).toContainText("Die Umgebungssuche ist vorübergehend nicht erreichbar");
+
+  await page.clock.fastForward("00:05");
+  await page.getByRole("button", { name: "Standort und AEDs erneut suchen" }).click();
+  await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
+  expect(requests.count).toBe(2);
+});
+
+test("retrying an explicitly chosen phone location still reacquires it, however much time has passed", async ({ page, context }) => {
+  const requests = await setUpFailingFirstSearch(page, context);
+  await page.goto("/");
+  // Ein älteres Kamerafoto: Die App setzt den Standort nicht selbst ein, die Person wählt ihn ausdrücklich.
+  await takeFreshCameraPhotoWithoutGps(page, 60 * 60 * 1_000);
+  await page.locator('[data-action="confirm-sighting"]').click();
+  const dateConfirm = page.locator('[data-action="confirm-photo-date"]');
+  if (await dateConfirm.isVisible()) await dateConfirm.click();
+  await page.locator('[data-action="use-phone-location"]').click();
+  await expect(page.locator(".capture-content")).toContainText("Die Umgebungssuche ist vorübergehend nicht erreichbar");
+
+  await page.clock.fastForward("10:00");
+  await page.getByRole("button", { name: "Standort und AEDs erneut suchen" }).click();
+  await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
+  expect(requests.count).toBe(2);
+});

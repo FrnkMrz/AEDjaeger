@@ -71,7 +71,11 @@ let selectedPhotoLocation: SearchLocation | undefined;
 let observedOn = localCalendarDate();
 let photoDateRequiresConfirmation = false;
 let activeSearchLocation: SearchLocation | undefined;
-let activeSearchLocationSource: "photo" | "phone" | "map" | undefined;
+// „phone“: Die Person hat den Handy-Standort ausdrücklich gewählt. „phone-auto“: Die App hat ihn bei einem frischen
+// Kamerafoto ohne GPS selbst eingesetzt. Beide heißen in der Anzeige „Handy-Standort verwendet“. Der Unterschied zählt
+// beim Wiederholen: Einen ausdrücklich gewählten Standort darf die App neu holen, einen selbst eingesetzten nur,
+// solange das Foto noch frisch ist.
+let activeSearchLocationSource: "photo" | "phone" | "phone-auto" | "map" | undefined;
 // Keep a stable ID while this photo is active; the server uses it to avoid double reservations after retries.
 let photoSelectionVersion = 0;
 let photoSelectionPending = false;
@@ -1022,10 +1026,23 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     // A photo's embedded point is fixed, but a phone GPS fix can improve after the user moves.
     // A chosen photo/map point is stable across retries. Phone GPS is deliberately reacquired
     // because the user may have moved since the previous attempt.
-    const retryLocation = activeSearchLocationSource === "photo" || activeSearchLocationSource === "map"
-      ? activeSearchLocation
-      : undefined;
-    void runNearbySearch(state.photoUrl, retryLocation);
+    // Ausnahme: Hat die App den Handy-Standort selbst eingesetzt („phone-auto“), gilt er nur, solange das Foto frisch ist.
+    // Wer die App nach einem Fehlschlag liegen lässt und woanders erneut versucht, bekommt die ausdrückliche Standortwahl.
+    const autoLocationExpired = activeSearchLocationSource === "phone-auto"
+      && !(phoneLocationPermission === "granted" && phoneLocationFitsPhoto({ fromCamera: selectedPhotoFromCamera, capturedAtMs: selectedPhotoCapturedAtMs }));
+    if (autoLocationExpired) {
+      if (searchRetryTimer) window.clearTimeout(searchRetryTimer);
+      searchRetryTimer = undefined;
+      activeSearchLocation = undefined;
+      activeSearchLocationSource = undefined;
+      state = { kind: "location-choice", photoUrl: state.photoUrl };
+      render(true);
+    } else {
+      const retryLocation = activeSearchLocationSource === "photo" || activeSearchLocationSource === "map"
+        ? activeSearchLocation
+        : undefined;
+      void runNearbySearch(state.photoUrl, retryLocation);
+    }
   } else if (action === "preview-candidate" && state.kind === "candidate-result") {
     const candidateId = source?.dataset.candidateId;
     const candidate = state.search.candidates.find((item) => item.id === candidateId);
@@ -1320,8 +1337,9 @@ function continueAfterSighting(photoUrl: string): void {
     // hat dem Handy den Standort einmal erlaubt: Der Handy-Standort ersetzt das fehlende Foto-GPS, ohne
     // Zwischenfrage. Die Anzeige nennt „Handy-Standort verwendet“. Bei Galerie-Fotos und älteren Aufnahmen
     // bleibt die ausdrückliche Wahl (siehe else), weil das Handy dort woanders sein kann.
+    // „phone-auto“ merkt, dass die App den Standort selbst eingesetzt hat: Beim Wiederholen wird die Frische neu geprüft.
     activeSearchLocation = undefined;
-    activeSearchLocationSource = "phone";
+    activeSearchLocationSource = "phone-auto";
     void runNearbySearch(photoUrl);
   } else {
     state = { kind: "location-choice", photoUrl };
