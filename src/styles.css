@@ -111,10 +111,11 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
 .account-create-link:focus-visible { outline: 3px solid #176b4b; outline-offset: 2px; }
 .account-create-help, .login-credentials-note { max-width: 410px; margin: 9px auto 0; color: #68746d; font-size: 12px; line-height: 1.5; }
 .login-credentials-note { margin-top: 15px; }
-/* Verbindungslampe in der Fußzeile: weißer Stern auf grünem (verbunden) oder rotem (nicht verbunden) Grund. */
-.footer-lamp { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; color: #fff; font-size: 14px; line-height: 1; }
-.footer-lamp-on { background: #1f9d55; }
-.footer-lamp-off { background: #d64545; }
+/* Verbindungslampe neben dem Namen: grün = mit OpenStreetMap verbunden, rot = nicht verbunden. Der helle Ring hebt sie vom Hintergrund ab. */
+.brand-group { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.connection-lamp { flex: none; width: 14px; height: 14px; border-radius: 50%; }
+.connection-lamp-on { background: #1f9d55; box-shadow: 0 0 0 4px rgba(31, 157, 85, 0.2); }
+.connection-lamp-off { background: #d64545; box-shadow: 0 0 0 4px rgba(214, 69, 69, 0.2); }
 .demo-badge { margin-left: 3px; border: 1px solid #dce4dc; border-radius: 5px; padding: 2px 5px; color: #626d66; font-size: 9px; font-weight: 700; letter-spacing: .06em; }
 .info-dialog { width: min(540px, calc(100% - 28px)); max-width: none; max-height: min(86dvh, 780px); overflow: hidden; border: 1px solid #e0e8df; border-radius: 24px; padding: 0; color: var(--ink); background: #fff; box-shadow: 0 24px 80px #14251b35; }
 .info-dialog::backdrop { background: #13231bcc; backdrop-filter: blur(3px); }
