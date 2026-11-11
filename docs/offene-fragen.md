@@ -4,7 +4,7 @@ Stand: **10.11.2026**. Der aktuelle nächste Schritt ist ein echter, lesender Ha
 
 ## Aufgeräumte Oberfläche (11.11.2026)
 
-Rückmeldung aus dem Handytest: zu viel Text auf der Bestätigungsseite, Verweise nach OpenStreetMap unerwünscht, „Zurück zu den Treffern“ ohne Bedeutung, der Block „Mit OSM-Testserver verbunden“ dauerhaft überflüssig. Umgesetzt: kurze Bestätigungsseite, keine Verweise nach außen, „Zurück“ nur bei mehreren Treffern, grüne bzw. rote Verbindungslampe in der Fußzeile, „Abmelden“ im Info-Dialog. **Offen:** Ob „Abmelden“ im Info-Dialog der richtige Ort ist, und ob auch auf der Seite „Neuen AED eintragen“ weniger Text stehen soll. Die Texte aller sechs Sprachen sind nicht muttersprachlich geprüft.
+Rückmeldung aus dem Handytest: zu viel Text auf der Bestätigungsseite, Verweise nach OpenStreetMap unerwünscht, „Zurück zu den Treffern“ ohne Bedeutung, der Block „Mit OSM-Testserver verbunden“ dauerhaft überflüssig. Umgesetzt: kurze Bestätigungsseite, keine Verweise nach außen, „Zurück“ nur bei mehreren Treffern, grüne bzw. rote Verbindungslampe in der Kopfzeile neben dem Namen, „Abmelden“ im Info-Dialog. **Offen:** Ob „Abmelden“ im Info-Dialog der richtige Ort ist, und ob auch auf der Seite „Neuen AED eintragen“ weniger Text stehen soll. Die Texte aller sechs Sprachen sind nicht muttersprachlich geprüft.
 
 ## GPS aus dem Foto fehlt auf dem iPhone (11.11.2026)
 

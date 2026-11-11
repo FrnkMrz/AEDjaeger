@@ -1574,8 +1574,8 @@ test("the error code is translated and hidden when the check works", async ({ pa
 
 test("a green lamp shows the connection, and it is red when signed out", async ({ page }) => {
   await page.goto("/");
-  const lamp = page.locator(".footer-lamp");
-  await expect(lamp).toHaveClass(/footer-lamp-on/);
+  const lamp = page.locator(".connection-lamp");
+  await expect(lamp).toHaveClass(/connection-lamp-on/);
   // Farbe allein genügt nicht: Die Lampe trägt den Status auch als Text für Screenreader.
   await expect(lamp).toHaveAttribute("aria-label", "Mit OpenStreetMap verbunden");
   expect(await lamp.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(31, 157, 85)");
@@ -1584,9 +1584,9 @@ test("a green lamp shows the connection, and it is red when signed out", async (
 
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   await page.reload();
-  await expect(page.locator(".footer-lamp")).toHaveClass(/footer-lamp-off/);
-  await expect(page.locator(".footer-lamp")).toHaveAttribute("aria-label", "Nicht verbunden");
-  expect(await page.locator(".footer-lamp").evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(214, 69, 69)");
+  await expect(page.locator(".connection-lamp")).toHaveClass(/connection-lamp-off/);
+  await expect(page.locator(".connection-lamp")).toHaveAttribute("aria-label", "Nicht verbunden");
+  expect(await page.locator(".connection-lamp").evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(214, 69, 69)");
 });
 
 test("the lamp label and the logout section exist in all six languages", async ({ page }) => {
@@ -1594,7 +1594,7 @@ test("the lamp label and the logout section exist in all six languages", async (
   await page.goto("/");
   for (const code of languageCodes) {
     await page.locator("#language").selectOption(code);
-    const label = await page.locator(".footer-lamp").getAttribute("aria-label");
+    const label = await page.locator(".connection-lamp").getAttribute("aria-label");
     expect(label, `Lampe in ${code}`).toBeTruthy();
     await page.locator("#open-info").click();
     const dialog = page.getByRole("dialog");
@@ -1766,10 +1766,10 @@ test.describe("the one-time location request", () => {
 
   test("asks exactly once after sign-in and never again after a restart", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator(".footer-lamp-on")).toBeVisible();
+    await expect(page.locator(".connection-lamp-on")).toBeVisible();
     await expect.poll(() => countGeolocationCalls(page)).toBe(1);
     await page.reload();
-    await expect(page.locator(".footer-lamp-on")).toBeVisible();
+    await expect(page.locator(".connection-lamp-on")).toBeVisible();
     await page.waitForTimeout(500);
     expect(await countGeolocationCalls(page)).toBe(1);
   });
@@ -1777,7 +1777,7 @@ test.describe("the one-time location request", () => {
   test("does not ask while signed out", async ({ page }) => {
     await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
     await page.goto("/");
-    await expect(page.locator(".footer-lamp-off")).toBeVisible();
+    await expect(page.locator(".connection-lamp-off")).toBeVisible();
     await page.waitForTimeout(500);
     expect(await countGeolocationCalls(page)).toBe(0);
   });
@@ -1785,7 +1785,7 @@ test.describe("the one-time location request", () => {
   test("does not ask when the location was already allowed", async ({ page, context }) => {
     await context.grantPermissions(["geolocation"]);
     await page.goto("/");
-    await expect(page.locator(".footer-lamp-on")).toBeVisible();
+    await expect(page.locator(".connection-lamp-on")).toBeVisible();
     await page.waitForTimeout(500);
     expect(await countGeolocationCalls(page)).toBe(0);
   });
@@ -1886,4 +1886,48 @@ test("retrying an explicitly chosen phone location still reacquires it, however 
   await page.getByRole("button", { name: "Standort und AEDs erneut suchen" }).click();
   await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
   expect(requests.count).toBe(2);
+});
+
+test("the connection lamp sits in the header next to the name, on every screen", async ({ page }) => {
+  await page.goto("/");
+  const lamp = page.locator("header .connection-lamp");
+  await expect(lamp).toBeVisible();
+  // Ganz oben und neben dem Namen, nicht in der Fußzeile.
+  const box = await lamp.boundingBox();
+  expect(box!.y).toBeLessThan(80);
+  await expect(page.locator("footer .connection-lamp")).toHaveCount(0);
+  const brandBox = await page.locator(".brand").boundingBox();
+  expect(box!.x).toBeGreaterThan(brandBox!.x + brandBox!.width - 1);
+
+  // Auch auf einer längeren Seite bleibt sie an derselben Stelle der Kopfzeile.
+  await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
+  await expect(page.locator('[data-action="confirm-sighting"]')).toBeVisible();
+  await expect(lamp).toBeVisible();
+  expect((await lamp.boundingBox())!.y).toBeLessThan(80);
+});
+
+test("the header with the lamp fits a narrow phone screen in all six languages", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto("/");
+  for (const code of languageCodes) {
+    await page.locator("#language").selectOption(code);
+    const box = await page.locator("header .connection-lamp").boundingBox();
+    expect(box!.x + box!.width, `Lampe in ${code} im Bild`).toBeLessThanOrEqual(320);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `Überlauf in ${code}`).toBeLessThanOrEqual(320);
+    // Die Lampe überlappt weder den Namen noch die Info-Schaltfläche.
+    const infoBox = await page.locator("#open-info").boundingBox();
+    // Mindestens 12 px Luft: Die Schrift eines echten Geräts kann breiter sein als die der Testumgebung.
+    expect(box!.x + box!.width + 12, `Abstand Lampe zu Info in ${code}`).toBeLessThanOrEqual(infoBox!.x);
+  }
+});
+
+test("the header keeps clear of the iPhone status bar and Dynamic Island", async ({ page }) => {
+  await page.goto("/");
+  // Chromium kennt keine echte Notch. Die Seite liest den Abstand aus --safe-top (im Betrieb env(safe-area-inset-top)).
+  // Der Test setzt dort die Höhe von Uhr und Dynamic Island und prüft, dass die Kopfzeile darunter beginnt.
+  await page.evaluate(() => document.documentElement.style.setProperty("--safe-top", "59px"));
+  for (const selector of [".brand", "header .connection-lamp", "#open-info"]) {
+    const box = await page.locator(selector).boundingBox();
+    expect(box!.y, `${selector} unter der Statusleiste`).toBeGreaterThanOrEqual(59);
+  }
 });

@@ -225,14 +225,16 @@ function accountPanel(): string {
   return `<section class="account-panel">${signInLinks()}<p>${t("accountIdentityOnly")}</p></section>`;
 }
 /**
- * Die Lampe in der Fußzeile zeigt, ob die App mit OpenStreetMap verbunden ist: grün = verbunden,
+ * Die Lampe neben dem Namen in der Kopfzeile zeigt, ob die App mit OpenStreetMap verbunden ist: grün = verbunden,
  * rot = nicht verbunden. Sie ersetzt den früheren Textblock „Mit OSM-Testserver verbunden“.
+ * Sie steht oben, weil dort jeder Bildschirm anfängt; in der Fußzeile lag sie bei längeren Seiten außerhalb des Bildschirms
+ * und war zu klein, um aufzufallen.
  * Für Screenreader trägt sie den Status als Text, denn Farbe allein reicht nicht.
  */
 function connectionLamp(): string {
   const connected = accountState === "signed-in";
   const label = connected ? (developmentSession ? t("accountDevSignedIn") : t("accountSignedIn")) : tv("connectionOff");
-  return `<span class="footer-lamp ${connected ? "footer-lamp-on" : "footer-lamp-off"}" role="img" aria-label="${escapeHtml(label)}"><span aria-hidden="true">✱</span></span>`;
+  return `<span class="connection-lamp ${connected ? "connection-lamp-on" : "connection-lamp-off"}" role="img" aria-label="${escapeHtml(label)}"></span>`;
 }
 
 function escapeHtml(value: string): string {
@@ -516,7 +518,7 @@ function render(restoreFlowFocus = false): void {
   document.title = `${t("appName")} · ${t("tagline")}`;
   app!.innerHTML = `
     <div class="page-shell">
-      <header class="topbar"><a class="brand" href="/" aria-label="${t("appName")}" ${hasUnresolvedSave(state) ? 'aria-disabled="true"' : ""}><span class="brand-mark">${icon("check")}</span><span>${t("appName")}</span></a><div class="topbar-actions"><button class="info-link" id="open-info" type="button"><span class="info-mark" aria-hidden="true">i</span><span>${t("aboutButton")}</span></button><label class="language-picker"><span class="sr-only">${t("language")}</span><select id="language" aria-label="${t("language")}">${supportedLanguages.map((code) => `<option value="${code}" ${language === code ? "selected" : ""}>${languageNames[code]}</option>`).join("")}</select><span class="language-globe" aria-hidden="true">◎</span></label></div></header>
+      <header class="topbar"><div class="brand-group"><a class="brand" href="/" aria-label="${t("appName")}" ${hasUnresolvedSave(state) ? 'aria-disabled="true"' : ""}><span class="brand-mark">${icon("check")}</span><span>${t("appName")}</span></a>${connectionLamp()}</div><div class="topbar-actions"><button class="info-link" id="open-info" type="button"><span class="info-mark" aria-hidden="true">i</span><span>${t("aboutButton")}</span></button><label class="language-picker"><span class="sr-only">${t("language")}</span><select id="language" aria-label="${t("language")}">${supportedLanguages.map((code) => `<option value="${code}" ${language === code ? "selected" : ""}>${languageNames[code]}</option>`).join("")}</select><span class="language-globe" aria-hidden="true">◎</span></label></div></header>
       ${authenticated ? `<main>
         <section class="hero ${isReady ? "" : "hero-compact"}"><div class="hero-kicker"><span></span>${t("eyebrow")}</div><h1>${isReady ? t("title") : state.kind === "analyzing" || state.kind === "photo-checking" || state.kind === "candidate-searching" || state.kind === "sending" ? t("checking") : t("tagline")}</h1>${isReady ? `<p>${t("intro")}</p>` : ""}</section>
         <section class="capture-card" aria-live="polite" aria-atomic="false">
@@ -525,7 +527,7 @@ function render(restoreFlowFocus = false): void {
           ${isReady ? `<details class="demo-panel"><summary>${t("demo")}</summary><h2>${t("testStepsTitle")}</h2><p>${t("testSteps")}</p><label for="scenario">${t("scenario")}</label><select id="scenario">${(Object.keys(scenarioKeys) as DemoScenario[]).map((key) => `<option value="${key}" ${scenario === key ? "selected" : ""}>${t(scenarioKeys[key])}</option>`).join("")}</select><label class="diagnostics-opt-in" for="diagnostics-enabled"><input id="diagnostics-enabled" type="checkbox" ${diagnosticsEnabled ? "checked" : ""}><span><strong>${t("testDiagnostics")}</strong><small>${t("testDiagnosticsPrivacy")}</small></span></label></details>` : ""}
         </section>
       </main>${accountPanel()}` : `<main class="login-main">${loginEntry()}</main>`}
-      <footer>${connectionLamp()}<span>${t("sourceNote")}</span><span class="demo-badge">DEMO</span></footer>
+      <footer><span>${t("sourceNote")}</span><span class="demo-badge">DEMO</span></footer>
       <dialog class="info-dialog" id="info-dialog" aria-labelledby="info-title" aria-describedby="info-intro">
         <div class="info-dialog-content">
           <div class="info-dialog-header"><div><p class="eyebrow">${t("appName")}</p><h2 id="info-title">${t("aboutTitle")}</h2></div><form method="dialog"><button class="dialog-close" aria-label="${t("closeInfo")}">×</button></form></div>

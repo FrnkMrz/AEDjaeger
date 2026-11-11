@@ -17,7 +17,10 @@
 body { margin: 0; min-width: 320px; min-height: 100vh; }
 button, select { font: inherit; }
 button, input, select, summary { -webkit-tap-highlight-color: transparent; }
-.page-shell { width: min(100% - 40px, 520px); min-height: 100svh; margin: 0 auto; display: flex; flex-direction: column; }
+/* iPhone: Mit viewport-fit=cover reicht die Seite bis unter Uhr und Dynamic Island. Ohne diesen Abstand
+   liegt die Kopfzeile (Name, Verbindungslampe, Info) darunter und ist unsichtbar. */
+:root { --safe-top: env(safe-area-inset-top, 0px); }
+.page-shell { padding-top: var(--safe-top); width: min(100% - 40px, 520px); min-height: 100svh; margin: 0 auto; display: flex; flex-direction: column; }
 .topbar { height: 76px; display: flex; align-items: center; justify-content: space-between; }
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
 .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; font: 800 19px "Noto Sans", system-ui, sans-serif; letter-spacing: -.055em; }
@@ -111,10 +114,11 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
 .account-create-link:focus-visible { outline: 3px solid #176b4b; outline-offset: 2px; }
 .account-create-help, .login-credentials-note { max-width: 410px; margin: 9px auto 0; color: #68746d; font-size: 12px; line-height: 1.5; }
 .login-credentials-note { margin-top: 15px; }
-/* Verbindungslampe in der Fußzeile: weißer Stern auf grünem (verbunden) oder rotem (nicht verbunden) Grund. */
-.footer-lamp { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; color: #fff; font-size: 14px; line-height: 1; }
-.footer-lamp-on { background: #1f9d55; }
-.footer-lamp-off { background: #d64545; }
+/* Verbindungslampe neben dem Namen: grün = mit OpenStreetMap verbunden, rot = nicht verbunden. Der helle Ring hebt sie vom Hintergrund ab. */
+.brand-group { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.connection-lamp { flex: none; width: 14px; height: 14px; border-radius: 50%; }
+.connection-lamp-on { background: #1f9d55; box-shadow: 0 0 0 4px rgba(31, 157, 85, 0.2); }
+.connection-lamp-off { background: #d64545; box-shadow: 0 0 0 4px rgba(214, 69, 69, 0.2); }
 .demo-badge { margin-left: 3px; border: 1px solid #dce4dc; border-radius: 5px; padding: 2px 5px; color: #626d66; font-size: 9px; font-weight: 700; letter-spacing: .06em; }
 .info-dialog { width: min(540px, calc(100% - 28px)); max-width: none; max-height: min(86dvh, 780px); overflow: hidden; border: 1px solid #e0e8df; border-radius: 24px; padding: 0; color: var(--ink); background: #fff; box-shadow: 0 24px 80px #14251b35; }
 .info-dialog::backdrop { background: #13231bcc; backdrop-filter: blur(3px); }
@@ -153,6 +157,17 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
   .demo-panel { margin-right: 18px; margin-left: 18px; }
   .result-message { gap: 11px; }
   .info-dialog-content { padding: 20px 17px; }
+}
+
+/* Sehr schmale Handys (320 px, z. B. iPhone SE): Name, Lampe, Info und Sprachwahl müssen nebeneinander passen,
+   auch wenn die Schrift des Geräts etwas breiter ist als in den Tests. */
+@media (max-width: 360px) {
+  .brand-group { gap: 8px; }
+  .brand { gap: 5px; font-size: 15px; }
+  .brand-mark { width: 24px; height: 24px; border-radius: 8px; }
+  .connection-lamp { width: 12px; height: 12px; }
+  .info-link { padding: 6px 6px; gap: 4px; }
+  .language-picker select { max-width: 84px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -203,7 +218,7 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
 .photo-check-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; overflow-wrap: anywhere; }
 
 /* Hinweis auf eine neue App-Version. Er liegt außerhalb von #app und bleibt beim Scrollen oben sichtbar. */
-.update-banner { position: sticky; top: 0; z-index: 60; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 14px; padding: 10px 16px; background: var(--green-dark); color: #fff; font-size: 14px; line-height: 1.4; text-align: center; }
+.update-banner { position: sticky; top: 0; z-index: 60; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 14px; padding: calc(10px + var(--safe-top)) 16px 10px; background: var(--green-dark); color: #fff; font-size: 14px; line-height: 1.4; text-align: center; }
 .update-banner-button { min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; background: #fff; color: var(--green-dark); font: inherit; font-weight: 700; cursor: pointer; }
 .update-banner-button:disabled { opacity: 0.6; cursor: not-allowed; }
 .update-banner-button:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
