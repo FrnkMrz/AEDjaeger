@@ -1919,3 +1919,14 @@ test("the header with the lamp fits a narrow phone screen in all six languages",
     expect(box!.x + box!.width).toBeLessThanOrEqual(infoBox!.x);
   }
 });
+
+test("the header keeps clear of the iPhone status bar and Dynamic Island", async ({ page }) => {
+  await page.goto("/");
+  // Chromium kennt keine echte Notch. Die Seite liest den Abstand aus --safe-top (im Betrieb env(safe-area-inset-top)).
+  // Der Test setzt dort die Höhe von Uhr und Dynamic Island und prüft, dass die Kopfzeile darunter beginnt.
+  await page.evaluate(() => document.documentElement.style.setProperty("--safe-top", "59px"));
+  for (const selector of [".brand", "header .connection-lamp", "#open-info"]) {
+    const box = await page.locator(selector).boundingBox();
+    expect(box!.y, `${selector} unter der Statusleiste`).toBeGreaterThanOrEqual(59);
+  }
+});

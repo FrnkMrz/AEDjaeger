@@ -17,7 +17,10 @@
 body { margin: 0; min-width: 320px; min-height: 100vh; }
 button, select { font: inherit; }
 button, input, select, summary { -webkit-tap-highlight-color: transparent; }
-.page-shell { width: min(100% - 40px, 520px); min-height: 100svh; margin: 0 auto; display: flex; flex-direction: column; }
+/* iPhone: Mit viewport-fit=cover reicht die Seite bis unter Uhr und Dynamic Island. Ohne diesen Abstand
+   liegt die Kopfzeile (Name, Verbindungslampe, Info) darunter und ist unsichtbar. */
+:root { --safe-top: env(safe-area-inset-top, 0px); }
+.page-shell { padding-top: var(--safe-top); width: min(100% - 40px, 520px); min-height: 100svh; margin: 0 auto; display: flex; flex-direction: column; }
 .topbar { height: 76px; display: flex; align-items: center; justify-content: space-between; }
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
 .brand { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; font: 800 19px "Noto Sans", system-ui, sans-serif; letter-spacing: -.055em; }
@@ -204,7 +207,7 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
 .photo-check-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; overflow-wrap: anywhere; }
 
 /* Hinweis auf eine neue App-Version. Er liegt außerhalb von #app und bleibt beim Scrollen oben sichtbar. */
-.update-banner { position: sticky; top: 0; z-index: 60; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 14px; padding: 10px 16px; background: var(--green-dark); color: #fff; font-size: 14px; line-height: 1.4; text-align: center; }
+.update-banner { position: sticky; top: 0; z-index: 60; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 14px; padding: calc(10px + var(--safe-top)) 16px 10px; background: var(--green-dark); color: #fff; font-size: 14px; line-height: 1.4; text-align: center; }
 .update-banner-button { min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; background: #fff; color: var(--green-dark); font: inherit; font-weight: 700; cursor: pointer; }
 .update-banner-button:disabled { opacity: 0.6; cursor: not-allowed; }
 .update-banner-button:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }

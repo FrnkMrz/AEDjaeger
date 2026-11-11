@@ -21,6 +21,9 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Liest AED-Kandidaten direkt aus der `defibrillators`-Ebene des OpenFireMap-PMTiles-Archivs. Der Worker prüft den Datenstand und liest für den Foto-Standort nur die benötigten Zoom-14-Kacheln über begrenzte HTTP-Range-Anfragen.
 - Verwendet kein Overpass für die Umgebungssuche. Fehlende, veraltete, unvollständige oder ungültige Archivdaten bleiben ein Suchfehler und werden nie als Beleg für einen freien Standort behandelt.
 
+### Fixed
+- Hält die Kopfzeile (Name, Verbindungslampe, Info) auf dem iPhone unterhalb von Uhr und Dynamic Island. Bisher lag sie in der installierten App darunter und war unsichtbar; ein e2e-Test prüft den Abstand. Der Update-Hinweis berücksichtigt den Abstand ebenfalls.
+
 ### Removed
 - Entfernt die externe OpenAI-Bildanalyse samt Anbieter-, Budget- und Browsercode. Der alte Analyse-Endpunkt antwortet aus Kompatibilitätsgründen mit HTTP 410, ohne den Request-Body zu lesen. Überholt am 10.11.2026: Die Fotoprüfung kehrt als optionale Funktion zurück (siehe „Added“), und `/api/vision/analyze` antwortet wieder entsprechend der Betreiber-Konfiguration statt mit HTTP 410.
 
