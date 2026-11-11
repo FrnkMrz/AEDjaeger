@@ -13,7 +13,7 @@ AEDjaeger soll vor Ort mit möglichst wenigen Schritten helfen, einen AED in Ope
 1. Mit OpenStreetMap anmelden. Ohne Anmeldung sind Foto und Arbeitsablauf gesperrt.
 2. AED oder AED-Gehäuse fotografieren oder ein vorhandenes Foto auswählen.
 3. Die Person bestätigt selbst, dass AED oder Gehäuse auf dem Foto sichtbar ist.
-4. Die App verwendet zuerst GPS aus dem Foto. Falls kein Foto-GPS vorhanden ist, darf sie Handy-GPS oder eine Kartenposition nur nach ausdrücklicher Auswahl der Person nutzen.
+4. Die App verwendet zuerst GPS aus dem Foto. Falls kein Foto-GPS vorhanden ist, nutzt sie bei einem gerade mit der Kamera der App aufgenommenen Foto den Handy-Standort (Erlaubnis einmal beim ersten Anmelden). Bei Galerie-Fotos und älteren Aufnahmen darf sie Handy-GPS oder eine Kartenposition nur nach ausdrücklicher Auswahl der Person nutzen.
 5. AEDs in der Nähe abgleichen.
 6. Bei einem eindeutig passenden vorhandenen AED nur dessen Vorhandensein mit `check_date` bestätigen. Bei keinem passenden Treffer nach erfolgreicher, vollständiger Suche eine Neuanlage vorbereiten.
 7. Vor jeder OSM-Änderung die konkrete Änderung zeigen und ausdrücklich bestätigen lassen.

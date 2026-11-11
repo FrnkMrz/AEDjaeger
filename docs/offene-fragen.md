@@ -8,7 +8,7 @@ Rückmeldung aus dem Handytest: zu viel Text auf der Bestätigungsseite, Verweis
 
 ## GPS aus dem Foto fehlt auf dem iPhone (11.11.2026)
 
-Beim Handytest meldete die App „Das Foto hat keine GPS-Daten“, obwohl das Foto in der Fotos-App einen Ort hatte. Geprüft: Der Leser der App findet in der Kopie des Fotos Koordinaten, und die Position bleibt zwischen Fotoauswahl und Suche erhalten (E2E-Test mit aktiver Fotoprüfung). Wahrscheinliche Ursache, aber **nicht belegt**: Safari auf dem iPhone liefert Fotos, die über ein Dateifeld ankommen, häufig ohne Ortsangabe (WebKit-Fehlerberichte 257534 und 263192). Entscheidung des Projektinhabers offen: Soll die App bei „AED fotografieren“ ohne Foto-GPS gleich den Handy-Standort anfragen?
+Beim Handytest meldete die App „Das Foto hat keine GPS-Daten“, obwohl das Foto in der Fotos-App einen Ort hatte. Geprüft: Der Leser der App findet in der Kopie des Fotos Koordinaten, und die Position bleibt zwischen Fotoauswahl und Suche erhalten (E2E-Test mit aktiver Fotoprüfung). Wahrscheinliche Ursache, aber **nicht belegt**: Safari auf dem iPhone liefert Fotos, die über ein Dateifeld ankommen, häufig ohne Ortsangabe (WebKit-Fehlerberichte 257534 und 263192). **Entscheidung des Projektinhabers (11.11.2026):** Die App fragt einmal pro Gerät nach der Standort-Erlaubnis und nutzt den Handy-Standort danach ohne Zwischenfrage. **Umsetzung mit einer Einschränkung**, die der Projektinhaber noch bestätigen soll: Automatisch gilt das nur bei einem Foto, das gerade eben (höchstens 5 Minuten) mit der Kamera der App aufgenommen wurde. Bei Galerie-Fotos und älteren Aufnahmen bleibt die ausdrückliche Wahl, weil das Handy dort woanders sein kann. **Offen:** Ob die einmalige Anfrage mit einem kurzen Hinweistext vor dem Systemdialog erklärt werden soll; heute erscheint nur der Systemdialog des Browsers. Auf dem iPhone ist nicht belegt, wie lange Safari die Erlaubnis speichert (je Besuch oder dauerhaft für die installierte PWA).
 
 ## Update-Hinweis für die PWA (10.11.2026)
 
@@ -120,7 +120,7 @@ Für eine leere Suche im OSM-Dev-Test bestätigt ein begrenzter, authentifiziert
 
 - Fotoaufnahme und Einfachheit stehen im Mittelpunkt: Foto → Sichtbarkeit selbst bestätigen → Umgebung abgleichen → vorhandenen AED prüfen oder neuen vorbereiten → Änderung ausdrücklich bestätigen.
 - Anmeldung mit OpenStreetMap ist Voraussetzung für alle Arbeitsfunktionen.
-- Foto/EXIF bleiben lokal; Foto-GPS hat Vorrang. Handy-GPS oder Kartenposition nur nach bewusster Auswahl.
+- Foto/EXIF bleiben lokal; Foto-GPS hat Vorrang. Der Handy-Standort ersetzt fehlendes Foto-GPS nur bei einem gerade mit der Kamera der App aufgenommenen Foto und erteilter Erlaubnis (einmalige Anfrage). Sonst gilt die bewusste Auswahl von Handy-Standort oder Kartenposition.
 - Fotoprüfung per OpenAI, optional und nur bei Betreiber-Freigabe (Entscheidung vom 10.11.2026, ersetzt „ohne OpenAI“). Ohne Freigabe bleibt das Foto lokal und die Person bestätigt selbst.
 - Deutsch, Englisch, Polnisch, Japanisch, Französisch und Spanisch.
 - Gamification bleibt im Pilot unsichtbar; keine öffentliche Teil- oder Ranglistenfunktion.

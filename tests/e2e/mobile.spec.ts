@@ -713,6 +713,9 @@ test("a denied phone location still allows choosing and searching an explicit ma
     await route.fulfill({ json: { status: "complete", coverage_radius_meters: 100, candidates: [] } });
   });
   await page.goto("/");
+  const locationRequests = () => page.evaluate(() => (window as typeof window & { __locationRequests: number }).__locationRequests);
+  // Die einmalige Standortanfrage nach dem Anmelden ist die einzige Abfrage; sie wird hier abgelehnt.
+  await expect.poll(locationRequests).toBe(1);
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
   const dateConfirm = page.locator('[data-action="confirm-photo-date"]');
@@ -721,7 +724,8 @@ test("a denied phone location still allows choosing and searching an explicit ma
 
   const map = page.locator("#search-location-map");
   await expect(map).toBeVisible();
-  expect(await page.evaluate(() => (window as typeof window & { __locationRequests: number }).__locationRequests)).toBe(0);
+  // Die Kartenwahl fragt den Handy-Standort nicht noch einmal ab.
+  expect(await locationRequests()).toBe(1);
   await expect(page.locator(".capture-content")).toContainText("Verschiebe die Karte zum AED");
   await expect(page.locator("#search-location-coordinates")).toContainText("Noch kein Standort gewählt");
   const search = page.locator('[data-action="confirm-map-location"]');
@@ -1639,4 +1643,136 @@ test("the confirmation page shows the earlier check date only when there is one"
   if (await dateConfirm.isVisible()) await dateConfirm.click();
   await page.locator('[data-action="preview-candidate"]').click();
   await expect(page.locator(".capture-content")).toContainText("Bisher: 2025-01-01");
+});
+
+// ---------------------------------------------------------------------------------------------
+// Handy-Standort statt fehlendem Foto-GPS: einmal beim Start fragen, danach ohne Zwischenfrage,
+// aber nur für ein frisch mit der Kamera der App aufgenommenes Foto.
+// ---------------------------------------------------------------------------------------------
+
+/** Legt eine frische Datei ohne GPS in die Kamera-Eingabe, so wie ein gerade aufgenommenes iPhone-Foto im Browser. */
+async function takeFreshCameraPhotoWithoutGps(page: import("@playwright/test").Page, ageMs = 0): Promise<void> {
+  await page.evaluate((age) => {
+    const file = new File(['<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#176b4b"/></svg>'], "kamera.svg", { type: "image/svg+xml", lastModified: Date.now() - age });
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    const input = document.querySelector<HTMLInputElement>("#camera-input")!;
+    input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }, ageMs);
+}
+
+test("a fresh camera photo without GPS uses the allowed phone location without asking again", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
+  const searches: { latitude: number; longitude: number }[] = [];
+  await page.route("**/api/osm/candidates/search", async (route) => { searches.push(route.request().postDataJSON()); await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }); });
+  await page.goto("/");
+  await takeFreshCameraPhotoWithoutGps(page);
+  await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
+
+  // Keine Standort-Zwischenfrage: Die Suche läuft direkt mit dem Handy-Standort.
+  await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Standort für die Suche wählen" })).toHaveCount(0);
+  expect(searches).toHaveLength(1);
+  expect(searches[0].latitude).toBeCloseTo(52.52, 4);
+  await expect(page.locator(".capture-content")).toContainText("Handy-Standort verwendet");
+});
+
+test("the phone location is not used for a gallery photo, even when it was allowed", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
+  let searches = 0;
+  await page.route("**/api/osm/candidates/search", async (route) => { searches += 1; await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }); });
+  await page.goto("/");
+  // Ein Foto aus der Galerie kann alt sein: Das Handy ist vielleicht längst woanders.
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
+  const dateConfirm = page.locator('[data-action="confirm-photo-date"]');
+  if (await dateConfirm.isVisible()) await dateConfirm.click();
+  await expect(page.getByRole("heading", { name: "Standort für die Suche wählen" })).toBeVisible();
+  expect(searches).toBe(0);
+});
+
+test("an older camera photo without GPS still asks where the AED is", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
+  let searches = 0;
+  await page.route("**/api/osm/candidates/search", async (route) => { searches += 1; await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }); });
+  await page.goto("/");
+  // Eine Stunde alt: Die Person ist inzwischen vielleicht weitergegangen.
+  await takeFreshCameraPhotoWithoutGps(page, 60 * 60 * 1_000);
+  await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
+  const dateConfirm = page.locator('[data-action="confirm-photo-date"]');
+  if (await dateConfirm.isVisible()) await dateConfirm.click();
+  await expect(page.getByRole("heading", { name: "Standort für die Suche wählen" })).toBeVisible();
+  expect(searches).toBe(0);
+});
+
+test("without the location permission a fresh camera photo still shows the explicit choice", async ({ page }) => {
+  let searches = 0;
+  await page.route("**/api/osm/candidates/search", async (route) => { searches += 1; await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }); });
+  await page.goto("/");
+  await takeFreshCameraPhotoWithoutGps(page);
+  await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
+  await expect(page.getByRole("heading", { name: "Standort für die Suche wählen" })).toBeVisible();
+  expect(searches).toBe(0);
+});
+
+test("the GPS of the photo wins over the phone location", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 48.137, longitude: 11.575, accuracy: 10 });
+  const searches: { latitude: number }[] = [];
+  await page.route("**/api/osm/candidates/search", async (route) => { searches.push(route.request().postDataJSON()); await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }); });
+  await page.goto("/");
+  await page.locator("#camera-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
+  await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
+  const dateConfirm = page.locator('[data-action="confirm-photo-date"]');
+  if (await dateConfirm.isVisible()) await dateConfirm.click();
+  await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
+  // Foto-GPS (Berlin), nicht der Handy-Standort (München).
+  expect(searches[0].latitude).toBeCloseTo(52.52, 3);
+  await expect(page.locator(".capture-content")).toContainText("Standort aus dem Foto verwendet");
+});
+
+test.describe("the one-time location request", () => {
+  /** Zählt die Standortabfragen der Seite über Neuladen hinweg (localStorage überlebt das Neuladen). */
+  const countGeolocationCalls = async (page: import("@playwright/test").Page) =>
+    Number(await page.evaluate(() => window.localStorage.getItem("test-geolocation-calls") ?? "0"));
+
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      const original = navigator.geolocation.getCurrentPosition.bind(navigator.geolocation);
+      navigator.geolocation.getCurrentPosition = (...args: Parameters<Geolocation["getCurrentPosition"]>) => {
+        window.localStorage.setItem("test-geolocation-calls", String(Number(window.localStorage.getItem("test-geolocation-calls") ?? "0") + 1));
+        return original(...args);
+      };
+    });
+  });
+
+  test("asks exactly once after sign-in and never again after a restart", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator(".footer-lamp-on")).toBeVisible();
+    await expect.poll(() => countGeolocationCalls(page)).toBe(1);
+    await page.reload();
+    await expect(page.locator(".footer-lamp-on")).toBeVisible();
+    await page.waitForTimeout(500);
+    expect(await countGeolocationCalls(page)).toBe(1);
+  });
+
+  test("does not ask while signed out", async ({ page }) => {
+    await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+    await page.goto("/");
+    await expect(page.locator(".footer-lamp-off")).toBeVisible();
+    await page.waitForTimeout(500);
+    expect(await countGeolocationCalls(page)).toBe(0);
+  });
+
+  test("does not ask when the location was already allowed", async ({ page, context }) => {
+    await context.grantPermissions(["geolocation"]);
+    await page.goto("/");
+    await expect(page.locator(".footer-lamp-on")).toBeVisible();
+    await page.waitForTimeout(500);
+    expect(await countGeolocationCalls(page)).toBe(0);
+  });
 });

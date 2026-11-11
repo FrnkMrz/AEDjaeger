@@ -28,6 +28,9 @@ Getestet werden Android Chrome, iPhone Safari und die installierte PWA. Die Test
 | A10 | Offline-Start der installierten PWA (Flugmodus) | Die Oberfläche startet aus dem Cache; die Suche zeigt einen Fehler statt eines leeren Ergebnisses | `[ ]` |
 | A11 | Installation der PWA auf dem Startbildschirm | Symbol und Name „AEDjaeger“ stimmen; Start im Vollbild oder im App-Modus | `[ ]` |
 | A12 | Layout bei schmaler Breite (Hoch- und Querformat) | Kein horizontales Scrollen; Schaltflächen sind bedienbar | `[ ]` |
+| A16 | Nach dem ersten Anmelden auf dem Handy | Einmal erscheint der Standort-Dialog des Browsers. Nach dem Start der App erscheint er nie wieder | `[ ]` |
+| A17 | iPhone: „AED fotografieren“ (Kamera der App) bei erteilter Standort-Erlaubnis | Keine Frage nach dem Standort. Die Suche läuft mit „Handy-Standort verwendet“. Hat das Foto GPS, steht „Standort aus dem Foto verwendet“ | `[ ]` |
+| A18 | „Foto auswählen“ (Galerie) ohne GPS, bei erteilter Erlaubnis | Die Standortwahl erscheint wie bisher; der Handy-Standort wird nicht stillschweigend genommen | `[ ]` |
 | A14 | Installierte PWA offen lassen, in der Zwischenzeit eine neue Version veröffentlichen (Merge auf `main`), dann zur App zurückkehren | Nach höchstens 30 Minuten oder sofort beim Zurückkehren erscheint oben „Neue Version verfügbar“. Die App lädt nicht von selbst neu | `[ ]` |
 | A15 | Banner mit aktivem Foto antippen („Neu laden“) | Hinweis „Das aktuelle Foto geht dabei verloren.“ steht vorher da; nach dem Tippen läuft die neue Version, das Banner ist weg | `[ ]` |
 

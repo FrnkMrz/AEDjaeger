@@ -7,6 +7,7 @@ import { readPhotoCapture, readPhotoLocation } from "./vision/photoLocation";
 import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservation, VisionClientError } from "./vision/analyzePhoto";
 import { isAedRecognized } from "./contracts/visionObservation";
 import { startUpdateWatcher } from "./pwa/updateCheck";
+import { askForLocationOnce, readLocationPermission, watchLocationPermission, type LocationPermission } from "./location/phoneLocationPermission";
 import { assessCandidateSearch } from "./domain/assessCandidateSearch";
 import { createPositionPicker, zoomToFitMarkers, type Coordinate, type MapMarker } from "./map/positionPicker";
 import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
@@ -53,6 +54,14 @@ let selectedPhotoFile: File | undefined;
 let photoCheckRequestId: string | undefined;
 // Update-Hinweis: wird true, sobald der Wächter eine neuere veröffentlichte Version erkennt.
 let updateAvailable = false;
+// Standort-Erlaubnis des Handys (nur lesen, nie anfragen). Nur bei „granted“ nutzt die App den Handy-Standort
+// ohne Zwischenfrage, und das nur für ein frisch aufgenommenes Kamerafoto ohne Foto-GPS.
+let phoneLocationPermission: LocationPermission = "unknown";
+// Wahr, wenn das aktuelle Foto gerade eben mit der Kamera der App entstand. Nur dann passt der Handy-Standort
+// zum Foto. Bei Galerie-Fotos oder älteren Aufnahmen kann das Handy längst woanders sein.
+let selectedPhotoPhoneLocationFits = false;
+// Die einmalige Standortanfrage wird pro Seitenaufruf höchstens einmal versucht (und pro Gerät nur einmal gestellt).
+let locationAskAttempted = false;
 let oauthReturnFailed = new URLSearchParams(window.location.search).get("login") === "error";
 let analysisTimer: number | undefined;
 let saveTimer: number | undefined;
@@ -732,6 +741,7 @@ async function refreshAccountState(focusSelector?: string): Promise<void> {
     developmentSession = status.developmentSession;
     developmentWriteAvailable = status.developmentWriteAvailable;
     photoCheckAvailable = status.photoCheckAvailable;
+    if (status.authenticated) void askForLocationOnceAfterSignIn();
     accountState = status.authenticated ? "signed-in" : !productionLoginAvailable && !developmentLoginAvailable ? "not-configured" : failedOAuthReturn ? "login-error" : "signed-out";
     if (state.kind === "photo" && accountState === "not-configured") recordDiagnostic("live_flow_blocked");
   } catch {
@@ -923,6 +933,8 @@ async function onPhotoSelected(event: Event): Promise<void> {
   // The open disclosure is an explicit user choice; carry that preview mode into this photo.
   demoMode = demoMode || (document.querySelector<HTMLDetailsElement>(".demo-panel")?.open ?? false);
   selectedPhotoLocation = photoLocation;
+  // Gerade eben mit der Kamera der App aufgenommen? Dann darf der Handy-Standort fehlendes Foto-GPS ersetzen.
+  selectedPhotoPhoneLocationFits = input.id === "camera-input" && isFreshCapture(photoCapturedAtMs);
   // Für die optionale Fotoprüfung merken: die Datei und eine neue Anfragekennung pro Foto.
   selectedPhotoFile = file;
   photoCheckRequestId = createVisionRequestId();
@@ -1297,10 +1309,42 @@ function continueAfterSighting(photoUrl: string): void {
     activeSearchLocation = selectedPhotoLocation;
     activeSearchLocationSource = "photo";
     void runNearbySearch(photoUrl, selectedPhotoLocation);
+  } else if (selectedPhotoPhoneLocationFits && phoneLocationPermission === "granted") {
+    // Das iPhone liefert Kamerafotos aus dem Browser oft ohne Ortsangabe. Die Person steht gerade am AED und
+    // hat dem Handy den Standort einmal erlaubt: Der Handy-Standort ersetzt das fehlende Foto-GPS, ohne
+    // Zwischenfrage. Die Anzeige nennt „Handy-Standort verwendet“. Bei Galerie-Fotos und älteren Aufnahmen
+    // bleibt die ausdrückliche Wahl (siehe else), weil das Handy dort woanders sein kann.
+    activeSearchLocation = undefined;
+    activeSearchLocationSource = "phone";
+    void runNearbySearch(photoUrl);
   } else {
     state = { kind: "location-choice", photoUrl };
     render(true);
   }
+}
+
+/**
+ * Fragt nach dem Anmelden einmal nach dem Standort, falls das Handy noch nicht entschieden hat.
+ * Das ist der „einmal beim Start“-Moment: Danach fragt die App nie wieder, und die Erlaubnis gilt für
+ * frisch aufgenommene Fotos ohne GPS. Der Browser zeigt dabei seinen eigenen Systemdialog.
+ */
+async function askForLocationOnceAfterSignIn(): Promise<void> {
+  if (locationAskAttempted) return;
+  locationAskAttempted = true;
+  phoneLocationPermission = await readLocationPermission();
+  let storage: Storage;
+  try {
+    storage = window.localStorage;
+  } catch {
+    // Ohne Browser-Speicher lässt sich „einmal“ nicht merken; dann wird nicht gefragt.
+    return;
+  }
+  askForLocationOnce({
+    permission: phoneLocationPermission,
+    storage,
+    geolocation: navigator.geolocation,
+    onGranted: () => { phoneLocationPermission = "granted"; },
+  });
 }
 
 function releasePhoto(): void {
@@ -1308,6 +1352,7 @@ function releasePhoto(): void {
   const photoUrl = getPhotoUrl(state);
   if (photoUrl?.startsWith("blob:")) URL.revokeObjectURL(photoUrl);
   selectedPhotoLocation = undefined;
+  selectedPhotoPhoneLocationFits = false;
   selectedPhotoFile = undefined;
   photoCheckRequestId = undefined;
   photoDateRequiresConfirmation = false;
@@ -1319,6 +1364,8 @@ function releasePhoto(): void {
 
 render();
 void refreshAccountState();
+// Hält die Erlaubnis aktuell, auch wenn die Person sie später in den Systemeinstellungen ändert.
+void watchLocationPermission((permission) => { phoneLocationPermission = permission; });
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", () => {
     // Every build gets a new worker URL, including deployments that only change the HTML, manifest or icon.
