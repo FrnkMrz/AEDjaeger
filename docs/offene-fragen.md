@@ -10,7 +10,7 @@ Die App zeigt „Neue Version verfügbar – Neu laden“, sobald `/version.json
 
 **Anlass:** Im Handytest ließ sich ein Screenshot mit Karnevalsbildern nach „AED oder Gehäuse gesehen – weiter“ in den Ablauf bringen. Die reine Selbstbestätigung hielt falsche Fotos nicht auf.
 
-**Entscheidung des Projektinhabers:** Die Fotoprüfung per OpenAI wird wieder eingebaut (die Anbindung war am 9.11.2026 mit PR #47 entfernt worden). Festgelegt: Bei „kein AED“ oder „nicht eindeutig“ ist der Weg gesperrt („Anderes Foto“). Bei Ausfall, Limit oder Fehler gilt der Rückfall auf die Selbstbestätigung. Vor dem Upload entfernt der Browser EXIF und GPS und verkleinert das Bild; ein Hinweis nennt OpenAI vor dem Tippen. `AGENTS.md` und die Docs sind angepasst.
+**Entscheidung des Projektinhabers:** Die Fotoprüfung per OpenAI wird wieder eingebaut (die Anbindung war am 9.11.2026 mit PR #47 entfernt worden). Festgelegt: Bei „kein AED“ oder „nicht eindeutig“ ist „Anderes Foto“ der Standardweg. Nach dem ersten Handytest kam eine Ausnahme dazu, weil die Prüfung auch irren kann: Mit **zwei ausdrücklichen Bestätigungen** („Trotzdem: Hier ist ein AED“, dann „Ja, AED oder Gehäuse ist zu sehen – weiter“) geht es trotzdem weiter. Danach gilt der normale Ablauf einschließlich der zwei Bestätigungen für Neuanlagen. Bei Ausfall, Limit oder Fehler gilt der Rückfall auf die Selbstbestätigung. Vor dem Upload entfernt der Browser EXIF und GPS und verkleinert das Bild; ein Hinweis nennt OpenAI vor dem Tippen. `AGENTS.md` und die Docs sind angepasst.
 
 **Umgesetzt:** Der alte Server-Teil (Route, OpenAI-Client, Budget in D1) kam aus der Historie zurück (Commit `314abdc`), der Sitzungsstatus meldet `photoCheckAvailable`, und der Browser bietet die Prüfung nur dann an. E2E-Tests mocken den Server; kein Test ruft OpenAI auf.
 
@@ -43,7 +43,8 @@ Scheitert die Prüfung, zeigt die App unter „Die Prüfung ist gerade nicht mö
 | `analysis_failed (HTTP 502, OpenAI 404, model_not_found)` | Modellname gibt es nicht (mehr) | Modell in `src/contracts/visionObservation.ts` prüfen |
 | `analysis_failed (HTTP 502, OpenAI 429, insufficient_quota)` | OpenAI-Guthaben oder Limit erschöpft | Abrechnung und Ausgabenlimit bei OpenAI prüfen |
 | `analysis_failed (HTTP 502, timeout)` | OpenAI antwortete nicht innerhalb von 25 Sekunden | Später erneut versuchen |
-| `analysis_failed (HTTP 502, incomplete_…)`, `no_output`, `invalid_json`, `schema_mismatch` | OpenAI antwortete, aber mit unbrauchbarem Inhalt | Meldung an den Entwickler mit dem genauen Code |
+| `analysis_failed (HTTP 502, incomplete_…)`, `no_output`, `invalid_json` | OpenAI antwortete, aber mit unbrauchbarem Inhalt | Meldung an den Entwickler mit dem genauen Code |
+| `analysis_failed (HTTP 502, schema_unexpected_keys / schema_invalid_scene / schema_invalid_count / schema_invalid_…)` | OpenAI hielt die vorgegebene Form nicht ein; der Code nennt das Feld. Zeilenumbrüche, zu lange Texte und widersprüchliche Zählungen werden seit dem 10.11.2026 selbst bereinigt und lösen das nicht mehr aus | Meldung an den Entwickler mit dem genauen Code |
 | `invalid_response (HTTP 500)` oder `(HTTP 503)` | Keine JSON-Antwort: der Worker ist abgestürzt oder hat ein Limit überschritten, zum Beispiel die CPU-Zeit im Workers-Free-Tarif | Worker-Logs prüfen; ist es die CPU-Zeit, den Server-Weg des Fotos schlanker machen oder den Tarif neu bewerten (Entscheidung des Projektinhabers) |
 | `invalid_response (model_mismatch:…)` | Server und App kennen verschiedene Modellnamen | Beide Seiten nutzen `VISION_MODEL`; nach einem Teil-Deploy erneut laden |
 | `analysis_failed (client_network)` / `(client_timeout)` | Verbindung zum Worker abgebrochen bzw. 35 Sekunden überschritten | Netz prüfen und erneut versuchen |

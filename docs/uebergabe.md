@@ -24,7 +24,7 @@ Die Karte ist Hilfsmittel für die Standortkorrektur, nicht der Startbildschirm.
 
 - Produktname in allen Sprachen: **AEDjaeger** (ohne Umlaute).
 - Erste Sprachversionen: Deutsch, Englisch, Polnisch, Japanisch, Französisch und Spanisch.
-- Fotoprüfung (Entscheidung vom 10.11.2026, ersetzt „ohne OpenAI“ vom 9.11.): optional per OpenAI, nur wenn der Betreiber sie für das Konto freigibt. Foto geht nach ausdrücklichem Tippen verkleinert und ohne EXIF/GPS raus. „Kein AED“ oder „nicht eindeutig“ sperrt den Weg; Ausfall, Limit oder Fehler fallen auf die Selbstbestätigung zurück. Ohne Freigabe bleibt alles lokal. Die App behauptet keine sichere Erkennung.
+- Fotoprüfung (Entscheidung vom 10.11.2026, ersetzt „ohne OpenAI“ vom 9.11.): optional per OpenAI, nur wenn der Betreiber sie für das Konto freigibt. Foto geht nach ausdrücklichem Tippen verkleinert und ohne EXIF/GPS raus. „Kein AED“ oder „nicht eindeutig“ sperrt den einfachen Weg („Anderes Foto“), mit Ausnahme nach zwei ausdrücklichen Bestätigungen; Ausfall, Limit oder Fehler fallen auf die Selbstbestätigung zurück. Ohne Freigabe bleibt alles lokal. Die App behauptet keine sichere Erkennung.
 - Im Pilot bleibt Gamification unsichtbar. Intern dürfen nur erfolgreiche Prüfungen nach bestätigtem OSM-Vorgang gezählt werden.
 - Oberfläche und API laufen als Cloudflare Worker mit Static Assets auf der vorhandenen `workers.dev`-Adresse; D1 hält notwendige Sitzungs- und Vorgangsdaten. Kein Paid-Tarif und keine eigene Domain ohne gesonderten Auftrag.
 - OSM-Login ist erforderlich. Der aktuelle Login ist für die OSM-Entwicklungsumgebung (Dev) gedacht. Geheimnisse und OAuth-Tokens dürfen ausschließlich in serverseitigen Secrets bzw. verschlüsselter Sitzung liegen.

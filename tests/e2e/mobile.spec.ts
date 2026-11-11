@@ -1225,13 +1225,87 @@ test("a photo without a recognizable AED is blocked and cannot start a search", 
   await page.getByRole("button", { name: "AED gesehen – Foto prüfen" }).click();
 
   await expect(page.getByRole("heading", { name: "Kein AED erkennbar" })).toBeVisible();
-  // Kein Weg an der Prüfung vorbei: weder Selbstbestätigung noch Suche.
+  // Die einfache Selbstbestätigung ist weg, und es startet keine Suche. Die Ausnahme braucht zwei Bestätigungen.
   await expect(page.locator('[data-action="confirm-sighting"]')).toHaveCount(0);
   await expect(page.locator('[data-action="check-photo"]')).toHaveCount(0);
   expect(searches).toBe(0);
 
   await page.getByRole("button", { name: "Anderes Foto" }).click();
   await expect(page.locator("#camera-input")).toBeAttached();
+});
+
+test("a rejected photo can still continue after two explicit confirmations", async ({ page }) => {
+  await enablePhotoCheck(page);
+  const searches: unknown[] = [];
+  await page.route("**/api/osm/candidates/search", async (route) => { searches.push(route.request().postDataJSON()); await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }); });
+  await page.route("**/api/vision/analyze", async (route) => {
+    const body = route.request().postDataJSON() as { request_id: string };
+    await route.fulfill({ json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("other_object") } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
+  await page.getByRole("button", { name: "AED gesehen – Foto prüfen" }).click();
+  await expect(page.getByRole("heading", { name: "Kein AED erkennbar" })).toBeVisible();
+
+  // Erste Bestätigung: öffnet nur die Rückfrage, es geht noch nichts weiter.
+  await page.getByRole("button", { name: "Trotzdem: Hier ist ein AED" }).click();
+  await expect(page.getByRole("heading", { name: "Wirklich ein AED?" })).toBeVisible();
+  await expect(page.locator(".capture-content")).toContainText("Die Prüfung hat keinen AED erkannt.");
+  expect(searches).toHaveLength(0);
+  await expect(page.locator('[data-action="confirm-sighting"]')).toHaveCount(0);
+
+  // Zweite Bestätigung: Jetzt gilt der normale Ablauf (Datumsfrage, Standort aus dem Foto, Suche).
+  await page.getByRole("button", { name: "Ja, AED oder Gehäuse ist zu sehen – weiter" }).click();
+  const dateConfirm = page.locator('[data-action="confirm-photo-date"]');
+  if (await dateConfirm.isVisible()) await dateConfirm.click();
+  await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
+  expect(searches).toHaveLength(1);
+});
+
+test("the second confirmation can be abandoned, and the override is offered for unclear photos too", async ({ page }) => {
+  await enablePhotoCheck(page);
+  let searches = 0;
+  await page.route("**/api/osm/candidates/search", async (route) => { searches += 1; await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }); });
+  await page.route("**/api/vision/analyze", async (route) => {
+    const body = route.request().postDataJSON() as { request_id: string };
+    await route.fulfill({ json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("unclear") } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
+  await page.getByRole("button", { name: "AED gesehen – Foto prüfen" }).click();
+  await expect(page.getByRole("heading", { name: "Nicht eindeutig" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Trotzdem: Hier ist ein AED" }).click();
+  await expect(page.getByRole("heading", { name: "Wirklich ein AED?" })).toBeVisible();
+  // „Anderes Foto“ bricht ab, ohne dass etwas gesendet oder gesucht wurde.
+  await page.getByRole("button", { name: "Anderes Foto" }).click();
+  await expect(page.locator("#camera-input")).toBeAttached();
+  expect(searches).toBe(0);
+});
+
+test("the override texts exist in all six languages", async ({ page }) => {
+  await enablePhotoCheck(page);
+  await page.route("**/api/vision/analyze", async (route) => {
+    const body = route.request().postDataJSON() as { request_id: string };
+    await route.fulfill({ json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("other_object") } });
+  });
+  await page.goto("/");
+  const expected: Record<string, { action: string; confirm: string }> = {
+    de: { action: "Trotzdem: Hier ist ein AED", confirm: "Ja, AED oder Gehäuse ist zu sehen – weiter" },
+    en: { action: "Still: this is an AED", confirm: "Yes, an AED or cabinet is visible — continue" },
+    pl: { action: "Mimo to: to jest AED", confirm: "Tak, widać AED lub obudowę — dalej" },
+    ja: { action: "それでも確認: AEDです", confirm: "はい、AEDまたは収納ケースが見えます — 続行" },
+    fr: { action: "Malgré tout : c’est un DAE", confirm: "Oui, un DAE ou son boîtier est visible — continuer" },
+    es: { action: "Aun así: esto es un DEA", confirm: "Sí, se ve un DEA o su armario — continuar" },
+  };
+  for (const code of languageCodes) {
+    await page.locator("#language").selectOption(code);
+    await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
+    await page.locator('[data-action="check-photo"]').click();
+    await page.getByRole("button", { name: expected[code].action }).click();
+    await expect(page.getByRole("button", { name: expected[code].confirm })).toBeVisible();
+    await page.locator('[data-action="retake"]').click();
+  }
 });
 
 test("an unclear photo asks for a closer picture", async ({ page }) => {

@@ -48,13 +48,20 @@ export type VisionObservationParseResult =
   | { ok: true; value: VisionObservation }
   | { ok: false; reason: "invalid-shape" };
 
-const MAX_DEVICE_COUNT = 10;
-const MAX_TEXT_LENGTH = 160;
-const MAX_LABEL_LENGTH = 80;
-const MAX_READABLE_TEXT_ITEMS = 12;
-const MAX_LOCATION_CLUES = 8;
-const MAX_IMAGE_ISSUES = 5;
-const EXPECTED_KEYS = [
+/**
+ * Grenzen der Beobachtung. Sie stehen an einer Stelle, weil die strenge Prüfung hier und die
+ * Aufbereitung der Anbieterantwort auf dem Server (server/vision/normalizeObservation.ts)
+ * dieselben Werte brauchen.
+ */
+export const OBSERVATION_LIMITS = {
+  deviceCount: 10,
+  textLength: 160,
+  labelLength: 80,
+  readableTextItems: 12,
+  locationClues: 8,
+  imageIssues: 5,
+} as const;
+export const OBSERVATION_KEYS = [
   "scene",
   "device_count",
   "readable_text",
@@ -62,7 +69,15 @@ const EXPECTED_KEYS = [
   "model",
   "location_clues",
   "image_issues",
-];
+] as const;
+
+const MAX_DEVICE_COUNT = OBSERVATION_LIMITS.deviceCount;
+const MAX_TEXT_LENGTH = OBSERVATION_LIMITS.textLength;
+const MAX_LABEL_LENGTH = OBSERVATION_LIMITS.labelLength;
+const MAX_READABLE_TEXT_ITEMS = OBSERVATION_LIMITS.readableTextItems;
+const MAX_LOCATION_CLUES = OBSERVATION_LIMITS.locationClues;
+const MAX_IMAGE_ISSUES = OBSERVATION_LIMITS.imageIssues;
+const EXPECTED_KEYS: readonly string[] = OBSERVATION_KEYS;
 
 /**
  * The scene and visible-device count must agree for clear classes. "unclear"

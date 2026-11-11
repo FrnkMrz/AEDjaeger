@@ -39,8 +39,10 @@ export type FlowState =
   | { kind: "photo"; photoUrl: string; photoCheck?: "unavailable"; photoCheckCode?: string }
   // Das Foto wird (nach ausdrücklichem Tippen) zur Prüfung an OpenAI gesendet.
   | { kind: "photo-checking"; photoUrl: string }
-  // Die Prüfung hat klar „kein AED“ oder „nicht eindeutig“ gemeldet: nur „Anderes Foto“ geht weiter.
-  | { kind: "photo-rejected"; photoUrl: string; reason: "not-aed" | "unclear" }
+  // Die Prüfung hat „kein AED“ oder „nicht eindeutig“ gemeldet: Standard ist „Anderes Foto“. Als Ausnahme für
+  // Fehlurteile geht es nur nach zwei ausdrücklichen Bestätigungen weiter.
+  // overrideStep "confirm": Die Person hat „Trotzdem: Hier ist ein AED“ getippt und muss es noch einmal bestätigen.
+  | { kind: "photo-rejected"; photoUrl: string; reason: "not-aed" | "unclear"; overrideStep?: "confirm" }
   | { kind: "photo-date"; photoUrl: string; suggestedDate: string }
   | { kind: "analyzing"; photoUrl: string }
   | { kind: "location-choice"; photoUrl: string }

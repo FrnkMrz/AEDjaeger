@@ -298,8 +298,15 @@ function statusContent(): string {
     case "photo-checking":
       return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv("photoChecking")}</span></div>`;
     case "photo-rejected":
-      // Nur „Anderes Foto“ geht weiter: Ein Foto ohne erkennbaren AED soll nicht in die Suche laufen.
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv(state.reason === "unclear" ? "photoUnclearTitle" : "photoRejectedTitle")}</h2><p>${tv(state.reason === "unclear" ? "photoUnclearBody" : "photoRejectedBody")}</p></div></div><button class="button button-primary" data-action="retake">${t("retake")}</button>`;
+      // Standardweg ist „Anderes Foto“: Ein Foto ohne erkennbaren AED soll nicht in die Suche laufen.
+      // Weil die Prüfung auch irren kann (zum Beispiel bei einem echten, aber ungünstig fotografierten AED),
+      // gibt es eine Ausnahme, die ZWEI ausdrückliche Bestätigungen verlangt: erst „Trotzdem: Hier ist ein AED“,
+      // dann „Ja, AED oder Gehäuse ist zu sehen – weiter“. Danach gilt der normale Ablauf mit seinen eigenen
+      // Bestätigungen (Datum, Standort, bei Neuanlagen wieder zwei).
+      if (state.overrideStep === "confirm") {
+        return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("photoOverrideTitle")}</h2><p>${tv("photoOverrideBody")}</p></div></div><button class="button button-primary" data-action="confirm-photo-override">${tv("photoOverrideConfirm")}</button><button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
+      }
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv(state.reason === "unclear" ? "photoUnclearTitle" : "photoRejectedTitle")}</h2><p>${tv(state.reason === "unclear" ? "photoUnclearBody" : "photoRejectedBody")}</p></div></div><button class="button button-primary" data-action="retake">${t("retake")}</button><button class="button button-secondary" data-action="start-photo-override">${tv("photoOverrideAction")}</button>`;
     case "photo-date":
       return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("photoDateTitle")}</h2><p>${tv("photoDateHelp")}</p><label for="photo-observed-on">${tv("photoDateLabel")}</label><input id="photo-observed-on" type="date" value="${escapeHtml(state.suggestedDate)}" max="${localCalendarDate()}" /></div></div><button class="button button-primary" data-action="confirm-photo-date">${tv("photoDateConfirm")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     case "analyzing":
@@ -947,6 +954,13 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     proceedAfterSighting(state.photoUrl);
   } else if (action === "check-photo" && state.kind === "photo" && accountState === "signed-in" && photoCheckAvailable) {
     void runPhotoCheck(state.photoUrl);
+  } else if (action === "start-photo-override" && state.kind === "photo-rejected" && state.overrideStep === undefined && accountState === "signed-in") {
+    // Erste Bestätigung der Ausnahme: Es folgt noch eine Rückfrage, nichts geht schon weiter.
+    state = { ...state, overrideStep: "confirm" };
+    render(true);
+  } else if (action === "confirm-photo-override" && state.kind === "photo-rejected" && state.overrideStep === "confirm" && accountState === "signed-in") {
+    // Zweite Bestätigung: Die Person versichert, dass AED oder Gehäuse zu sehen ist, obwohl die Prüfung keinen erkannt hat.
+    proceedAfterSighting(state.photoUrl);
   } else if (action === "confirm-photo-date" && state.kind === "photo-date" && accountState === "signed-in") {
     const dateInput = app!.querySelector<HTMLInputElement>("#photo-observed-on");
     if (!dateInput || !isValidObservedDate(dateInput.value)) return;
