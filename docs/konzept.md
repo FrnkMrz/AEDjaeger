@@ -10,7 +10,7 @@ Das Foto ist der Einstieg und hilft der Person, den konkreten AED zu prüfen. Di
 
 ## Der normale Ablauf
 
-1. **Foto machen oder auswählen.** Die Person bestätigt ausdrücklich, dass das AED-Gerät oder sein Gehäuse zu sehen ist. GPS aus dem Foto wird lokal zuerst ausgewertet. Fehlt es, wird Handy-GPS oder eine Kartenposition nur nach bewusster Auswahl verwendet.
+1. **Foto machen oder auswählen.** Die Person bestätigt ausdrücklich, dass das AED-Gerät oder sein Gehäuse zu sehen ist. GPS aus dem Foto wird lokal zuerst ausgewertet. Fehlt es bei einem gerade mit der Kamera der App aufgenommenen Foto, nutzt die App den Handy-Standort, den die Person einmal erlaubt hat. Bei Galerie-Fotos und älteren Aufnahmen wird Handy-GPS oder eine Kartenposition nur nach bewusster Auswahl verwendet.
 2. **Umgebung abgleichen.** Die App vergleicht den gewählten Standort mit vorhandenen AED-Daten. Sie zeigt Kandidaten zur Prüfung; Nähe allein entscheidet nicht über eine Zuordnung.
 3. **Kurz bestätigen, fertig.** Bei einem passenden Eintrag: „Schon eingetragen. Noch vorhanden bestätigen.“ Bei einem neuen Gerät: „Neuen AED eintragen.“ Ein Tippen speichert die jeweils angekündigte Änderung.
 

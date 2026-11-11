@@ -7,6 +7,7 @@ import { readPhotoCapture, readPhotoLocation } from "./vision/photoLocation";
 import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservation, VisionClientError } from "./vision/analyzePhoto";
 import { isAedRecognized } from "./contracts/visionObservation";
 import { startUpdateWatcher } from "./pwa/updateCheck";
+import { askForLocationOnce, phoneLocationFitsPhoto, readLocationPermission, watchLocationPermission, type LocationPermission } from "./location/phoneLocationPermission";
 import { assessCandidateSearch } from "./domain/assessCandidateSearch";
 import { createPositionPicker, zoomToFitMarkers, type Coordinate, type MapMarker } from "./map/positionPicker";
 import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
@@ -17,13 +18,13 @@ const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root element was not found.");
 
 const languageNames: Record<Language, string> = { de: "Deutsch", en: "English", pl: "Polski", ja: "日本語", fr: "Français", es: "Español" };
-const developmentWriteCopy: Record<Language, { action: string; createAction: string; retry: string; sending: string; complete: string; created: string; uncertain: string; conflict: string; failed: string; testOnly: string }> = {
-  de: { action: "Testserver: Prüfdatum speichern", createAction: "Testserver: AED eintragen", retry: "Testserver: Status erneut prüfen", sending: "Testserver: Änderung wird gesendet…", complete: "Testserver: Vor-Ort-Prüfung gespeichert.", created: "Testserver: Neuer AED wurde eingetragen.", uncertain: "Testserver: Ergebnis unklar. Mit derselben Anfrage erneut prüfen; keine neue Änderung wird blind gesendet.", conflict: "Testserver: In der Nähe gibt es einen AED oder der OSM-Eintrag änderte sich. Suche bitte erneut.", failed: "Testserver: Änderung fehlgeschlagen. Bitte Eintrag erneut prüfen.", testOnly: "Änderungen bleiben auf dem OSM-Testserver." },
-  en: { action: "Test server: Save visit date", createAction: "Test server: Add AED", retry: "Test server: Check status again", sending: "Test server: Sending update…", complete: "Test server: Visit confirmation saved.", created: "Test server: New AED added.", uncertain: "Test server: Result is unclear. Check again using the same request; no new edit will be sent blindly.", conflict: "Test server: An AED is nearby or the OSM entry changed. Search again.", failed: "Test server: Update failed. Please check the entry again.", testOnly: "Changes stay on the OSM test server." },
-  pl: { action: "Serwer testowy: zapisz datę kontroli", createAction: "Serwer testowy: dodaj AED", retry: "Serwer testowy: sprawdź ponownie stan", sending: "Serwer testowy: wysyłanie zmiany…", complete: "Serwer testowy: zapisano potwierdzenie kontroli.", created: "Serwer testowy: dodano nowy AED.", uncertain: "Serwer testowy: wynik jest niepewny. Sprawdź ponownie to samo żądanie; nie wyślemy w ciemno nowej zmiany.", conflict: "Serwer testowy: w pobliżu jest AED albo wpis OSM został zmieniony. Wyszukaj ponownie.", failed: "Serwer testowy: nie udało się zapisać zmiany. Sprawdź ponownie wpis.", testOnly: "Zmiany pozostają na serwerze testowym OSM." },
-  ja: { action: "テストサーバー：確認日を保存", createAction: "テストサーバー：AEDを登録", retry: "テストサーバー：状態を再確認", sending: "テストサーバー：変更を送信中…", complete: "テストサーバー：現地確認を保存しました。", created: "テストサーバー：新しいAEDを登録しました。", uncertain: "テストサーバー：結果を確認できません。同じリクエストで再確認してください。新しい変更を無確認で送信しません。", conflict: "テストサーバー：近くにAEDがあるか、OSMの項目が変更されています。再検索してください。", failed: "テストサーバー：変更に失敗しました。項目を再確認してください。", testOnly: "変更はOSMテストサーバーにのみ保存されます。" },
-  fr: { action: "Serveur de test : enregistrer la date", createAction: "Serveur de test : ajouter un DAE", retry: "Serveur de test : vérifier à nouveau", sending: "Serveur de test : envoi de la modification…", complete: "Serveur de test : visite confirmée.", created: "Serveur de test : nouveau DAE ajouté.", uncertain: "Serveur de test : résultat incertain. Vérifiez à nouveau avec la même requête ; aucune nouvelle modification ne sera envoyée à l’aveugle.", conflict: "Serveur de test : un DAE est proche ou la fiche OSM a changé. Relancez la recherche.", failed: "Serveur de test : échec de la modification. Vérifiez à nouveau la fiche.", testOnly: "Les modifications restent sur le serveur de test OSM." },
-  es: { action: "Servidor de pruebas: guardar fecha", createAction: "Servidor de pruebas: añadir DEA", retry: "Servidor de pruebas: comprobar estado", sending: "Servidor de pruebas: enviando cambio…", complete: "Servidor de pruebas: visita confirmada.", created: "Servidor de pruebas: se añadió un DEA.", uncertain: "Servidor de pruebas: resultado incierto. Comprueba de nuevo con la misma solicitud; no enviaremos otro cambio a ciegas.", conflict: "Servidor de pruebas: hay un DEA cerca o la ficha OSM ha cambiado. Vuelve a buscar.", failed: "Servidor de pruebas: no se pudo guardar. Comprueba de nuevo la ficha.", testOnly: "Los cambios solo se guardan en el servidor de pruebas de OSM." },
+const developmentWriteCopy: Record<Language, { action: string; createAction: string; retry: string; sending: string; complete: string; created: string; uncertain: string; conflict: string; failed: string; }> = {
+  de: { action: "Testserver: Prüfdatum speichern", createAction: "Testserver: AED eintragen", retry: "Testserver: Status erneut prüfen", sending: "Testserver: Änderung wird gesendet…", complete: "Testserver: Vor-Ort-Prüfung gespeichert.", created: "Testserver: Neuer AED wurde eingetragen.", uncertain: "Testserver: Ergebnis unklar. Mit derselben Anfrage erneut prüfen; keine neue Änderung wird blind gesendet.", conflict: "Testserver: In der Nähe gibt es einen AED oder der OSM-Eintrag änderte sich. Suche bitte erneut.", failed: "Testserver: Änderung fehlgeschlagen. Bitte Eintrag erneut prüfen." },
+  en: { action: "Test server: Save visit date", createAction: "Test server: Add AED", retry: "Test server: Check status again", sending: "Test server: Sending update…", complete: "Test server: Visit confirmation saved.", created: "Test server: New AED added.", uncertain: "Test server: Result is unclear. Check again using the same request; no new edit will be sent blindly.", conflict: "Test server: An AED is nearby or the OSM entry changed. Search again.", failed: "Test server: Update failed. Please check the entry again." },
+  pl: { action: "Serwer testowy: zapisz datę kontroli", createAction: "Serwer testowy: dodaj AED", retry: "Serwer testowy: sprawdź ponownie stan", sending: "Serwer testowy: wysyłanie zmiany…", complete: "Serwer testowy: zapisano potwierdzenie kontroli.", created: "Serwer testowy: dodano nowy AED.", uncertain: "Serwer testowy: wynik jest niepewny. Sprawdź ponownie to samo żądanie; nie wyślemy w ciemno nowej zmiany.", conflict: "Serwer testowy: w pobliżu jest AED albo wpis OSM został zmieniony. Wyszukaj ponownie.", failed: "Serwer testowy: nie udało się zapisać zmiany. Sprawdź ponownie wpis." },
+  ja: { action: "テストサーバー：確認日を保存", createAction: "テストサーバー：AEDを登録", retry: "テストサーバー：状態を再確認", sending: "テストサーバー：変更を送信中…", complete: "テストサーバー：現地確認を保存しました。", created: "テストサーバー：新しいAEDを登録しました。", uncertain: "テストサーバー：結果を確認できません。同じリクエストで再確認してください。新しい変更を無確認で送信しません。", conflict: "テストサーバー：近くにAEDがあるか、OSMの項目が変更されています。再検索してください。", failed: "テストサーバー：変更に失敗しました。項目を再確認してください。" },
+  fr: { action: "Serveur de test : enregistrer la date", createAction: "Serveur de test : ajouter un DAE", retry: "Serveur de test : vérifier à nouveau", sending: "Serveur de test : envoi de la modification…", complete: "Serveur de test : visite confirmée.", created: "Serveur de test : nouveau DAE ajouté.", uncertain: "Serveur de test : résultat incertain. Vérifiez à nouveau avec la même requête ; aucune nouvelle modification ne sera envoyée à l’aveugle.", conflict: "Serveur de test : un DAE est proche ou la fiche OSM a changé. Relancez la recherche.", failed: "Serveur de test : échec de la modification. Vérifiez à nouveau la fiche." },
+  es: { action: "Servidor de pruebas: guardar fecha", createAction: "Servidor de pruebas: añadir DEA", retry: "Servidor de pruebas: comprobar estado", sending: "Servidor de pruebas: enviando cambio…", complete: "Servidor de pruebas: visita confirmada.", created: "Servidor de pruebas: se añadió un DEA.", uncertain: "Servidor de pruebas: resultado incierto. Comprueba de nuevo con la misma solicitud; no enviaremos otro cambio a ciegas.", conflict: "Servidor de pruebas: hay un DEA cerca o la ficha OSM ha cambiado. Vuelve a buscar.", failed: "Servidor de pruebas: no se pudo guardar. Comprueba de nuevo la ficha." },
 };
 const scenarioKeys: Record<DemoScenario, TranslationKey> = {
   existing: "existingScenario", new: "newScenario", multiple: "multipleScenario", unclear: "unclearScenario", "search-error": "searchErrorScenario", "upload-unclear": "uploadErrorScenario",
@@ -53,6 +54,15 @@ let selectedPhotoFile: File | undefined;
 let photoCheckRequestId: string | undefined;
 // Update-Hinweis: wird true, sobald der Wächter eine neuere veröffentlichte Version erkennt.
 let updateAvailable = false;
+// Standort-Erlaubnis des Handys (nur lesen, nie anfragen). Nur bei „granted“ nutzt die App den Handy-Standort
+// ohne Zwischenfrage, und das nur für ein frisch aufgenommenes Kamerafoto ohne Foto-GPS.
+let phoneLocationPermission: LocationPermission = "unknown";
+// Herkunft und Aufnahmezeit des aktuellen Fotos. Daraus entscheidet phoneLocationFitsPhoto bei jeder Fortsetzung
+// neu, ob der Handy-Standort noch zum Foto passt: nur bei einem Kamerafoto, das höchstens fünf Minuten alt ist.
+let selectedPhotoFromCamera = false;
+let selectedPhotoCapturedAtMs: number | undefined;
+// Die einmalige Standortanfrage wird pro Seitenaufruf höchstens einmal versucht (und pro Gerät nur einmal gestellt).
+let locationAskAttempted = false;
 let oauthReturnFailed = new URLSearchParams(window.location.search).get("login") === "error";
 let analysisTimer: number | undefined;
 let saveTimer: number | undefined;
@@ -61,7 +71,11 @@ let selectedPhotoLocation: SearchLocation | undefined;
 let observedOn = localCalendarDate();
 let photoDateRequiresConfirmation = false;
 let activeSearchLocation: SearchLocation | undefined;
-let activeSearchLocationSource: "photo" | "phone" | "map" | undefined;
+// „phone“: Die Person hat den Handy-Standort ausdrücklich gewählt. „phone-auto“: Die App hat ihn bei einem frischen
+// Kamerafoto ohne GPS selbst eingesetzt. Beide heißen in der Anzeige „Handy-Standort verwendet“. Der Unterschied zählt
+// beim Wiederholen: Einen ausdrücklich gewählten Standort darf die App neu holen, einen selbst eingesetzten nur,
+// solange das Foto noch frisch ist.
+let activeSearchLocationSource: "photo" | "phone" | "phone-auto" | "map" | undefined;
 // Keep a stable ID while this photo is active; the server uses it to avoid double reservations after retries.
 let photoSelectionVersion = 0;
 let photoSelectionPending = false;
@@ -203,16 +217,24 @@ function accountPanel(): string {
   if (accountState === "connection-error") return `<section class="account-panel" aria-live="polite" tabindex="-1"><span>${t("accountConnectionError")}</span><button class="account-button" id="osm-session-retry" type="button">${t("accountRetry")}</button></section>`;
   if ((photoSelectionPending || hasActivePhotoDraft(state)) && accountState !== "signed-in") return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountLoginBlocked")}</section>`;
   if (accountState === "login-error") return `<section class="account-panel" aria-live="polite"><p role="alert">${t("accountLoginError")}</p>${signInLinks()}</section>`;
-  if (accountState === "signed-in") {
-    const signedInTitle = developmentSession ? t("accountDevSignedIn") : t("accountSignedIn");
-    const sessionMessage = developmentSession ? t("accountDevNotice") : t("accountIdentityOnly");
-    return `<section class="account-panel" aria-live="polite"><div><strong>${signedInTitle}</strong><p>${sessionMessage}</p></div><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>`;
-  }
+  // Angemeldet: Kein Block auf dem Hauptbildschirm. Der Status steht als Lampe in der Fußzeile, „Abmelden“ im Info-Dialog.
+  if (accountState === "signed-in") return "";
   if (accountState === "logout-error") {
     return `<section class="account-panel" aria-live="polite"><span>${t("accountSignOutError")}</span><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>`;
   }
   return `<section class="account-panel">${signInLinks()}<p>${t("accountIdentityOnly")}</p></section>`;
 }
+/**
+ * Die Lampe in der Fußzeile zeigt, ob die App mit OpenStreetMap verbunden ist: grün = verbunden,
+ * rot = nicht verbunden. Sie ersetzt den früheren Textblock „Mit OSM-Testserver verbunden“.
+ * Für Screenreader trägt sie den Status als Text, denn Farbe allein reicht nicht.
+ */
+function connectionLamp(): string {
+  const connected = accountState === "signed-in";
+  const label = connected ? (developmentSession ? t("accountDevSignedIn") : t("accountSignedIn")) : tv("connectionOff");
+  return `<span class="footer-lamp ${connected ? "footer-lamp-on" : "footer-lamp-off"}" role="img" aria-label="${escapeHtml(label)}"><span aria-hidden="true">✱</span></span>`;
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
 }
@@ -344,7 +366,7 @@ function statusContent(): string {
           const reviewAction = candidate.osmType === "node"
             ? `<button class="button button-secondary" data-action="preview-candidate" data-candidate-id="${escapeHtml(candidate.id)}">${tv("selectCandidate")}</button>`
             : `<span class="supporting-copy">${tv("previewUnsupportedShort")}</span>`;
-          return `<li class="candidate-item"><strong>${escapeHtml(label)}</strong>${distance}<a href="https://www.openstreetmap.org/${escapeHtml(candidate.id)}" target="_blank" rel="noopener noreferrer">${tv("candidateOpenMap")} ↗</a>${reviewAction}</li>`;
+          return `<li class="candidate-item"><strong>${escapeHtml(label)}</strong>${distance}${reviewAction}</li>`;
         }).join("");
       let outcome: string;
       if (search.status === "partial" || assessment.kind === "search-incomplete") outcome = tv("searchPartial");
@@ -386,11 +408,9 @@ function statusContent(): string {
       const point = state.result.kind === "ready" ? state.result.position : state.returnState.location;
       const latitude = point.latitude.toFixed(5);
       const longitude = point.longitude.toFixed(5);
-      // Coordinates are numeric GPS values validated by the location and proposal boundaries.
-      const mapUrl = `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=19/${latitude}/${longitude}`;
       const content = state.result.kind === "ready"
-        ? `<p>${tv("newPreviewCoordinates", { latitude, longitude })}</p><p><a href="${mapUrl}" target="_blank" rel="noopener noreferrer">${tv("newPreviewOpenMap")}</a></p><strong>${tv("newPreviewTags")}</strong><ul>${Object.entries(state.result.tags).map(([key, value]) => `<li><code>${escapeHtml(key)}=${escapeHtml(value)}</code></li>`).join("")}</ul><p>${state.result.confirmedDifferentCandidateIds.length > 0 ? tv("newPreviewReviewedCandidates") : tv("newPreviewCaution")}</p>`
-        : `<p>${tv(state.result.reason === "position-not-confirmed" ? "newPositionRequired" : state.result.reason === "search-found-candidate" ? "newPreviewFoundCandidate" : "newPreviewSearchInvalid")}</p><p><a href="${mapUrl}" target="_blank" rel="noopener noreferrer">${tv("newPreviewOpenMap")}</a></p>`;
+        ? `<p>${tv("newPreviewCoordinates", { latitude, longitude })}</p><strong>${tv("newPreviewTags")}</strong><ul>${Object.entries(state.result.tags).map(([key, value]) => `<li><code>${escapeHtml(key)}=${escapeHtml(value)}</code></li>`).join("")}</ul><p>${state.result.confirmedDifferentCandidateIds.length > 0 ? tv("newPreviewReviewedCandidates") : tv("newPreviewCaution")}</p>`
+        : `<p>${tv(state.result.reason === "position-not-confirmed" ? "newPositionRequired" : state.result.reason === "search-found-candidate" ? "newPreviewFoundCandidate" : "newPreviewSearchInvalid")}</p>`;
       const copy = developmentWriteCopy[language];
       const canCreate = developmentSession && developmentWriteAvailable && state.result.kind === "ready";
       const statusCopy = state.writeStatus === "complete" ? copy.created : state.writeStatus ? copy[state.writeStatus] : "";
@@ -402,17 +422,23 @@ function statusContent(): string {
         : state.writeStatus === "uncertain" && state.operationId
           ? `<button class="button button-secondary" data-action="retry-development-write">${copy.retry}</button>`
           : "";
-      const noWriteNotice = developmentSession ? copy.testOnly : tv("previewNoWrite");
+      // Der Hinweis „nur eine Vorschau“ steht nur, wenn es nichts zu speichern gibt. Mit Speichern-Knopf sagt dessen
+      // Beschriftung („Testserver: AED eintragen“) schon, wohin die Änderung geht.
+      // Der Hinweis „nur eine Vorschau“ gilt nur, wenn gar nichts gespeichert werden kann und kein Vorgang läuft. Nach einem
+      // Speichern (oder währenddessen) wäre er falsch; dann sagt die Statusmeldung, was passiert ist.
+      const noWriteNotice = !canCreate && !state.writeStatus ? `<p class="simulation-note">${tv("previewNoWrite")}</p>` : "";
+      // „Zurück“ bleibt hier immer: Es führt zur Positionsbestätigung bzw. zur Suche, nicht nur zu Treffern.
       const navigation = state.writeStatus === "sending" || state.writeStatus === "uncertain" ? "" : `<button class="button button-quiet" data-action="back-to-search">${tv("previewBack")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("newPreviewTitle")}</h2>${content}<p class="simulation-note">${noWriteNotice}</p>${writeStatus}</div></div>${writeAction}${navigation}`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("newPreviewTitle")}</h2>${content}${noWriteNotice}${writeStatus}</div></div>${writeAction}${navigation}`;
     }
     case "osm-preview": {
       const { result } = state;
       const candidateId = state.candidateId;
       const candidate = state.returnState.search.candidates.find((item) => item.id === candidateId);
       const canWrite = developmentSession && developmentWriteAvailable && candidate?.osmType === "node" && result.kind === "ready";
+      // Nur das Wesentliche: das neue Prüfdatum. Der bisherige Wert steht nur da, wenn es einen gibt.
       const content = result.kind === "ready"
-        ? `<p><strong>${tv("previewCheckDate")}</strong></p><p>${tv("previewOldDate", { date: escapeHtml(result.changes[0].before ?? tv("previewNoDate")) })}</p><p>${tv("previewNewDate", { date: result.changes[0].after })}</p>`
+        ? `<p><strong>${tv("previewNewDate", { date: result.changes[0].after })}</strong></p>${result.changes[0].before ? `<p>${tv("previewOldDate", { date: escapeHtml(result.changes[0].before) })}</p>` : ""}`
         : `<p>${tv("previewUnsupported")}</p>`;
       const copy = developmentWriteCopy[language];
       const writeStatus = state.writeStatus ? `<p role="status" class="simulation-note">${copy[state.writeStatus]}</p>` : "";
@@ -421,21 +447,25 @@ function statusContent(): string {
         : state.writeStatus === "uncertain" && state.operationId
           ? `<button class="button button-secondary" data-action="retry-development-write">${copy.retry}</button>`
           : "";
-      const noWriteNotice = developmentSession ? copy.testOnly : tv("previewNoWrite");
+      // Nur wenn nichts gespeichert werden kann und kein Vorgang läuft; sonst wäre „nur eine Vorschau“ nach einem Speichern falsch.
+      const noWriteNotice = !canWrite && !state.writeStatus ? `<p class="simulation-note">${tv("previewNoWrite")}</p>` : "";
       const recoverableWrite = state.writeStatus === "sending" || state.writeStatus === "uncertain";
-      const navigation = recoverableWrite ? "" : `<button class="button button-quiet" data-action="back-to-candidates">${tv("previewBack")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("previewTitle")}</h2><p>${tv("previewTarget", { target: escapeHtml(state.candidateLabel) })}</p><p><a href="https://www.openstreetmap.org/${escapeHtml(state.candidateId)}" target="_blank" rel="noopener noreferrer">${tv("candidateOpenMap")} ↗</a></p>${content}<p class="simulation-note">${noWriteNotice}</p>${writeStatus}</div></div>${writeAction}${navigation}`;
+      // „Zurück“ gibt es nur, wenn es mehrere Treffer zur Auswahl gab. Bei einem einzigen Treffer hätte es keine Bedeutung.
+      // Gezählt wird wie in der Trefferliste: Bei „candidate-review“ die bewerteten Treffer, sonst alle Suchtreffer.
+      const shownCandidates = state.returnState.assessment.kind === "candidate-review" ? state.returnState.assessment.candidates.length : state.returnState.search.candidates.length;
+      const hasOtherCandidates = shownCandidates > 1;
+      const navigation = recoverableWrite ? "" : `${hasOtherCandidates ? `<button class="button button-quiet" data-action="back-to-candidates">${tv("previewBack")}</button>` : ""}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(state.candidateLabel)}</strong></p>${content}${noWriteNotice}${writeStatus}</div></div>${writeAction}${navigation}`;
     }
     case "development-write-recovery": {
       const copy = developmentWriteCopy[language];
       const retry = state.writeStatus === "uncertain"
         ? `<button class="button button-secondary" data-action="retry-development-write">${copy.retry}</button>`
         : "";
-      const targetLink = state.request.kind === "check-date"
-        ? `<p><a href="https://www.openstreetmap.org/${escapeHtml(state.request.target)}" target="_blank" rel="noopener noreferrer">${tv("candidateOpenMap")} ↗</a></p>`
-        : `<p>${state.request.latitude.toFixed(5)}, ${state.request.longitude.toFixed(5)}</p>`;
+      // Bei einer Neuanlage steht die Position da; bei einem Prüfdatum genügt die Bezeichnung des AED.
+      const targetLink = state.request.kind === "check-date" ? "" : `<p>${state.request.latitude.toFixed(5)}, ${state.request.longitude.toFixed(5)}</p>`;
       const recoveryMessage = state.request.kind === "create-node" && state.writeStatus === "complete" ? copy.created : copy[state.writeStatus];
-      return `<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("previewTitle")}</h2><p>${tv("previewTarget", { target: escapeHtml(state.request.candidateLabel) })}</p>${targetLink}<p class="simulation-note" role="status">${recoveryMessage}</p></div></div>${retry}`;
+      return `<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(state.request.candidateLabel)}</strong></p>${targetLink}<p class="simulation-note" role="status">${recoveryMessage}</p></div></div>${retry}`;
     }
     case "candidate-error": {
       const errorKey: Record<typeof state.reason, FlowMessageKey> = {
@@ -495,7 +525,7 @@ function render(restoreFlowFocus = false): void {
           ${isReady ? `<details class="demo-panel"><summary>${t("demo")}</summary><h2>${t("testStepsTitle")}</h2><p>${t("testSteps")}</p><label for="scenario">${t("scenario")}</label><select id="scenario">${(Object.keys(scenarioKeys) as DemoScenario[]).map((key) => `<option value="${key}" ${scenario === key ? "selected" : ""}>${t(scenarioKeys[key])}</option>`).join("")}</select><label class="diagnostics-opt-in" for="diagnostics-enabled"><input id="diagnostics-enabled" type="checkbox" ${diagnosticsEnabled ? "checked" : ""}><span><strong>${t("testDiagnostics")}</strong><small>${t("testDiagnosticsPrivacy")}</small></span></label></details>` : ""}
         </section>
       </main>${accountPanel()}` : `<main class="login-main">${loginEntry()}</main>`}
-      <footer><span class="footer-symbol" aria-hidden="true">✳</span><span>${t("sourceNote")}</span><span class="demo-badge">DEMO</span></footer>
+      <footer>${connectionLamp()}<span>${t("sourceNote")}</span><span class="demo-badge">DEMO</span></footer>
       <dialog class="info-dialog" id="info-dialog" aria-labelledby="info-title" aria-describedby="info-intro">
         <div class="info-dialog-content">
           <div class="info-dialog-header"><div><p class="eyebrow">${t("appName")}</p><h2 id="info-title">${t("aboutTitle")}</h2></div><form method="dialog"><button class="dialog-close" aria-label="${t("closeInfo")}">×</button></form></div>
@@ -508,6 +538,7 @@ function render(restoreFlowFocus = false): void {
             <li class="roadmap-item"><span class="roadmap-status">${t("roadmapNext")}</span><h4>${t("roadmapApiTitle")}</h4><p>${t("roadmapApiBody")}</p></li>
             <li class="roadmap-item"><span class="roadmap-status">${t("roadmapLater")}</span><h4>${t("roadmapOsmTitle")}</h4><p>${t("roadmapOsmBody")}</p></li>
           </ol></section>
+          ${authenticated ? `<section class="info-section account-section"><h3>${developmentSession ? t("accountDevSignedIn") : t("accountSignedIn")}</h3><p>${developmentSession ? t("accountDevNotice") : t("accountIdentityOnly")}</p><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>` : ""}
         </div>
       </dialog>
     </div>`;
@@ -718,6 +749,7 @@ async function refreshAccountState(focusSelector?: string): Promise<void> {
     developmentSession = status.developmentSession;
     developmentWriteAvailable = status.developmentWriteAvailable;
     photoCheckAvailable = status.photoCheckAvailable;
+    if (status.authenticated) void askForLocationOnceAfterSignIn();
     accountState = status.authenticated ? "signed-in" : !productionLoginAvailable && !developmentLoginAvailable ? "not-configured" : failedOAuthReturn ? "login-error" : "signed-out";
     if (state.kind === "photo" && accountState === "not-configured") recordDiagnostic("live_flow_blocked");
   } catch {
@@ -728,7 +760,7 @@ async function refreshAccountState(focusSelector?: string): Promise<void> {
   render();
   if (focusSelector === "next-action") {
     const nextActionSelector = accountState === "connection-error" ? "#osm-session-retry"
-      : accountState === "signed-in" ? "#osm-sign-out"
+      : accountState === "signed-in" ? "#camera-input"
         : accountState === "signed-out" || accountState === "login-error" ? "#osm-sign-in"
           : "#login-title";
     app!.querySelector<HTMLElement>(nextActionSelector)?.focus();
@@ -909,6 +941,10 @@ async function onPhotoSelected(event: Event): Promise<void> {
   // The open disclosure is an explicit user choice; carry that preview mode into this photo.
   demoMode = demoMode || (document.querySelector<HTMLDetailsElement>(".demo-panel")?.open ?? false);
   selectedPhotoLocation = photoLocation;
+  // Merken, ob und wann das Foto mit der Kamera der App entstand. Ob der Handy-Standort fehlendes Foto-GPS ersetzen
+  // darf, wird erst bei der Fortsetzung geprüft (die Person kann zwischendurch lange warten oder weggehen).
+  selectedPhotoFromCamera = input.id === "camera-input";
+  selectedPhotoCapturedAtMs = photoCapturedAtMs;
   // Für die optionale Fotoprüfung merken: die Datei und eine neue Anfragekennung pro Foto.
   selectedPhotoFile = file;
   photoCheckRequestId = createVisionRequestId();
@@ -990,10 +1026,23 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     // A photo's embedded point is fixed, but a phone GPS fix can improve after the user moves.
     // A chosen photo/map point is stable across retries. Phone GPS is deliberately reacquired
     // because the user may have moved since the previous attempt.
-    const retryLocation = activeSearchLocationSource === "photo" || activeSearchLocationSource === "map"
-      ? activeSearchLocation
-      : undefined;
-    void runNearbySearch(state.photoUrl, retryLocation);
+    // Ausnahme: Hat die App den Handy-Standort selbst eingesetzt („phone-auto“), gilt er nur, solange das Foto frisch ist.
+    // Wer die App nach einem Fehlschlag liegen lässt und woanders erneut versucht, bekommt die ausdrückliche Standortwahl.
+    const autoLocationExpired = activeSearchLocationSource === "phone-auto"
+      && !(phoneLocationPermission === "granted" && phoneLocationFitsPhoto({ fromCamera: selectedPhotoFromCamera, capturedAtMs: selectedPhotoCapturedAtMs }));
+    if (autoLocationExpired) {
+      if (searchRetryTimer) window.clearTimeout(searchRetryTimer);
+      searchRetryTimer = undefined;
+      activeSearchLocation = undefined;
+      activeSearchLocationSource = undefined;
+      state = { kind: "location-choice", photoUrl: state.photoUrl };
+      render(true);
+    } else {
+      const retryLocation = activeSearchLocationSource === "photo" || activeSearchLocationSource === "map"
+        ? activeSearchLocation
+        : undefined;
+      void runNearbySearch(state.photoUrl, retryLocation);
+    }
   } else if (action === "preview-candidate" && state.kind === "candidate-result") {
     const candidateId = source?.dataset.candidateId;
     const candidate = state.search.candidates.find((item) => item.id === candidateId);
@@ -1283,10 +1332,43 @@ function continueAfterSighting(photoUrl: string): void {
     activeSearchLocation = selectedPhotoLocation;
     activeSearchLocationSource = "photo";
     void runNearbySearch(photoUrl, selectedPhotoLocation);
+  } else if (phoneLocationPermission === "granted" && phoneLocationFitsPhoto({ fromCamera: selectedPhotoFromCamera, capturedAtMs: selectedPhotoCapturedAtMs })) {
+    // Das iPhone liefert Kamerafotos aus dem Browser oft ohne Ortsangabe. Die Person steht gerade am AED und
+    // hat dem Handy den Standort einmal erlaubt: Der Handy-Standort ersetzt das fehlende Foto-GPS, ohne
+    // Zwischenfrage. Die Anzeige nennt „Handy-Standort verwendet“. Bei Galerie-Fotos und älteren Aufnahmen
+    // bleibt die ausdrückliche Wahl (siehe else), weil das Handy dort woanders sein kann.
+    // „phone-auto“ merkt, dass die App den Standort selbst eingesetzt hat: Beim Wiederholen wird die Frische neu geprüft.
+    activeSearchLocation = undefined;
+    activeSearchLocationSource = "phone-auto";
+    void runNearbySearch(photoUrl);
   } else {
     state = { kind: "location-choice", photoUrl };
     render(true);
   }
+}
+
+/**
+ * Fragt nach dem Anmelden einmal nach dem Standort, falls das Handy noch nicht entschieden hat.
+ * Das ist der „einmal beim Start“-Moment: Danach fragt die App nie wieder, und die Erlaubnis gilt für
+ * frisch aufgenommene Fotos ohne GPS. Der Browser zeigt dabei seinen eigenen Systemdialog.
+ */
+async function askForLocationOnceAfterSignIn(): Promise<void> {
+  if (locationAskAttempted) return;
+  locationAskAttempted = true;
+  phoneLocationPermission = await readLocationPermission();
+  let storage: Storage;
+  try {
+    storage = window.localStorage;
+  } catch {
+    // Ohne Browser-Speicher lässt sich „einmal“ nicht merken; dann wird nicht gefragt.
+    return;
+  }
+  askForLocationOnce({
+    permission: phoneLocationPermission,
+    storage,
+    geolocation: navigator.geolocation,
+    onGranted: () => { phoneLocationPermission = "granted"; },
+  });
 }
 
 function releasePhoto(): void {
@@ -1294,6 +1376,8 @@ function releasePhoto(): void {
   const photoUrl = getPhotoUrl(state);
   if (photoUrl?.startsWith("blob:")) URL.revokeObjectURL(photoUrl);
   selectedPhotoLocation = undefined;
+  selectedPhotoFromCamera = false;
+  selectedPhotoCapturedAtMs = undefined;
   selectedPhotoFile = undefined;
   photoCheckRequestId = undefined;
   photoDateRequiresConfirmation = false;
@@ -1305,6 +1389,8 @@ function releasePhoto(): void {
 
 render();
 void refreshAccountState();
+// Hält die Erlaubnis aktuell, auch wenn die Person sie später in den Systemeinstellungen ändert.
+void watchLocationPermission((permission) => { phoneLocationPermission = permission; });
 if ("serviceWorker" in navigator && import.meta.env.PROD) {
   window.addEventListener("load", () => {
     // Every build gets a new worker URL, including deployments that only change the HTML, manifest or icon.
