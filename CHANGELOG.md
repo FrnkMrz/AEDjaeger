@@ -21,6 +21,9 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Liest AED-Kandidaten direkt aus der `defibrillators`-Ebene des OpenFireMap-PMTiles-Archivs. Der Worker prüft den Datenstand und liest für den Foto-Standort nur die benötigten Zoom-14-Kacheln über begrenzte HTTP-Range-Anfragen.
 - Verwendet kein Overpass für die Umgebungssuche. Fehlende, veraltete, unvollständige oder ungültige Archivdaten bleiben ein Suchfehler und werden nie als Beleg für einen freien Standort behandelt.
 
+### Added
+- Ergänzt die Vorbereitung des OSM-Dev-Schreibtests in `docs/pilot-abnahme.md` (Abschnitt C0): Dev-Konto und OAuth-Anwendung, Worker-Einstellungen, Migrationen `0006` bis `0009`, Wahl des Testorts, geänderte Reihenfolge (zuerst Neuanlage, dann `check_date`) und eine Vorlage für den Abnahmebericht. Es wird nichts geschrieben; `OSM_DEV_WRITES_ENABLED` bleibt aus.
+
 ### Changed
 - Entfernt das Häkchen-Symbol vor dem Namen in der Kopfzeile: Es zeigte dasselbe wie die grüne Lampe. Die Lampe bleibt als einziger Statusanzeiger.
 - Die Lampe ist jetzt eine Schaltfläche mit größerer Tippfläche. Grün: öffnet den Abschnitt mit „Abmelden“ im Info-Dialog (abgemeldet wird erst mit „Abmelden“). Rot: startet die Anmeldung wie der Anmelde-Knopf; fehlt dieser (Prüfung läuft, Verbindungsfehler), bleibt die Person auf der Anmeldeseite und der passende Knopf bekommt den Fokus.
