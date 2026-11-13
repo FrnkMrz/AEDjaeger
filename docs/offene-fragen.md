@@ -15,7 +15,10 @@ Bestätigt vom Projektinhaber: Die Versionsnummer im Info-Dialog stimmt mit `/ve
 **Offen:**
 
 - **Tags am Wiki prüfen:** Per Websuche (13.11.2026) belegt: `defibrillator:cabinet` hat die Werte `vertical_door`, `horizontal_door`, `twist`, `mechanical`, `no` und beschreibt die Art des Gehäuses; `access` kennt `yes`, `customers`, `private`, `no`, nicht aber `permissive`. Beides stammt aus Suchauszügen. Das Wiki ist aus der Agentenumgebung nicht erreichbar; zur Absicherung den Host freigeben oder den Tag-Abschnitt der DE-Seite einfügen. `manufacturer` und `model` bleiben draußen.
-- **Gehäuse-Frage (vor P2):** Die Wiki-Werte sind technisch (Tür senkrecht, Tür waagerecht, Drehverschluss, mechanisch). Offen ist, was die Oberfläche Laien anbietet: nur „Nein, offen“ (`no`), eine Auswahl mit Bildern, oder das Feld ganz streichen.
+- **Gehäuse-Frage:** Die Wiki-Werte sind technisch (Tür senkrecht, Tür waagerecht, Drehverschluss, mechanisch). Offen ist, was die Oberfläche Laien anbietet: nur „Nein, offen“ (`no`), eine Auswahl mit Bildern, oder das Feld ganz streichen. **Vorläufig (ohne Rückmeldung des Projektinhabers):** P2 zeigt das Feld nicht. Der Datenvertrag erlaubt es weiterhin, sodass eine spätere Ergänzung keine Serveränderung braucht.
+- **Formular auf dem Handy (P2):** Nur im Browser mit Playwright geprüft (Pixel-7-Profil, 320 px, alle sechs Sprachen, Tastatur). Nicht geprüft: echtes iPhone und Android, Bildschirmtastatur (verdeckt sie die Fußleiste?), japanische Eingabemethode, Lesbarkeit im Freien.
+- **Zeiten-Eingabe:** Zwei feste Vorlagen („Mo-Fr 08:00-18:00“, „Mo-Sa 07:00-20:00“). Offen ist, ob mehr oder gar keine Vorlagen sinnvoll sind.
+- **Schnellwahl beim Standort:** Fünf Wörter (Eingang, Foyer, Außenwand, Empfang, Treppenhaus). Offen ist, ob das die richtigen sind.
 - **Korrekturen (P5):** Bleibt hinter einem Betreiber-Schalter. Offen ist der Name der Variable und ob der Schalter zusätzlich nur für zugelassene Konten gilt.
 - **`opening_hours`:** Version 1 prüft nur Länge und Zeichen. Ob später eine Syntaxprüfung (eigene Bibliothek) lohnt, braucht eine eigene Entscheidung.
 - **Telefon und Betreiber:** Es gilt „nur von Gerät oder Schild“. Offen ist, ob die App Nummern zusätzlich automatisch auf Privatnummern prüfen soll (eher nein).

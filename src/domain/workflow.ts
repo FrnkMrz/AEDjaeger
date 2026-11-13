@@ -1,5 +1,6 @@
 import { assessCandidateSearch } from "./assessCandidateSearch";
-import type { CandidateAssessment, LocationEstimate, MatchPolicy } from "./candidateMatch";
+import type { CandidateAssessment, Coordinate, LocationEstimate, MatchPolicy } from "./candidateMatch";
+import type { DetailTags } from "../contracts/aedDetails";
 import type { CandidateSearchResult } from "../osm/candidateTypes";
 import type { SearchLocation } from "../osm/candidateSearch";
 import type { ExistingCheckDatePreview, NewAedPreview, ProposalResult } from "./osmChangeProposal";
@@ -29,7 +30,8 @@ export type DevelopmentWriteRequest = {
   candidateLabel: string;
 } & (
   | { kind: "check-date"; target: string; expectedVersion?: number; expectedCheckDate: string | null; observedOn: string }
-  | { kind: "create-node"; latitude: number; longitude: number; observedOn: string; locationDescription: string | null; confirmedDifferentCandidateIds: string[] }
+  // details: die geprüften Detailtags (siehe src/contracts/aedDetails.ts). Leer, wenn die Person nichts angegeben hat.
+  | { kind: "create-node"; latitude: number; longitude: number; observedOn: string; details: DetailTags; confirmedDifferentCandidateIds: string[] }
 );
 
 export type FlowState =
@@ -49,7 +51,12 @@ export type FlowState =
   | { kind: "location-map"; photoUrl: string; center: LocationEstimate; initialZoom?: number }
   | { kind: "candidate-searching"; photoUrl: string }
   | CandidateResultState
-  | { kind: "new-aed-preview"; photoUrl: string; result: ProposalResult<NewAedPreview>; returnState: CandidateResultState; writeStatus?: "sending" | "complete" | "uncertain" | "conflict" | "failed"; operationId?: string }
+  // Detailformular für eine Neuanlage (Entscheidung vom 13.11.2026). Die Person hat Suche und Position bestätigt (erste Bestätigung);
+  // hier gibt sie freiwillige Angaben ein. Die eingegebenen Werte liegen im Arbeitsspeicher von main.ts (detailForm), damit sie
+  // beim Neuzeichnen und beim Zurückgehen erhalten bleiben. position ist der bestätigte Kartenpunkt.
+  | { kind: "new-aed-details"; photoUrl: string; returnState: CandidateResultState; position: Coordinate }
+  // detailsPosition ist nur gesetzt, wenn die Vorschau aus dem Detailformular kommt: Dann führt „Zurück“ dorthin statt zur Suche.
+  | { kind: "new-aed-preview"; photoUrl: string; result: ProposalResult<NewAedPreview>; returnState: CandidateResultState; detailsPosition?: Coordinate; writeStatus?: "sending" | "complete" | "uncertain" | "conflict" | "failed"; operationId?: string }
   | { kind: "osm-preview"; photoUrl: string; candidateId: string; candidateLabel: string; result: ProposalResult<ExistingCheckDatePreview>; returnState: CandidateResultState; writeStatus?: "sending" | "complete" | "unchanged" | "uncertain" | "conflict" | "failed"; operationId?: string }
   | { kind: "development-write-recovery"; request: DevelopmentWriteRequest; writeStatus: "uncertain" | "sending" | "complete" | "unchanged" | "conflict" | "failed" }
   | { kind: "candidate-error"; photoUrl: string; reason: "location-unavailable" | "location-denied" | "location-uncertain" | "sign-in" | "rate-limited" | "service-unavailable" | "failed" | "invalid-response"; retryAvailableAt?: number }

@@ -1,6 +1,6 @@
 import "./styles.css";
 import { endOSMSession, loadOSMSession } from "./auth/osmSession";
-import { analysisResult, chooseCandidate, confirmationResult, recoveryResult, type CandidateId, type DemoScenario, type DevelopmentWriteRequest, type FlowState } from "./domain/workflow";
+import { analysisResult, chooseCandidate, confirmationResult, recoveryResult, type CandidateId, type CandidateResultState, type DemoScenario, type DevelopmentWriteRequest, type FlowState } from "./domain/workflow";
 import { translate, translations, type Language, type TranslationKey } from "./i18n/translations";
 import { translateFlow, type FlowMessageKey } from "./i18n/flowTranslations";
 import { readPhotoCapture, readPhotoLocation } from "./vision/photoLocation";
@@ -14,6 +14,10 @@ import { askForLocationOnce, phoneLocationFitsPhoto, readLocationPermission, wat
 import { assessCandidateSearch } from "./domain/assessCandidateSearch";
 import { createPositionPicker, zoomToFitMarkers, type Coordinate, type MapMarker } from "./map/positionPicker";
 import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
+import {
+  ACCESS_VALUES, DETAIL_LIMITS, EMPTY_DETAIL_FORM, INDOOR_VALUES, buildDetailTags, isDetailKey, validateDetailTags,
+  type AedDetailForm, type DetailKey, type DetailTags,
+} from "./contracts/aedDetails";
 import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } from "./osm/candidateSearch";
 import { isCalendarDate, isFreshCapture, isValidObservedDate, localCalendarDate, photoDateNeedsConfirmation } from "./domain/localDate";
 
@@ -85,6 +89,12 @@ let photoSelectionPending = false;
 let activePositionPicker: { destroy(): void } | undefined;
 let newAedPositionOverride: Coordinate | undefined;
 let mapLocationOverride: Coordinate | undefined;
+// Eingaben im Detailformular für eine Neuanlage. Sie liegen bewusst außerhalb von `state`: render() baut die
+// Seite bei jedem Zustandswechsel neu auf, die Eingaben sollen dabei (und beim Zurückgehen aus der Vorschau)
+// erhalten bleiben. Sie bleiben nur im Arbeitsspeicher und werden mit dem Foto verworfen (resetDetailForm).
+let detailForm: AedDetailForm = { ...EMPTY_DETAIL_FORM };
+// Ob der Abschnitt „Mehr Angaben“ aufgeklappt ist. Merken, damit er beim Neuzeichnen nicht zuklappt.
+let detailMoreOpen = false;
 
 function readLanguage(): Language {
   // Nicht lesbarer Speicher (zum Beispiel "alle Cookies blockieren") darf den Start nicht verhindern: dann gilt die Gerätesprache.
@@ -118,13 +128,26 @@ function readPendingDevelopmentWrite(): DevelopmentWriteRequest | undefined {
       return request;
     }
     if (kind === "create-node" && typeof value.latitude === "number" && Number.isFinite(value.latitude) && Math.abs(value.latitude) <= 90
-      && typeof value.longitude === "number" && Number.isFinite(value.longitude) && Math.abs(value.longitude) <= 180
-      && (value.locationDescription === null || typeof value.locationDescription === "string" && value.locationDescription.length <= 255)) {
+      && typeof value.longitude === "number" && Number.isFinite(value.longitude) && Math.abs(value.longitude) <= 180) {
       const confirmedIds = value.confirmedDifferentCandidateIds ?? [];
       if (!Array.isArray(confirmedIds) || confirmedIds.length > 100
         || confirmedIds.some((id) => typeof id !== "string" || !/^(node|way|relation)\/[1-9]\d{0,15}$/u.test(id))
         || new Set(confirmedIds).size !== confirmedIds.length) return undefined;
-      return { ...value, confirmedDifferentCandidateIds: confirmedIds } as unknown as DevelopmentWriteRequest;
+      // Die gespeicherten Detailtags werden wie jede Eingabe an einer Vertrauensgrenze erneut geprüft.
+      // Ältere Einträge (vor Etappe P2) kennen nur `locationDescription`; sie werden in das neue Format übersetzt.
+      let rawDetails: unknown = value.details;
+      if (rawDetails === undefined) {
+        if (value.locationDescription === null || value.locationDescription === undefined) rawDetails = {};
+        else if (typeof value.locationDescription === "string") rawDetails = { "defibrillator:location": value.locationDescription };
+        else return undefined;
+      }
+      const checkedDetails = validateDetailTags(rawDetails);
+      if (!checkedDetails.ok) return undefined;
+      return {
+        kind: "create-node", operationId: value.operationId, candidateLabel: value.candidateLabel,
+        latitude: value.latitude, longitude: value.longitude, observedOn: value.observedOn,
+        details: checkedDetails.tags, confirmedDifferentCandidateIds: confirmedIds,
+      } as DevelopmentWriteRequest;
     }
     return undefined;
   } catch {
@@ -339,6 +362,284 @@ function reviewedCandidateMarkers(current: FlowState): MapMarker[] {
   return markers;
 }
 
+/**
+ * Baut die Vorschau einer Neuanlage aus dem Suchergebnis, der bestätigten Position und den Detailangaben.
+ *
+ * Alle Sicherheitsprüfungen (vollständige Suche, keine Treffer in der Nähe, bestätigte Position, gültige
+ * Details) stecken in `previewNewAed`. Diese Funktion reicht nur die Eingaben dorthin weiter. Sie wird an
+ * zwei Stellen gebraucht: bei nicht bestätigter Position (dann entsteht eine gesperrte Vorschau mit
+ * Hinweis) und nach dem Detailformular (dann entsteht die echte Vorschau).
+ *
+ * @param current            Der Zustand „Suchergebnis“, aus dem die Neuanlage kommt.
+ * @param positionConfirmed  true, wenn die Person die Position ausdrücklich bestätigt hat.
+ * @param details            Geprüfte Detailtags aus dem Formular (leer oder weggelassen = keine Angaben).
+ */
+function computeNewAedPreview(current: CandidateResultState, positionConfirmed: boolean, details?: DetailTags) {
+  return previewNewAed({
+    searchStatus: current.search.status,
+    assessmentKind: current.assessment.kind,
+    position: newAedPositionOverride ?? current.location,
+    searchCenter: current.location,
+    coverageRadiusMeters: current.search.coverageRadiusMeters,
+    nearbyRadiusMeters: 100,
+    searchCandidates: current.search.candidates,
+    // Only reject AEDs the review panel actually showed. Other search results
+    // remain in the duplicate check, especially if the map point is moved.
+    confirmedDifferentCandidateIds: current.noneOfTheseConfirmed && current.assessment.kind === "candidate-review"
+      ? current.assessment.candidates.map((candidate) => candidate.id)
+      : [],
+    positionConfirmed,
+    observedOn,
+    ...(details === undefined ? {} : { details }),
+  });
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Detailformular für eine Neuanlage (Etappe P2, Entscheidung vom 13.11.2026)
+//
+// Aufbau: Große Auswahlfelder statt Aufklapplisten, „Weiß ich nicht“ als Vorgabe, eine feste Fußleiste mit einem
+// Hauptknopf. Die Regeln, welche Eingabe welches OSM-Tag ergibt, stehen NICHT hier, sondern im gemeinsamen
+// Vertrag src/contracts/aedDetails.ts (buildDetailTags). Dieser Teil kümmert sich nur um Anzeige und Bedienung.
+//
+// Wichtig für das Verständnis: render() baut die ganze Seite bei jedem Zustandswechsel neu auf. Das wäre beim
+// Tippen in ein Textfeld schlecht (der Cursor springt weg, eine japanische Eingabe bricht ab). Deshalb ändern
+// Eingaben im Formular nur `detailForm` und aktualisieren gezielt die Fußleiste. Nur bei Auswahlfeldern, die
+// weitere Felder ein- oder ausblenden, wird der Formularteil (#detail-form) neu gezeichnet.
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Die Textfelder des Formulars. Sie entsprechen den gleichnamigen Feldern von AedDetailForm. */
+type DetailTextField = "location" | "hoursText" | "operator" | "phone" | "description" | "ref";
+const DETAIL_TEXT_FIELDS: readonly DetailTextField[] = ["location", "hoursText", "operator", "phone", "description", "ref"];
+
+/** Prüft, ob ein Text aus dem DOM der Name eines Textfelds ist (statt einem Attribut blind zu vertrauen). */
+function isDetailTextField(value: string | undefined): value is DetailTextField {
+  return value !== undefined && (DETAIL_TEXT_FIELDS as readonly string[]).includes(value);
+}
+
+/**
+ * Abschnitt des Formulars, in dem ein Schlüssel steht. Damit erscheint eine Fehlermeldung direkt beim
+ * betroffenen Feld und nicht irgendwo.
+ */
+const DETAIL_GROUP_OF_KEY: Record<DetailKey, string> = {
+  "defibrillator:location": "location",
+  access: "access",
+  opening_hours: "hours",
+  indoor: "indoor",
+  level: "indoor",
+  "defibrillator:cabinet": "more",
+  operator: "more",
+  phone: "more",
+  description: "more",
+  ref: "more",
+};
+
+/** Setzt das Formular zurück (neues Foto, Foto verworfen, neue Suche). */
+function resetDetailForm(): void {
+  detailForm = { ...EMPTY_DETAIL_FORM };
+  detailMoreOpen = false;
+}
+
+/** Wählt aus einer festen Werteliste den passenden Wert oder `null` („Weiß ich nicht“). */
+function pickAllowed<T extends string>(allowed: readonly T[], raw: string): T | null {
+  return (allowed as readonly string[]).includes(raw) ? (raw as T) : null;
+}
+
+/**
+ * Eine Auswahl-Kachel. Technisch ein echtes Radio-Feld (versteckt) mit sichtbarem Etikett. Dadurch funktionieren
+ * Tastatur (Pfeiltasten), Screenreader und Fokus ohne eigenen Code; die Kachel ist 48 px hoch (siehe styles.css).
+ */
+function detailRadio(field: "access" | "hoursMode" | "indoor", value: string, label: string, checked: boolean, isUnknown = false): string {
+  const id = `detail-${field}-${value === "" ? "unknown" : value}`;
+  return `<span class="chip-wrap"><input class="chip-input" type="radio" name="detail-${field}" id="${id}" value="${escapeHtml(value)}" data-detail-radio="${field}"${checked ? " checked" : ""} /><label class="chip${isUnknown ? " chip-unknown" : ""}" for="${id}">${escapeHtml(label)}</label></span>`;
+}
+
+/** Ein Textfeld des Formulars; Änderungen landen über den `input`-Handler in `detailForm`. */
+function detailTextInput(field: DetailTextField, id: string, maxLength: number, extraAttributes = ""): string {
+  return `<input class="field" id="${id}" type="text" maxlength="${maxLength}" value="${escapeHtml(detailForm[field])}" data-detail-text="${field}" autocomplete="off" ${extraAttributes} />`;
+}
+
+/** Ein Abschnitt: Überschrift, Hinweis, Inhalt und ein (zunächst verborgener) Platz für die Fehlermeldung. */
+function detailGroup(id: string, title: string, hint: string, body: string): string {
+  // Ein <div role="group"> statt <fieldset>: Die Überschrift liegt dann sauber IM Kasten (bei <legend> läuft der Rahmen
+  // durch sie hindurch). Für Screenreader ist die Gruppe über aria-labelledby genauso benannt.
+  return `<div class="detail-group" id="detail-group-${id}" role="group" aria-labelledby="detail-legend-${id}"><p class="detail-legend" id="detail-legend-${id}">${escapeHtml(title)}</p>${hint ? `<p class="detail-hint">${escapeHtml(hint)}</p>` : ""}${body}<p class="detail-error" role="alert" data-detail-error="${id}" hidden>${tv("detailInvalid")}</p></div>`;
+}
+
+/** Text für den Zähler an „Mehr Angaben“: wie viele der seltenen Angaben schon gesetzt sind. */
+function detailMoreCountText(): string {
+  const set = [detailForm.operator, detailForm.phone, detailForm.description, detailForm.ref].filter((text) => text.trim() !== "").length;
+  return set === 0 ? tv("detailMoreOptional") : tv("detailMoreCount", { count: set });
+}
+
+/** Beschriftung des Hauptknopfs: nennt, wie viele Angaben mitgehen. */
+function detailContinueLabel(count: number): string {
+  if (count === 0) return tv("detailContinueNone");
+  return count === 1 ? tv("detailContinueOne") : tv("detailContinueMany", { count });
+}
+
+/** Der Formularteil (alles außer Fußleiste). Wird bei Auswahländerungen komplett neu geschrieben. */
+function detailFormMarkup(): string {
+  const f = detailForm;
+  const unknown = tv("detailUnknown");
+
+  // 1. Wo genau? Textfeld plus Schnellwahl-Wörter, die ans Ende des Textes angehängt werden.
+  const quickWords = [tv("detailLocEntrance"), tv("detailLocFoyer"), tv("detailLocOutside"), tv("detailLocReception"), tv("detailLocStairs")];
+  const location = detailGroup("location", tv("detailLocationLabel"), tv("detailLocationHint"),
+    `<input class="field" id="detail-location" type="text" maxlength="${DETAIL_LIMITS.location}" value="${escapeHtml(f.location)}" data-detail-text="location" autocomplete="off" placeholder="${escapeHtml(tv("detailLocationPlaceholder"))}" aria-label="${escapeHtml(tv("detailLocationLabel"))}" />`
+    + `<div class="chip-row">${quickWords.map((word) => `<button type="button" class="chip chip-small" data-detail-addloc="${escapeHtml(word)}">${escapeHtml(word)}</button>`).join("")}</div>`);
+
+  // 2. Wer kommt ran? Die Frage meint das Gerät, nicht das Gebäude.
+  const access = detailGroup("access", tv("detailAccessLabel"), tv("detailAccessHint"),
+    `<div class="chip-row">${detailRadio("access", "yes", tv("detailAccessYes"), f.access === "yes")}${detailRadio("access", "customers", tv("detailAccessCustomers"), f.access === "customers")}${detailRadio("access", "private", tv("detailAccessPrivate"), f.access === "private")}${detailRadio("access", "", unknown, f.access === null, true)}</div>`);
+
+  // 3. Wann erreichbar? „Rund um die Uhr“ nur nach ausdrücklicher Wahl; das Zeiten-Feld erscheint bei „Zu bestimmten Zeiten“.
+  const timesField = f.hoursMode === "times"
+    ? `<div class="detail-sub"><label class="detail-hint" for="detail-hours-text">${tv("detailHoursTextLabel")}</label>${detailTextInput("hoursText", "detail-hours-text", DETAIL_LIMITS.openingHours, 'placeholder="Mo-Fr 08:00-18:00" autocapitalize="off" spellcheck="false"')}<div class="chip-row"><button type="button" class="chip chip-small" data-detail-hours-preset="Mo-Fr 08:00-18:00">Mo-Fr 08:00-18:00</button><button type="button" class="chip chip-small" data-detail-hours-preset="Mo-Sa 07:00-20:00">Mo-Sa 07:00-20:00</button></div></div>`
+    : "";
+  const hours = detailGroup("hours", tv("detailHoursLabel"), tv("detailHoursHint"),
+    `<div class="chip-row">${detailRadio("hoursMode", "always", tv("detailHoursAlways"), f.hoursMode === "always")}${detailRadio("hoursMode", "times", tv("detailHoursTimes"), f.hoursMode === "times")}${detailRadio("hoursMode", "", unknown, f.hoursMode === null, true)}</div>${timesField}`);
+
+  // 4. Drinnen oder draußen? Die Ebene erscheint nur bei „Drinnen“. Der erste Tipp auf + oder − setzt 0 (Erdgeschoss).
+  const levelField = f.indoor === "yes"
+    ? `<div class="detail-sub"><span class="detail-hint" id="detail-level-label">${tv("detailLevelLabel")}</span><div class="stepper" role="group" aria-labelledby="detail-level-label"><button type="button" class="step-button" id="detail-level-down" data-detail-step="-1" aria-label="${escapeHtml(tv("detailLevelLower"))}">−</button><output class="step-value" id="detail-level-value" aria-live="polite">${f.level === null ? "–" : f.level}</output><button type="button" class="step-button" id="detail-level-up" data-detail-step="1" aria-label="${escapeHtml(tv("detailLevelHigher"))}">+</button><button type="button" class="chip chip-small chip-unknown" id="detail-level-clear" data-detail-level-clear="1">${unknown}</button></div></div>`
+    : "";
+  const indoor = detailGroup("indoor", tv("detailIndoorLabel"), "",
+    `<div class="chip-row">${detailRadio("indoor", "yes", tv("detailIndoorYes"), f.indoor === "yes")}${detailRadio("indoor", "no", tv("detailIndoorNo"), f.indoor === "no")}${detailRadio("indoor", "", unknown, f.indoor === null, true)}</div>${levelField}`);
+
+  // 5. Seltene Angaben, eingeklappt. Gehäuse bleibt vorerst draußen (offene Entscheidung, siehe docs/offene-fragen.md).
+  const more = `<details class="detail-more" id="detail-more"${detailMoreOpen ? " open" : ""}><summary><span>${tv("detailMoreTitle")}</span><span class="detail-more-count" id="detail-more-count">${detailMoreCountText()}</span></summary><div class="detail-more-body">`
+    + `<div><label class="detail-hint" for="detail-operator">${tv("detailOperatorLabel")}</label>${detailTextInput("operator", "detail-operator", DETAIL_LIMITS.operator)}</div>`
+    + `<div><label class="detail-hint" for="detail-phone">${tv("detailPhoneLabel")}</label>${detailTextInput("phone", "detail-phone", DETAIL_LIMITS.phone, 'inputmode="tel" autocomplete="off"')}<p class="detail-hint">${tv("detailPhoneHint")}</p></div>`
+    + `<div><label class="detail-hint" for="detail-description">${tv("detailDescriptionLabel")}</label>${detailTextInput("description", "detail-description", DETAIL_LIMITS.description)}</div>`
+    + `<div><label class="detail-hint" for="detail-ref">${tv("detailRefLabel")}</label>${detailTextInput("ref", "detail-ref", DETAIL_LIMITS.ref)}</div>`
+    + `<p class="detail-hint">${tv("detailNoCode")}</p><p class="detail-error" role="alert" data-detail-error="more" hidden>${tv("detailInvalid")}</p></div></details>`;
+
+  return `${location}${access}${hours}${indoor}${more}`;
+}
+
+/** Fußleiste: der eine Hauptknopf (immer erreichbar) und „Zurück zur Karte“. */
+function detailFooterMarkup(): string {
+  const built = buildDetailTags(detailForm);
+  const count = built.ok ? Object.keys(built.tags).length : 0;
+  return `<div class="detail-footer"><button class="button button-primary" id="detail-continue" type="button" data-action="details-continue"${built.ok ? "" : " disabled"}>${detailContinueLabel(count)}</button></div><button class="button button-quiet" type="button" data-action="back-from-details">${tv("detailsBackToMap")}</button>`;
+}
+
+/**
+ * Aktualisiert Hauptknopf, Fehlermeldung und Zähler, ohne das Formular neu zu zeichnen.
+ * Wird nach jeder Eingabe aufgerufen. Ist eine Angabe ungültig, sperrt sie den Knopf und zeigt die Meldung
+ * direkt bei dem betroffenen Abschnitt.
+ */
+function updateDetailFooter(): void {
+  const built = buildDetailTags(detailForm);
+  const button = app!.querySelector<HTMLButtonElement>("#detail-continue");
+  if (button) {
+    button.disabled = !built.ok;
+    button.textContent = detailContinueLabel(built.ok ? Object.keys(built.tags).length : 0);
+  }
+  const failingGroup = !built.ok && isDetailKey(built.key) ? DETAIL_GROUP_OF_KEY[built.key] : undefined;
+  app!.querySelectorAll<HTMLElement>("[data-detail-error]").forEach((slot) => { slot.hidden = slot.dataset.detailError !== failingGroup; });
+  // Steckt der Fehler in „Mehr Angaben“, muss der Abschnitt offen sein, sonst sieht ihn niemand.
+  if (failingGroup === "more") {
+    const details = app!.querySelector<HTMLDetailsElement>("#detail-more");
+    if (details) details.open = true;
+  }
+  const moreCount = app!.querySelector<HTMLElement>("#detail-more-count");
+  if (moreCount) moreCount.textContent = detailMoreCountText();
+}
+
+/**
+ * Zeichnet nur den Formularteil neu (nach einer Auswahländerung) und setzt den Fokus zurück auf das Feld, das die
+ * Person gerade bedient hat. So bleibt die Bedienung per Tastatur und Screenreader zusammenhängend.
+ */
+function refreshDetailForm(focusId?: string): void {
+  const host = app!.querySelector<HTMLElement>("#detail-form");
+  if (!host) return;
+  host.innerHTML = detailFormMarkup();
+  updateDetailFooter();
+  if (focusId) document.getElementById(focusId)?.focus();
+}
+
+/** Setzt den Wert des Ebenen-Zählers in der Anzeige (ohne Neuzeichnen). */
+function showDetailLevel(): void {
+  const output = app!.querySelector<HTMLOutputElement>("#detail-level-value");
+  if (output) output.textContent = detailForm.level === null ? "–" : String(detailForm.level);
+}
+
+/**
+ * Verbindet das Formular mit seinen Eingaben. Die Abhörer hängen am äußeren Behälter #detail-form, der beim
+ * Neuzeichnen des Inhalts bestehen bleibt: So gibt es nie doppelte Abhörer und keine verlorenen.
+ * Wird von render() aufgerufen, nachdem die Seite neu geschrieben wurde.
+ */
+function bindDetailForm(): void {
+  const host = app!.querySelector<HTMLElement>("#detail-form");
+  if (!host) return;
+
+  // Auswahlfelder (Radio): Wert speichern, bei Bedarf Folgefelder ein- oder ausblenden.
+  host.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement) || target.type !== "radio") return;
+    const field = target.dataset.detailRadio;
+    if (field === "access") {
+      detailForm.access = pickAllowed(ACCESS_VALUES, target.value);
+    } else if (field === "indoor") {
+      detailForm.indoor = pickAllowed(INDOOR_VALUES, target.value);
+      // Die Ebene gehört nur zu einem Gerät im Gebäude.
+      if (detailForm.indoor !== "yes") detailForm.level = null;
+    } else if (field === "hoursMode") {
+      detailForm.hoursMode = pickAllowed(["always", "times"] as const, target.value);
+    } else {
+      return;
+    }
+    refreshDetailForm(target.id);
+  });
+
+  // Textfelder: nur das Modell und die Fußleiste aktualisieren, das Feld selbst bleibt unangetastet.
+  host.addEventListener("input", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    const field = target.dataset.detailText;
+    if (!isDetailTextField(field)) return;
+    detailForm[field] = target.value;
+    updateDetailFooter();
+  });
+
+  // Knöpfe im Formular: Schnellwahl für den Standort, Zeiten-Vorlagen, Ebenen-Zähler.
+  host.addEventListener("click", (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLElement>("button");
+    if (!button) return;
+    if (button.dataset.detailAddloc !== undefined) {
+      const base = detailForm.location.trim();
+      const next = base === "" ? button.dataset.detailAddloc : `${base}, ${button.dataset.detailAddloc}`;
+      if (next.length > DETAIL_LIMITS.location) return;
+      detailForm.location = next;
+      const input = host.querySelector<HTMLInputElement>("#detail-location");
+      if (input) input.value = next;
+      updateDetailFooter();
+    } else if (button.dataset.detailHoursPreset !== undefined) {
+      detailForm.hoursText = button.dataset.detailHoursPreset;
+      const input = host.querySelector<HTMLInputElement>("#detail-hours-text");
+      if (input) input.value = detailForm.hoursText;
+      updateDetailFooter();
+    } else if (button.dataset.detailStep !== undefined) {
+      const step = Number(button.dataset.detailStep) < 0 ? -1 : 1;
+      // Der erste Tipp landet auf 0 (Erdgeschoss), egal in welche Richtung: Das ist der häufigste Fall.
+      detailForm.level = detailForm.level === null ? 0 : Math.max(DETAIL_LIMITS.levelMin, Math.min(DETAIL_LIMITS.levelMax, detailForm.level + step));
+      showDetailLevel();
+      updateDetailFooter();
+    } else if (button.dataset.detailLevelClear !== undefined) {
+      detailForm.level = null;
+      showDetailLevel();
+      updateDetailFooter();
+    }
+  });
+
+  // Aufklappen merken, damit „Mehr Angaben“ beim Neuzeichnen offen bleibt. Das Ereignis „toggle“ bubbelt nicht,
+  // deshalb wird es in der Aufnahmephase am Behälter abgefangen.
+  host.addEventListener("toggle", (event) => {
+    if (event.target instanceof HTMLDetailsElement && event.target.id === "detail-more") detailMoreOpen = event.target.open;
+  }, true);
+}
+
 function statusContent(): string {
   const photoUrl = getPhotoUrl(state);
   const photoMarkup = photoUrl ? `<img class="photo-preview" src="${escapeHtml(photoUrl)}" alt="${t("photoAlt")}" />` : "";
@@ -459,6 +760,11 @@ function statusContent(): string {
       // Fehlersuche, aber nicht der Person vor Ort. Zu alte Daten sperrt der Server ohnehin.
       return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p><p class="supporting-copy">${tv(locationSource)}</p>${overviewMap}${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}</div></div>${newEntryAction}${retry}${startNewEntry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     }
+    case "new-aed-details": {
+      // Kleines Foto oben, damit das Formular Platz hat. Die eigentliche Arbeit passiert in #detail-form (siehe bindDetailForm).
+      const thumbnail = photoMarkup.replace('class="photo-preview"', 'class="photo-preview photo-thumb"');
+      return `<div class="detail-form-root">${thumbnail}<div class="result-message"><span class="status-icon status-good" aria-hidden="true">✓</span><div><h2>${tv("detailsTitle")}</h2><p>${tv("detailsIntro")}</p></div></div><div id="detail-form">${detailFormMarkup()}</div>${detailFooterMarkup()}</div>`;
+    }
     case "new-aed-preview": {
       const point = state.result.kind === "ready" ? state.result.position : state.returnState.location;
       const latitude = point.latitude.toFixed(5);
@@ -483,7 +789,11 @@ function statusContent(): string {
       // Speichern (oder währenddessen) wäre er falsch; dann sagt die Statusmeldung, was passiert ist.
       const noWriteNotice = !canCreate && !state.writeStatus ? `<p class="simulation-note">${tv("previewNoWrite")}</p>` : "";
       // „Zurück“ bleibt hier immer: Es führt zur Positionsbestätigung bzw. zur Suche, nicht nur zu Treffern.
-      const navigation = state.writeStatus === "sending" || state.writeStatus === "uncertain" ? "" : `<button class="button button-quiet" data-action="back-to-search">${tv("previewBack")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      // Kommt die Vorschau aus dem Detailformular, führt „Zurück“ dorthin (die Eingaben bleiben erhalten). Sonst zur Suche.
+      const backButton = state.detailsPosition
+        ? `<button class="button button-quiet" data-action="back-to-details">${tv("detailsBackToForm")}</button>`
+        : `<button class="button button-quiet" data-action="back-to-search">${tv("previewBack")}</button>`;
+      const navigation = state.writeStatus === "sending" || state.writeStatus === "uncertain" ? "" : `${backButton}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
       return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("newPreviewTitle")}</h2>${content}${noWriteNotice}${writeStatus}</div></div>${writeAction}${navigation}`;
     }
     case "osm-preview": {
@@ -673,6 +983,9 @@ function render(restoreFlowFocus = false): void {
       });
     }
   }
+
+  // Detailformular: Eingaben mit dem gemerkten Formularzustand verbinden.
+  if (state.kind === "new-aed-details") bindDetailForm();
 
   // Zweite Bestätigung in der Neuanlage-Vorschau: Der Speichern-Knopf wird erst aktiv,
   // wenn der Haken „vor Ort geprüft“ gesetzt ist, und wieder gesperrt, wenn er entfernt wird.
@@ -877,7 +1190,7 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
         expected_version: requestBody.expectedVersion, expected_check_date: requestBody.expectedCheckDate, observed_on: requestBody.observedOn,
       } : {
         operation_id: requestBody.operationId, confirmed: true, latitude: requestBody.latitude, longitude: requestBody.longitude,
-        observed_on: requestBody.observedOn, location_description: requestBody.locationDescription,
+        observed_on: requestBody.observedOn, details: requestBody.details,
         confirmed_different_candidate_ids: requestBody.confirmedDifferentCandidateIds,
       }),
     });
@@ -951,6 +1264,7 @@ function focusCurrentState(): void {
     "osm-preview": ".result-message h2",
     "development-write-recovery": ".result-message h2",
     "new-aed-preview": ".result-message h2",
+    "new-aed-details": ".result-message h2",
     "candidate-error": ".result-message h2",
     clarification: ".result-message h2",
     proposal: '[data-action="confirm"]',
@@ -1147,23 +1461,31 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
   } else if (action === "preview-new-aed" && state.kind === "candidate-result") {
     if (!newEntryPanelOpen(state)) return;
     const positionConfirmed = app!.querySelector<HTMLInputElement>("#new-aed-position-confirmed")?.checked === true;
-    const result = previewNewAed({
-      searchStatus: state.search.status,
-      assessmentKind: state.assessment.kind,
-      position: newAedPositionOverride ?? state.location,
-      searchCenter: state.location,
-      coverageRadiusMeters: state.search.coverageRadiusMeters,
-      nearbyRadiusMeters: 100,
-      searchCandidates: state.search.candidates,
-      // Only reject AEDs the review panel actually showed. Other search results
-      // remain in the duplicate check, especially if the map point is moved.
-      confirmedDifferentCandidateIds: state.noneOfTheseConfirmed && state.assessment.kind === "candidate-review"
-        ? state.assessment.candidates.map((candidate) => candidate.id)
-        : [],
-      positionConfirmed,
-      observedOn,
-    });
-    state = { kind: "new-aed-preview", photoUrl: state.photoUrl, result, returnState: state };
+    if (positionConfirmed) {
+      // Erste Bestätigung (Position) ist da: weiter zu den freiwilligen Angaben. Die Vorschau folgt erst danach.
+      const confirmedPosition = newAedPositionOverride ?? state.location;
+      state = { kind: "new-aed-details", photoUrl: state.photoUrl, returnState: state, position: { latitude: confirmedPosition.latitude, longitude: confirmedPosition.longitude } };
+    } else {
+      // Position nicht bestätigt: Die gesperrte Vorschau erklärt, was fehlt. Das Formular erscheint noch nicht.
+      const result = computeNewAedPreview(state, false);
+      state = { kind: "new-aed-preview", photoUrl: state.photoUrl, result, returnState: state };
+    }
+  } else if (action === "details-continue" && state.kind === "new-aed-details") {
+    // Die Angaben laufen durch denselben Vertrag wie später beim Server. Ist etwas ungültig, bleibt die Person
+    // im Formular (der Knopf ist dann ohnehin gesperrt; das hier ist die zweite Sicherung gegen erzwungene Klicks).
+    const built = buildDetailTags(detailForm);
+    if (!built.ok) {
+      updateDetailFooter();
+      return;
+    }
+    const result = computeNewAedPreview(state.returnState, true, built.tags);
+    state = { kind: "new-aed-preview", photoUrl: state.photoUrl, result, returnState: state.returnState, detailsPosition: state.position };
+  } else if (action === "back-from-details" && state.kind === "new-aed-details") {
+    // Zurück zur Positionsbestätigung. Die Angaben bleiben im Speicher, falls die Person gleich wieder weitergeht.
+    state = state.returnState;
+  } else if (action === "back-to-details" && state.kind === "new-aed-preview" && state.detailsPosition) {
+    if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
+    state = { kind: "new-aed-details", photoUrl: state.photoUrl, returnState: state.returnState, position: state.detailsPosition };
   } else if (action === "back-to-search" && state.kind === "new-aed-preview") {
     if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
     state = state.returnState;
@@ -1180,7 +1502,9 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
       kind: "create-node", operationId,
       candidateLabel: `${preview.result.position.latitude.toFixed(5)}, ${preview.result.position.longitude.toFixed(5)}`,
       latitude: preview.result.position.latitude, longitude: preview.result.position.longitude,
-      observedOn: preview.result.tags.check_date, locationDescription: null,
+      observedOn: preview.result.tags.check_date,
+      // Nur die Detailtags gehen als `details` an den Server. `emergency` und `check_date` setzt der Server selbst.
+      details: Object.fromEntries(Object.entries(preview.result.tags).filter(([key]) => isDetailKey(key))) as DetailTags,
       confirmedDifferentCandidateIds: preview.result.confirmedDifferentCandidateIds,
     };
     try {
@@ -1274,6 +1598,8 @@ function clearTimers(): void {
 
 async function runNearbySearch(photoUrl: string, providedLocation?: SearchLocation): Promise<void> {
   newAedPositionOverride = undefined;
+  // Eine neue Suche beginnt eine neue Neuanlage: Angaben der vorherigen sind veraltet.
+  resetDetailForm();
   if (searchRetryTimer) window.clearTimeout(searchRetryTimer);
   searchRetryTimer = undefined;
   if (accountState !== "signed-in") {
@@ -1460,6 +1786,7 @@ async function askForLocationOnceAfterSignIn(): Promise<void> {
 
 function releasePhoto(): void {
   newAedPositionOverride = undefined;
+  resetDetailForm();
   const photoUrl = getPhotoUrl(state);
   if (photoUrl?.startsWith("blob:")) URL.revokeObjectURL(photoUrl);
   selectedPhotoLocation = undefined;

@@ -38,7 +38,7 @@ Neben dem Schnellweg „Noch da – bestätigen“ (schreibt nur `check_date`) g
 | `opening_hours` | `24/7` oder ein OSM-Zeitausdruck, höchstens 120 Zeichen | „Rund um die Uhr“, „Zu bestimmten Zeiten“ (mit Textfeld) | `24/7` nur bei ausdrücklicher Wahl, nie abgeleitet. Version 1 prüft nur Länge und Zeichen, nicht die Syntax. |
 | `indoor` | `yes`, `no` | „Drinnen“, „Draußen“ | Nur bei eindeutiger Antwort. |
 | `level` | ganze Zahl von −9 bis 99 | Zähler (0 = Erdgeschoss, −1 = Keller) | Nur sichtbar und nur geschrieben, wenn `indoor=yes` gewählt ist. |
-| `defibrillator:cabinet` | `vertical_door`, `horizontal_door`, `twist`, `mechanical`, `no` | „Mehr Angaben“ (Auswahl wird in P2 festgelegt) | Beschreibt die **Art** des Gehäuses, kein einfaches Ja/Nein. Werte laut Websuche-Auszug des Wikis vom 13.11.2026; die Seite selbst war nicht lesbar. Die Oberfläche bietet nur an, was für Laien verständlich ist. |
+| `defibrillator:cabinet` | `vertical_door`, `horizontal_door`, `twist`, `mechanical`, `no` | Noch nicht in der Oberfläche (offene Entscheidung); der Server akzeptiert den Schlüssel | Beschreibt die **Art** des Gehäuses, kein einfaches Ja/Nein. Werte laut Websuche-Auszug des Wikis vom 13.11.2026; die Seite selbst war nicht lesbar. Die Oberfläche bietet nur an, was für Laien verständlich ist. |
 | `operator` | Freitext, höchstens 120 Zeichen | „Mehr Angaben“ | Nur, was am Gerät oder Schild steht. |
 | `phone` | Telefonnummer, höchstens 40 Zeichen | „Mehr Angaben“ | Nur Nummern von Gerät oder Schild. Hinweis „Keine Privatnummern“ in der App. |
 | `description` | Freitext, höchstens 255 Zeichen | „Mehr Angaben“ | Notiz für andere Mapper. |

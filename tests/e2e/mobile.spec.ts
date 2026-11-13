@@ -552,6 +552,9 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   await expect(page.locator("#new-aed-position-coordinates")).not.toContainText("52.52000, 13.40500");
   await page.locator("#new-aed-position-confirmed").check();
   await page.getByRole("button", { name: "Neuen AED vorbereiten" }).click();
+  // Seit Etappe P2 folgt auf die bestätigte Position das freiwillige Detailformular; ohne Angaben geht es sofort weiter.
+  await expect(page.getByRole("heading", { name: "Angaben zum AED" })).toBeVisible();
+  await page.getByRole("button", { name: "Weiter ohne Angaben" }).click();
   await expect(page.getByRole("heading", { name: "Vorschau für neuen AED" })).toBeVisible();
   await expect(page.locator(".capture-content")).not.toContainText("52.52000, 13.40500");
   await expect(page.locator(".capture-content")).toContainText("emergency=defibrillator");
@@ -595,7 +598,8 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
     confirmed: true,
     latitude: 52.52,
     observed_on: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/u),
-    location_description: null,
+    // Ohne Angaben im Formular geht ein leeres Detail-Objekt an den Server (Etappe P2/P3).
+    details: {},
   });
   expect(createRequest?.longitude).toBeCloseTo(13.40495, 4);
   expect(createRequest?.operation_id).toMatch(/^[0-9a-f-]{36}$/iu);
@@ -629,6 +633,7 @@ test("a reviewed nearby AED can be rejected before preparing a separate new entr
   await expect(page.locator("#new-aed-position-map .position-map-marker")).toHaveText(["1"]);
   await page.locator("#new-aed-position-confirmed").check();
   await page.getByRole("button", { name: "Neuen AED vorbereiten" }).click();
+  await page.getByRole("button", { name: "Weiter ohne Angaben" }).click();
   await expect(page.getByRole("heading", { name: "Vorschau für neuen AED" })).toBeVisible();
   await expect(page.locator(".capture-content")).toContainText("Die angezeigten nahen AED-Einträge wurden als andere Geräte bestätigt.");
   await expect(page.getByRole("button", { name: "Testserver: AED eintragen" })).toBeDisabled();
@@ -2344,4 +2349,163 @@ test("a named node still shows its name", async ({ page, context }) => {
   const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ json: { status: "complete", version: 2 } }));
   await expect(saveButton).toBeVisible();
   await expect(page.locator(".result-message")).toContainText("Rathaus");
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// Detailformular für eine Neuanlage (Etappe P2)
+// ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * Bringt die App bis zum Detailformular: angemeldetes Testserver-Konto, Foto mit Standort, Suche ohne Treffer,
+ * beide Bestätigungen vor dem Formular (neu eintragen, Position bestätigt). Gespeichert wird nichts.
+ */
+async function openNewAedDetailForm(page: import("@playwright/test").Page, context: import("@playwright/test").BrowserContext): Promise<void> {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
+  await page.route("https://tile.openstreetmap.org/**", (route) => route.fulfill({ status: 200, contentType: "image/svg+xml", body: "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"256\"><rect width=\"256\" height=\"256\" fill=\"#e5ece3\"/></svg>" }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true } }));
+  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: { status: "complete", coverage_radius_meters: 112, candidates: [] } }));
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
+  await beginNearbySearch(page);
+  await page.getByRole("button", { name: "Hier fehlt ein AED – neu eintragen" }).click();
+  await page.locator("#new-aed-position-confirmed").check();
+  await page.getByRole("button", { name: "Neuen AED vorbereiten" }).click();
+  await expect(page.getByRole("heading", { name: "Angaben zum AED" })).toBeVisible();
+}
+
+test("the detail form turns a few taps into OSM tags and keeps its entries when going back", async ({ page, context }) => {
+  await openNewAedDetailForm(page, context);
+  let createRequest: Record<string, unknown> | undefined;
+  await page.route("**/api/osm/development/create-node", async (route) => {
+    createRequest = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({ json: { status: "complete", node_id: "456", version: 1 } });
+  });
+  const continueButton = page.locator("#detail-continue");
+
+  // Ohne Eingabe: Der Weg geht trotzdem weiter, der Knopf nennt es ehrlich.
+  await expect(continueButton).toHaveText("Weiter ohne Angaben");
+  // „Weiß ich nicht“ ist überall vorausgewählt und schreibt kein Tag.
+  await expect(page.locator("#detail-access-unknown")).toBeChecked();
+  await expect(page.locator("#detail-hoursMode-unknown")).toBeChecked();
+  await expect(page.locator("#detail-indoor-unknown")).toBeChecked();
+  // Das Zeiten-Feld und die Ebene erscheinen erst, wenn sie gebraucht werden.
+  await expect(page.locator("#detail-hours-text")).toHaveCount(0);
+  await expect(page.locator("#detail-level-value")).toHaveCount(0);
+
+  // Standort: Tippen darf den Fokus nicht verlieren (die Seite wird dabei nicht neu gezeichnet).
+  await page.locator("#detail-location").click();
+  await page.keyboard.type("Foyer");
+  await expect(page.locator("#detail-location")).toBeFocused();
+  await expect(page.locator("#detail-location")).toHaveValue("Foyer");
+  await page.getByRole("button", { name: "Empfang", exact: true }).click();
+  await expect(page.locator("#detail-location")).toHaveValue("Foyer, Empfang");
+
+  await page.getByText("Nur Kunden", { exact: true }).click();
+  await page.getByText("Zu bestimmten Zeiten", { exact: true }).click();
+  await page.locator("#detail-hours-text").fill("Mo-Fr 08:00-18:00");
+  await page.getByText("Drinnen", { exact: true }).click();
+  // Der erste Tipp auf + setzt 0 (Erdgeschoss), der zweite 1.
+  await page.getByRole("button", { name: "Eine Ebene höher" }).click();
+  await expect(page.locator("#detail-level-value")).toHaveText("0");
+  await page.getByRole("button", { name: "Eine Ebene höher" }).click();
+  await expect(page.locator("#detail-level-value")).toHaveText("1");
+  await expect(continueButton).toHaveText("Weiter · 5 Angaben");
+
+  // „Mehr Angaben“: eine ungültige Telefonnummer sperrt den Knopf und meldet es am Feld, die korrigierte gibt ihn frei.
+  await page.getByText("Mehr Angaben", { exact: true }).click();
+  await page.locator("#detail-phone").fill("anrufen!");
+  await expect(continueButton).toBeDisabled();
+  await expect(page.locator('[data-detail-error="more"]')).toBeVisible();
+  await page.locator("#detail-phone").fill("+49 911 123456");
+  await expect(continueButton).toBeEnabled();
+  await expect(page.locator('[data-detail-error="more"]')).toBeHidden();
+  await expect(continueButton).toHaveText("Weiter · 6 Angaben");
+
+  await continueButton.click();
+  await expect(page.getByRole("heading", { name: "Vorschau für neuen AED" })).toBeVisible();
+  const preview = page.locator(".capture-content");
+  for (const tag of ["emergency=defibrillator", "defibrillator:location=Foyer, Empfang", "access=customers", "opening_hours=Mo-Fr 08:00-18:00", "indoor=yes", "level=1", "phone=+49 911 123456"]) {
+    await expect(preview).toContainText(tag);
+  }
+
+  // Zurück zu den Angaben: Nichts ist verloren, „Mehr Angaben“ bleibt offen.
+  await page.getByRole("button", { name: "Zurück zu den Angaben" }).click();
+  await expect(page.locator("#detail-location")).toHaveValue("Foyer, Empfang");
+  await expect(page.locator("#detail-access-customers")).toBeChecked();
+  await expect(page.locator("#detail-hours-text")).toHaveValue("Mo-Fr 08:00-18:00");
+  await expect(page.locator("#detail-level-value")).toHaveText("1");
+  await expect(page.locator("#detail-phone")).toHaveValue("+49 911 123456");
+  await expect(continueButton).toHaveText("Weiter · 6 Angaben");
+
+  // Zweite Bestätigung und Speichern: Der Server bekommt genau diese Detailtags, nichts sonst.
+  await continueButton.click();
+  await page.locator("#new-aed-absence-confirmed").check();
+  await page.getByRole("button", { name: "Testserver: AED eintragen" }).click();
+  await expect.poll(() => createRequest).toBeDefined();
+  expect(createRequest?.details).toEqual({
+    "defibrillator:location": "Foyer, Empfang", access: "customers", opening_hours: "Mo-Fr 08:00-18:00", indoor: "yes", level: "1", phone: "+49 911 123456",
+  });
+  expect(createRequest).not.toHaveProperty("location_description");
+});
+
+test("choosing drinnen and then draußen drops the level, and 24/7 only follows an explicit choice", async ({ page, context }) => {
+  await openNewAedDetailForm(page, context);
+  await page.getByText("Drinnen", { exact: true }).click();
+  await page.getByRole("button", { name: "Eine Ebene tiefer" }).click();
+  await page.getByRole("button", { name: "Eine Ebene tiefer" }).click();
+  await expect(page.locator("#detail-level-value")).toHaveText("-1");
+  await page.getByText("Draußen", { exact: true }).click();
+  await expect(page.locator("#detail-level-value")).toHaveCount(0);
+  await expect(page.locator("#detail-continue")).toHaveText("Weiter · 1 Angabe");
+  await page.locator("#detail-continue").click();
+  await expect(page.locator(".capture-content")).toContainText("indoor=no");
+  await expect(page.locator(".capture-content")).not.toContainText("level=");
+  await expect(page.locator(".capture-content")).not.toContainText("opening_hours=");
+  await page.getByRole("button", { name: "Zurück zu den Angaben" }).click();
+  await page.getByText("Rund um die Uhr", { exact: true }).click();
+  await page.locator("#detail-continue").click();
+  await expect(page.locator(".capture-content")).toContainText("opening_hours=24/7");
+});
+
+test("the detail form radio groups work with the keyboard and keep the focus", async ({ page, context }) => {
+  await openNewAedDetailForm(page, context);
+  await page.locator("#detail-access-unknown").focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect(page.locator("#detail-access-private")).toBeChecked();
+  await expect(page.locator("#detail-access-private")).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await expect(page.locator("#detail-access-customers")).toBeChecked();
+  await expect(page.locator("#detail-access-customers")).toBeFocused();
+  // Jede Gruppe hat einen sichtbaren Namen für Screenreader.
+  await expect(page.getByRole("group", { name: "Wer kommt ran?" })).toBeVisible();
+});
+
+test("the detail form fits a 320 px phone in all six languages with the main button always reachable", async ({ page, context }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await openNewAedDetailForm(page, context);
+  // Alle Folgefelder einblenden, damit das Formular so lang wie möglich ist.
+  await page.getByText("Zu bestimmten Zeiten", { exact: true }).click();
+  await page.getByText("Drinnen", { exact: true }).click();
+  await page.getByText("Mehr Angaben", { exact: true }).click();
+
+  for (const language of languageCodes) {
+    await page.locator("#language").selectOption(language);
+    await expect(page.locator("#detail-form")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `horizontal page overflow in ${language}`).toBeLessThanOrEqual(320);
+    // Kein Bedienelement ragt rechts über den Bildschirm hinaus.
+    const overflowing = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>("#detail-form .chip, #detail-form .field, #detail-form .step-button, #detail-form summary, .detail-footer .button")]
+      .filter((element) => element.getBoundingClientRect().right > window.innerWidth + 0.5).map((element) => element.className));
+    expect(overflowing, `controls beyond the screen in ${language}`).toEqual([]);
+    // Alle Tippflächen sind mindestens 44 px hoch.
+    const tooSmall = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>("#detail-form .chip, #detail-form .step-button, #detail-form summary, #detail-form .field, .detail-footer .button")]
+      .filter((element) => element.getBoundingClientRect().height < 44).map((element) => element.textContent?.trim() ?? element.className));
+    expect(tooSmall, `touch targets below 44 px in ${language}`).toEqual([]);
+    // Die feste Fußleiste: Der Hauptknopf liegt ohne Scrollen im sichtbaren Bereich, auch bei langem Formular.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const footerBox = await page.locator("#detail-continue").boundingBox();
+    expect(footerBox, `main button visible in ${language}`).not.toBeNull();
+    expect(footerBox!.y + footerBox!.height, `main button inside the viewport in ${language}`).toBeLessThanOrEqual(640);
+  }
 });

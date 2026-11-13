@@ -33,8 +33,8 @@ Entscheidung vom 13.11.2026, Mockup abgenommen. Je Etappe ein kleiner PR gegen `
 | --- | --- | --- |
 | P0 | Entscheidung und Dokumentation: `AGENTS.md`, `docs/osm.md`, `docs/konzept.md`, `docs/architektur.md`, `docs/offene-fragen.md`, `CHANGELOG.md` | Umgesetzt auf dem Arbeitsbranch, noch nicht gemergt |
 | P1 | Gemeinsamer Datenvertrag `src/contracts/aedDetails.ts` (Schlüsselliste, Werte, Grenzen, `buildDetailTags`, `validateDetailTags`, `diffTags`) mit 31 Tests in `tests/aedDetails.test.ts`. Noch von keinem Programmteil benutzt | Umgesetzt auf dem Arbeitsbranch, noch nicht gemergt |
-| P2 | Formular für Neuanlage im Browser (neuer Zustand `new-aed-details`), Texte in allen sechs Sprachen, E2E bei 320 px | Offen |
-| P3 | Worker schreibt die Detailtags bei Neuanlage (`details` statt `location_description`), Hash und Wiederaufnahme rückwärtskompatibel | Offen |
+| P2 | Formular für Neuanlage im Browser (neuer Zustand `new-aed-details`), Texte in allen sechs Sprachen, E2E bei 320 px. Ohne das Feld „Gehäuse“ (siehe [offene Fragen](offene-fragen.md)) | Umgesetzt auf dem Arbeitsbranch, noch nicht gemergt. Nicht auf einem echten Handy geprüft |
+| P3 | Worker schreibt die Detailtags bei Neuanlage (`details` statt `location_description`), Hash und Wiederaufnahme rückwärtskompatibel. Wegen der Schnittstelle zusammen mit P2 umgesetzt | Umgesetzt auf dem Arbeitsbranch, noch nicht gemergt. Nur mit simulierten OSM-Antworten getestet |
 | P4 | Bestehenden AED ergänzen: frisches Lesen von Version und Tags, Schreibroute mit `expected_version` und `expected_before`, nur fehlende Tags | Offen |
 | P5 | Korrekturen bestehender Werte hinter einem Betreiber-Schalter (Standard aus), Vorschau `alt → neu`, zusätzliche Bestätigung | Offen |
 | P6 | Praxistest auf iPhone (und später Android), Messung der Tipps und Sekunden bis „gespeichert“, Übergabe aktualisieren | Offen |

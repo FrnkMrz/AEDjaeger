@@ -50,7 +50,7 @@ describe("OSM change previews", () => {
   });
 
   it("creates a minimal new-node preview with only approved tags", () => {
-    expect(previewNewAed({ ...newAedInput, locationDescription: "Eingang rechts" })).toEqual({
+    expect(previewNewAed({ ...newAedInput, details: { "defibrillator:location": "Eingang rechts" } })).toEqual({
       kind: "ready",
       operation: "create-node",
       position: { latitude: 52.52, longitude: 13.405 },
@@ -61,6 +61,37 @@ describe("OSM change previews", () => {
       },
       confirmedDifferentCandidateIds: [],
     });
+  });
+
+  it("adds every approved detail tag next to emergency and check_date", () => {
+    const preview = previewNewAed({
+      ...newAedInput,
+      details: { "defibrillator:location": "Foyer", access: "customers", opening_hours: "Mo-Fr 08:00-18:00", indoor: "yes", level: "0", ref: "A-1" },
+    });
+    expect(preview).toMatchObject({
+      kind: "ready",
+      tags: {
+        emergency: "defibrillator", check_date: "2026-10-23", "defibrillator:location": "Foyer", access: "customers",
+        opening_hours: "Mo-Fr 08:00-18:00", indoor: "yes", level: "0", ref: "A-1",
+      },
+    });
+  });
+
+  it("writes only emergency and check_date when the person gave no details", () => {
+    for (const details of [undefined, {}]) {
+      expect(previewNewAed({ ...newAedInput, ...(details === undefined ? {} : { details }) })).toMatchObject({
+        kind: "ready", tags: { emergency: "defibrillator", check_date: "2026-10-23" },
+      });
+    }
+    const preview = previewNewAed(newAedInput);
+    if (preview.kind === "ready") expect(Object.keys(preview.tags).sort()).toEqual(["check_date", "emergency"]);
+  });
+
+  it("blocks details that could override protected tags or carry unapproved keys", () => {
+    // Details dürfen weder emergency noch check_date ersetzen noch fremde Schlüssel (zum Beispiel den Zugangscode) einschleusen.
+    for (const key of ["emergency", "check_date", "defibrillator:code", "name"]) {
+      expect(previewNewAed({ ...newAedInput, details: { [key]: "x" } as never })).toEqual({ kind: "blocked", reason: "invalid-details" });
+    }
   });
 
   it("allows a new preview after the person explicitly rejects every nearby candidate", () => {
@@ -177,8 +208,15 @@ describe("OSM change previews", () => {
     expect(previewNewAed({ ...newAedInput, position: { latitude: 91, longitude: 13 } })).toEqual({
       kind: "blocked", reason: "invalid-position",
     });
-    expect(previewNewAed({ ...newAedInput, locationDescription: "\nignored" })).toEqual({
-      kind: "blocked", reason: "invalid-location-description",
+    // Ein Zeilenumbruch MITTEN im Text wird abgelehnt. Am Rand entfernt das Trimmen ihn (typisch beim Einfügen aus der Zwischenablage).
+    expect(previewNewAed({ ...newAedInput, details: { "defibrillator:location": "Eingang\nrechts" } })).toEqual({
+      kind: "blocked", reason: "invalid-details",
+    });
+    expect(previewNewAed({ ...newAedInput, details: { "defibrillator:location": "\nEingang rechts\n" } })).toMatchObject({
+      kind: "ready", tags: { "defibrillator:location": "Eingang rechts" },
+    });
+    expect(previewNewAed({ ...newAedInput, details: { access: "permissive" } as never })).toEqual({
+      kind: "blocked", reason: "invalid-details",
     });
   });
 });

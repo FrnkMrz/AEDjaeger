@@ -1,5 +1,6 @@
 import { assessCandidates, distanceMeters, type Coordinate } from "./candidateMatch";
 import type { NearbyAedCandidate } from "../osm/candidateTypes";
+import { validateDetailTags, type DetailTags } from "../contracts/aedDetails";
 
 export interface TagChange {
   key: string;
@@ -33,7 +34,8 @@ export type ProposalError =
   | "invalid-search-coverage"
   | "position-outside-search"
   | "search-found-candidate"
-  | "invalid-location-description";
+  // Eine Detailangabe verletzt den Vertrag in src/contracts/aedDetails.ts (fremder Schlüssel, zu lang, ungültige Zeichen).
+  | "invalid-details";
 
 export type ProposalResult<T> = T | { kind: "blocked"; reason: ProposalError };
 
@@ -108,7 +110,12 @@ export function previewNewAed(
     confirmedDifferentCandidateIds?: ReadonlyArray<string>;
     positionConfirmed: boolean;
     observedOn: string;
-    locationDescription?: string;
+    /**
+     * Freiwillige Detailangaben der Person (Zugang, Zeiten, Lage …). Sie werden hier erneut gegen den
+     * Vertrag geprüft: Nur Schlüssel der festen Liste kommen durch, `emergency` und `check_date` setzt
+     * allein diese Funktion.
+     */
+    details?: DetailTags;
   },
 ): ProposalResult<NewAedPreview> {
   const confirmedDifferentIds = new Set(input.confirmedDifferentCandidateIds ?? []);
@@ -166,15 +173,12 @@ export function previewNewAed(
     emergency: "defibrillator",
     check_date: input.observedOn,
   };
-  if (input.locationDescription !== undefined) {
-    if (/[\u0000-\u001f\u007f]/.test(input.locationDescription)) {
-      return { kind: "blocked", reason: "invalid-location-description" };
-    }
-    const description = input.locationDescription.trim();
-    if (description.length === 0 || description.length > 160) {
-      return { kind: "blocked", reason: "invalid-location-description" };
-    }
-    tags["defibrillator:location"] = description;
+  if (input.details !== undefined) {
+    const checked = validateDetailTags(input.details);
+    if (!checked.ok) return { kind: "blocked", reason: "invalid-details" };
+    // Die geprüften, getrimmten Werte kommen dazu. Weil die Liste weder `emergency` noch `check_date` enthält,
+    // kann keine Detailangabe diese beiden Tags überschreiben.
+    Object.assign(tags, checked.tags);
   }
 
   return {

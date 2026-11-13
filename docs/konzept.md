@@ -37,7 +37,7 @@ Bedienung (abgenommenes Mockup vom 13.11.2026, orientiert am Hydrantenjäger):
 - Eine scrollbare Seite mit großen Auswahlfeldern statt Aufklapplisten, mindestens 48 px hoch, Schrift mindestens 14 px.
 - „Weiß ich nicht“ ist überall die Vorgabe. Sie schreibt nichts und löscht nichts.
 - Folgefelder erscheinen nur, wenn sie gebraucht werden: Zeiten bei „Zu bestimmten Zeiten“, Ebene bei „Drinnen“.
-- Seltene Angaben (Gehäuse, Betreiber, Telefon, Notiz, Nummer) stehen eingeklappt unter „Mehr Angaben“.
+- Seltene Angaben (Betreiber, Telefon, Notiz, Nummer) stehen eingeklappt unter „Mehr Angaben“. Das Feld „Gehäuse“ folgt nach einer Entscheidung (siehe offene Fragen).
 - Eine feste Fußleiste zeigt einen Hauptknopf mit der Zahl der Änderungen („Weiter · 3 Angaben“). Ohne Änderung bleibt er gesperrt.
 - Die Vorschau zeigt jede Änderung. Bei bestehenden AEDs steht `alt → neu` da, unveränderte Tags erscheinen als „bleibt“. Gespeichert wird erst nach der Bestätigung für diesen Vorgang.
 

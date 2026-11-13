@@ -17,6 +17,7 @@ import type { D1Database } from "../storage/d1";
 import { requestOSMDevelopmentApi } from "./developmentApi";
 import { withoutXmlDeclaration } from "./xmlText";
 import { isAcceptableObservationDate } from "./observationDate";
+import { validateDetailTags, type DetailTags } from "../../src/contracts/aedDetails";
 
 const SESSION_COOKIE = "aedjaeger_osm_session";
 const MAX_BODY_BYTES = 2_048;
@@ -33,7 +34,11 @@ type CreateRequest = {
   latitude: number;
   longitude: number;
   observed_on: string;
-  location_description: string | null;
+  /**
+   * Geprüfte Detailtags aus dem gemeinsamen Vertrag (src/contracts/aedDetails.ts). Leer, wenn die Person nichts
+   * angegeben hat. Ältere App-Versionen senden nur `location_description`; parseRequest macht daraus dieselbe Form.
+   */
+  details: DetailTags;
   confirmed_different_candidate_ids: string[];
 };
 /** Creates one confirmed AED node, using only the fixed OSM development API. */
@@ -206,9 +211,7 @@ async function uploadCreatedNode(
   dependencies: Dependencies,
 ): Promise<Response> {
   if (!operation.changeset_id) return jsonResponse({ status: "pending" }, 202);
-  const tags: Record<string, string> = { emergency: "defibrillator", check_date: input.observed_on };
-  if (input.location_description !== null) tags["defibrillator:location"] = input.location_description;
-  const xml = buildCreateNodeChange(input, tags, operation.changeset_id);
+  const xml = buildCreateNodeChange(input, createdNodeTags(input), operation.changeset_id);
   let response: Response;
   try {
     response = await requestOSMDevelopmentApi("development", `/api/0.6/changeset/${operation.changeset_id}/upload`, token, { method: "POST", body: xml }, dependencies.fetch ?? fetch);
@@ -351,9 +354,18 @@ function parseCreatedDiff(rawValue: string): { id: number; version: number } | n
   return Number.isSafeInteger(id) && Number.isSafeInteger(version) ? { id, version } : null;
 }
 
+/**
+ * Die Tags des neuen Knotens: `emergency` und `check_date` setzt allein der Server, dazu kommen die geprüften
+ * Detailtags. Die Detailliste enthält diese beiden Schlüssel nicht, deshalb kann keine Eingabe sie ersetzen.
+ * Dieselbe Funktion dient beim Hochladen und beim Abgleich nach einem Verbindungsabbruch, damit beide Seiten
+ * immer genau denselben Tag-Satz meinen.
+ */
+function createdNodeTags(input: CreateRequest): Record<string, string> {
+  return { emergency: "defibrillator", check_date: input.observed_on, ...input.details };
+}
+
 function findCreatedNodeInChangeset(value: string, changesetId: string, input: CreateRequest): { id: number; version: number } | null {
-  const tags: Record<string, string> = { emergency: "defibrillator", check_date: input.observed_on };
-  if (input.location_description !== null) tags["defibrillator:location"] = input.location_description;
+  const tags = createdNodeTags(input);
   for (const match of value.matchAll(/<node\b([^>]*)>([\s\S]*?)<\/node>/gu)) {
     const attributes = parseXmlAttributes(match[1]);
     if (attributes.changeset !== changesetId || !isNumericId(attributes.id) || !isPositiveIntString(attributes.version)
@@ -383,41 +395,72 @@ function isPositiveIntString(value: string | undefined): value is string { retur
 function parseRequest(bytes: Uint8Array, now: number): CreateRequest {
   let value: unknown;
   try { value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); } catch { throw new Error("Invalid JSON"); }
-  const expectedKeys = "confirmed,latitude,location_description,longitude,observed_on,operation_id";
-  const expectedKeysWithReviewedCandidates = `confirmed,confirmed_different_candidate_ids,latitude,location_description,longitude,observed_on,operation_id`;
-  const keys = isRecord(value) ? Object.keys(value).sort().join(",") : "";
-  if (!isRecord(value) || (keys !== expectedKeys && keys !== expectedKeysWithReviewedCandidates)
+  // Erlaubte Felder: fünf Pflichtfelder, dazu genau EINE der beiden Formen für Zusatzangaben
+  //  - `details` (aktuelle App): Objekt mit Detailtags,
+  //  - `location_description` (ältere App-Versionen, die noch im Browser-Speicher liegen können): Text oder null,
+  // und optional die Liste der bestätigten anderen Geräte. Jedes andere Feld lehnt die Anfrage ab.
+  const requiredKeys = ["confirmed", "latitude", "longitude", "observed_on", "operation_id"];
+  const optionalKeys = ["confirmed_different_candidate_ids"];
+  const presentKeys = isRecord(value) ? Object.keys(value) : [];
+  const hasDetails = presentKeys.includes("details");
+  const hasLegacyLocation = presentKeys.includes("location_description");
+  if (!isRecord(value) || hasDetails === hasLegacyLocation
+    || requiredKeys.some((key) => !presentKeys.includes(key))
+    || presentKeys.some((key) => !requiredKeys.includes(key) && !optionalKeys.includes(key) && key !== "details" && key !== "location_description")
     || value.confirmed !== true || typeof value.operation_id !== "string"
     || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value.operation_id)
     || typeof value.latitude !== "number" || !Number.isFinite(value.latitude) || value.latitude < -90 || value.latitude > 90
     || typeof value.longitude !== "number" || !Number.isFinite(value.longitude) || value.longitude < -180 || value.longitude > 180
     || !isAcceptableObservationDate(value.observed_on, now)
-    || !(value.location_description === null || (typeof value.location_description === "string" && value.location_description.trim().length > 0
-      && value.location_description.trim().length <= 160 && !/[\u0000-\u001f\u007f]/u.test(value.location_description)))
     || value.confirmed_different_candidate_ids !== undefined && (!Array.isArray(value.confirmed_different_candidate_ids)
       || value.confirmed_different_candidate_ids.length > 100
       || value.confirmed_different_candidate_ids.some((id) => typeof id !== "string" || !/^(node|way|relation)\/[1-9]\d{0,15}$/u.test(id))
       || new Set(value.confirmed_different_candidate_ids).size !== value.confirmed_different_candidate_ids.length)) {
     throw new Error("Invalid request");
   }
+
+  // Die Zusatzangaben gehen in jedem Fall durch den gemeinsamen Vertrag: Nur Schlüssel der festen Liste,
+  // nur gültige Werte. Ein einziger Verstoß lehnt die ganze Anfrage ab (nichts wird still weggelassen).
+  let rawDetails: unknown;
+  if (hasDetails) rawDetails = value.details;
+  else if (value.location_description === null) rawDetails = {};
+  else rawDetails = { "defibrillator:location": value.location_description };
+  const checkedDetails = validateDetailTags(rawDetails);
+  if (!checkedDetails.ok) throw new Error("Invalid request");
+
   return {
-    ...value,
-    location_description: typeof value.location_description === "string" ? value.location_description.trim() : null,
+    operation_id: value.operation_id,
+    confirmed: true,
+    latitude: value.latitude,
+    longitude: value.longitude,
+    observed_on: value.observed_on,
+    details: checkedDetails.tags,
     confirmed_different_candidate_ids: (value.confirmed_different_candidate_ids ?? []) as string[],
   } as CreateRequest;
 }
 
 /**
- * Keep the pre-review request hash when the reviewed-candidate list is empty.
- * That lets an in-flight create from an older deployment be reconciled with a
- * retry from this version instead of being mistaken for a different operation.
+ * Serialisiert die Anfrage so, dass daraus der Vergleichswert (Hash) für die Vorgangs-ID entsteht.
+ * Gleiche Anfrage, gleicher Text; eine andere Anfrage mit derselben Vorgangs-ID wird als Konflikt abgewiesen.
+ *
+ * Zwei Altformate bleiben absichtlich unverändert, damit ein Vorgang, der vor einer Aktualisierung begann,
+ * mit einer Wiederholung aus der neuen Version abgeglichen wird und nicht als fremder Vorgang gilt:
+ *  1. Ohne bestätigte andere Geräte fehlt die Liste im Text (Stand vor der Trefferprüfung).
+ *  2. Enthalten die Details höchstens den Standort-Text, steht er wie früher als `location_description`
+ *     (Text oder null) an derselben Stelle. Erst weitere Detailtags führen zur neuen Form mit `details`.
+ * Die Reihenfolge der Felder ist Teil des Formats und darf sich nicht ändern.
  */
 function serializeCreateRequestForHash(input: CreateRequest): string {
-  if (input.confirmed_different_candidate_ids.length > 0) return JSON.stringify(input);
-  const legacyCompatibleInput = Object.fromEntries(
-    Object.entries(input).filter(([key]) => key !== "confirmed_different_candidate_ids"),
-  );
-  return JSON.stringify(legacyCompatibleInput);
+  const base = {
+    operation_id: input.operation_id, confirmed: input.confirmed, latitude: input.latitude, longitude: input.longitude, observed_on: input.observed_on,
+  };
+  const onlyLocation = Object.keys(input.details).every((key) => key === "defibrillator:location");
+  const withExtras = onlyLocation
+    ? { ...base, location_description: input.details["defibrillator:location"] ?? null }
+    : { ...base, details: input.details };
+  return JSON.stringify(input.confirmed_different_candidate_ids.length > 0
+    ? { ...withExtras, confirmed_different_candidate_ids: input.confirmed_different_candidate_ids }
+    : withExtras);
 }
 
 function isStringRecord(value: unknown): value is Record<string, string> { return isRecord(value) && Object.keys(value).length <= 512 && Object.entries(value).every(([key, text]) => key.length > 0 && key.length <= 255 && typeof text === "string" && text.length <= 255); }
