@@ -2221,3 +2221,33 @@ test("the sound switch in the info dialog is saved, plays a preview when switche
   await page.locator("#open-info").click();
   await expect(page.locator("#success-sound-toggle")).not.toBeChecked();
 });
+
+test("the sound can be switched off for the open page even when the browser storage is blocked", async ({ page, context }) => {
+  await installFakeAudio(page);
+  // Wie bei vollem oder gesperrtem Speicher: Das Schreiben der Ton-Einstellung schlägt fehl (QuotaExceededError).
+  // Andere Schlüssel (zum Beispiel der offene Speichervorgang) bleiben schreibbar, sonst verweigert die App das
+  // Speichern auf dem Testserver aus Sicherheitsgründen.
+  await page.addInitScript(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (key === "aedjaeger-success-sound") throw new DOMException("full", "QuotaExceededError");
+      return original.call(this, key, value);
+    };
+  });
+  let writes = 0;
+  const saveButton = await openCheckDateSaveButton(page, context, async (route) => { writes += 1; await route.fulfill({ json: { status: "complete", version: 8 } }); });
+  // Der Schalter im Info-Dialog: ausschalten, und die Wahl hält bis zum Neuladen.
+  await page.locator("#open-info").click();
+  const toggle = page.locator("#success-sound-toggle");
+  await expect(toggle).toBeChecked();
+  await toggle.uncheck();
+  await expect(toggle).not.toBeChecked();
+  await page.keyboard.press("Escape");
+  await saveButton.click();
+  await expect(page.getByRole("status")).toContainText("Vor-Ort-Prüfung gespeichert");
+  expect(writes).toBe(1);
+  expect(await readSound(page)).toEqual({ contexts: 0, resumes: 0, oscillators: 0 });
+  // Der Schalter springt nach einer neuen Darstellung nicht zurück auf „an“.
+  await page.locator("#open-info").click();
+  await expect(page.locator("#success-sound-toggle")).not.toBeChecked();
+});

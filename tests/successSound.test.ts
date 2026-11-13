@@ -96,6 +96,50 @@ describe("success sound", () => {
   });
 });
 
+describe("success sound choice during the session", () => {
+  const blockedStorage = { getItem: () => { throw new Error("denied"); }, setItem: () => { throw new Error("denied"); } };
+
+  it("can be switched off for the open page even when the browser storage is blocked", () => {
+    const { context, log } = fakeAudio();
+    const factory = vi.fn(() => context);
+    const sound = createSuccessSound({ storage: blockedStorage, createContext: factory });
+    expect(sound.isEnabled()).toBe(true); // Standard: an.
+    sound.setEnabled(false);
+    expect(sound.isEnabled()).toBe(false); // Die Wahl hält, obwohl nichts gespeichert werden kann.
+    sound.prepare();
+    expect(sound.play()).toBe(false);
+    expect(factory).not.toHaveBeenCalled();
+    expect(log.oscillators).toBe(0);
+  });
+
+  it("can be switched back on for the open page even when the browser storage is blocked", () => {
+    const { context, log } = fakeAudio();
+    const sound = createSuccessSound({ storage: blockedStorage, createContext: () => context });
+    sound.setEnabled(false);
+    sound.setEnabled(true);
+    expect(sound.isEnabled()).toBe(true);
+    expect(sound.play()).toBe(true);
+    expect(log.oscillators).toBe(4);
+  });
+
+  it("also writes the choice to the storage so it survives a reload", () => {
+    const storage = memoryStorage();
+    const sound = createSuccessSound({ storage, createContext: () => null });
+    sound.setEnabled(false);
+    expect(storage.values.get(SUCCESS_SOUND_PREFERENCE_KEY)).toBe("off");
+    // Eine neue Seite (neuer Spieler) liest die gespeicherte Wahl.
+    expect(createSuccessSound({ storage, createContext: () => null }).isEnabled()).toBe(false);
+  });
+
+  it("keeps the choice of this page even if the stored value differs", () => {
+    const storage = memoryStorage({ [SUCCESS_SOUND_PREFERENCE_KEY]: "off" });
+    const sound = createSuccessSound({ storage, createContext: () => null });
+    expect(sound.isEnabled()).toBe(false);
+    sound.setEnabled(true);
+    expect(sound.isEnabled()).toBe(true);
+  });
+});
+
 describe("success sound preference", () => {
   it("is on by default and off only when stored as off", () => {
     expect(isSuccessSoundEnabled(memoryStorage())).toBe(true);

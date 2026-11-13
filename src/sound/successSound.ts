@@ -92,7 +92,11 @@ export function isSuccessSoundEnabled(storage: StorageLike | undefined = safeLoc
   }
 }
 
-/** Speichert die Einstellung. Scheitert das Speichern, gilt sie nur bis zum Neuladen; die App läuft weiter. */
+/**
+ * Speichert die Einstellung im Browser-Speicher (nur diese Funktion; die Wahl für die laufende Sitzung hält der
+ * Spieler selbst im Arbeitsspeicher, siehe createSuccessSound). Scheitert das Speichern, geht nur das Merken über das
+ * Neuladen hinaus verloren; die App läuft weiter.
+ */
 export function setSuccessSoundEnabled(enabled: boolean, storage: StorageLike | undefined = safeLocalStorage()): void {
   try {
     storage?.setItem(SUCCESS_SOUND_PREFERENCE_KEY, enabled ? "on" : "off");
@@ -113,11 +117,22 @@ function safeLocalStorage(): StorageLike | undefined {
  * Baut den Ton-Spieler. Die App nutzt genau eine Instanz; Tests geben Attrappen mit.
  * - prepare(): beim Tippen aufrufen (legt den Audio-Baustein an und weckt ihn auf).
  * - play(): beim bestätigten Erfolg aufrufen. Gibt true zurück, wenn der Ton angestoßen wurde.
+ * - isEnabled() / setEnabled(): die Wahl der Person (Schalter im Info-Dialog).
  */
 export function createSuccessSound(options: SuccessSoundOptions = {}) {
   const createContext = options.createContext ?? createBrowserAudioContext;
   let context: AudioContextLike | null = null;
-  const enabled = (): boolean => isSuccessSoundEnabled(options.storage ?? safeLocalStorage());
+  // Die Wahl der Person, solange die Seite offen ist. Sie hat Vorrang vor dem Browser-Speicher. Wichtig, wenn der
+  // Speicher gesperrt ist (zum Beispiel im privaten Modus): Dann lässt sich der Ton trotzdem ausschalten, und die
+  // Wahl gilt bis zum Neuladen. Ohne diese Wahl im Arbeitsspeicher spielte der Ton weiter und der Schalter sprang zurück.
+  let sessionChoice: boolean | undefined;
+  const enabled = (): boolean => sessionChoice ?? isSuccessSoundEnabled(options.storage ?? safeLocalStorage());
+
+  /** Setzt die Wahl: erst im Arbeitsspeicher (wirkt sofort), dann im Browser-Speicher (bleibt nach dem Neuladen). */
+  function setEnabled(value: boolean): void {
+    sessionChoice = value;
+    setSuccessSoundEnabled(value, options.storage ?? safeLocalStorage());
+  }
 
   function prepare(): void {
     if (!enabled()) return; // Ist der Ton aus, wird nicht einmal ein Audio-Baustein angelegt (schont Musik im Hintergrund).
@@ -161,7 +176,7 @@ export function createSuccessSound(options: SuccessSoundOptions = {}) {
     }
   }
 
-  return { prepare, play };
+  return { prepare, play, isEnabled: enabled, setEnabled };
 }
 
 /** Die eine Instanz, die die App benutzt. */

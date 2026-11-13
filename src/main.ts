@@ -7,7 +7,7 @@ import { readPhotoCapture, readPhotoLocation } from "./vision/photoLocation";
 import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservation, VisionClientError } from "./vision/analyzePhoto";
 import { isAedRecognized } from "./contracts/visionObservation";
 import { formatBuildTime } from "./pwa/buildInfo";
-import { isSuccessSoundEnabled, setSuccessSoundEnabled, successSound } from "./sound/successSound";
+import { successSound } from "./sound/successSound";
 import { startUpdateWatcher } from "./pwa/updateCheck";
 import { askForLocationOnce, phoneLocationFitsPhoto, readLocationPermission, watchLocationPermission, type LocationPermission } from "./location/phoneLocationPermission";
 import { assessCandidateSearch } from "./domain/assessCandidateSearch";
@@ -587,7 +587,7 @@ function render(restoreFlowFocus = false): void {
             <li class="roadmap-item"><span class="roadmap-status">${t("roadmapLater")}</span><h4>${t("roadmapOsmTitle")}</h4><p>${t("roadmapOsmBody")}</p></li>
           </ol></section>
           ${authenticated ? `<section class="info-section account-section"><h3>${developmentSession ? t("accountDevSignedIn") : t("accountSignedIn")}</h3><p>${developmentSession ? t("accountDevNotice") : t("accountIdentityOnly")}</p><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>` : ""}
-          <label class="sound-toggle"><input type="checkbox" id="success-sound-toggle" ${isSuccessSoundEnabled() ? "checked" : ""} /><span>${tv("soundToggle")}</span></label>
+          <label class="sound-toggle"><input type="checkbox" id="success-sound-toggle" ${successSound.isEnabled() ? "checked" : ""} /><span>${tv("soundToggle")}</span></label>
           <p class="build-version" id="build-version">${escapeHtml(buildVersionText())}</p>
         </div>
       </dialog>
@@ -681,7 +681,7 @@ function render(restoreFlowFocus = false): void {
   document.querySelector<HTMLButtonElement>("#connection-lamp")?.addEventListener("click", openAccountFromLamp);
   document.querySelector<HTMLInputElement>("#success-sound-toggle")?.addEventListener("change", (event) => {
     const enabled = (event.target as HTMLInputElement).checked;
-    setSuccessSoundEnabled(enabled);
+    successSound.setEnabled(enabled);
     // Beim Einschalten einmal vorspielen: So hört die Person sofort, wie es klingt, und der Ton ist freigeschaltet.
     if (enabled) {
       successSound.prepare();
