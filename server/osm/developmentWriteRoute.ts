@@ -3,6 +3,7 @@ import { findOSMSession } from "../storage/osmSessions";
 import { findOSMDevelopmentToken } from "../storage/osmDevelopmentTokens";
 import {
   claimOSMDevelopmentUpload,
+  failEmptyUncertainOSMDevelopmentWrite,
   hashOSMDevelopmentWriteValue,
   reserveOSMDevelopmentWrite,
   updateOSMDevelopmentWrite,
@@ -20,6 +21,8 @@ export const SESSION_COOKIE = "aedjaeger_osm_session";
 const MAX_BODY_BYTES = 8_192;
 const MAX_NODE_BYTES = 64 * 1_024;
 const MAX_WRITE_RESPONSE_BYTES = 1_024;
+const MAX_CHANGESET_STATUS_BYTES = 8_192;
+const MAX_CHANGESET_DOWNLOAD_BYTES = 512 * 1_024;
 
 export type DevelopmentWriteEnvironment = {
   DB?: D1Database;
@@ -182,8 +185,10 @@ export async function handleDevelopmentCheckDate(
   try {
     changesetId = await createChangeset(token, dependencies.fetch ?? fetch, hasCorrections(input) ? "corrections" : hasDetails(input) ? "details" : "none");
   } catch {
-    await safelyUpdate(environment.DB, { sessionHash, operationId: input.operation_id, state: "uncertain", now: (dependencies.now ?? Date.now)() });
-    return jsonResponse({ status: "uncertain" }, 202);
+    // Without a changeset ID this request cannot upload a map object. Retire it
+    // as failed so the same operation ID cannot remain uncertain for a week.
+    await safelyUpdate(environment.DB, { sessionHash, operationId: input.operation_id, state: "failed", now: (dependencies.now ?? Date.now)() });
+    return jsonResponse({ error: "write_failed" }, 502);
   }
   try {
     await updateOSMDevelopmentWrite(environment.DB, {
@@ -274,15 +279,47 @@ async function reconcileUncertainWrite(
   token: string,
   dependencies: Dependencies,
 ): Promise<Response> {
-  if (!operation.changeset_id) return jsonResponse({ status: "uncertain" }, 202);
+  if (!operation.changeset_id) {
+    // Older deployments recorded a failed changeset-open request as uncertain.
+    // No upload can have been sent without its changeset ID.
+    await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state: "failed", now: (dependencies.now ?? Date.now)() });
+    return jsonResponse({ error: "write_failed" }, 502);
+  }
   try {
-    const node = await readDevelopmentNode(input.target, token, dependencies.fetch ?? fetch);
-    if (writeAppearsApplied(node, input)) {
-      await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state: "uploaded", changesetId: operation.changeset_id, resultVersion: node.version, now: (dependencies.now ?? Date.now)() });
-      return finishChangeset(database, sessionHash, input.operation_id, { ...operation, state: "uploaded", result_version: node.version }, token, dependencies);
+    // Closing is a barrier: once confirmed, a late upload cannot change the
+    // node after the following changeset download has been inspected.
+    if (!await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch)) {
+      return jsonResponse({ status: "uncertain" }, 202);
     }
+
+    const response = await requestOSMDevelopmentApi("development", `/api/0.6/changeset/${operation.changeset_id}/download`, token, { method: "GET" }, dependencies.fetch ?? fetch);
+    if (!response.ok) return jsonResponse({ status: "uncertain" }, 202);
+    const body = await readLimitedText(response, MAX_CHANGESET_DOWNLOAD_BYTES);
+    const updatedNode = findUpdatedNodeInChangeset(body, operation.changeset_id, input.target);
+
+    if (updatedNode && writeAppearsApplied(updatedNode, input)) {
+      await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state: "uploaded", changesetId: operation.changeset_id, resultVersion: updatedNode.version, now: (dependencies.now ?? Date.now)() });
+      return finishChangeset(database, sessionHash, input.operation_id, { ...operation, state: "uploaded", result_version: updatedNode.version }, token, dependencies);
+    }
+
+    if (isEmptyChangesetDownload(body)) {
+      const failed = await failEmptyUncertainOSMDevelopmentWrite(database, {
+        sessionHash,
+        operationId: input.operation_id,
+        changesetId: operation.changeset_id,
+        now: (dependencies.now ?? Date.now)(),
+      });
+      return failed
+        ? jsonResponse({ error: "write_failed" }, 502)
+        : jsonResponse({ status: "pending" }, 202);
+    }
+
+    // The closed changeset contains a different or conflicting edit. Keep it
+    // terminally blocked instead of inviting another upload with stale data.
+    await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state: "conflict", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
+    return jsonResponse({ error: "version_conflict" }, 409);
   } catch {
-    // A lost connection or untrusted upstream response keeps the operation blocked.
+    // A lost connection or malformed upstream response keeps the operation blocked.
   }
   return jsonResponse({ status: "uncertain" }, 202);
 }
@@ -336,13 +373,14 @@ function hasCorrections(input: ConfirmedCheckDate): boolean {
  *    vorher gleich gewesen sein kann, zählt hier vor allem die neue Version (sie ist bei Details Pflicht).
  * Im Zweifel bleibt der Vorgang „unklar“ und wird nie blind wiederholt.
  */
-function writeAppearsApplied(node: OSMNode, input: ConfirmedCheckDate): boolean {
+function writeAppearsApplied(node: Pick<OSMNode, "version" | "tags">, input: ConfirmedCheckDate): boolean {
   if (node.tags.emergency !== "defibrillator" || node.tags.check_date !== input.observed_on) return false;
   if (hasDetails(input)) {
-    return input.expected_version !== undefined && node.version > input.expected_version
+    return input.expected_version !== undefined && node.version === input.expected_version + 1
       && Object.entries(input.details ?? {}).every(([key, value]) => node.tags[key] === value);
   }
-  return input.expected_check_date !== input.observed_on && (input.expected_version === undefined || node.version > input.expected_version);
+  return input.expected_check_date !== input.observed_on
+    && (input.expected_version === undefined || node.version === input.expected_version + 1);
 }
 
 export async function readDevelopmentNode(path: string, token: string, fetcher: typeof fetch): Promise<OSMNode> {
@@ -387,10 +425,73 @@ async function createChangeset(token: string, fetcher: typeof fetch, kind: "none
 async function closeChangeset(token: string, changesetId: string, fetcher: typeof fetch): Promise<boolean> {
   try {
     const response = await requestOSMDevelopmentApi("development", `/api/0.6/changeset/${changesetId}/close`, token, { method: "PUT" }, fetcher);
-    return response.ok || response.status === 409;
+    if (response.ok) return true;
+    // A 409 can mean either "already closed" or "not owned by this user".
+    // Confirm the server's state instead of treating every conflict as success.
+    if (response.status !== 409) return false;
+    const status = await requestOSMDevelopmentApi("development", "/api/0.6/changeset/" + changesetId, token, { method: "GET" }, fetcher);
+    if (!status.ok) return false;
+    return isChangesetClosed(await readLimitedText(status, MAX_CHANGESET_STATUS_BYTES), changesetId);
   } catch {
     return false;
   }
+}
+
+function isChangesetClosed(body: string, changesetId: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (!isRecord(parsed) || !isRecord(parsed.changeset)) return false;
+    return String(parsed.changeset.id) === changesetId && parsed.changeset.open === false;
+  } catch {
+    // The OSM API may return XML instead of JSON.
+  }
+  return new RegExp("<changeset\\b(?=[^>]*\\bid=\"" + changesetId + "\"(?=[\\s>]))(?=[^>]*\\bopen=\"false\"(?=[\\s>]))[^>]*\\/?\\s*>", "u").test(body);
+}
+
+function isEmptyChangesetDownload(value: string): boolean {
+  const withoutDeclaration = withoutXmlDeclaration(value);
+  const root = /^<osmChange\b[^>]*>([\s\S]*)<\/osmChange>\s*$/u.exec(withoutDeclaration);
+  if (!root) return false;
+  const content = root[1].replace(/<!--([\s\S]*?)-->/gu, "").trim();
+  if (!content) return true;
+  return content.replace(/<(create|modify|delete)\s*\/\s*>/giu, "")
+    .replace(/<(create|modify|delete)\s*>\s*<\/\1\s*>/giu, "").trim().length === 0;
+}
+
+function findUpdatedNodeInChangeset(
+  value: string,
+  changesetId: string,
+  target: string,
+): Pick<OSMNode, "version" | "tags"> | null {
+  const targetId = target.slice("node/".length);
+  for (const action of value.matchAll(/<modify\b[^>]*>([\s\S]*?)<\/modify\s*>/giu)) {
+    for (const node of action[1].matchAll(/<node\b([^>]*)>([\s\S]*?)<\/node\s*>/giu)) {
+      const attributes = parseXmlAttributes(node[1]);
+      const version = Number(attributes.version);
+      if (attributes.id !== targetId || attributes.changeset !== changesetId
+        || !/^[1-9]\d{0,15}$/u.test(attributes.version ?? "") || !Number.isSafeInteger(version)) continue;
+      const tags = new Map<string, string>();
+      for (const tag of node[2].matchAll(/<tag\b([^>]*)\/?\s*>/giu)) {
+        const tagAttributes = parseXmlAttributes(tag[1]);
+        if (tagAttributes.k !== undefined && tagAttributes.v !== undefined) tags.set(tagAttributes.k, tagAttributes.v);
+      }
+      return { version, tags: Object.fromEntries(tags) };
+    }
+  }
+  return null;
+}
+
+function parseXmlAttributes(value: string): Record<string, string> {
+  const attributes: Record<string, string> = {};
+  for (const match of value.matchAll(/([A-Za-z_:][\w:.-]*)="([^"]*)"/gu)) {
+    attributes[match[1]] = match[2]
+      .replaceAll("&quot;", '"')
+      .replaceAll("&apos;", "'")
+      .replaceAll("&lt;", "<")
+      .replaceAll("&gt;", ">")
+      .replaceAll("&amp;", "&");
+  }
+  return attributes;
 }
 
 function buildNodeUpdateChange(node: OSMNode, tags: Record<string, string>, changesetId: string): string {
