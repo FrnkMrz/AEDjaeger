@@ -123,6 +123,8 @@ Ablauf:
 | C5 | Schalter wieder ausschalten (`OSM_DEV_WRITES_ENABLED` entfernen oder `false`) | Ein erneuter Schreibversuch wird abgelehnt | `[ ]` |
 | C6 | Produktions-OSM prüfen | Es gibt keine Änderung durch diesen Test | `[ ]` |
 
+**Erster Versuch am 13.11.2026 (iPhone):** Die Neuanlage legte auf dem Testserver den Knoten `4365809370` an (Änderungssatz `725093`, Version 1, genau die zwei Angaben `emergency=defibrillator` und `check_date=2026-11-13`; der Änderungssatz wurde nach etwa 10 Sekunden geschlossen). Die App blieb trotzdem bei „Testserver: Ergebnis unklar“. Ursache: Die Statusprüfung des Änderungssatzes las nur XML, der Testserver antwortete mit JSON. Behoben im Code, mit Tests; ohne Deploy bleibt der Zustand unverändert. Nach dem Deploy bestätigt „Testserver: Status erneut prüfen“ den vorhandenen Vorgang, ohne einen zweiten Knoten anzulegen. Der Test ist erst abgehakt, wenn die App „erstellt“ meldet.
+
 Abnahmebericht (ausfüllen, ohne Tokens):
 
 | Angabe | Wert |

@@ -130,7 +130,7 @@ function makeRequest(body: unknown = input): Request {
   });
 }
 
-function makeFetch(options: { nearbyAed?: boolean; nearbyAedId?: number; loseUploadResponse?: boolean; invalidMap?: boolean; emptyChangeset?: boolean; observedOn?: string } = {}) {
+function makeFetch(options: { nearbyAed?: boolean; nearbyAedId?: number; loseUploadResponse?: boolean; invalidMap?: boolean; emptyChangeset?: boolean; observedOn?: string; alreadyClosed?: "json" | "xml" | "json-open" | "json-other-id" } = {}) {
   let loseUploadResponse = options.loseUploadResponse ?? false;
   let uploadCount = 0;
   const calls: Array<{ url: string; method: string; body?: string }> = [];
@@ -148,11 +148,19 @@ function makeFetch(options: { nearbyAed?: boolean; nearbyAedId?: number; loseUpl
       expect(body).toContain(`<tag k="check_date" v="${options.observedOn ?? "2026-10-24"}"/>`);
       expect(body).toContain('<tag k="defibrillator:location" v="Near main entrance"/>');
       if (loseUploadResponse) { loseUploadResponse = false; throw new Error("connection lost after upload"); }
-      return new Response('<diffResult><node old_id="-1" new_id="456" new_version="1"/></diffResult>', { status: 200 });
+      return new Response('<?xml version="1.0" encoding="UTF-8"?>\n<diffResult generator="OpenStreetMap server" version="0.6">\n <node old_id="-1" new_id="456" new_version="1"/>\n</diffResult>\n', { status: 200 });
     }
     if (url.endsWith("/changeset/77/download")) return new Response(options.emptyChangeset
       ? '<?xml version="1.0" encoding="UTF-8"?><osmChange version="0.6" generator="test"><create/><modify/><delete/></osmChange>'
       : '<osmChange version="0.6"><create><node id="456" version="1" lat="52.52" lon="13.405" changeset="77"><tag k="check_date" v="2026-10-24"/><tag k="emergency" v="defibrillator"/><tag k="defibrillator:location" v="Near main entrance"/></node></create><modify/><delete/></osmChange>', { status: 200 });
+    // Wie der echte Testserver: Der Änderungssatz ist schon geschlossen, "close" meldet 409, und der Status kommt als JSON
+    // (wegen "Accept: application/json, ...") oder als XML.
+    if (options.alreadyClosed && url.endsWith("/changeset/77/close")) return new Response("The changeset 77 was closed at 2026-10-24 10:00:00 UTC", { status: 409 });
+    if (options.alreadyClosed && url.endsWith("/api/0.6/changeset/77")) {
+      if (options.alreadyClosed === "xml") return new Response('<?xml version="1.0" encoding="UTF-8"?><osm version="0.6"><changeset id="77" open="false" changes_count="1"/></osm>', { status: 200, headers: { "Content-Type": "application/xml" } });
+      const changeset = options.alreadyClosed === "json-open" ? { id: 77, open: true } : options.alreadyClosed === "json-other-id" ? { id: 78, open: false } : { id: 77, open: false, changes_count: 1, tags: { comment: "AEDjaeger: AED mapped on site", created_by: "AEDjaeger 0.1.0" } };
+      return Response.json({ version: "0.6", generator: "OpenStreetMap server", changeset });
+    }
     if (url.endsWith("/changeset/77/close")) return new Response(null, { status: 200 });
     throw new Error(`Unexpected OSM request ${method} ${url}`);
   };
@@ -244,6 +252,38 @@ describe("OSM development node creation", () => {
     expect(retry.status).toBe(200);
     expect(await retry.json()).toEqual({ status: "complete", node_id: "456", version: 1 });
     expect(api.uploadCount).toBe(1);
+  });
+
+  it("completes a retry when the changeset is already closed and the server reports it as JSON", async () => {
+    // Fehler vom 13.11.2026 auf dem Testserver: Knoten angelegt, Änderungssatz geschlossen, die App blieb bei "Ergebnis unklar".
+    const DB = await setupDatabase(); const api = makeFetch({ loseUploadResponse: true, alreadyClosed: "json" });
+    const dependencies = { now: () => now, fetch: api.fetcher };
+    expect((await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies)).status).toBe(202);
+    const retry = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies);
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toEqual({ status: "complete", node_id: "456", version: 1 });
+    expect(api.uploadCount).toBe(1);
+  });
+
+  it("also completes a retry when the already-closed status arrives as XML", async () => {
+    const DB = await setupDatabase(); const api = makeFetch({ loseUploadResponse: true, alreadyClosed: "xml" });
+    const dependencies = { now: () => now, fetch: api.fetcher };
+    expect((await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies)).status).toBe(202);
+    const retry = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies);
+    expect(retry.status).toBe(200);
+    expect(api.uploadCount).toBe(1);
+  });
+
+  it("stays uncertain when the status says the changeset is still open or belongs to another number", async () => {
+    for (const alreadyClosed of ["json-open", "json-other-id"] as const) {
+      const DB = await setupDatabase(); const api = makeFetch({ loseUploadResponse: true, alreadyClosed });
+      const dependencies = { now: () => now, fetch: api.fetcher };
+      expect((await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies)).status).toBe(202);
+      const retry = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies);
+      expect(retry.status, alreadyClosed).toBe(202);
+      expect(await retry.json()).toEqual({ status: "uncertain" });
+      expect(api.uploadCount).toBe(1);
+    }
   });
 
   it("reconciles an older pending create when a retry includes an empty reviewed-candidate list", async () => {

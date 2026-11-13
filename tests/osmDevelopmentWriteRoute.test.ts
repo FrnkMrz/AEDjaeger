@@ -234,7 +234,7 @@ function makeFetch(options: { appliedAfterUploadFailure?: boolean; conflictVersi
       }
       version = 4;
       checkDate = options.observedOn ?? "2026-10-24";
-      return new Response('<diffResult><node old_id="42" new_id="42" new_version="4"/></diffResult>', { status: 200 });
+      return new Response('<?xml version="1.0" encoding="UTF-8"?>\n<diffResult generator="OpenStreetMap server" version="0.6">\n <node old_id="42" new_id="42" new_version="4"/>\n</diffResult>\n', { status: 200 });
     }
     if (url.endsWith("/api/0.6/changeset/77/close")) return new Response(null, { status: 200 });
     throw new Error(`Unexpected OSM API request: ${method} ${url}`);
