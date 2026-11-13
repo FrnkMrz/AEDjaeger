@@ -8,6 +8,9 @@ import { describe, expect, it } from "vitest";
 // Diese Datei ist bewusst reines JavaScript (.mjs): Sie liest Dateien mit Node, und die
 // TypeScript-Prüfung des Projekts kennt absichtlich keine Node-Typen.
 const manifest = JSON.parse(readFileSync("public/manifest.webmanifest", "utf8"));
+const appIconSvg = readFileSync("public/aed-icon.svg", "utf8");
+const maskableIconSvg = readFileSync("public/aed-icon-maskable.svg", "utf8");
+const appSource = readFileSync("src/main.ts", "utf8");
 
 /** Liest Breite und Höhe direkt aus dem PNG-Kopf (Bytes 16–23), ohne Bildbibliothek. */
 function pngSize(path) {
@@ -43,5 +46,16 @@ describe("PWA-Symbole", () => {
   it("bindet ein 180-Pixel-Symbol für iPhone und iPad ein", () => {
     expect(readFileSync("index.html", "utf8")).toContain('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />');
     expect(pngSize("public/apple-touch-icon.png")).toEqual({ width: 180, height: 180 });
+  });
+
+  it("uses the same Maki defibrillator path in the standard and maskable SVG icons", () => {
+    const pathInAppIcon = appIconSvg.match(/<path id="defibrillator" d="([^"]+)"\/>/)?.[1];
+    const pathInMaskableIcon = maskableIconSvg.match(/<path id="defibrillator" d="([^"]+)"\/>/)?.[1];
+    const pathInIllustration = appSource.match(/const defibrillatorPath = "([^"]+)";/)?.[1];
+    expect(pathInAppIcon).toBeTruthy();
+    expect(pathInMaskableIcon).toBe(pathInAppIcon);
+    expect(pathInIllustration).toBe(pathInAppIcon);
+    expect(appIconSvg).toContain("Maki defibrillator by Mapbox, CC0 1.0");
+    expect(maskableIconSvg).toContain("Maki defibrillator by Mapbox, CC0 1.0");
   });
 });

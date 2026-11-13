@@ -30,6 +30,11 @@ test("the information roadmap fits a narrow phone screen in all six languages", 
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("heading", { level: 2 })).toContainText("AEDjaeger");
+    const iconCredits = dialog.locator(".icon-credits");
+    await expect(iconCredits).toBeVisible();
+    await expect(iconCredits).toContainText("CC0");
+    await expect(iconCredits.locator("a").nth(0)).toHaveAttribute("href", "https://github.com/mapbox/maki/blob/main/icons/defibrillator.svg");
+    await expect(iconCredits.locator("a").nth(1)).toHaveAttribute("href", "https://creativecommons.org/publicdomain/zero/1.0/");
     await expect(dialog.getByRole("heading", { level: 3 }).last()).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `horizontal page overflow in ${language}`).toBeLessThanOrEqual(320);
     expect(await dialog.locator(".info-dialog-content").evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
@@ -37,6 +42,13 @@ test("the information roadmap fits a narrow phone screen in all six languages", 
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
   }
+});
+
+test("uses the Maki defibrillator glyph in the welcome illustration", async ({ page }) => {
+  await page.goto("/");
+  const symbol = page.locator(".empty-illustration .device-mark path").first();
+  await expect(symbol).toBeVisible();
+  await expect(symbol).toHaveAttribute("d", /^m1\.54995 7\.33811c-/);
 });
 
 test("changing the UI language keeps keyboard focus on the language selector", async ({ page }) => {
