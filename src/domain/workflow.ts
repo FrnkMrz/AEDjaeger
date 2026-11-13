@@ -1,3 +1,4 @@
+import { MAX_LOCATION_ACCURACY_METERS, NEARBY_RADIUS_METERS } from "./matchPolicy";
 import { assessCandidateSearch } from "./assessCandidateSearch";
 import type { CandidateAssessment, LocationEstimate, MatchPolicy } from "./candidateMatch";
 import type { CandidateSearchResult } from "../osm/candidateTypes";
@@ -67,8 +68,8 @@ const demoLocation: LocationEstimate = {
   accuracyMeters: 10,
 };
 const demoMatchPolicy: MatchPolicy = {
-  nearbyRadiusMeters: 100,
-  maximumAccuracyMeters: 100,
+  nearbyRadiusMeters: NEARBY_RADIUS_METERS,
+  maximumAccuracyMeters: MAX_LOCATION_ACCURACY_METERS,
 };
 
 // Fixed candidates model the dedicated AED feed. Classification comes from the

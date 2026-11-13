@@ -1,9 +1,46 @@
 import { describe, expect, it } from "vitest";
+import { CONFIRM_RADIUS_METERS, MAX_LOCATION_ACCURACY_METERS, NEARBY_RADIUS_METERS } from "../src/domain/matchPolicy";
 import { assessCandidates, distanceMeters, type LocationEstimate, type MatchPolicy, type SearchResult } from "../src/domain/candidateMatch";
 
 const location: LocationEstimate = { latitude: 52.5, longitude: 13.4, accuracyMeters: 10 };
 const policy: MatchPolicy = { nearbyRadiusMeters: 100, maximumAccuracyMeters: 100 };
 const completeEmptySearch: SearchResult = { status: "complete", coverageRadiusMeters: 110, candidates: [] };
+
+describe("distance tiers from the match policy", () => {
+  // 1 Meter entspricht etwa 0,000009 Grad Breite.
+  const metersNorth = (meters: number) => ({ latitude: 52.5 + meters * 0.000009, longitude: 13.4 });
+  const tierPolicy: MatchPolicy = { nearbyRadiusMeters: NEARBY_RADIUS_METERS, maximumAccuracyMeters: MAX_LOCATION_ACCURACY_METERS };
+  const search = (...metres: number[]): SearchResult => ({
+    status: "complete", coverageRadiusMeters: 200,
+    candidates: metres.map((meters) => ({ id: `node/${meters + 1}`, coordinateQuality: "exact" as const, position: metersNorth(meters) })),
+  });
+
+  it("keeps AEDs up to 50 m and drops everything farther, even with a poor GPS accuracy", () => {
+    // Früher zählte die volle GPS-Ungenauigkeit dazu: Bei 30 m Genauigkeit blieben AEDs bis 130 m übrig.
+    const result = assessCandidates({ ...location, accuracyMeters: 30 }, search(3, 40, 60, 120, 170), tierPolicy);
+    expect(result.kind).toBe("candidate-review");
+    if (result.kind !== "candidate-review") return;
+    expect(result.candidates.map((candidate) => candidate.id)).toEqual(["node/4", "node/41"]);
+    expect(result.candidates.every((candidate) => candidate.distanceMeters <= NEARBY_RADIUS_METERS)).toBe(true);
+  });
+
+  it("offers a new entry when the only AEDs are farther than 50 m", () => {
+    expect(assessCandidates(location, search(60, 170), tierPolicy)).toEqual({ kind: "new-entry-eligible" });
+  });
+
+  it("treats a GPS accuracy worse than 50 m as too uncertain, so the app asks for the map position", () => {
+    expect(assessCandidates({ ...location, accuracyMeters: 51 }, search(3), tierPolicy)).toEqual({
+      kind: "location-too-uncertain", accuracyMeters: 51, maximumAccuracyMeters: 50,
+    });
+    expect(assessCandidates({ ...location, accuracyMeters: 50 }, search(3), tierPolicy).kind).toBe("candidate-review");
+  });
+
+  it("uses 10 m for confirming and 50 m for the hint tier", () => {
+    expect(CONFIRM_RADIUS_METERS).toBe(10);
+    expect(NEARBY_RADIUS_METERS).toBe(50);
+    expect(CONFIRM_RADIUS_METERS).toBeLessThan(NEARBY_RADIUS_METERS);
+  });
+});
 
 describe("OSM candidate assessment", () => {
   it("computes zero distance for the same coordinate", () => {

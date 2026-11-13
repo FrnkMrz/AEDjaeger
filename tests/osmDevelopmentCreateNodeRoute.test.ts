@@ -130,7 +130,7 @@ function makeRequest(body: unknown = input): Request {
   });
 }
 
-function makeFetch(options: { nearbyAed?: boolean; nearbyAedId?: number; loseUploadResponse?: boolean; invalidMap?: boolean; emptyChangeset?: boolean; observedOn?: string; alreadyClosed?: "json" | "xml" | "json-open" | "json-other-id" } = {}) {
+function makeFetch(options: { nearbyAedAt?: { lat: number; lon: number; type?: "node" | "way" }; nearbyAed?: boolean; nearbyAedId?: number; loseUploadResponse?: boolean; invalidMap?: boolean; emptyChangeset?: boolean; observedOn?: string; alreadyClosed?: "json" | "xml" | "json-open" | "json-other-id" } = {}) {
   let loseUploadResponse = options.loseUploadResponse ?? false;
   let uploadCount = 0;
   const calls: Array<{ url: string; method: string; body?: string }> = [];
@@ -139,7 +139,7 @@ function makeFetch(options: { nearbyAed?: boolean; nearbyAedId?: number; loseUpl
     calls.push({ url, method, body });
     if (url.includes("/api/0.6/map.json?bbox=")) return Response.json(options.invalidMap
       ? { version: "0.6", elements: [{ error: "incomplete map response" }] }
-      : { version: "0.6", elements: [{ type: "node", id: 1 }, ...(options.nearbyAed ? [{ type: "node", id: options.nearbyAedId ?? 2, tags: { emergency: "defibrillator" } }] : [])] });
+      : { version: "0.6", elements: [{ type: "node", id: 1 }, ...(options.nearbyAed ? [{ type: "node", id: options.nearbyAedId ?? 2, tags: { emergency: "defibrillator" } }] : []), ...(options.nearbyAedAt ? [{ type: options.nearbyAedAt.type ?? "node", id: 5, ...(options.nearbyAedAt.type === "way" ? {} : { lat: options.nearbyAedAt.lat, lon: options.nearbyAedAt.lon }), tags: { emergency: "defibrillator" } }] : [])] });
     if (url.endsWith("/changeset/create")) return new Response("77", { status: 200 });
     if (url.endsWith("/changeset/77/upload")) {
       uploadCount += 1;
@@ -193,6 +193,23 @@ describe("OSM development node creation", () => {
     );
     expect(response.status).toBe(200);
     expect(api.calls.find((call) => call.url.endsWith("/upload"))?.body).toContain(`<tag k="check_date" v="${historicalDate}"/>`);
+  });
+
+  it("blocks creation only for an AED within 50 m of the new point, the same reach as the search", async () => {
+    // Die neue Position ist 52.52 / 13.405. 1 Meter Breite sind etwa 0,000009 Grad.
+    for (const [lat, blocked] of [[52.52027, true], [52.52072, false]] as const) {
+      const DB = await setupDatabase(); const api = makeFetch({ nearbyAedAt: { lat, lon: 13.405 } });
+      const response = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+      expect(response.status, `AED bei ${lat}`).toBe(blocked ? 409 : 200);
+      expect(api.calls.some((call) => call.url.endsWith("/changeset/create")), `AED bei ${lat}`).toBe(!blocked);
+    }
+  });
+
+  it("still blocks for a way or relation inside the box, because it has no reliable point", async () => {
+    const DB = await setupDatabase(); const api = makeFetch({ nearbyAedAt: { lat: 52.52, lon: 13.405, type: "way" } });
+    const response = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    expect(response.status).toBe(409);
+    expect(api.calls.some((call) => call.url.endsWith("/changeset/create"))).toBe(false);
   });
 
   it("blocks creation if the fresh OSM map contains any nearby AED object", async () => {

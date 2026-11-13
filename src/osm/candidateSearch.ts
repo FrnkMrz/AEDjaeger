@@ -1,3 +1,4 @@
+import { MAX_LOCATION_ACCURACY_METERS } from "../domain/matchPolicy";
 import type { CandidateSearchResult, NearbyAedCandidate } from "./candidateTypes";
 
 export class CandidateSearchError extends Error {
@@ -13,7 +14,7 @@ export interface SearchLocation {
   accuracyMeters: number;
 }
 
-const MAX_SEARCH_ACCURACY_METERS = 100;
+const MAX_SEARCH_ACCURACY_METERS = MAX_LOCATION_ACCURACY_METERS;
 const SEARCH_REQUEST_TIMEOUT_MS = 35_000;
 const MAX_RETRY_AFTER_SECONDS = 7 * 24 * 60 * 60;
 

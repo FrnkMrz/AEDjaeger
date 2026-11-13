@@ -1,3 +1,4 @@
+import { MAX_LOCATION_ACCURACY_METERS, NEARBY_RADIUS_METERS } from "../../src/domain/matchPolicy";
 import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 import { PMTiles, type RangeResponse, type Source } from "pmtiles";
@@ -22,8 +23,9 @@ const AED_ZOOM = 14;
 // Vor einer Neuanlage prüft die Schreibroute den Kartenausschnitt ohnehin erneut live.
 // Derselbe Wert steht in scripts/check-live-search.mjs und muss synchron bleiben.
 const MAX_SOURCE_AGE_HOURS = 5 * 24;
-const MAX_ACCURACY = 100;
-const SEARCH_RADIUS = 100;
+const MAX_ACCURACY = MAX_LOCATION_ACCURACY_METERS;
+// Reichweite der Suche und Genauigkeitsgrenze: siehe src/domain/matchPolicy.ts (gleiche Zahlen wie in der App).
+const SEARCH_RADIUS = NEARBY_RADIUS_METERS;
 const MAX_REQUEST_BYTES = 1_024;
 const MAX_METADATA_BYTES = 256 * 1_024;
 const MAX_RANGE_BYTES = 8 * 1_024 * 1_024;
@@ -161,6 +163,19 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
       if (!accessToken) throw new CoverageUnavailableError();
       const mapCandidates = await fetchDevelopmentCandidates(accessToken, bounds, location, fetcher, controller.signal);
       for (const candidate of mapCandidates) candidates.set(candidate.id, candidate);
+    } else if (session.environment === "development" && env.OSM_OAUTH_ENCRYPTION_KEY) {
+      // Testserver-Sitzung mit Treffern aus dem Archiv: Auch die Entwicklungsinstanz abfragen und die Treffer
+      // zusammenführen. Der Schutz vor Doppelten beim Anlegen schaut dort ohnehin hin; ohne diese Abfrage zeigte die
+      // Suche zum Beispiel den eigenen Test-Knoten nie, und das Anlegen wurde trotzdem blockiert. Hier ist die Abfrage
+      // eine Ergänzung: Scheitert sie, bleibt es beim Ergebnis aus dem Archiv (wie bisher). Bei gleicher Kennung gewinnt
+      // der Treffer vom Testserver, weil nur er sich dort ändern lässt.
+      try {
+        const encryptionKey = await importOAuthEncryptionKey(env.OSM_OAUTH_ENCRYPTION_KEY);
+        const accessToken = await findOSMDevelopmentToken(env.DB, sessionToken, now, encryptionKey);
+        if (accessToken) {
+          for (const candidate of await fetchDevelopmentCandidates(accessToken, bounds, location, fetcher, controller.signal)) candidates.set(candidate.id, candidate);
+        }
+      } catch { /* Ergänzung scheitert: Ergebnis aus dem Archiv bleibt gültig. */ }
     }
 
     return json({

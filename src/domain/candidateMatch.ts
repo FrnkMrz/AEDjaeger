@@ -140,7 +140,7 @@ export function assessCandidates(
     // Keep approximate centers even when their calculated distance is large: the
     // underlying way or relation may still overlap the searched area. Manual review
     // prevents that approximate coordinate from hiding a possible existing AED.
-    .filter((candidate) => candidate.coordinateQuality === "approximate-center" || candidate.distanceMeters <= requiredCoverageMeters)
+    .filter((candidate) => candidate.coordinateQuality === "approximate-center" || candidate.distanceMeters <= policy.nearbyRadiusMeters)
     .sort((left, right) => {
       if (left.distanceMeters !== right.distanceMeters) return left.distanceMeters - right.distanceMeters;
       return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;
