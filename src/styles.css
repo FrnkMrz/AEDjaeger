@@ -89,7 +89,9 @@ h1 { margin-bottom: 12px; font: 800 clamp(30px, 8vw, 43px)/1.14 "Noto Sans", sys
 .loading-row { min-height: 68px; display: flex; align-items: center; justify-content: center; gap: 12px; color: #52645a; font-size: 14px; }
 .spinner { width: 19px; height: 19px; border: 2px solid #dce9de; border-top-color: var(--green); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-footer { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 28px 0 max(22px, env(safe-area-inset-bottom)); color: #626d66; font-size: 12px; }
+footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; padding: 28px 0 max(22px, env(safe-area-inset-bottom)); color: #626d66; font-size: 12px; }
+/* Versionsnummer ganz klein auf eigener Zeile unter der Fußzeile: So sieht man auf jedem Bildschirm, welche Version läuft. */
+.build-mark { flex-basis: 100%; text-align: center; color: #8a948d; font-size: 10px; letter-spacing: .02em; user-select: all; }
 .account-panel { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 14px; margin: 0 0 18px; border: 1px solid #e5e9e3; border-radius: 14px; padding: 11px 14px; color: #57645d; background: #fff; font-size: 12px; text-align: center; }
 .account-panel > div { flex: 1 1 180px; }
 .account-panel strong { color: #27523d; }
