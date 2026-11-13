@@ -1,3 +1,4 @@
+import { MAX_LOCATION_ACCURACY_METERS, NEARBY_RADIUS_METERS } from "./matchPolicy";
 import { assessCandidateSearch } from "./assessCandidateSearch";
 import type { CandidateAssessment, LocationEstimate, MatchPolicy } from "./candidateMatch";
 import type { CandidateSearchResult } from "../osm/candidateTypes";
@@ -50,8 +51,8 @@ export type FlowState =
   | { kind: "candidate-searching"; photoUrl: string }
   | CandidateResultState
   | { kind: "new-aed-preview"; photoUrl: string; result: ProposalResult<NewAedPreview>; returnState: CandidateResultState; writeStatus?: "sending" | "complete" | "uncertain" | "conflict" | "failed"; operationId?: string }
-  | { kind: "osm-preview"; photoUrl: string; candidateId: string; candidateLabel: string; result: ProposalResult<ExistingCheckDatePreview>; returnState: CandidateResultState; writeStatus?: "sending" | "complete" | "unchanged" | "uncertain" | "conflict" | "failed"; operationId?: string }
-  | { kind: "development-write-recovery"; request: DevelopmentWriteRequest; writeStatus: "uncertain" | "sending" | "complete" | "unchanged" | "conflict" | "failed" }
+  | { kind: "osm-preview"; photoUrl: string; candidateId: string; candidateLabel: string; result: ProposalResult<ExistingCheckDatePreview>; returnState: CandidateResultState; writeStatus?: "sending" | "complete" | "unchanged" | "notFound" | "uncertain" | "conflict" | "failed"; operationId?: string }
+  | { kind: "development-write-recovery"; request: DevelopmentWriteRequest; writeStatus: "uncertain" | "sending" | "complete" | "unchanged" | "notFound" | "conflict" | "failed" }
   | { kind: "candidate-error"; photoUrl: string; reason: "location-unavailable" | "location-denied" | "location-uncertain" | "sign-in" | "rate-limited" | "service-unavailable" | "failed" | "invalid-response"; retryAvailableAt?: number }
   | { kind: "clarification"; photoUrl: string; reason: "sign-only" | "multiple" }
   | { kind: "proposal"; photoUrl: string; proposal: ProposalKind; candidateId?: CandidateId }
@@ -67,8 +68,8 @@ const demoLocation: LocationEstimate = {
   accuracyMeters: 10,
 };
 const demoMatchPolicy: MatchPolicy = {
-  nearbyRadiusMeters: 100,
-  maximumAccuracyMeters: 100,
+  nearbyRadiusMeters: NEARBY_RADIUS_METERS,
+  maximumAccuracyMeters: MAX_LOCATION_ACCURACY_METERS,
 };
 
 // Fixed candidates model the dedicated AED feed. Classification comes from the

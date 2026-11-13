@@ -7,6 +7,7 @@ import { readPhotoCapture, readPhotoLocation } from "./vision/photoLocation";
 import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservation, VisionClientError } from "./vision/analyzePhoto";
 import { isAedRecognized } from "./contracts/visionObservation";
 import { formatBuildTime } from "./pwa/buildInfo";
+import { CONFIRM_RADIUS_METERS, MAP_PIN_ACCURACY_METERS, MAX_LOCATION_ACCURACY_METERS, NEARBY_RADIUS_METERS } from "./domain/matchPolicy";
 import { successSound } from "./sound/successSound";
 import { readStoredValue, writeStoredValue } from "./storage/safeStorage";
 import { startUpdateWatcher } from "./pwa/updateCheck";
@@ -21,13 +22,13 @@ const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root element was not found.");
 
 const languageNames: Record<Language, string> = { de: "Deutsch", en: "English", pl: "Polski", ja: "日本語", fr: "Français", es: "Español" };
-const developmentWriteCopy: Record<Language, { action: string; createAction: string; retry: string; sending: string; complete: string; unchanged: string; created: string; uncertain: string; conflict: string; failed: string; }> = {
-  de: { action: "Testserver: Prüfdatum speichern", createAction: "Testserver: AED eintragen", retry: "Testserver: Status erneut prüfen", sending: "Testserver: Änderung wird gesendet…", complete: "Testserver: Vor-Ort-Prüfung gespeichert.", unchanged: "Testserver: Schon aktuell. Es wurde nichts geändert.", created: "Testserver: Neuer AED wurde eingetragen.", uncertain: "Testserver: Ergebnis unklar. Mit derselben Anfrage erneut prüfen; keine neue Änderung wird blind gesendet.", conflict: "Testserver: In der Nähe gibt es einen AED oder der OSM-Eintrag änderte sich. Suche bitte erneut.", failed: "Testserver: Änderung fehlgeschlagen. Bitte Eintrag erneut prüfen." },
-  en: { action: "Test server: Save visit date", createAction: "Test server: Add AED", retry: "Test server: Check status again", sending: "Test server: Sending update…", complete: "Test server: Visit confirmation saved.", unchanged: "Test server: Already up to date. Nothing was changed.", created: "Test server: New AED added.", uncertain: "Test server: Result is unclear. Check again using the same request; no new edit will be sent blindly.", conflict: "Test server: An AED is nearby or the OSM entry changed. Search again.", failed: "Test server: Update failed. Please check the entry again." },
-  pl: { action: "Serwer testowy: zapisz datę kontroli", createAction: "Serwer testowy: dodaj AED", retry: "Serwer testowy: sprawdź ponownie stan", sending: "Serwer testowy: wysyłanie zmiany…", complete: "Serwer testowy: zapisano potwierdzenie kontroli.", unchanged: "Serwer testowy: Już aktualne. Nic nie zmieniono.", created: "Serwer testowy: dodano nowy AED.", uncertain: "Serwer testowy: wynik jest niepewny. Sprawdź ponownie to samo żądanie; nie wyślemy w ciemno nowej zmiany.", conflict: "Serwer testowy: w pobliżu jest AED albo wpis OSM został zmieniony. Wyszukaj ponownie.", failed: "Serwer testowy: nie udało się zapisać zmiany. Sprawdź ponownie wpis." },
-  ja: { action: "テストサーバー：確認日を保存", createAction: "テストサーバー：AEDを登録", retry: "テストサーバー：状態を再確認", sending: "テストサーバー：変更を送信中…", complete: "テストサーバー：現地確認を保存しました。", unchanged: "テストサーバー：すでに最新です。変更はありません。", created: "テストサーバー：新しいAEDを登録しました。", uncertain: "テストサーバー：結果を確認できません。同じリクエストで再確認してください。新しい変更を無確認で送信しません。", conflict: "テストサーバー：近くにAEDがあるか、OSMの項目が変更されています。再検索してください。", failed: "テストサーバー：変更に失敗しました。項目を再確認してください。" },
-  fr: { action: "Serveur de test : enregistrer la date", createAction: "Serveur de test : ajouter un DAE", retry: "Serveur de test : vérifier à nouveau", sending: "Serveur de test : envoi de la modification…", complete: "Serveur de test : visite confirmée.", unchanged: "Serveur de test : déjà à jour. Rien n'a été modifié.", created: "Serveur de test : nouveau DAE ajouté.", uncertain: "Serveur de test : résultat incertain. Vérifiez à nouveau avec la même requête ; aucune nouvelle modification ne sera envoyée à l’aveugle.", conflict: "Serveur de test : un DAE est proche ou la fiche OSM a changé. Relancez la recherche.", failed: "Serveur de test : échec de la modification. Vérifiez à nouveau la fiche." },
-  es: { action: "Servidor de pruebas: guardar fecha", createAction: "Servidor de pruebas: añadir DEA", retry: "Servidor de pruebas: comprobar estado", sending: "Servidor de pruebas: enviando cambio…", complete: "Servidor de pruebas: visita confirmada.", unchanged: "Servidor de pruebas: ya está actualizado. No se cambió nada.", created: "Servidor de pruebas: se añadió un DEA.", uncertain: "Servidor de pruebas: resultado incierto. Comprueba de nuevo con la misma solicitud; no enviaremos otro cambio a ciegas.", conflict: "Servidor de pruebas: hay un DEA cerca o la ficha OSM ha cambiado. Vuelve a buscar.", failed: "Servidor de pruebas: no se pudo guardar. Comprueba de nuevo la ficha." },
+const developmentWriteCopy: Record<Language, { action: string; createAction: string; retry: string; sending: string; complete: string; unchanged: string; notFound: string; created: string; uncertain: string; conflict: string; failed: string; }> = {
+  de: { action: "Testserver: Prüfdatum speichern", createAction: "Testserver: AED eintragen", retry: "Testserver: Status erneut prüfen", sending: "Testserver: Änderung wird gesendet…", complete: "Testserver: Vor-Ort-Prüfung gespeichert.", unchanged: "Testserver: Schon aktuell. Es wurde nichts geändert.", notFound: "Testserver: Dieser AED stammt aus dem echten OSM und existiert auf dem Testserver nicht. Es wurde nichts geändert.", created: "Testserver: Neuer AED wurde eingetragen.", uncertain: "Testserver: Ergebnis unklar. Mit derselben Anfrage erneut prüfen; keine neue Änderung wird blind gesendet.", conflict: "Testserver: Nichts wurde geändert. In der Nähe gibt es einen AED, den du noch nicht geprüft hast, oder der Eintrag hat sich geändert. Bitte suche erneut.", failed: "Testserver: Änderung fehlgeschlagen. Bitte Eintrag erneut prüfen." },
+  en: { action: "Test server: Save visit date", createAction: "Test server: Add AED", retry: "Test server: Check status again", sending: "Test server: Sending update…", complete: "Test server: Visit confirmation saved.", unchanged: "Test server: Already up to date. Nothing was changed.", notFound: "Test server: This AED comes from the real OSM and does not exist on the test server. Nothing was changed.", created: "Test server: New AED added.", uncertain: "Test server: Result is unclear. Check again using the same request; no new edit will be sent blindly.", conflict: "Test server: Nothing was changed. There is an AED nearby that you have not reviewed yet, or the entry has changed. Please search again.", failed: "Test server: Update failed. Please check the entry again." },
+  pl: { action: "Serwer testowy: zapisz datę kontroli", createAction: "Serwer testowy: dodaj AED", retry: "Serwer testowy: sprawdź ponownie stan", sending: "Serwer testowy: wysyłanie zmiany…", complete: "Serwer testowy: zapisano potwierdzenie kontroli.", unchanged: "Serwer testowy: Już aktualne. Nic nie zmieniono.", notFound: "Serwer testowy: Ten AED pochodzi z prawdziwego OSM i nie istnieje na serwerze testowym. Nic nie zmieniono.", created: "Serwer testowy: dodano nowy AED.", uncertain: "Serwer testowy: wynik jest niepewny. Sprawdź ponownie to samo żądanie; nie wyślemy w ciemno nowej zmiany.", conflict: "Serwer testowy: Nic nie zmieniono. W pobliżu jest AED, którego jeszcze nie sprawdzono, albo wpis się zmienił. Wyszukaj ponownie.", failed: "Serwer testowy: nie udało się zapisać zmiany. Sprawdź ponownie wpis." },
+  ja: { action: "テストサーバー：確認日を保存", createAction: "テストサーバー：AEDを登録", retry: "テストサーバー：状態を再確認", sending: "テストサーバー：変更を送信中…", complete: "テストサーバー：現地確認を保存しました。", unchanged: "テストサーバー：すでに最新です。変更はありません。", notFound: "テストサーバー：このAEDは本番のOSMのもので、テストサーバーには存在しません。変更はありません。", created: "テストサーバー：新しいAEDを登録しました。", uncertain: "テストサーバー：結果を確認できません。同じリクエストで再確認してください。新しい変更を無確認で送信しません。", conflict: "テストサーバー：変更はありません。近くに未確認のAEDがあるか、登録内容が変わりました。もう一度検索してください。", failed: "テストサーバー：変更に失敗しました。項目を再確認してください。" },
+  fr: { action: "Serveur de test : enregistrer la date", createAction: "Serveur de test : ajouter un DAE", retry: "Serveur de test : vérifier à nouveau", sending: "Serveur de test : envoi de la modification…", complete: "Serveur de test : visite confirmée.", unchanged: "Serveur de test : déjà à jour. Rien n'a été modifié.", notFound: "Serveur de test : ce DAE provient du vrai OSM et n'existe pas sur le serveur de test. Rien n'a été modifié.", created: "Serveur de test : nouveau DAE ajouté.", uncertain: "Serveur de test : résultat incertain. Vérifiez à nouveau avec la même requête ; aucune nouvelle modification ne sera envoyée à l’aveugle.", conflict: "Serveur de test : rien n'a été modifié. Un DAE à proximité n'a pas encore été vérifié, ou l'entrée a changé. Veuillez relancer la recherche.", failed: "Serveur de test : échec de la modification. Vérifiez à nouveau la fiche." },
+  es: { action: "Servidor de pruebas: guardar fecha", createAction: "Servidor de pruebas: añadir DEA", retry: "Servidor de pruebas: comprobar estado", sending: "Servidor de pruebas: enviando cambio…", complete: "Servidor de pruebas: visita confirmada.", unchanged: "Servidor de pruebas: ya está actualizado. No se cambió nada.", notFound: "Servidor de pruebas: este DEA procede del OSM real y no existe en el servidor de pruebas. No se cambió nada.", created: "Servidor de pruebas: se añadió un DEA.", uncertain: "Servidor de pruebas: resultado incierto. Comprueba de nuevo con la misma solicitud; no enviaremos otro cambio a ciegas.", conflict: "Servidor de pruebas: no se cambió nada. Hay un DEA cercano que aún no se ha revisado, o la entrada cambió. Busca de nuevo.", failed: "Servidor de pruebas: no se pudo guardar. Comprueba de nuevo la ficha." },
 };
 const scenarioKeys: Record<DemoScenario, TranslationKey> = {
   existing: "existingScenario", new: "newScenario", multiple: "multipleScenario", unclear: "unclearScenario", "search-error": "searchErrorScenario", "upload-unclear": "uploadErrorScenario",
@@ -418,9 +419,15 @@ function statusContent(): string {
           const name = candidate.tags.name || candidate.tags["defibrillator:location"] || candidate.id;
           const label = numbered ? `${index + 1}. ${name}` : name;
           const distance = distanceMeters === undefined ? "" : `<span>${escapeHtml(tv("distance", { distance: Math.round(distanceMeters) }))}</span>`;
-          const reviewAction = candidate.osmType === "node"
-            ? `<button class="button button-secondary" data-action="preview-candidate" data-candidate-id="${escapeHtml(candidate.id)}">${tv("selectCandidate")}</button>`
-            : `<span class="supporting-copy">${tv("previewUnsupportedShort")}</span>`;
+          // Zwei Stufen (siehe src/domain/matchPolicy.ts): Bis 10 m ist es ein Treffer zum Bestätigen. Zwischen 10 und
+          // 50 m steht nur ein Hinweis mit der Entfernung; der AED muss vor einer Neuanlage geprüft werden, lässt sich
+          // aber nicht als "noch vorhanden" bestätigen.
+          const tooFarToConfirm = distanceMeters !== undefined && distanceMeters > CONFIRM_RADIUS_METERS;
+          const reviewAction = candidate.osmType !== "node"
+            ? `<span class="supporting-copy">${tv("previewUnsupportedShort")}</span>`
+            : tooFarToConfirm
+              ? `<span class="supporting-copy">${tv("candidateTooFar", { meters: CONFIRM_RADIUS_METERS })}</span>`
+              : `<button class="button button-secondary" data-action="preview-candidate" data-candidate-id="${escapeHtml(candidate.id)}">${tv("selectCandidate")}</button>`;
           return `<li class="candidate-item"><strong>${escapeHtml(label)}</strong>${distance}${reviewAction}</li>`;
         }).join("");
       let outcome: string;
@@ -490,11 +497,15 @@ function statusContent(): string {
       const { result } = state;
       const candidateId = state.candidateId;
       const candidate = state.returnState.search.candidates.find((item) => item.id === candidateId);
-      const canWrite = developmentSession && developmentWriteAvailable && candidate?.osmType === "node" && result.kind === "ready";
+      // Ein AED aus dem Archiv des echten OSM gibt es auf dem Testserver nicht. Dafür gibt es dort keinen Speichern-Knopf.
+      const archiveOnly = developmentSession && developmentWriteAvailable && candidate?.source === "archive";
+      const canWrite = developmentSession && developmentWriteAvailable && candidate?.osmType === "node" && result.kind === "ready" && !archiveOnly;
       // Nur das Wesentliche: das neue Prüfdatum. Der bisherige Wert steht nur da, wenn es einen gibt.
       const content = result.kind === "ready"
         ? `<p><strong>${tv("previewNewDate", { date: result.changes[0].after })}</strong></p>${result.changes[0].before ? `<p>${tv("previewOldDate", { date: escapeHtml(result.changes[0].before) })}</p>` : ""}`
-        : `<p>${tv("previewUnsupported")}</p>`;
+        : result.reason === "newer-check-date-exists" && result.existingDate
+          ? `<p>${tv("previewNewerDate", { date: escapeHtml(result.existingDate) })}</p>`
+          : `<p>${tv("previewUnsupported")}</p>`;
       const copy = developmentWriteCopy[language];
       const writeStatus = state.writeStatus ? `<p role="status" class="simulation-note">${copy[state.writeStatus]}</p>` : "";
       const writeAction = canWrite && !state.writeStatus
@@ -503,7 +514,9 @@ function statusContent(): string {
           ? `<button class="button button-secondary" data-action="retry-development-write">${copy.retry}</button>`
           : "";
       // Nur wenn nichts gespeichert werden kann und kein Vorgang läuft; sonst wäre „nur eine Vorschau“ nach einem Speichern falsch.
-      const noWriteNotice = !canWrite && !state.writeStatus ? `<p class="simulation-note">${tv("previewNoWrite")}</p>` : "";
+      // Bei einem neueren Datum in OSM sagt die Meldung selbst, dass nichts geändert wird; „nur eine Vorschau“ wäre doppelt.
+      const newerDateInOsm = result.kind === "blocked" && result.reason === "newer-check-date-exists";
+      const noWriteNotice = !canWrite && !state.writeStatus && !newerDateInOsm ? `<p class="simulation-note">${archiveOnly ? tv("previewArchiveNotice") : tv("previewNoWrite")}</p>` : "";
       const recoverableWrite = state.writeStatus === "sending" || state.writeStatus === "uncertain";
       // „Zurück“ gibt es nur, wenn es mehrere Treffer zur Auswahl gab. Bei einem einzigen Treffer hätte es keine Bedeutung.
       // Gezählt wird wie in der Trefferliste: Bei „candidate-review“ die bewerteten Treffer, sonst alle Suchtreffer.
@@ -898,6 +911,16 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
     } else if (response.status === 409) {
       setDevelopmentWriteStatus(requestBody.operationId, "conflict");
       clearPendingDevelopmentCheck();
+    } else if (response.status === 404 && isRecord(payload) && payload.error === "target_not_found") {
+      // Eindeutig: Den Knoten gibt es auf dem Testserver nicht (zum Beispiel ein AED aus dem Archiv des echten OSM).
+      // Nichts wurde geschrieben; ein erneutes Prüfen würde dasselbe ergeben. Darum kein "unklar" und kein Prüfen-Knopf.
+      setDevelopmentWriteStatus(requestBody.operationId, "notFound");
+      clearPendingDevelopmentCheck();
+    } else if (isRecord(payload) && payload.error === "write_failed") {
+      // Der Server hat den Vorgang endgültig als gescheitert festgehalten. Wiederholen liefert dieselbe Antwort,
+      // darum "fehlgeschlagen" (neuer Versuch von vorn) statt "unklar".
+      setDevelopmentWriteStatus(requestBody.operationId, "failed");
+      clearPendingDevelopmentCheck();
     } else if (response.status === 202 || response.status >= 500 || !response.ok && !isRecord(payload)) {
       setDevelopmentWriteStatus(requestBody.operationId, "uncertain");
     } else {
@@ -912,10 +935,10 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
     || (state.kind === "development-write-recovery" && state.request.operationId === requestBody.operationId)) render(true);
 }
 
-function setDevelopmentWriteStatus(operationId: string, writeStatus: "uncertain" | "sending" | "complete" | "unchanged" | "conflict" | "failed"): void {
+function setDevelopmentWriteStatus(operationId: string, writeStatus: "uncertain" | "sending" | "complete" | "unchanged" | "notFound" | "conflict" | "failed"): void {
   if (state.kind === "new-aed-preview" && state.operationId === operationId) {
     // Eine Neuanlage kennt kein "schon aktuell"; der Server meldet es dort nie. Sicherheitshalber gilt es als erstellt.
-    state = { ...state, writeStatus: writeStatus === "unchanged" ? "complete" : writeStatus };
+    state = { ...state, writeStatus: writeStatus === "unchanged" ? "complete" : writeStatus === "notFound" ? "failed" : writeStatus };
   } else if (state.kind === "osm-preview" && state.operationId === operationId) {
     state = { ...state, writeStatus };
   } else if (state.kind === "development-write-recovery" && state.request.operationId === operationId) {
@@ -1103,7 +1126,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
   } else if (action === "confirm-map-location" && state.kind === "location-map") {
     const position = mapLocationOverride ?? state.center;
     activeSearchLocationSource = "map";
-    void runNearbySearch(state.photoUrl, { ...position, accuracyMeters: 100 });
+    void runNearbySearch(state.photoUrl, { ...position, accuracyMeters: MAP_PIN_ACCURACY_METERS });
   } else if (action === "retry-search" && (state.kind === "candidate-error" || (state.kind === "candidate-result" && (state.search.status === "partial" || state.assessment.kind === "search-incomplete")))) {
     // A photo's embedded point is fixed, but a phone GPS fix can improve after the user moves.
     // A chosen photo/map point is stable across retries. Phone GPS is deliberately reacquired
@@ -1153,7 +1176,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
       position: newAedPositionOverride ?? state.location,
       searchCenter: state.location,
       coverageRadiusMeters: state.search.coverageRadiusMeters,
-      nearbyRadiusMeters: 100,
+      nearbyRadiusMeters: NEARBY_RADIUS_METERS,
       searchCandidates: state.search.candidates,
       // Only reject AEDs the review panel actually showed. Other search results
       // remain in the duplicate check, especially if the map point is moved.
@@ -1203,7 +1226,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     const preview = state;
     const candidateId = preview.candidateId;
     const candidate = preview.returnState.search.candidates.find((item) => item.id === candidateId);
-    if (!candidate || candidate.osmType !== "node" || preview.result.kind !== "ready") return;
+    if (!candidate || candidate.osmType !== "node" || candidate.source === "archive" || preview.result.kind !== "ready") return;
     const operationId = preview.operationId ?? crypto.randomUUID();
     const change = preview.result.changes[0];
     const request: DevelopmentWriteRequest = {
@@ -1289,7 +1312,7 @@ async function runNearbySearch(photoUrl: string, providedLocation?: SearchLocati
     const location = providedLocation ?? await getPhoneLocation();
     activeSearchLocation = location;
     const search = await requestNearbyCandidates(location);
-    const { assessment } = assessCandidateSearch(location, search, { nearbyRadiusMeters: 100, maximumAccuracyMeters: 100 });
+    const { assessment } = assessCandidateSearch(location, search, { nearbyRadiusMeters: NEARBY_RADIUS_METERS, maximumAccuracyMeters: MAX_LOCATION_ACCURACY_METERS });
     // Keep coordinates only in the active in-memory photo flow so a later preview can stay tied to
     // the exact search location. They are discarded when the photo is replaced and never persisted.
     const retryAvailableAt = search.status === "partial"

@@ -1,3 +1,4 @@
+import { UNKNOWN_PHOTO_GPS_ACCURACY_METERS } from "../src/domain/matchPolicy";
 import { describe, expect, it, vi } from "vitest";
 import { readPhotoLocation } from "../src/vision/photoLocation";
 
@@ -10,7 +11,7 @@ describe("photo GPS extraction", () => {
     await expect(readPhotoLocation(photo, readGps)).resolves.toEqual({
       latitude: 52.52,
       longitude: 13.405,
-      accuracyMeters: 100,
+      accuracyMeters: UNKNOWN_PHOTO_GPS_ACCURACY_METERS,
     });
     expect(readGps).toHaveBeenCalledWith(photo);
   });

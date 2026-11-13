@@ -209,7 +209,7 @@ function makeRequest(payload: unknown = requestBody): Request {
   });
 }
 
-function makeFetch(options: { appliedAfterUploadFailure?: boolean; conflictVersion?: number; observedOn?: string } = {}) {
+function makeFetch(options: { appliedAfterUploadFailure?: boolean; conflictVersion?: number; observedOn?: string; missingNode?: boolean } = {}) {
   let version = options.conflictVersion ?? 3;
   let checkDate = "2025-10-20";
   const calls: Array<{ method: string; url: string; body?: string }> = [];
@@ -219,6 +219,7 @@ function makeFetch(options: { appliedAfterUploadFailure?: boolean; conflictVersi
     const method = init.method ?? "GET";
     const body = typeof init.body === "string" ? init.body : undefined;
     calls.push({ method, url, body });
+    if (options.missingNode && url.endsWith("/api/0.6/node/42.json")) return new Response("Not Found", { status: 404 });
     if (url.endsWith("/api/0.6/node/42.json")) {
       return Response.json({ version: "0.6", elements: [{ type: "node", id: 42, lat: 52.52, lon: 13.4, version, tags: { emergency: "defibrillator", name: "Clinic & hall", check_date: checkDate } }] });
     }
@@ -300,6 +301,21 @@ describe("OSM development check-date writer", () => {
     const response = await handleDevelopmentCheckDate(makeRequest(), { ...environment, DB }, { now: () => now, fetch: fetcher });
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "version_conflict" });
+    expect(calls.some((call) => call.url.endsWith("/changeset/create"))).toBe(false);
+  });
+
+  it("reports a node that does not exist on the test server as a definite failure, without opening a changeset", async () => {
+    // Typisch für einen AED aus dem Archiv des echten OSM: Die Entwicklungsinstanz hat eine eigene Datenbank.
+    const DB = await setupDatabase();
+    const { fetcher, calls } = makeFetch({ missingNode: true });
+    const first = await handleDevelopmentCheckDate(makeRequest(), { ...environment, DB }, { now: () => now, fetch: fetcher });
+    expect(first.status).toBe(404);
+    expect(await first.json()).toEqual({ error: "target_not_found" });
+    expect(calls.some((call) => call.url.endsWith("/changeset/create"))).toBe(false);
+    // Eine Wiederholung mit derselben Vorgangsnummer ergibt dieselbe endgültige Antwort und öffnet nichts.
+    const retry = await handleDevelopmentCheckDate(makeRequest(), { ...environment, DB }, { now: () => now, fetch: fetcher });
+    expect(retry.status).toBe(502);
+    expect(await retry.json()).toEqual({ error: "write_failed" });
     expect(calls.some((call) => call.url.endsWith("/changeset/create"))).toBe(false);
   });
 

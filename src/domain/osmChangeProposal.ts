@@ -33,9 +33,11 @@ export type ProposalError =
   | "invalid-search-coverage"
   | "position-outside-search"
   | "search-found-candidate"
-  | "invalid-location-description";
+  | "invalid-location-description"
+  | "newer-check-date-exists";
 
-export type ProposalResult<T> = T | { kind: "blocked"; reason: ProposalError };
+/** existingDate: Nur bei "newer-check-date-exists": das neuere Prüfdatum, das schon in OSM steht. */
+export type ProposalResult<T> = T | { kind: "blocked"; reason: ProposalError; existingDate?: string };
 
 function isValidDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -82,6 +84,13 @@ export function previewExistingAedCheck(
   if (candidate.osmType !== "node") return { kind: "blocked", reason: "unsupported-object" };
 
   const previousDate = candidate.tags.check_date;
+  // Ein Foto aus der Mediathek kann älter sein als das, was schon in OSM steht. Dann gibt es nichts zu bestätigen: Ein
+  // älteres Datum darf ein neueres nie überschreiben. Der Server prüft das beim Speichern ebenfalls (409
+  // "newer_check_date_exists"); hier zeigt die App es schon in der Vorschau, bevor jemand auf "Speichern" tippt.
+  // Gleiches Datum bleibt erlaubt und endet beim Speichern mit "Schon aktuell".
+  if (typeof previousDate === "string" && isValidDate(previousDate) && previousDate > observedOn) {
+    return { kind: "blocked", reason: "newer-check-date-exists", existingDate: previousDate };
+  }
   return {
     kind: "ready",
     operation: "update",

@@ -128,7 +128,7 @@ describe("PMTiles AED candidate search", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       status: "complete", data_until: metadata().osm_data_until,
-      candidates: [{ id: "node/123", osmType: "node", coordinateQuality: "exact", tags: { name: "Bahnhof", wheelchair: "yes", check_date: "2026-10-20" } }],
+      candidates: [{ id: "node/123", osmType: "node", coordinateQuality: "exact", source: "archive", tags: { name: "Bahnhof", wheelchair: "yes", check_date: "2026-10-20" } }],
     });
     expect(fetcher.mock.calls.length).toBeGreaterThan(2);
     expect(fetcher.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
@@ -146,9 +146,59 @@ describe("PMTiles AED candidate search", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       status: "complete",
-      candidates: [{ id: "node/456", tags: { check_date: "2026-10-01", name: "Eingang" } }],
+      candidates: [{ id: "node/456", source: "development", tags: { check_date: "2026-10-01", name: "Eingang" } }],
     });
     expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).origin === "https://master.apis.dev.openstreetmap.org")).toBe(true);
+  });
+
+  it("also shows AEDs of the test server next to the archive hits in a test-server session", async () => {
+    // Der Schutz vor Doppelten beim Anlegen prüft die Entwicklungsinstanz. Die Suche muss dort ebenfalls hinschauen.
+    fixture.mapPayload = { elements: [
+      { type: "node", id: 456, lat: 52.52036, lon: 13.405, tags: { emergency: "defibrillator", name: "Test-Knoten" } },
+    ] };
+    const response = await handleStaticCandidateSearch(request({ latitude: 52.52, longitude: 13.405, accuracy_meters: 10 }), {
+      DB: database(), OSM_OAUTH_ENCRYPTION_KEY: "test-encryption-key",
+    }, { fetch: fetchArchive(), now: () => now });
+    expect(response.status).toBe(200);
+    const body = await response.json() as { candidates: Array<{ id: string; source: string }> };
+    expect(body.candidates.map((candidate) => [candidate.id, candidate.source]).sort()).toEqual([["node/123", "archive"], ["node/456", "development"]]);
+  });
+
+  it("keeps the archive result when the additional test-server lookup fails", async () => {
+    const response = await handleStaticCandidateSearch(request({ latitude: 52.52, longitude: 13.405, accuracy_meters: 10 }), {
+      DB: database(), OSM_OAUTH_ENCRYPTION_KEY: "test-encryption-key",
+    }, { fetch: fetchArchive({ mapStatus: 500 }), now: () => now });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: "complete", candidates: [{ id: "node/123", source: "archive" }] });
+  });
+
+  it("never asks the test server in a production session", async () => {
+    const fetcher = fetchArchive();
+    const response = await handleStaticCandidateSearch(request(), { DB: database({ environment: "production" }), OSM_OAUTH_ENCRYPTION_KEY: "test-encryption-key" }, { fetch: fetcher, now: () => now });
+    expect(response.status).toBe(200);
+    expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).origin === "https://master.apis.dev.openstreetmap.org")).toBe(false);
+  });
+
+  it("rejects a GPS accuracy worse than 50 m before any lookup", async () => {
+    const fetcher = fetchArchive();
+    const response = await handleStaticCandidateSearch(request({ latitude: 52.52, longitude: 13.405, accuracy_meters: 60 }), { DB: database() }, { fetch: fetcher, now: () => now });
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "location_too_uncertain" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("searches only 50 m plus the GPS accuracy around the point", async () => {
+    fixture.pointFeature = null;
+    fixture.mapPayload = { elements: [
+      { type: "node", id: 456, lat: 52.52036, lon: 13.405, tags: { emergency: "defibrillator", name: "bei 40 m" } },
+      { type: "node", id: 789, lat: 52.52063, lon: 13.405, tags: { emergency: "defibrillator", name: "bei 70 m" } },
+    ] };
+    const response = await handleStaticCandidateSearch(request({ latitude: 52.52, longitude: 13.405, accuracy_meters: 10 }), {
+      DB: database(), OSM_OAUTH_ENCRYPTION_KEY: "test-encryption-key",
+    }, { fetch: fetchArchive(), now: () => now });
+    const body = await response.json() as { candidates: Array<{ id: string }>; coverage_radius_meters: number };
+    expect(body.coverage_radius_meters).toBe(60);
+    expect(body.candidates.map((candidate) => candidate.id)).toEqual(["node/456"]);
   });
 
   it("returns no matches only after the complete development-map area has been checked", async () => {

@@ -16,6 +16,7 @@ import {
 import type { D1Database } from "../storage/d1";
 import { requestOSMDevelopmentApi } from "./developmentApi";
 import { withoutXmlDeclaration } from "./xmlText";
+import { NEARBY_RADIUS_METERS } from "../../src/domain/matchPolicy";
 import { isAcceptableObservationDate } from "./observationDate";
 
 const SESSION_COOKIE = "aedjaeger_osm_session";
@@ -166,8 +167,11 @@ export async function handleDevelopmentCreateNode(
 async function findNearbyAed(input: CreateRequest, token: string, fetcher: typeof fetch): Promise<boolean> {
   // The browser's earlier versioned AED-index result is useful for the UI but is not trusted
   // to authorize a create. Re-read one small authoritative OSM API box here.
-  const latitudePadding = 0.001;
-  const longitudePadding = Math.min(0.01, 0.0015 / Math.max(0.1, Math.cos(input.latitude * Math.PI / 180)));
+  // Dieselbe Reichweite wie die Suche in der App (siehe src/domain/matchPolicy.ts): Der Kasten ist etwas größer als
+  // 50 m, die Entfernung der einzelnen Knoten wird unten genau geprüft. Ein AED, den die Suche nie gezeigt hat,
+  // soll das Anlegen nicht blockieren.
+  const latitudePadding = (NEARBY_RADIUS_METERS * 1.2) / 111_320;
+  const longitudePadding = Math.min(0.01, latitudePadding / Math.max(0.1, Math.cos(input.latitude * Math.PI / 180)));
   const response = await requestOSMDevelopmentApi("development", "/api/0.6/map.json", token, {
     method: "GET",
     bbox: {
@@ -188,6 +192,10 @@ async function findNearbyAed(input: CreateRequest, token: string, fetcher: typeo
     }
     if (isStringRecord(element.tags) && element.tags.emergency === "defibrillator") {
       if (!isNumericId(typeof element.id === "number" ? String(element.id) : undefined)) return true;
+      // Ein Knoten außerhalb des Nahbereichs (über 50 m) zählt nicht. Wege und Relationen haben im Kartenabruf keinen
+      // sicheren Punkt; sie blockieren wie bisher, solange sie im Kasten liegen.
+      if (element.type === "node" && typeof element.lat === "number" && typeof element.lon === "number"
+        && metersBetween(input.latitude, input.longitude, element.lat, element.lon) > NEARBY_RADIUS_METERS) continue;
       const candidateId = `${element.type}/${element.id}`;
       // Only nearby AEDs the person explicitly reviewed as different are exempt.
       // Any newly appeared or unreviewed AED still blocks creation.
@@ -421,6 +429,15 @@ function serializeCreateRequestForHash(input: CreateRequest): string {
 }
 
 function isStringRecord(value: unknown): value is Record<string, string> { return isRecord(value) && Object.keys(value).length <= 512 && Object.entries(value).every(([key, text]) => key.length > 0 && key.length <= 255 && typeof text === "string" && text.length <= 255); }
+/** Entfernung zweier Punkte in Metern (Haversine-Formel, Erdradius 6.371 km). */
+function metersBetween(latitudeA: number, longitudeA: number, latitudeB: number, longitudeB: number): number {
+  const toRadians = (degrees: number) => degrees * Math.PI / 180;
+  const deltaLatitude = toRadians(latitudeB - latitudeA);
+  const deltaLongitude = toRadians(longitudeB - longitudeA);
+  const a = Math.sin(deltaLatitude / 2) ** 2 + Math.cos(toRadians(latitudeA)) * Math.cos(toRadians(latitudeB)) * Math.sin(deltaLongitude / 2) ** 2;
+  return 2 * 6_371_000 * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 function escapeXml(value: string): string { return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;"); }
 function isCrossOrigin(request: Request, origin: string): boolean { const requestOrigin = request.headers.get("Origin"); return (requestOrigin !== null && requestOrigin !== origin) || request.headers.get("Sec-Fetch-Site") === "cross-site"; }
