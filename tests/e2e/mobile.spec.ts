@@ -2130,7 +2130,7 @@ async function readSound(page: import("@playwright/test").Page): Promise<SoundCo
 }
 
 /** Bringt die App bis zum Speichern-Knopf für das Prüfdatum und gibt ihn zurück. */
-async function openCheckDateSaveButton(page: import("@playwright/test").Page, context: import("@playwright/test").BrowserContext, onWrite: (route: import("@playwright/test").Route) => Promise<void>) {
+async function openCheckDateSaveButton(page: import("@playwright/test").Page, context: import("@playwright/test").BrowserContext, onWrite: (route: import("@playwright/test").Route) => Promise<void>, tags: Record<string, string> = { emergency: "defibrillator", name: "Rathaus", check_date: "2025-10-20" }) {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
@@ -2138,7 +2138,7 @@ async function openCheckDateSaveButton(page: import("@playwright/test").Page, co
   } }));
   await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
     status: "complete", coverage_radius_meters: 112,
-    candidates: [{ id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2025-10-20" } }],
+    candidates: [{ id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags }],
   } }));
   await page.route("**/api/osm/development/check-date", onWrite);
   await page.goto("/");
@@ -2250,4 +2250,98 @@ test("the sound can be switched off for the open page even when the browser stor
   // Der Schalter springt nach einer neuen Darstellung nicht zurück auf „an“.
   await page.locator("#open-info").click();
   await expect(page.locator("#success-sound-toggle")).not.toBeChecked();
+});
+
+// ---------------------------------------------------------------------------------------------
+// Gesperrter Browser-Speicher: Die App startet und die Sprache lässt sich trotzdem wechseln
+// ---------------------------------------------------------------------------------------------
+
+test("the app starts and works when the browser storage cannot even be accessed", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  // Wie bei „alle Cookies blockieren“: Schon der Zugriff auf localStorage und sessionStorage wirft einen Fehler.
+  await page.addInitScript(() => {
+    const blocked = () => { throw new DOMException("denied", "SecurityError"); };
+    Object.defineProperty(window, "localStorage", { get: blocked, configurable: true });
+    Object.defineProperty(window, "sessionStorage", { get: blocked, configurable: true });
+  });
+  await page.goto("/");
+  // Start mit der Gerätesprache (Deutsch im Test), Lampe und Aufnahme sind da.
+  await expect(page.locator("header .connection-lamp-on")).toBeVisible();
+  await expect(page.locator("#file-input")).toBeAttached();
+  // Der Sprachwechsel greift für die offene Seite, obwohl sich nichts merken lässt.
+  await page.locator("#language").selectOption("en");
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.locator("#build-version")).toContainText("Version");
+  await page.locator("#language").selectOption("pl");
+  await expect(page.locator("html")).toHaveAttribute("lang", "pl");
+  expect(pageErrors).toEqual([]);
+});
+
+test("switching the language still works when only writing to the browser storage fails", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.addInitScript(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (key === "aedjaeger-language") throw new DOMException("full", "QuotaExceededError");
+      return original.call(this, key, value);
+    };
+  });
+  await page.goto("/");
+  await page.locator("#language").selectOption("fr");
+  await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+  expect(pageErrors).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------------------------
+// "Schon aktuell": Der Server schreibt nichts, wenn das Datum schon so auf dem Knoten steht
+// ---------------------------------------------------------------------------------------------
+
+test("an already-current check date says nothing was changed, plays no sound and offers no second save", async ({ page, context }) => {
+  await installFakeAudio(page);
+  let writes = 0;
+  const saveButton = await openCheckDateSaveButton(page, context, async (route) => { writes += 1; await route.fulfill({ json: { status: "complete", version: 1, already_current: true } }); });
+  await saveButton.click();
+  await expect(page.getByRole("status")).toContainText("Schon aktuell. Es wurde nichts geändert.");
+  // Nicht als "gespeichert" ausgeben, kein Ton, kein zweiter Speichern-Knopf.
+  await expect(page.getByRole("status")).not.toContainText("gespeichert");
+  await expect(page.getByRole("button", { name: "Testserver: Prüfdatum speichern" })).toHaveCount(0);
+  expect(writes).toBe(1);
+  expect((await readSound(page)).oscillators).toBe(0);
+  // Der Hinweis steht in allen sechs Sprachen da.
+  const expected: Record<string, string> = {
+    de: "Schon aktuell", en: "Already up to date", pl: "Już aktualne", ja: "すでに最新です", fr: "déjà à jour", es: "ya está actualizado",
+  };
+  for (const code of languageCodes) {
+    await page.locator("#language").selectOption(code);
+    await expect(page.getByRole("status"), `Meldung in ${code}`).toContainText(expected[code]);
+  }
+});
+
+test("a real change still says saved and plays the sound once", async ({ page, context }) => {
+  await installFakeAudio(page);
+  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ json: { status: "complete", version: 2 } }));
+  await saveButton.click();
+  await expect(page.getByRole("status")).toContainText("Vor-Ort-Prüfung gespeichert");
+  await expect(page.getByRole("status")).not.toContainText("Schon aktuell");
+  expect((await readSound(page)).oscillators).toBe(4);
+});
+
+test("a node without a name shows a readable label instead of the technical identifier, in all six languages", async ({ page, context }) => {
+  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ json: { status: "complete", version: 2 } }), { emergency: "defibrillator", check_date: "2025-10-20" });
+  await expect(saveButton).toBeVisible();
+  const preview = page.locator(".result-message");
+  await expect(preview).not.toContainText("node/123");
+  const expected: Record<string, string> = { de: "AED (ohne Namen)", en: "AED (no name)", pl: "AED (bez nazwy)", ja: "AED（名称なし）", fr: "DAE (sans nom)", es: "DEA (sin nombre)" };
+  for (const code of languageCodes) {
+    await page.locator("#language").selectOption(code);
+    await expect(preview, `Bezeichnung in ${code}`).toContainText(expected[code]);
+  }
+});
+
+test("a named node still shows its name", async ({ page, context }) => {
+  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ json: { status: "complete", version: 2 } }));
+  await expect(saveButton).toBeVisible();
+  await expect(page.locator(".result-message")).toContainText("Rathaus");
 });
