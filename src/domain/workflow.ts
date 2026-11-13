@@ -1,6 +1,7 @@
 import { assessCandidateSearch } from "./assessCandidateSearch";
 import type { CandidateAssessment, Coordinate, LocationEstimate, MatchPolicy } from "./candidateMatch";
 import type { DetailTags } from "../contracts/aedDetails";
+import type { ExistingNode, ExistingNodeErrorCode } from "../osm/existingNode";
 import type { CandidateSearchResult } from "../osm/candidateTypes";
 import type { SearchLocation } from "../osm/candidateSearch";
 import type { ExistingCheckDatePreview, NewAedPreview, ProposalResult } from "./osmChangeProposal";
@@ -29,10 +30,17 @@ export type DevelopmentWriteRequest = {
   operationId: string;
   candidateLabel: string;
 } & (
-  | { kind: "check-date"; target: string; expectedVersion?: number; expectedCheckDate: string | null; observedOn: string }
+  // details (optional): Detailtags, die ERGÄNZT werden sollen. Dann ist expectedVersion die Version, die die Person frisch gesehen hat.
+  | { kind: "check-date"; target: string; expectedVersion?: number; expectedCheckDate: string | null; observedOn: string; details?: DetailTags }
   // details: die geprüften Detailtags (siehe src/contracts/aedDetails.ts). Leer, wenn die Person nichts angegeben hat.
   | { kind: "create-node"; latitude: number; longitude: number; observedOn: string; details: DetailTags; confirmedDifferentCandidateIds: string[] }
 );
+
+/** Ladezustand des frischen AED-Stands beim Ergänzen von Angaben. */
+export type ExistingAedLoad =
+  | { status: "loading" }
+  | { status: "error"; code: ExistingNodeErrorCode }
+  | { status: "ready"; node: ExistingNode };
 
 export type FlowState =
   | { kind: "ready" }
@@ -57,7 +65,11 @@ export type FlowState =
   | { kind: "new-aed-details"; photoUrl: string; returnState: CandidateResultState; position: Coordinate }
   // detailsPosition ist nur gesetzt, wenn die Vorschau aus dem Detailformular kommt: Dann führt „Zurück“ dorthin statt zur Suche.
   | { kind: "new-aed-preview"; photoUrl: string; result: ProposalResult<NewAedPreview>; returnState: CandidateResultState; detailsPosition?: Coordinate; writeStatus?: "sending" | "complete" | "uncertain" | "conflict" | "failed"; operationId?: string }
-  | { kind: "osm-preview"; photoUrl: string; candidateId: string; candidateLabel: string; result: ProposalResult<ExistingCheckDatePreview>; returnState: CandidateResultState; writeStatus?: "sending" | "complete" | "unchanged" | "uncertain" | "conflict" | "failed"; operationId?: string }
+  // Angaben zu einem bestehenden AED ergänzen (Etappe P4). Erst wird der aktuelle Stand frisch aus OSM geladen (load), dann
+  // zeigt das Formular, was schon eingetragen ist (gesperrt), und lässt nur Fehlendes ausfüllen.
+  | { kind: "existing-aed-details"; photoUrl: string; candidateId: string; candidateLabel: string; returnState: CandidateResultState; load: ExistingAedLoad }
+  // details/node sind nur gesetzt, wenn die Vorschau aus dem Ergänzen-Formular kommt: details sind die neuen Tags, node der frisch gelesene Stand.
+  | { kind: "osm-preview"; photoUrl: string; candidateId: string; candidateLabel: string; result: ProposalResult<ExistingCheckDatePreview>; returnState: CandidateResultState; details?: DetailTags; node?: ExistingNode; writeStatus?: "sending" | "complete" | "unchanged" | "uncertain" | "conflict" | "failed"; operationId?: string }
   | { kind: "development-write-recovery"; request: DevelopmentWriteRequest; writeStatus: "uncertain" | "sending" | "complete" | "unchanged" | "conflict" | "failed" }
   | { kind: "candidate-error"; photoUrl: string; reason: "location-unavailable" | "location-denied" | "location-uncertain" | "sign-in" | "rate-limited" | "service-unavailable" | "failed" | "invalid-response"; retryAvailableAt?: number }
   | { kind: "clarification"; photoUrl: string; reason: "sign-only" | "multiple" }

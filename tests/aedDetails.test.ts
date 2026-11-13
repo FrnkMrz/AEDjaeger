@@ -58,6 +58,21 @@ describe("buildDetailTags: Ebene nur bei „drinnen“", () => {
     expect(tagsOf({ indoor: null, level: 2 })).toEqual({});
   });
 
+  it("nimmt beim Ergänzen den bestehenden OSM-Wert indoor=yes, wenn die Person „drinnen“ nicht erneut wählt", () => {
+    const build = (changes: Partial<AedDetailForm>, existing?: Record<string, string>) => {
+      const result = buildDetailTags(form(changes), existing);
+      if (!result.ok) throw new Error(`${result.key} ${result.problem}`);
+      return result.tags;
+    };
+    expect(build({ level: 2 }, { indoor: "yes" })).toEqual({ level: "2" });
+    // Steht in OSM „draußen“ oder nichts, gibt es keine Ebene.
+    expect(build({ level: 2 }, { indoor: "no" })).toEqual({});
+    expect(build({ level: 2 }, {})).toEqual({});
+    expect(build({ level: 2 })).toEqual({});
+    // Die ausdrückliche Wahl der Person geht vor dem bestehenden Wert.
+    expect(build({ level: 2, indoor: "no" }, { indoor: "yes" })).toEqual({ indoor: "no" });
+  });
+
   it("lässt level weg, wenn drinnen gewählt, aber keine Ebene angegeben ist", () => {
     expect(tagsOf({ indoor: "yes", level: null })).toEqual({ indoor: "yes" });
   });

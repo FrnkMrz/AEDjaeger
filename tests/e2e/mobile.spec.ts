@@ -2509,3 +2509,187 @@ test("the detail form fits a 320 px phone in all six languages with the main but
     expect(footerBox!.y + footerBox!.height, `main button inside the viewport in ${language}`).toBeLessThanOrEqual(640);
   }
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// Angaben zu einem bestehenden AED ergänzen (Etappe P4): nur Fehlendes, nie Überschreiben
+// ---------------------------------------------------------------------------------------------------------------
+
+type NodeAnswer = { status: number; body?: unknown };
+
+/**
+ * Bringt die App bis zur einfachen Bestätigung eines bestehenden AED (Treffer node/123). Der Server-Ersatz für das frische
+ * Lesen und das Speichern ist einstellbar; alle Anfragen werden mitgeschrieben. Gespeichert wird nichts in OSM.
+ */
+async function openExistingAedPreview(
+  page: import("@playwright/test").Page,
+  context: import("@playwright/test").BrowserContext,
+  options: { nodes: NodeAnswer[]; writeStatus?: number; writeBody?: unknown },
+) {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true } }));
+  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
+    status: "complete", coverage_radius_meters: 112,
+    // Das Archiv kennt nur ältere, unvollständige Tags; der frische Stand kommt über die eigene Leseroute.
+    candidates: [{ id: "node/123", osmType: "node", coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Rathaus" } }],
+  } }));
+  const nodeRequests: string[] = [];
+  let answerIndex = 0;
+  await page.route("**/api/osm/development/node**", async (route) => {
+    nodeRequests.push(route.request().url());
+    const answer = options.nodes[Math.min(answerIndex, options.nodes.length - 1)];
+    answerIndex += 1;
+    await route.fulfill({ status: answer.status, json: answer.body ?? {} });
+  });
+  const writes: Array<Record<string, unknown>> = [];
+  await page.route("**/api/osm/development/check-date", async (route) => {
+    writes.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({ status: options.writeStatus ?? 200, json: options.writeBody ?? { status: "complete", version: 10 } });
+  });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.locator('[data-action="confirm-sighting"]').click();
+  await beginNearbySearch(page);
+  await page.getByRole("button", { name: "Als noch vorhanden bestätigen" }).click();
+  await expect(page.getByRole("heading", { name: "Änderungsvorschau" })).toBeVisible();
+  return { nodeRequests, writes };
+}
+
+const freshNode = (tags: Record<string, string>, version = 9): NodeAnswer => ({ status: 200, body: { status: "ok", id: "node/123", version, tags } });
+
+test("adding details to an existing AED locks what is already entered and sends only the additions", async ({ page, context }) => {
+  const { nodeRequests, writes } = await openExistingAedPreview(page, context, {
+    nodes: [freshNode({ access: "yes", indoor: "yes", "defibrillator:location": "Links neben dem Garagentor", check_date: "2025-10-20" })],
+  });
+  // Ohne Tipp auf „Ergänzen“ wird nichts gelesen.
+  expect(nodeRequests).toEqual([]);
+  await page.getByRole("button", { name: "Fehlende Angaben ergänzen" }).click();
+  await expect(page.getByRole("heading", { name: "Angaben ergänzen" })).toBeVisible();
+  expect(nodeRequests).toHaveLength(1);
+  expect(nodeRequests[0]).toContain("id=node%2F123");
+
+  // Was schon in OSM steht, ist nur Text und lässt sich nicht ändern.
+  await expect(page.locator("#detail-group-location")).toContainText("Schon eingetragen: Links neben dem Garagentor");
+  await expect(page.locator("#detail-group-access")).toContainText("Schon eingetragen: Jeder");
+  await expect(page.locator("#detail-group-indoor")).toContainText("Schon eingetragen: Drinnen");
+  await expect(page.locator("#detail-location")).toHaveCount(0);
+  await expect(page.locator("#detail-access-yes")).toHaveCount(0);
+  await expect(page.locator("#detail-indoor-yes")).toHaveCount(0);
+  // Fehlendes lässt sich ausfüllen: Zeiten, und die Ebene, weil „drinnen“ schon in OSM steht.
+  await expect(page.locator("#detail-hoursMode-always")).toBeAttached();
+  await expect(page.locator("#detail-level-value")).toHaveText("–");
+  await expect(page.locator("#detail-continue")).toHaveText("Weiter ohne Angaben");
+
+  await page.getByText("Rund um die Uhr", { exact: true }).click();
+  await page.getByRole("button", { name: "Eine Ebene höher" }).click();
+  await expect(page.locator("#detail-continue")).toHaveText("Weiter · 2 Angaben");
+  await page.locator("#detail-continue").click();
+
+  // Vorschau: nur die neuen Tags, und der Knopf sagt, dass Angaben gespeichert werden.
+  await expect(page.getByRole("heading", { name: "Änderungsvorschau" })).toBeVisible();
+  const preview = page.locator(".capture-content");
+  await expect(preview).toContainText("Neu eingetragen werden:");
+  await expect(preview).toContainText("opening_hours=24/7");
+  await expect(preview).toContainText("level=0");
+  await expect(preview).not.toContainText("access=");
+  await expect(preview).not.toContainText("indoor=");
+  await expect(page.getByRole("button", { name: "Fehlende Angaben ergänzen" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Testserver: Angaben speichern" }).click();
+  await expect(page.getByRole("status")).toContainText("Prüfdatum und neue Angaben gespeichert");
+  expect(writes).toHaveLength(1);
+  // Die Version und das Prüfdatum kommen aus dem frisch gelesenen Stand, nicht aus dem alten Treffer.
+  expect(writes[0]).toMatchObject({
+    confirmed: true, target: "node/123", expected_version: 9, expected_check_date: "2025-10-20",
+    details: { opening_hours: "24/7", level: "0" },
+  });
+});
+
+test("the quick confirmation stays a single tap without reading the object or sending details", async ({ page, context }) => {
+  const { nodeRequests, writes } = await openExistingAedPreview(page, context, { nodes: [freshNode({})] });
+  await page.getByRole("button", { name: "Testserver: Prüfdatum speichern" }).click();
+  await expect(page.getByRole("status")).toContainText("Vor-Ort-Prüfung gespeichert");
+  expect(nodeRequests).toEqual([]);
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).not.toHaveProperty("details");
+});
+
+test("going back from the preview keeps the entries, going back from the form resets them", async ({ page, context }) => {
+  await openExistingAedPreview(page, context, { nodes: [freshNode({ check_date: "2025-10-20" })] });
+  await page.getByRole("button", { name: "Fehlende Angaben ergänzen" }).click();
+  await page.getByText("Jeder", { exact: true }).click();
+  await page.locator("#detail-continue").click();
+  await expect(page.locator(".capture-content")).toContainText("access=yes");
+  await page.getByRole("button", { name: "Zurück zu den Angaben" }).click();
+  await expect(page.locator("#detail-access-yes")).toBeChecked();
+  // Zurück zur einfachen Bestätigung: Die Eingaben sind weg, die Vorschau zeigt nur noch das Datum.
+  await page.getByRole("button", { name: "Zurück", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Testserver: Prüfdatum speichern" })).toBeVisible();
+  await page.getByRole("button", { name: "Fehlende Angaben ergänzen" }).click();
+  await expect(page.locator("#detail-access-yes")).not.toBeChecked();
+  await expect(page.locator("#detail-continue")).toHaveText("Weiter ohne Angaben");
+});
+
+test("a failed read offers a retry, and the retry shows the form", async ({ page, context }) => {
+  const { nodeRequests } = await openExistingAedPreview(page, context, { nodes: [{ status: 502, body: { error: "development_api_unavailable" } }, freshNode({ check_date: "2025-10-20" })] });
+  await page.getByRole("button", { name: "Fehlende Angaben ergänzen" }).click();
+  await expect(page.getByRole("alert")).toContainText("Die aktuellen Daten ließen sich nicht laden");
+  await expect(page.locator("#detail-form")).toHaveCount(0);
+  await page.getByRole("button", { name: "Erneut laden" }).click();
+  await expect(page.locator("#detail-form")).toBeVisible();
+  expect(nodeRequests).toHaveLength(2);
+});
+
+test("a deleted object says so and offers no useless retry", async ({ page, context }) => {
+  await openExistingAedPreview(page, context, { nodes: [{ status: 404, body: { error: "node_unavailable" } }] });
+  await page.getByRole("button", { name: "Fehlende Angaben ergänzen" }).click();
+  await expect(page.getByRole("alert")).toContainText("nicht mehr verfügbar");
+  await expect(page.getByRole("button", { name: "Erneut laden" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Zurück", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Testserver: Prüfdatum speichern" })).toBeVisible();
+});
+
+test("an AED with everything already entered says so and offers nothing to fill in", async ({ page, context }) => {
+  await openExistingAedPreview(page, context, { nodes: [freshNode({
+    "defibrillator:location": "Foyer", access: "customers", opening_hours: "Mo-Fr 08:00-18:00", indoor: "no", operator: "Stadtwerke", phone: "112", description: "Notiz", ref: "7", check_date: "2025-10-20",
+  })] });
+  await page.getByRole("button", { name: "Fehlende Angaben ergänzen" }).click();
+  await expect(page.locator(".capture-content")).toContainText("schon alles eingetragen");
+  await expect(page.locator("#detail-form input[type='text'], #detail-form input[type='radio']")).toHaveCount(0);
+  // Der Weg bleibt offen: ohne Angaben geht es zur einfachen Bestätigung des Prüfdatums.
+  await expect(page.locator("#detail-continue")).toHaveText("Weiter ohne Angaben");
+});
+
+test("an existing value from OSM is shown as plain text and never as markup", async ({ page, context }) => {
+  await openExistingAedPreview(page, context, { nodes: [freshNode({ "defibrillator:location": "<img src=x onerror=window.__pwned=1>", check_date: "2025-10-20" })] });
+  await page.getByRole("button", { name: "Fehlende Angaben ergänzen" }).click();
+  await expect(page.locator("#detail-group-location")).toContainText("<img src=x onerror=window.__pwned=1>");
+  expect(await page.evaluate(() => (window as unknown as { __pwned?: number }).__pwned)).toBeUndefined();
+  await expect(page.locator("#detail-group-location img")).toHaveCount(0);
+});
+
+test("a server conflict while saving added details asks for a new check", async ({ page, context }) => {
+  await openExistingAedPreview(page, context, { nodes: [freshNode({ check_date: "2025-10-20" })], writeStatus: 409, writeBody: { error: "version_conflict" } });
+  await page.getByRole("button", { name: "Fehlende Angaben ergänzen" }).click();
+  await page.getByText("Nur Kunden", { exact: true }).click();
+  await page.locator("#detail-continue").click();
+  await page.getByRole("button", { name: "Testserver: Angaben speichern" }).click();
+  await expect(page.getByRole("status")).toContainText("OSM-Eintrag änderte sich");
+});
+
+test("the add-details form fits a 320 px phone in all six languages", async ({ page, context }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await openExistingAedPreview(page, context, { nodes: [freshNode({ access: "yes", indoor: "yes", check_date: "2025-10-20" })] });
+  await page.getByRole("button", { name: "Fehlende Angaben ergänzen" }).click();
+  await expect(page.locator("#detail-form")).toBeVisible();
+  await page.getByText("Mehr Angaben", { exact: true }).click();
+  for (const language of languageCodes) {
+    await page.locator("#language").selectOption(language);
+    await expect(page.locator("#detail-form")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `horizontal page overflow in ${language}`).toBeLessThanOrEqual(320);
+    const overflowing = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>("#detail-form .chip, #detail-form .field, #detail-form .detail-locked, #detail-form summary, .detail-footer .button")]
+      .filter((element) => element.getBoundingClientRect().right > window.innerWidth + 0.5).map((element) => element.className));
+    expect(overflowing, `controls beyond the screen in ${language}`).toEqual([]);
+    // Die gesperrten Zeilen nennen den bestehenden Wert in der gewählten Sprache.
+    await expect(page.locator("#detail-group-access .detail-locked")).not.toBeEmpty();
+  }
+});

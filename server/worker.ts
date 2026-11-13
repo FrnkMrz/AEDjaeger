@@ -8,6 +8,7 @@ import { storeOSMDevelopmentToken } from "./storage/osmDevelopmentTokens";
 import { handleStaticCandidateSearch } from "./osm/staticCandidateSearchRoute";
 import { handleDevelopmentCheckDate } from "./osm/developmentWriteRoute";
 import { handleDevelopmentCreateNode } from "./osm/developmentCreateNodeRoute";
+import { handleDevelopmentNodeRead } from "./osm/developmentNodeRoute";
 import { handleTestDiagnostic } from "./testDiagnostics";
 import { handleVisionAnalysis, isPhotoCheckAvailable } from "./vision/analyzeRoute";
 
@@ -81,6 +82,8 @@ const worker = {
     if (pathname === "/api/osm/candidates/search") return handleStaticCandidateSearch(request, environment);
     if (pathname === "/api/osm/development/check-date") return handleDevelopmentCheckDate(request, environment);
     if (pathname === "/api/osm/development/create-node") return handleDevelopmentCreateNode(request, environment);
+    // Frisches Lesen eines bestehenden AED (nur lesend) für das Ergänzen von Angaben.
+    if (pathname === "/api/osm/development/node") return handleDevelopmentNodeRead(request, environment);
     // Fotoprüfung: Die Route ist standardmäßig AUS. Sie arbeitet nur, wenn der Betreiber
     // AI_ANALYSIS_ENABLED, OPENAI_API_KEY, die Zulassungsliste und die Kostenlimits gesetzt hat
     // (siehe server/vision/analyzeRoute.ts). Ohne diese Werte antwortet sie mit 503 und es

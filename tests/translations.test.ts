@@ -41,6 +41,13 @@ describe("first-version UI languages", () => {
         expect(filled, `${language}.${key}`).toContain("3");
         expect(filled, `${language}.${key}`).not.toContain("{");
       }
+      // Ergänzen bestehender AEDs (Etappe P4): Texte vorhanden, der Platzhalter für den bestehenden Wert wird ersetzt.
+      for (const key of ["detailsExistingTitle", "detailsExistingIntro", "detailLoading", "detailLoadFailed", "detailLoadChanged", "detailLoadRetry", "detailsAddAction", "detailsAddedTitle", "detailsAllPresent"] as FlowMessageKey[]) {
+        expect(translateFlow(language, key).trim(), `${language}.${key}`).not.toBe("");
+      }
+      const existing = translateFlow(language, "detailExistingValue", { value: "WERT" });
+      expect(existing, language).toContain("WERT");
+      expect(existing, language).not.toContain("{");
       // Die Frage nach dem Zugang muss das Gerät meinen; der Hinweis darf in keiner Sprache fehlen oder leer sein.
       expect(translateFlow(language, "detailAccessHint").length, language).toBeGreaterThan(8);
     }

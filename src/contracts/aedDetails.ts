@@ -242,10 +242,12 @@ function inDetailOrder(tags: DetailTags): DetailTags {
  *  - Ist ein eingegebener Wert ungültig, kommt ein Fehler zurück. Er wird nicht still entfernt,
  *    damit die Person ihn korrigieren kann.
  *
- * @param form  Der aktuelle Formularzustand.
- * @returns     Die Tags (in fester Reihenfolge) oder ein Fehler mit Schlüssel und Grund.
+ * @param form      Der aktuelle Formularzustand.
+ * @param existing  Optional: die bisherigen OSM-Tags des Objekts (nur beim Ergänzen eines bestehenden AED). Steht dort
+ *                  schon `indoor=yes`, darf die Ebene auch dann entstehen, wenn die Person „drinnen“ nicht erneut wählt.
+ * @returns         Die Tags (in fester Reihenfolge) oder ein Fehler mit Schlüssel und Grund.
  */
-export function buildDetailTags(form: Readonly<AedDetailForm>): DetailResult {
+export function buildDetailTags(form: Readonly<AedDetailForm>, existing?: Readonly<Record<string, string>>): DetailResult {
   const candidate: Record<string, string> = {};
 
   // Hilfsfunktion: Text übernehmen, wenn nach dem Trimmen etwas drinsteht.
@@ -261,8 +263,10 @@ export function buildDetailTags(form: Readonly<AedDetailForm>): DetailResult {
   else if (form.hoursMode === "times") addText("opening_hours", form.hoursText);
 
   if (form.indoor !== null) candidate.indoor = form.indoor;
-  // Die Ebene gehört nur zu einem Gerät im Gebäude.
-  if (form.indoor === "yes" && form.level !== null) candidate.level = String(form.level);
+  // Die Ebene gehört nur zu einem Gerät im Gebäude. Gilt die Wahl der Person; hat sie keine getroffen, zählt der
+  // bestehende OSM-Wert (nur beim Ergänzen eines vorhandenen AED).
+  const effectiveIndoor = form.indoor ?? existing?.indoor ?? null;
+  if (effectiveIndoor === "yes" && form.level !== null) candidate.level = String(form.level);
 
   if (form.cabinet !== null) candidate["defibrillator:cabinet"] = form.cabinet;
   addText("operator", form.operator);

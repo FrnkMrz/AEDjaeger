@@ -20,7 +20,9 @@ import { isAcceptableObservationDate } from "./observationDate";
 import { validateDetailTags, type DetailTags } from "../../src/contracts/aedDetails";
 
 const SESSION_COOKIE = "aedjaeger_osm_session";
-const MAX_BODY_BYTES = 2_048;
+// Genug Platz für alle Detailtags auch mit Mehrbyte-Zeichen (Japanisch: 3 Byte je Zeichen). Die Längengrenzen aus
+// src/contracts/aedDetails.ts halten die Anfrage trotzdem klein.
+const MAX_BODY_BYTES = 8_192;
 const MAX_MAP_BYTES = 512 * 1_024;
 const MAX_RESPONSE_BYTES = 1_024;
 // Die Statusantwort eines Änderungssatzes (JSON oder XML) kann mit Tags und Ausdehnung länger als 1 KiB sein.

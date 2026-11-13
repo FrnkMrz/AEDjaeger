@@ -347,3 +347,184 @@ describe("OSM development check-date writer", () => {
     expect(calls).toBe(0);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// Detailangaben ergänzen (Etappe P4): nur Fehlendes, nie Überschreiben
+// ---------------------------------------------------------------------------------------------------------------
+
+/** Liest die Tags aus dem Upload-XML und macht aus den XML-Zeichen wieder Text. */
+function tagsFromUpload(xml: string): Record<string, string> {
+  const decode = (value: string) => value.replaceAll("&quot;", '"').replaceAll("&apos;", "'").replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
+  const tags: Record<string, string> = {};
+  for (const match of xml.matchAll(/<tag k="([^"]*)" v="([^"]*)"\/>/gu)) tags[decode(match[1])] = decode(match[2]);
+  return tags;
+}
+
+/**
+ * Ein kleiner Testserver-Ersatz mit veränderlichem Zustand: Der AED (Knoten 42) hat Tags und eine Version.
+ * Ein erfolgreicher Upload übernimmt die Tags aus dem XML und erhöht die Version, wie der echte Testserver.
+ */
+function makeStatefulFetch(options: { tags?: Record<string, string>; version?: number; loseUploadResponse?: boolean; failBeforeApply?: boolean } = {}) {
+  const state = { version: options.version ?? 3, tags: { emergency: "defibrillator", name: "Rathaus", fixme: "Eingang prüfen", check_date: "2025-10-20", ...(options.tags ?? {}) } as Record<string, string> };
+  const calls: Array<{ method: string; url: string; body?: string }> = [];
+  const changesetBodies: string[] = [];
+  let loseUpload = options.loseUploadResponse ?? false;
+  let failBeforeApply = options.failBeforeApply ?? false;
+  const fetcher: typeof fetch = async (input, init = {}) => {
+    const url = String(input); const method = init.method ?? "GET"; const body = typeof init.body === "string" ? init.body : undefined;
+    calls.push({ method, url, body });
+    if (url.endsWith("/api/0.6/node/42.json")) {
+      return Response.json({ version: "0.6", elements: [{ type: "node", id: 42, lat: 52.52, lon: 13.4, version: state.version, tags: state.tags }] });
+    }
+    if (url.endsWith("/api/0.6/changeset/create")) { changesetBodies.push(body ?? ""); return new Response("77", { status: 200 }); }
+    if (url.endsWith("/api/0.6/changeset/77/upload")) {
+      if (failBeforeApply) { failBeforeApply = false; throw new Error("network failed before the server applied the write"); }
+      expect(body).toContain(`version="${state.version}"`);
+      state.tags = tagsFromUpload(body ?? "");
+      state.version += 1;
+      if (loseUpload) { loseUpload = false; throw new Error("connection lost after the server applied the write"); }
+      return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<diffResult generator="OpenStreetMap server" version="0.6">\n <node old_id="42" new_id="42" new_version="${state.version}"/>\n</diffResult>\n`, { status: 200 });
+    }
+    if (url.endsWith("/api/0.6/changeset/77/close")) return new Response(null, { status: 200 });
+    throw new Error(`Unexpected OSM API request: ${method} ${url}`);
+  };
+  return { fetcher, calls, state, changesetBodies, get uploads() { return calls.filter((call) => call.url.endsWith("/upload")); } };
+}
+
+const detailsRequest = { ...requestBody, details: { "defibrillator:location": "Foyer links", access: "customers", indoor: "yes", level: "0" } };
+
+describe("OSM development writer: adding missing details", () => {
+  it("adds only the requested details, keeps every other tag, and says so in the changeset comment", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch();
+    const response = await handleDevelopmentCheckDate(makeRequest(detailsRequest), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: "complete", version: 4 });
+    expect(api.uploads).toHaveLength(1);
+    // Alle bisherigen Tags bleiben (auch fremde wie name und fixme), neu sind das Prüfdatum und die Details.
+    expect(api.state.tags).toEqual({
+      emergency: "defibrillator", name: "Rathaus", fixme: "Eingang prüfen", check_date: "2026-10-24",
+      "defibrillator:location": "Foyer links", access: "customers", indoor: "yes", level: "0",
+    });
+    expect(api.changesetBodies[0]).toContain("missing details added");
+  });
+
+  it("still uses the plain check-date comment when no details are sent", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch();
+    expect((await handleDevelopmentCheckDate(makeRequest(), { ...environment, DB }, { now: () => now, fetch: api.fetcher })).status).toBe(200);
+    expect(api.changesetBodies[0]).toContain("presence checked on site");
+    expect(api.changesetBodies[0]).not.toContain("details");
+  });
+
+  it("writes the details even when the check date already has the observation date", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch({ tags: { check_date: "2026-10-24" } });
+    const response = await handleDevelopmentCheckDate(makeRequest({ ...detailsRequest, expected_check_date: "2026-10-24" }), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    expect(response.status).toBe(200);
+    // Kein „schon aktuell“: Es gab ja etwas zu schreiben.
+    expect(await response.json()).not.toHaveProperty("already_current");
+    expect(api.uploads).toHaveLength(1);
+    expect(api.state.tags.access).toBe("customers");
+  });
+
+  it("never overwrites: a requested key that now exists on the node ends in a conflict without any write", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch({ tags: { access: "private" } });
+    const response = await handleDevelopmentCheckDate(makeRequest(detailsRequest), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "version_conflict" });
+    expect(api.calls.some((call) => call.url.endsWith("/changeset/create"))).toBe(false);
+    expect(api.state.tags.access).toBe("private");
+  });
+
+  it("stops when someone else changed the object since the person saw it", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch({ version: 4 });
+    const response = await handleDevelopmentCheckDate(makeRequest(detailsRequest), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    expect(response.status).toBe(409);
+    expect(api.calls.some((call) => call.url.endsWith("/changeset/create"))).toBe(false);
+  });
+
+  it("stops when a newer check date exists, even with details", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch({ tags: { check_date: "2026-11-01" } });
+    const response = await handleDevelopmentCheckDate(makeRequest({ ...detailsRequest, expected_check_date: "2026-11-01" }), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "newer_check_date_exists" });
+    expect(api.uploads).toHaveLength(0);
+  });
+
+  it("rejects malformed or unapproved detail requests before calling OSM", async () => {
+    const { expected_version: _omitted, ...withoutVersion } = detailsRequest;
+    const bad: Array<[string, unknown]> = [
+      ["details without the seen version", withoutVersion],
+      ["access code key", { ...requestBody, details: { "defibrillator:code": "1234" } }],
+      ["protected tag", { ...requestBody, details: { check_date: "2020-01-01" } }],
+      ["name tag", { ...requestBody, details: { name: "Falsch" } }],
+      ["invalid access value", { ...requestBody, details: { access: "permissive" } }],
+      ["too long text", { ...requestBody, details: { description: "x".repeat(256) } }],
+      ["control character inside", { ...requestBody, details: { operator: "Stadt\nwerke" } }],
+      ["empty details", { ...requestBody, details: {} }],
+      ["array", { ...requestBody, details: [] }],
+      ["null", { ...requestBody, details: null }],
+      ["non-text value", { ...requestBody, details: { level: 1 } }],
+      ["unknown top-level field", { ...detailsRequest, extra: true }],
+    ];
+    for (const [label, body] of bad) {
+      const DB = await setupDatabase(); const api = makeStatefulFetch();
+      const response = await handleDevelopmentCheckDate(makeRequest(body), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+      expect(response.status, label).toBe(400);
+      expect(api.calls, label).toEqual([]);
+    }
+  });
+
+  it("reconciles a lost upload response for a details-only change (check date unchanged) without a second edit", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch({ tags: { check_date: "2026-10-24" }, loseUploadResponse: true });
+    const body = { ...detailsRequest, expected_check_date: "2026-10-24" };
+    const dependencies = { now: () => now, fetch: api.fetcher };
+    const first = await handleDevelopmentCheckDate(makeRequest(body), { ...environment, DB }, dependencies);
+    expect(first.status).toBe(202);
+    const retry = await handleDevelopmentCheckDate(makeRequest(body), { ...environment, DB }, dependencies);
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toMatchObject({ status: "complete", version: 4 });
+    expect(api.uploads).toHaveLength(1);
+  });
+
+  it("stays uncertain when the failed upload was not applied, and never retries the write by itself", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch({ failBeforeApply: true });
+    const dependencies = { now: () => now, fetch: api.fetcher };
+    expect((await handleDevelopmentCheckDate(makeRequest(detailsRequest), { ...environment, DB }, dependencies)).status).toBe(202);
+    const retry = await handleDevelopmentCheckDate(makeRequest(detailsRequest), { ...environment, DB }, dependencies);
+    expect(retry.status).toBe(202);
+    expect(await retry.json()).toEqual({ status: "uncertain" });
+    expect(api.state.tags.access).toBeUndefined();
+  });
+
+  it("does not take a foreign edit for its own: a changed version without the requested values stays uncertain", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch({ failBeforeApply: true });
+    const dependencies = { now: () => now, fetch: api.fetcher };
+    expect((await handleDevelopmentCheckDate(makeRequest(detailsRequest), { ...environment, DB }, dependencies)).status).toBe(202);
+    // Jemand anderes ändert das Objekt (neue Version, anderes Prüfdatum, andere Werte).
+    api.state.version = 4; api.state.tags = { ...api.state.tags, check_date: "2026-10-24", access: "yes" };
+    const retry = await handleDevelopmentCheckDate(makeRequest(detailsRequest), { ...environment, DB }, dependencies);
+    expect(retry.status).toBe(202);
+    // Nur der ursprüngliche, gescheiterte Versuch: Die Wiederholung schreibt nichts und überschreibt den fremden Wert nicht.
+    expect(api.uploads).toHaveLength(1);
+    expect(api.state.tags.access).toBe("yes");
+  });
+
+  it("rejects the same operation id with different details", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch();
+    const dependencies = { now: () => now, fetch: api.fetcher };
+    expect((await handleDevelopmentCheckDate(makeRequest(detailsRequest), { ...environment, DB }, dependencies)).status).toBe(200);
+    const changed = await handleDevelopmentCheckDate(makeRequest({ ...requestBody, details: { access: "private" } }), { ...environment, DB }, dependencies);
+    expect(changed.status).toBe(409);
+    expect(await changed.json()).toEqual({ error: "operation_id_conflict" });
+    expect(api.uploads).toHaveLength(1);
+  });
+
+  it("completes a duplicate request idempotently without a second upload", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch();
+    const dependencies = { now: () => now, fetch: api.fetcher };
+    expect((await handleDevelopmentCheckDate(makeRequest(detailsRequest), { ...environment, DB }, dependencies)).status).toBe(200);
+    const duplicate = await handleDevelopmentCheckDate(makeRequest(detailsRequest), { ...environment, DB }, dependencies);
+    expect(duplicate.status).toBe(200);
+    expect(await duplicate.json()).toMatchObject({ status: "complete", version: 4 });
+    expect(api.uploads).toHaveLength(1);
+  });
+});

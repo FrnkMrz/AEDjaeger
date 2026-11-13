@@ -19,19 +19,20 @@ import {
   type AedDetailForm, type DetailKey, type DetailTags,
 } from "./contracts/aedDetails";
 import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } from "./osm/candidateSearch";
+import { ExistingNodeError, requestExistingNode } from "./osm/existingNode";
 import { isCalendarDate, isFreshCapture, isValidObservedDate, localCalendarDate, photoDateNeedsConfirmation } from "./domain/localDate";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root element was not found.");
 
 const languageNames: Record<Language, string> = { de: "Deutsch", en: "English", pl: "Polski", ja: "日本語", fr: "Français", es: "Español" };
-const developmentWriteCopy: Record<Language, { action: string; createAction: string; retry: string; sending: string; complete: string; unchanged: string; created: string; uncertain: string; conflict: string; failed: string; }> = {
-  de: { action: "Testserver: Prüfdatum speichern", createAction: "Testserver: AED eintragen", retry: "Testserver: Status erneut prüfen", sending: "Testserver: Änderung wird gesendet…", complete: "Testserver: Vor-Ort-Prüfung gespeichert.", unchanged: "Testserver: Schon aktuell. Es wurde nichts geändert.", created: "Testserver: Neuer AED wurde eingetragen.", uncertain: "Testserver: Ergebnis unklar. Mit derselben Anfrage erneut prüfen; keine neue Änderung wird blind gesendet.", conflict: "Testserver: In der Nähe gibt es einen AED oder der OSM-Eintrag änderte sich. Suche bitte erneut.", failed: "Testserver: Änderung fehlgeschlagen. Bitte Eintrag erneut prüfen." },
-  en: { action: "Test server: Save visit date", createAction: "Test server: Add AED", retry: "Test server: Check status again", sending: "Test server: Sending update…", complete: "Test server: Visit confirmation saved.", unchanged: "Test server: Already up to date. Nothing was changed.", created: "Test server: New AED added.", uncertain: "Test server: Result is unclear. Check again using the same request; no new edit will be sent blindly.", conflict: "Test server: An AED is nearby or the OSM entry changed. Search again.", failed: "Test server: Update failed. Please check the entry again." },
-  pl: { action: "Serwer testowy: zapisz datę kontroli", createAction: "Serwer testowy: dodaj AED", retry: "Serwer testowy: sprawdź ponownie stan", sending: "Serwer testowy: wysyłanie zmiany…", complete: "Serwer testowy: zapisano potwierdzenie kontroli.", unchanged: "Serwer testowy: Już aktualne. Nic nie zmieniono.", created: "Serwer testowy: dodano nowy AED.", uncertain: "Serwer testowy: wynik jest niepewny. Sprawdź ponownie to samo żądanie; nie wyślemy w ciemno nowej zmiany.", conflict: "Serwer testowy: w pobliżu jest AED albo wpis OSM został zmieniony. Wyszukaj ponownie.", failed: "Serwer testowy: nie udało się zapisać zmiany. Sprawdź ponownie wpis." },
-  ja: { action: "テストサーバー：確認日を保存", createAction: "テストサーバー：AEDを登録", retry: "テストサーバー：状態を再確認", sending: "テストサーバー：変更を送信中…", complete: "テストサーバー：現地確認を保存しました。", unchanged: "テストサーバー：すでに最新です。変更はありません。", created: "テストサーバー：新しいAEDを登録しました。", uncertain: "テストサーバー：結果を確認できません。同じリクエストで再確認してください。新しい変更を無確認で送信しません。", conflict: "テストサーバー：近くにAEDがあるか、OSMの項目が変更されています。再検索してください。", failed: "テストサーバー：変更に失敗しました。項目を再確認してください。" },
-  fr: { action: "Serveur de test : enregistrer la date", createAction: "Serveur de test : ajouter un DAE", retry: "Serveur de test : vérifier à nouveau", sending: "Serveur de test : envoi de la modification…", complete: "Serveur de test : visite confirmée.", unchanged: "Serveur de test : déjà à jour. Rien n'a été modifié.", created: "Serveur de test : nouveau DAE ajouté.", uncertain: "Serveur de test : résultat incertain. Vérifiez à nouveau avec la même requête ; aucune nouvelle modification ne sera envoyée à l’aveugle.", conflict: "Serveur de test : un DAE est proche ou la fiche OSM a changé. Relancez la recherche.", failed: "Serveur de test : échec de la modification. Vérifiez à nouveau la fiche." },
-  es: { action: "Servidor de pruebas: guardar fecha", createAction: "Servidor de pruebas: añadir DEA", retry: "Servidor de pruebas: comprobar estado", sending: "Servidor de pruebas: enviando cambio…", complete: "Servidor de pruebas: visita confirmada.", unchanged: "Servidor de pruebas: ya está actualizado. No se cambió nada.", created: "Servidor de pruebas: se añadió un DEA.", uncertain: "Servidor de pruebas: resultado incierto. Comprueba de nuevo con la misma solicitud; no enviaremos otro cambio a ciegas.", conflict: "Servidor de pruebas: hay un DEA cerca o la ficha OSM ha cambiado. Vuelve a buscar.", failed: "Servidor de pruebas: no se pudo guardar. Comprueba de nuevo la ficha." },
+const developmentWriteCopy: Record<Language, { action: string; createAction: string; detailsAction: string; detailsComplete: string; retry: string; sending: string; complete: string; unchanged: string; created: string; uncertain: string; conflict: string; failed: string; }> = {
+  de: { action: "Testserver: Prüfdatum speichern", createAction: "Testserver: AED eintragen", detailsAction: "Testserver: Angaben speichern", detailsComplete: "Testserver: Prüfdatum und neue Angaben gespeichert.", retry: "Testserver: Status erneut prüfen", sending: "Testserver: Änderung wird gesendet…", complete: "Testserver: Vor-Ort-Prüfung gespeichert.", unchanged: "Testserver: Schon aktuell. Es wurde nichts geändert.", created: "Testserver: Neuer AED wurde eingetragen.", uncertain: "Testserver: Ergebnis unklar. Mit derselben Anfrage erneut prüfen; keine neue Änderung wird blind gesendet.", conflict: "Testserver: In der Nähe gibt es einen AED oder der OSM-Eintrag änderte sich. Suche bitte erneut.", failed: "Testserver: Änderung fehlgeschlagen. Bitte Eintrag erneut prüfen." },
+  en: { action: "Test server: Save visit date", createAction: "Test server: Add AED", detailsAction: "Test server: Save details", detailsComplete: "Test server: Visit date and new details saved.", retry: "Test server: Check status again", sending: "Test server: Sending update…", complete: "Test server: Visit confirmation saved.", unchanged: "Test server: Already up to date. Nothing was changed.", created: "Test server: New AED added.", uncertain: "Test server: Result is unclear. Check again using the same request; no new edit will be sent blindly.", conflict: "Test server: An AED is nearby or the OSM entry changed. Search again.", failed: "Test server: Update failed. Please check the entry again." },
+  pl: { action: "Serwer testowy: zapisz datę kontroli", createAction: "Serwer testowy: dodaj AED", detailsAction: "Serwer testowy: zapisz dane", detailsComplete: "Serwer testowy: zapisano datę kontroli i nowe dane.", retry: "Serwer testowy: sprawdź ponownie stan", sending: "Serwer testowy: wysyłanie zmiany…", complete: "Serwer testowy: zapisano potwierdzenie kontroli.", unchanged: "Serwer testowy: Już aktualne. Nic nie zmieniono.", created: "Serwer testowy: dodano nowy AED.", uncertain: "Serwer testowy: wynik jest niepewny. Sprawdź ponownie to samo żądanie; nie wyślemy w ciemno nowej zmiany.", conflict: "Serwer testowy: w pobliżu jest AED albo wpis OSM został zmieniony. Wyszukaj ponownie.", failed: "Serwer testowy: nie udało się zapisać zmiany. Sprawdź ponownie wpis." },
+  ja: { action: "テストサーバー：確認日を保存", createAction: "テストサーバー：AEDを登録", detailsAction: "テストサーバー：情報を保存", detailsComplete: "テストサーバー：確認日と新しい情報を保存しました。", retry: "テストサーバー：状態を再確認", sending: "テストサーバー：変更を送信中…", complete: "テストサーバー：現地確認を保存しました。", unchanged: "テストサーバー：すでに最新です。変更はありません。", created: "テストサーバー：新しいAEDを登録しました。", uncertain: "テストサーバー：結果を確認できません。同じリクエストで再確認してください。新しい変更を無確認で送信しません。", conflict: "テストサーバー：近くにAEDがあるか、OSMの項目が変更されています。再検索してください。", failed: "テストサーバー：変更に失敗しました。項目を再確認してください。" },
+  fr: { action: "Serveur de test : enregistrer la date", createAction: "Serveur de test : ajouter un DAE", detailsAction: "Serveur de test : enregistrer les informations", detailsComplete: "Serveur de test : date de visite et nouvelles informations enregistrées.", retry: "Serveur de test : vérifier à nouveau", sending: "Serveur de test : envoi de la modification…", complete: "Serveur de test : visite confirmée.", unchanged: "Serveur de test : déjà à jour. Rien n'a été modifié.", created: "Serveur de test : nouveau DAE ajouté.", uncertain: "Serveur de test : résultat incertain. Vérifiez à nouveau avec la même requête ; aucune nouvelle modification ne sera envoyée à l’aveugle.", conflict: "Serveur de test : un DAE est proche ou la fiche OSM a changé. Relancez la recherche.", failed: "Serveur de test : échec de la modification. Vérifiez à nouveau la fiche." },
+  es: { action: "Servidor de pruebas: guardar fecha", createAction: "Servidor de pruebas: añadir DEA", detailsAction: "Servidor de pruebas: guardar datos", detailsComplete: "Servidor de pruebas: fecha de visita y nuevos datos guardados.", retry: "Servidor de pruebas: comprobar estado", sending: "Servidor de pruebas: enviando cambio…", complete: "Servidor de pruebas: visita confirmada.", unchanged: "Servidor de pruebas: ya está actualizado. No se cambió nada.", created: "Servidor de pruebas: se añadió un DEA.", uncertain: "Servidor de pruebas: resultado incierto. Comprueba de nuevo con la misma solicitud; no enviaremos otro cambio a ciegas.", conflict: "Servidor de pruebas: hay un DEA cerca o la ficha OSM ha cambiado. Vuelve a buscar.", failed: "Servidor de pruebas: no se pudo guardar. Comprueba de nuevo la ficha." },
 };
 const scenarioKeys: Record<DemoScenario, TranslationKey> = {
   existing: "existingScenario", new: "newScenario", multiple: "multipleScenario", unclear: "unclearScenario", "search-error": "searchErrorScenario", "upload-unclear": "uploadErrorScenario",
@@ -95,6 +96,9 @@ let mapLocationOverride: Coordinate | undefined;
 let detailForm: AedDetailForm = { ...EMPTY_DETAIL_FORM };
 // Ob der Abschnitt „Mehr Angaben“ aufgeklappt ist. Merken, damit er beim Neuzeichnen nicht zuklappt.
 let detailMoreOpen = false;
+// Nur beim Ergänzen eines bestehenden AED gesetzt: der frisch gelesene OSM-Stand (Detail-Schlüssel und Prüfdatum). Schlüssel, die
+// hier stehen, sind im Formular gesperrt. Bei einer Neuanlage bleibt er undefined.
+let detailExistingTags: Readonly<Record<string, string>> | undefined;
 
 function readLanguage(): Language {
   // Nicht lesbarer Speicher (zum Beispiel "alle Cookies blockieren") darf den Start nicht verhindern: dann gilt die Gerätesprache.
@@ -120,6 +124,13 @@ function readPendingDevelopmentWrite(): DevelopmentWriteRequest | undefined {
     if (kind === "check-date" && typeof value.target === "string" && /^node\/[1-9]\d{0,15}$/u.test(value.target)
       && (value.expectedVersion === undefined || Number.isSafeInteger(value.expectedVersion) && (value.expectedVersion as number) > 0)
       && (value.expectedCheckDate === null || isCalendarDate(value.expectedCheckDate))) {
+      // Gespeicherte Detailtags (Etappe P4) werden wie jede Eingabe an einer Vertrauensgrenze erneut geprüft. Mit Details ist die
+      // gesehene Version Pflicht; ein leeres Objekt gibt es nicht (die App lässt das Feld dann weg).
+      if (value.details !== undefined) {
+        const checkedDetails = validateDetailTags(value.details);
+        if (!checkedDetails.ok || Object.keys(checkedDetails.tags).length === 0 || value.expectedVersion === undefined) return undefined;
+        (value as Record<string, unknown>).details = checkedDetails.tags;
+      }
       const request = { ...value, kind: "check-date" } as unknown as DevelopmentWriteRequest;
       if (legacyCheck) {
         sessionStorage.setItem("aedjaeger-pending-osm-development-write", JSON.stringify(request));
@@ -437,6 +448,7 @@ const DETAIL_GROUP_OF_KEY: Record<DetailKey, string> = {
 function resetDetailForm(): void {
   detailForm = { ...EMPTY_DETAIL_FORM };
   detailMoreOpen = false;
+  detailExistingTags = undefined;
 }
 
 /** Wählt aus einer festen Werteliste den passenden Wert oder `null` („Weiß ich nicht“). */
@@ -477,51 +489,117 @@ function detailContinueLabel(count: number): string {
   return count === 1 ? tv("detailContinueOne") : tv("detailContinueMany", { count });
 }
 
-/** Der Formularteil (alles außer Fußleiste). Wird bei Auswahländerungen komplett neu geschrieben. */
+/** Ist dieser Schlüssel am bestehenden AED schon eingetragen? (Nur beim Ergänzen; bei einer Neuanlage immer false.) */
+function detailHas(key: DetailKey): boolean {
+  return detailExistingTags !== undefined && Object.prototype.hasOwnProperty.call(detailExistingTags, key);
+}
+
+/** Zeigt einen bestehenden OSM-Wert in der Sprache der Person, soweit er einer unserer Auswahlwerte ist. */
+function existingValueLabel(key: DetailKey, value: string): string {
+  if (key === "access") return ({ yes: tv("detailAccessYes"), customers: tv("detailAccessCustomers"), private: tv("detailAccessPrivate") } as Record<string, string>)[value] ?? value;
+  if (key === "indoor") return ({ yes: tv("detailIndoorYes"), no: tv("detailIndoorNo") } as Record<string, string>)[value] ?? value;
+  if (key === "opening_hours" && value === "24/7") return tv("detailHoursAlways");
+  return value;
+}
+
+/** Zeile „Schon eingetragen: …“ für einen gesperrten Wert. Der Wert kommt aus OSM und wird wie jeder fremde Text maskiert. */
+function detailLockedLine(key: DetailKey): string {
+  const value = detailExistingTags?.[key] ?? "";
+  return `<p class="detail-locked">${escapeHtml(tv("detailExistingValue", { value: existingValueLabel(key, value) }))}</p>`;
+}
+
+/**
+ * Sind beim bestehenden AED alle Angaben schon eingetragen, die das Formular erfassen kann?
+ * Dann gibt es nichts zu ergänzen, und die Oberfläche sagt es.
+ */
+function detailEverythingPresent(): boolean {
+  if (detailExistingTags === undefined) return false;
+  const keys: DetailKey[] = ["defibrillator:location", "access", "opening_hours", "indoor", "operator", "phone", "description", "ref"];
+  if (!keys.every(detailHas)) return false;
+  // Die Ebene fehlt nur dann nicht, wenn sie schon da ist oder der AED nicht im Gebäude hängt.
+  return detailHas("level") || detailExistingTags.indoor !== "yes";
+}
+
+/**
+ * Der Formularteil (alles außer Fußleiste). Wird bei Auswahländerungen komplett neu geschrieben.
+ * Beim Ergänzen eines bestehenden AED (detailExistingTags gesetzt) erscheint jedes schon eingetragene Feld nur als
+ * gesperrte Zeile „Schon eingetragen: …“. Nur Fehlendes lässt sich ausfüllen.
+ */
 function detailFormMarkup(): string {
   const f = detailForm;
   const unknown = tv("detailUnknown");
 
   // 1. Wo genau? Textfeld plus Schnellwahl-Wörter, die ans Ende des Textes angehängt werden.
   const quickWords = [tv("detailLocEntrance"), tv("detailLocFoyer"), tv("detailLocOutside"), tv("detailLocReception"), tv("detailLocStairs")];
-  const location = detailGroup("location", tv("detailLocationLabel"), tv("detailLocationHint"),
-    `<input class="field" id="detail-location" type="text" maxlength="${DETAIL_LIMITS.location}" value="${escapeHtml(f.location)}" data-detail-text="location" autocomplete="off" placeholder="${escapeHtml(tv("detailLocationPlaceholder"))}" aria-label="${escapeHtml(tv("detailLocationLabel"))}" />`
-    + `<div class="chip-row">${quickWords.map((word) => `<button type="button" class="chip chip-small" data-detail-addloc="${escapeHtml(word)}">${escapeHtml(word)}</button>`).join("")}</div>`);
+  const location = detailGroup("location", tv("detailLocationLabel"), detailHas("defibrillator:location") ? "" : tv("detailLocationHint"),
+    detailHas("defibrillator:location")
+      ? detailLockedLine("defibrillator:location")
+      : `<input class="field" id="detail-location" type="text" maxlength="${DETAIL_LIMITS.location}" value="${escapeHtml(f.location)}" data-detail-text="location" autocomplete="off" placeholder="${escapeHtml(tv("detailLocationPlaceholder"))}" aria-label="${escapeHtml(tv("detailLocationLabel"))}" />`
+        + `<div class="chip-row">${quickWords.map((word) => `<button type="button" class="chip chip-small" data-detail-addloc="${escapeHtml(word)}">${escapeHtml(word)}</button>`).join("")}</div>`);
 
   // 2. Wer kommt ran? Die Frage meint das Gerät, nicht das Gebäude.
-  const access = detailGroup("access", tv("detailAccessLabel"), tv("detailAccessHint"),
-    `<div class="chip-row">${detailRadio("access", "yes", tv("detailAccessYes"), f.access === "yes")}${detailRadio("access", "customers", tv("detailAccessCustomers"), f.access === "customers")}${detailRadio("access", "private", tv("detailAccessPrivate"), f.access === "private")}${detailRadio("access", "", unknown, f.access === null, true)}</div>`);
+  const access = detailGroup("access", tv("detailAccessLabel"), detailHas("access") ? "" : tv("detailAccessHint"),
+    detailHas("access")
+      ? detailLockedLine("access")
+      : `<div class="chip-row">${detailRadio("access", "yes", tv("detailAccessYes"), f.access === "yes")}${detailRadio("access", "customers", tv("detailAccessCustomers"), f.access === "customers")}${detailRadio("access", "private", tv("detailAccessPrivate"), f.access === "private")}${detailRadio("access", "", unknown, f.access === null, true)}</div>`);
 
   // 3. Wann erreichbar? „Rund um die Uhr“ nur nach ausdrücklicher Wahl; das Zeiten-Feld erscheint bei „Zu bestimmten Zeiten“.
   const timesField = f.hoursMode === "times"
     ? `<div class="detail-sub"><label class="detail-hint" for="detail-hours-text">${tv("detailHoursTextLabel")}</label>${detailTextInput("hoursText", "detail-hours-text", DETAIL_LIMITS.openingHours, 'placeholder="Mo-Fr 08:00-18:00" autocapitalize="off" spellcheck="false"')}<div class="chip-row"><button type="button" class="chip chip-small" data-detail-hours-preset="Mo-Fr 08:00-18:00">Mo-Fr 08:00-18:00</button><button type="button" class="chip chip-small" data-detail-hours-preset="Mo-Sa 07:00-20:00">Mo-Sa 07:00-20:00</button></div></div>`
     : "";
-  const hours = detailGroup("hours", tv("detailHoursLabel"), tv("detailHoursHint"),
-    `<div class="chip-row">${detailRadio("hoursMode", "always", tv("detailHoursAlways"), f.hoursMode === "always")}${detailRadio("hoursMode", "times", tv("detailHoursTimes"), f.hoursMode === "times")}${detailRadio("hoursMode", "", unknown, f.hoursMode === null, true)}</div>${timesField}`);
+  const hours = detailGroup("hours", tv("detailHoursLabel"), detailHas("opening_hours") ? "" : tv("detailHoursHint"),
+    detailHas("opening_hours")
+      ? detailLockedLine("opening_hours")
+      : `<div class="chip-row">${detailRadio("hoursMode", "always", tv("detailHoursAlways"), f.hoursMode === "always")}${detailRadio("hoursMode", "times", tv("detailHoursTimes"), f.hoursMode === "times")}${detailRadio("hoursMode", "", unknown, f.hoursMode === null, true)}</div>${timesField}`);
 
-  // 4. Drinnen oder draußen? Die Ebene erscheint nur bei „Drinnen“. Der erste Tipp auf + oder − setzt 0 (Erdgeschoss).
-  const levelField = f.indoor === "yes"
-    ? `<div class="detail-sub"><span class="detail-hint" id="detail-level-label">${tv("detailLevelLabel")}</span><div class="stepper" role="group" aria-labelledby="detail-level-label"><button type="button" class="step-button" id="detail-level-down" data-detail-step="-1" aria-label="${escapeHtml(tv("detailLevelLower"))}">−</button><output class="step-value" id="detail-level-value" aria-live="polite">${f.level === null ? "–" : f.level}</output><button type="button" class="step-button" id="detail-level-up" data-detail-step="1" aria-label="${escapeHtml(tv("detailLevelHigher"))}">+</button><button type="button" class="chip chip-small chip-unknown" id="detail-level-clear" data-detail-level-clear="1">${unknown}</button></div></div>`
+  // 4. Drinnen oder draußen? Die Ebene erscheint nur bei „Drinnen“ (gewählt oder in OSM schon eingetragen).
+  // Der erste Tipp auf + oder − setzt 0 (Erdgeschoss).
+  const effectiveIndoor = detailHas("indoor") ? detailExistingTags?.indoor : f.indoor;
+  const levelField = effectiveIndoor === "yes"
+    ? (detailHas("level")
+      ? detailLockedLine("level")
+      : `<div class="detail-sub"><span class="detail-hint" id="detail-level-label">${tv("detailLevelLabel")}</span><div class="stepper" role="group" aria-labelledby="detail-level-label"><button type="button" class="step-button" id="detail-level-down" data-detail-step="-1" aria-label="${escapeHtml(tv("detailLevelLower"))}">−</button><output class="step-value" id="detail-level-value" aria-live="polite">${f.level === null ? "–" : f.level}</output><button type="button" class="step-button" id="detail-level-up" data-detail-step="1" aria-label="${escapeHtml(tv("detailLevelHigher"))}">+</button><button type="button" class="chip chip-small chip-unknown" id="detail-level-clear" data-detail-level-clear="1">${unknown}</button></div></div>`)
     : "";
   const indoor = detailGroup("indoor", tv("detailIndoorLabel"), "",
-    `<div class="chip-row">${detailRadio("indoor", "yes", tv("detailIndoorYes"), f.indoor === "yes")}${detailRadio("indoor", "no", tv("detailIndoorNo"), f.indoor === "no")}${detailRadio("indoor", "", unknown, f.indoor === null, true)}</div>${levelField}`);
+    (detailHas("indoor")
+      ? detailLockedLine("indoor")
+      : `<div class="chip-row">${detailRadio("indoor", "yes", tv("detailIndoorYes"), f.indoor === "yes")}${detailRadio("indoor", "no", tv("detailIndoorNo"), f.indoor === "no")}${detailRadio("indoor", "", unknown, f.indoor === null, true)}</div>`) + levelField);
 
   // 5. Seltene Angaben, eingeklappt. Gehäuse bleibt vorerst draußen (offene Entscheidung, siehe docs/offene-fragen.md).
+  // Jedes Feld ist entweder gesperrt (schon eingetragen) oder ein Eingabefeld.
+  const moreField = (key: "operator" | "phone" | "description" | "ref", label: string, maxLength: number, extra = "", note = ""): string => detailHas(key)
+    ? `<div><span class="detail-hint">${label}</span>${detailLockedLine(key)}</div>`
+    : `<div><label class="detail-hint" for="detail-${key}">${label}</label>${detailTextInput(key, `detail-${key}`, maxLength, extra)}${note}</div>`;
   const more = `<details class="detail-more" id="detail-more"${detailMoreOpen ? " open" : ""}><summary><span>${tv("detailMoreTitle")}</span><span class="detail-more-count" id="detail-more-count">${detailMoreCountText()}</span></summary><div class="detail-more-body">`
-    + `<div><label class="detail-hint" for="detail-operator">${tv("detailOperatorLabel")}</label>${detailTextInput("operator", "detail-operator", DETAIL_LIMITS.operator)}</div>`
-    + `<div><label class="detail-hint" for="detail-phone">${tv("detailPhoneLabel")}</label>${detailTextInput("phone", "detail-phone", DETAIL_LIMITS.phone, 'inputmode="tel" autocomplete="off"')}<p class="detail-hint">${tv("detailPhoneHint")}</p></div>`
-    + `<div><label class="detail-hint" for="detail-description">${tv("detailDescriptionLabel")}</label>${detailTextInput("description", "detail-description", DETAIL_LIMITS.description)}</div>`
-    + `<div><label class="detail-hint" for="detail-ref">${tv("detailRefLabel")}</label>${detailTextInput("ref", "detail-ref", DETAIL_LIMITS.ref)}</div>`
+    + moreField("operator", tv("detailOperatorLabel"), DETAIL_LIMITS.operator)
+    + moreField("phone", tv("detailPhoneLabel"), DETAIL_LIMITS.phone, 'inputmode="tel" autocomplete="off"', `<p class="detail-hint">${tv("detailPhoneHint")}</p>`)
+    + moreField("description", tv("detailDescriptionLabel"), DETAIL_LIMITS.description)
+    + moreField("ref", tv("detailRefLabel"), DETAIL_LIMITS.ref)
     + `<p class="detail-hint">${tv("detailNoCode")}</p><p class="detail-error" role="alert" data-detail-error="more" hidden>${tv("detailInvalid")}</p></div></details>`;
 
   return `${location}${access}${hours}${indoor}${more}`;
 }
 
-/** Fußleiste: der eine Hauptknopf (immer erreichbar) und „Zurück zur Karte“. */
+/**
+ * Die Tags, die das Formular jetzt ergeben würde. Beim Ergänzen eines bestehenden AED zählt der bestehende Stand mit
+ * (für die Ebene), und Schlüssel, die schon in OSM stehen, werden nie übernommen: Ergänzen heißt nicht überschreiben.
+ */
+function currentDetailResult(): ReturnType<typeof buildDetailTags> {
+  const built = buildDetailTags(detailForm, detailExistingTags);
+  if (!built.ok || detailExistingTags === undefined) return built;
+  const missingOnly = Object.fromEntries(Object.entries(built.tags).filter(([key]) => !detailHas(key as DetailKey))) as DetailTags;
+  return { ok: true, tags: missingOnly };
+}
+
+/** Fußleiste: der eine Hauptknopf (immer erreichbar) und „Zurück“. Die Aktionen unterscheiden Neuanlage und Ergänzen. */
 function detailFooterMarkup(): string {
-  const built = buildDetailTags(detailForm);
+  const built = currentDetailResult();
   const count = built.ok ? Object.keys(built.tags).length : 0;
-  return `<div class="detail-footer"><button class="button button-primary" id="detail-continue" type="button" data-action="details-continue"${built.ok ? "" : " disabled"}>${detailContinueLabel(count)}</button></div><button class="button button-quiet" type="button" data-action="back-from-details">${tv("detailsBackToMap")}</button>`;
+  const existing = detailExistingTags !== undefined;
+  const continueAction = existing ? "existing-details-continue" : "details-continue";
+  const backAction = existing ? "back-from-existing-details" : "back-from-details";
+  const backLabel = existing ? tv("previewBack") : tv("detailsBackToMap");
+  return `<div class="detail-footer"><button class="button button-primary" id="detail-continue" type="button" data-action="${continueAction}"${built.ok ? "" : " disabled"}>${detailContinueLabel(count)}</button></div><button class="button button-quiet" type="button" data-action="${backAction}">${backLabel}</button>`;
 }
 
 /**
@@ -530,7 +608,7 @@ function detailFooterMarkup(): string {
  * direkt bei dem betroffenen Abschnitt.
  */
 function updateDetailFooter(): void {
-  const built = buildDetailTags(detailForm);
+  const built = currentDetailResult();
   const button = app!.querySelector<HTMLButtonElement>("#detail-continue");
   if (button) {
     button.disabled = !built.ok;
@@ -805,10 +883,20 @@ function statusContent(): string {
       const content = result.kind === "ready"
         ? `<p><strong>${tv("previewNewDate", { date: result.changes[0].after })}</strong></p>${result.changes[0].before ? `<p>${tv("previewOldDate", { date: escapeHtml(result.changes[0].before) })}</p>` : ""}`
         : `<p>${tv("previewUnsupported")}</p>`;
+      // Kommt die Vorschau aus dem Ergänzen-Formular, stehen hier die neuen Tags. Sie werden vor dem Speichern genau gezeigt.
+      const addedTags = state.details ? Object.entries(state.details) : [];
+      const addedList = addedTags.length > 0
+        ? `<p><strong>${tv("detailsAddedTitle")}</strong></p><ul>${addedTags.map(([key, value]) => `<li><code>${escapeHtml(key)}=${escapeHtml(value)}</code></li>`).join("")}</ul>`
+        : "";
       const copy = developmentWriteCopy[language];
-      const writeStatus = state.writeStatus ? `<p role="status" class="simulation-note">${copy[state.writeStatus]}</p>` : "";
+      const statusText = state.writeStatus === "complete" && addedTags.length > 0 ? copy.detailsComplete : state.writeStatus ? copy[state.writeStatus] : "";
+      const writeStatus = state.writeStatus ? `<p role="status" class="simulation-note">${statusText}</p>` : "";
+      // Der zweite Weg neben dem Ein-Tipp-Speichern: fehlende Angaben ergänzen. Nur beim einfachen Prüfdatum-Vorschlag.
+      const addDetailsButton = canWrite && !state.writeStatus && !state.node
+        ? `<button class="button button-secondary" data-action="open-existing-details">${tv("detailsAddAction")}</button>`
+        : "";
       const writeAction = canWrite && !state.writeStatus
-        ? `<button class="button button-primary" data-action="save-development-check">${copy.action}</button>`
+        ? `<button class="button button-primary" data-action="save-development-check">${addedTags.length > 0 ? copy.detailsAction : copy.action}</button>`
         : state.writeStatus === "uncertain" && state.operationId
           ? `<button class="button button-secondary" data-action="retry-development-write">${copy.retry}</button>`
           : "";
@@ -819,8 +907,28 @@ function statusContent(): string {
       // Gezählt wird wie in der Trefferliste: Bei „candidate-review“ die bewerteten Treffer, sonst alle Suchtreffer.
       const shownCandidates = state.returnState.assessment.kind === "candidate-review" ? state.returnState.assessment.candidates.length : state.returnState.search.candidates.length;
       const hasOtherCandidates = shownCandidates > 1;
-      const navigation = recoverableWrite ? "" : `${hasOtherCandidates ? `<button class="button button-quiet" data-action="back-to-candidates">${tv("previewBack")}</button>` : ""}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.candidateLabel))}</strong></p>${content}${noWriteNotice}${writeStatus}</div></div>${writeAction}${navigation}`;
+      // Aus dem Ergänzen-Formular führt „Zurück“ dorthin (die Eingaben bleiben), sonst zur Trefferliste.
+      const backButton = state.node
+        ? `<button class="button button-quiet" data-action="back-to-existing-details">${tv("detailsBackToForm")}</button>`
+        : hasOtherCandidates ? `<button class="button button-quiet" data-action="back-to-candidates">${tv("previewBack")}</button>` : "";
+      const navigation = recoverableWrite ? "" : `${backButton}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.candidateLabel))}</strong></p>${content}${addedList}${noWriteNotice}${writeStatus}</div></div>${writeAction}${addDetailsButton}${navigation}`;
+    }
+    case "existing-aed-details": {
+      const label = escapeHtml(displayCandidateLabel(state.candidateLabel));
+      const header = `<div class="result-message"><span class="status-icon status-good" aria-hidden="true">✓</span><div><h2>${tv("detailsExistingTitle")}</h2><p><strong>${label}</strong></p><p>${tv("detailsExistingIntro")}</p></div></div>`;
+      if (state.load.status === "loading") {
+        return `${photoMarkup}${header}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv("detailLoading")}</span></div>`;
+      }
+      if (state.load.status === "error") {
+        const message = state.load.code === "node_unavailable" ? tv("detailLoadChanged") : state.load.code === "authentication_required" ? tv("errorSignIn") : tv("detailLoadFailed");
+        // Ist der Eintrag weg, hilft Wiederholen nicht; dann bleibt nur der Rückweg.
+        const retry = state.load.code === "node_unavailable" ? "" : `<button class="button button-secondary" data-action="existing-details-retry">${tv("detailLoadRetry")}</button>`;
+        return `${photoMarkup}${header}<p class="simulation-note" role="alert">${message}</p>${retry}<button class="button button-quiet" data-action="back-from-existing-details">${tv("previewBack")}</button>`;
+      }
+      const thumbnail = photoMarkup.replace('class="photo-preview"', 'class="photo-preview photo-thumb"');
+      const allPresent = detailEverythingPresent() ? `<p class="simulation-note">${tv("detailsAllPresent")}</p>` : "";
+      return `<div class="detail-form-root">${thumbnail}${header}${allPresent}<div id="detail-form">${detailFormMarkup()}</div>${detailFooterMarkup()}</div>`;
     }
     case "development-write-recovery": {
       const copy = developmentWriteCopy[language];
@@ -985,7 +1093,7 @@ function render(restoreFlowFocus = false): void {
   }
 
   // Detailformular: Eingaben mit dem gemerkten Formularzustand verbinden.
-  if (state.kind === "new-aed-details") bindDetailForm();
+  if (state.kind === "new-aed-details" || (state.kind === "existing-aed-details" && state.load.status === "ready")) bindDetailForm();
 
   // Zweite Bestätigung in der Neuanlage-Vorschau: Der Speichern-Knopf wird erst aktiv,
   // wenn der Haken „vor Ort geprüft“ gesetzt ist, und wieder gesperrt, wenn er entfernt wird.
@@ -1188,6 +1296,8 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
       body: JSON.stringify(requestBody.kind === "check-date" ? {
         operation_id: requestBody.operationId, confirmed: true, target: requestBody.target,
         expected_version: requestBody.expectedVersion, expected_check_date: requestBody.expectedCheckDate, observed_on: requestBody.observedOn,
+        // Nur mit ergänzten Angaben; ohne sie bleibt die Anfrage (und ihr Abgleichswert) wie früher.
+        ...(requestBody.details && Object.keys(requestBody.details).length > 0 ? { details: requestBody.details } : {}),
       } : {
         operation_id: requestBody.operationId, confirmed: true, latitude: requestBody.latitude, longitude: requestBody.longitude,
         observed_on: requestBody.observedOn, details: requestBody.details,
@@ -1265,6 +1375,7 @@ function focusCurrentState(): void {
     "development-write-recovery": ".result-message h2",
     "new-aed-preview": ".result-message h2",
     "new-aed-details": ".result-message h2",
+    "existing-aed-details": ".result-message h2",
     "candidate-error": ".result-message h2",
     clarification: ".result-message h2",
     proposal: '[data-action="confirm"]',
@@ -1462,6 +1573,8 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     if (!newEntryPanelOpen(state)) return;
     const positionConfirmed = app!.querySelector<HTMLInputElement>("#new-aed-position-confirmed")?.checked === true;
     if (positionConfirmed) {
+      // Ein eventuell übrig gebliebener Stand eines bestehenden AED darf das Neuanlage-Formular nie sperren.
+      detailExistingTags = undefined;
       // Erste Bestätigung (Position) ist da: weiter zu den freiwilligen Angaben. Die Vorschau folgt erst danach.
       const confirmedPosition = newAedPositionOverride ?? state.location;
       state = { kind: "new-aed-details", photoUrl: state.photoUrl, returnState: state, position: { latitude: confirmedPosition.latitude, longitude: confirmedPosition.longitude } };
@@ -1518,6 +1631,47 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     state = { ...preview, operationId, writeStatus: "sending" };
     render(true);
     void submitDevelopmentWrite(request);
+  } else if (action === "open-existing-details" && state.kind === "osm-preview" && !state.node) {
+    // Zweiter Weg neben „noch vorhanden“: fehlende Angaben ergänzen. Erst wird der AED frisch aus OSM gelesen.
+    const candidateId = state.candidateId;
+    const candidate = state.returnState.search.candidates.find((item) => item.id === candidateId);
+    if (!developmentSession || !developmentWriteAvailable || candidate?.osmType !== "node") return;
+    resetDetailForm();
+    state = { kind: "existing-aed-details", photoUrl: state.photoUrl, candidateId, candidateLabel: state.candidateLabel, returnState: state.returnState, load: { status: "loading" } };
+    void loadExistingAedNode(candidateId);
+  } else if (action === "existing-details-retry" && state.kind === "existing-aed-details" && state.load.status === "error") {
+    const candidateId = state.candidateId;
+    state = { ...state, load: { status: "loading" } };
+    void loadExistingAedNode(candidateId);
+  } else if (action === "existing-details-continue" && state.kind === "existing-aed-details" && state.load.status === "ready") {
+    // Die Eingaben laufen durch denselben Vertrag wie später beim Server. Bestehende Werte bleiben (gesperrt), nur Fehlendes geht mit.
+    const built = currentDetailResult();
+    if (!built.ok) {
+      updateDetailFooter();
+      return;
+    }
+    const node = state.load.node;
+    // Das Prüfdatum wird gegen den FRISCH gelesenen Stand vorbereitet, nicht gegen den alten Treffer aus dem Archiv.
+    const result = previewExistingAedCheck({ id: state.candidateId, osmType: "node", tags: node.tags }, true, observedOn);
+    state = {
+      kind: "osm-preview", photoUrl: state.photoUrl, candidateId: state.candidateId, candidateLabel: state.candidateLabel,
+      result, returnState: state.returnState, node, ...(Object.keys(built.tags).length > 0 ? { details: built.tags } : {}),
+    };
+  } else if (action === "back-from-existing-details" && state.kind === "existing-aed-details") {
+    // Zurück zur einfachen Bestätigung. Die Eingaben werden verworfen, denn der Stand in OSM kann sich inzwischen ändern.
+    const { candidateId, candidateLabel, returnState, photoUrl } = state;
+    const candidate = returnState.search.candidates.find((item) => item.id === candidateId);
+    resetDetailForm();
+    if (!candidate) {
+      state = returnState;
+    } else {
+      state = { kind: "osm-preview", photoUrl, candidateId, candidateLabel, result: previewExistingAedCheck(candidate, true, observedOn), returnState };
+    }
+  } else if (action === "back-to-existing-details" && state.kind === "osm-preview" && state.node) {
+    if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
+    // Der gelesene Stand und die Eingaben bleiben erhalten (detailForm liegt im Speicher).
+    detailExistingTags = state.node.tags;
+    state = { kind: "existing-aed-details", photoUrl: state.photoUrl, candidateId: state.candidateId, candidateLabel: state.candidateLabel, returnState: state.returnState, load: { status: "ready", node: state.node } };
   } else if (action === "back-to-candidates" && state.kind === "osm-preview") {
     if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
     state = state.returnState;
@@ -1534,9 +1688,11 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
       kind: "check-date", operationId,
       target: candidate.id,
       candidateLabel: preview.candidateLabel,
-      ...(candidate.version === undefined ? {} : { expectedVersion: candidate.version }),
+      // Kommt die Vorschau aus dem Ergänzen-Formular, zählt die Version, die die Person frisch gesehen hat.
+      ...(preview.node ? { expectedVersion: preview.node.version } : candidate.version === undefined ? {} : { expectedVersion: candidate.version }),
       expectedCheckDate: change.before,
       observedOn: change.after,
+      ...(preview.details && Object.keys(preview.details).length > 0 ? { details: preview.details } : {}),
     };
     try {
       // Save the exact confirmed proposal before sending so a reload can safely check the same operation.
@@ -1672,6 +1828,26 @@ function getPhoneLocation(): Promise<SearchLocation> {
       { enableHighAccuracy: true, maximumAge: 0, timeout: 15_000 },
     );
   });
+}
+
+/**
+ * Lädt den aktuellen Stand des gewählten AED frisch aus OSM und zeigt dann das Ergänzen-Formular.
+ *
+ * Die Antwort zählt nur, wenn die Person noch bei genau diesem AED im Ladezustand ist. Ist sie inzwischen
+ * zurückgegangen, weitergegangen oder hat das Foto verworfen, wird das späte Ergebnis ignoriert.
+ */
+async function loadExistingAedNode(candidateId: string): Promise<void> {
+  try {
+    const node = await requestExistingNode(candidateId);
+    if (state.kind !== "existing-aed-details" || state.candidateId !== candidateId || state.load.status !== "loading") return;
+    detailExistingTags = node.tags;
+    state = { ...state, load: { status: "ready", node } };
+  } catch (error) {
+    if (state.kind !== "existing-aed-details" || state.candidateId !== candidateId || state.load.status !== "loading") return;
+    detailExistingTags = undefined;
+    state = { ...state, load: { status: "error", code: error instanceof ExistingNodeError ? error.code : "service_unavailable" } };
+  }
+  render(true);
 }
 
 /**
