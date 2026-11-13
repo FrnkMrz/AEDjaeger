@@ -133,6 +133,7 @@ footer { display: flex; align-items: center; justify-content: center; gap: 8px; 
 .info-section { margin-top: 20px; border-top: 1px solid #edf0ec; padding-top: 17px; }
 .info-section h3 { margin: 0 0 7px; font-size: 16px; line-height: 1.35; }
 .info-section p { margin: 0 0 13px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.build-version { margin: 18px 0 0; border-top: 1px solid #edf0ec; padding-top: 12px; color: var(--muted); font-size: 12px; text-align: center; user-select: all; }
 .roadmap-list { display: grid; gap: 10px; margin: 15px 0 0; padding: 0; list-style: none; counter-reset: roadmap; }
 .roadmap-item { position: relative; border: 1px solid #e8ece7; border-radius: 14px; padding: 13px 14px 12px; counter-increment: roadmap; }
 .roadmap-item::before { content: counter(roadmap); position: absolute; top: 14px; left: 14px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; color: #50705b; background: #edf4ee; font-size: 11px; font-weight: 800; }

@@ -14,6 +14,8 @@ Legende für die Ergebnisfelder: `[ ]` offen, `[x]` bestanden, `[!]` Fehler (Not
 
 Getestet werden Android Chrome, iPhone Safari und die installierte PWA. Die Testperson meldet Abweichungen mit Gerät, Browserversion, Uhrzeit und genauem Text der Meldung.
 
+**Vor jedem Test die Version prüfen:** Eine installierte PWA lädt eine neue Version erst nach einem vollständigen Neustart. Im Info-Dialog (Schaltfläche „Info“) steht ganz unten „Version <Nummer> · <Datum, Uhrzeit>“. Öffne im Browser `https://aedjaeger.aedjaeger.workers.dev/version.json`; dort steht `{"revision":"<Nummer>"}`. **Sind beide Nummern gleich, läuft die neueste Version.** Weichen sie ab, läuft noch die alte: App ganz schließen, neu öffnen, bei „Neue Version verfügbar“ auf „Neu laden“ tippen und erneut vergleichen. Das Datum im Dialog ist der Zeitpunkt des Builds. Der Build läuft im Workflow vor dem Deploy-Schritt, das Datum liegt also immer kurz **vor** der Deploy-Zeit; ein Vergleich mit der Deploy-Zeit taugt nicht. Die Nummer gehört in jede Fehlermeldung.
+
 | Nr | Schritt | Erwartetes Ergebnis | Ergebnis |
 | --- | --- | --- | --- |
 | A1 | App unter der workers.dev-Adresse öffnen, mit OSM-Entwicklungskonto am Testserver anmelden | Anmeldung gelingt; nach der Rückkehr von OSM ist die App wieder bedienbar | `[ ]` |

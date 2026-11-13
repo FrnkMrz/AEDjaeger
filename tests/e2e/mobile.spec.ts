@@ -146,6 +146,8 @@ test("a camera input photo with an old EXIF date requires confirmation", async (
 
 test("a fresh camera photo without EXIF date skips the observation-date question", async ({ page }) => {
   await page.goto("/");
+  // Erst warten, bis die App das Eingabefeld gezeichnet hat; sonst gibt es unter Last noch keins.
+  await page.locator("#camera-input").waitFor({ state: "attached" });
   // Eine im Browser erzeugte Datei trägt die aktuelle Zeit als Dateizeit – wie ein Foto,
   // das die Kamera gerade eben aufgenommen hat. Sie enthält keine EXIF-Daten.
   await page.evaluate(() => {
@@ -164,6 +166,8 @@ test("a fresh camera photo without EXIF date skips the observation-date question
 
 test("a fresh file chosen from the gallery without EXIF date still asks for the observation date", async ({ page }) => {
   await page.goto("/");
+  // Erst warten, bis die App das Eingabefeld gezeichnet hat; sonst gibt es unter Last noch keins.
+  await page.locator("#file-input").waitFor({ state: "attached" });
   // Bei „Foto auswählen“ sagt die Dateizeit nichts über die Aufnahme aus (z. B. ein gerade erst
   // gespeichertes altes Bild). Die 5-Minuten-Regel darf hier ohne EXIF-Zeit nicht greifen.
   await page.evaluate(() => {
@@ -2042,4 +2046,27 @@ test("signing out ends the session: after the logout request the app shows the l
   await page.waitForTimeout(300);
   await expect(page.locator(".connection-lamp-off")).toBeVisible();
   expect(signInRequests).toBe(0);
+});
+
+test("the info dialog shows the build version, the same one the server publishes, in all six languages", async ({ page }) => {
+  await page.goto("/");
+  const published = (await (await page.request.get("/version.json")).json()) as { revision: string };
+  expect(published.revision).toMatch(/^[a-z0-9]{4,32}$/);
+  const expectedWord: Record<string, string> = { de: "Version", en: "Version", pl: "Wersja", ja: "バージョン", fr: "Version", es: "Versión" };
+  for (const code of languageCodes) {
+    await page.locator("#language").selectOption(code);
+    await page.locator("#open-info").click();
+    const line = page.locator("#build-version");
+    await expect(line, `Versionszeile in ${code}`).toContainText(`${expectedWord[code]} ${published.revision}`);
+    // Zusätzlich steht die Build-Zeit dabei, zurückgerechnet aus der Revision (hier das aktuelle Jahr des Builds).
+    await expect(line, `Build-Zeit in ${code}`).toContainText(String(new Date().getFullYear()));
+    await page.keyboard.press("Escape");
+  }
+});
+
+test("the build version is also visible in the info dialog when signed out", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.goto("/");
+  await page.locator("#open-info").click();
+  await expect(page.locator("#build-version")).toContainText("Version ");
 });
