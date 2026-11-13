@@ -5,6 +5,8 @@ import {
   EMPTY_DETAIL_FORM,
   buildDetailTags,
   diffTags,
+  formFromExistingTags,
+  planDetailChanges,
   isDetailKey,
   validateDetailTags,
   type AedDetailForm,
@@ -233,5 +235,115 @@ describe("diffTags: nur Ergänzen oder Ändern, nie Löschen", () => {
     const changes = diffTags({ opening_hours: "Mo-Fr 08:00-18:00" }, { ref: "9", opening_hours: "24/7", access: "yes" });
     expect(changes.map((change) => change.key)).toEqual(["access", "opening_hours", "ref"]);
     expect(changes[1]).toEqual({ key: "opening_hours", kind: "change", before: "Mo-Fr 08:00-18:00", after: "24/7" });
+  });
+});
+
+describe("planDetailChanges: ergänzen und korrigieren, nie löschen", () => {
+  const plan = (changes: Partial<AedDetailForm>, existing: Record<string, string>, mode: "add-only" | "correct") => planDetailChanges(form(changes), existing, mode);
+
+  it("meldet im Modus „add-only“ nur Fehlendes als Ergänzung und lässt Vorhandenes in Ruhe", () => {
+    const result = plan({ access: "yes", indoor: "no", operator: "Neu" }, { access: "private", operator: "Alt", check_date: "2025-01-01" }, "add-only");
+    expect(result).toEqual({ ok: true, additions: { indoor: "no" }, corrections: [], tags: { indoor: "no" } });
+  });
+
+  it("meldet im Modus „correct“ abweichende Werte als Korrektur mit altem Wert", () => {
+    const result = plan({ access: "yes", operator: "Neu" }, { access: "private", operator: "Alt" }, "correct");
+    expect(result).toEqual({
+      ok: true,
+      additions: {},
+      corrections: [{ key: "access", before: "private", after: "yes" }, { key: "operator", before: "Alt", after: "Neu" }],
+      tags: { access: "yes", operator: "Neu" },
+    });
+  });
+
+  it("mischt Ergänzungen und Korrekturen in fester Reihenfolge", () => {
+    const result = plan({ location: "Foyer", access: "yes", ref: "7" }, { access: "private" }, "correct");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.additions).toEqual({ "defibrillator:location": "Foyer", ref: "7" });
+      expect(result.corrections).toEqual([{ key: "access", before: "private", after: "yes" }]);
+      expect(Object.keys(result.tags)).toEqual(["defibrillator:location", "access", "ref"]);
+    }
+  });
+
+  it("zählt gleiche Werte nicht als Änderung, auch wenn OSM Leerzeichen am Rand hat", () => {
+    expect(plan({ location: "Foyer", access: "yes" }, { "defibrillator:location": " Foyer ", access: "yes" }, "correct")).toEqual({ ok: true, additions: {}, corrections: [], tags: {} });
+  });
+
+  it("löscht nie: ein leeres Feld oder „Weiß ich nicht“ ändert nichts", () => {
+    const result = plan({}, { access: "yes", indoor: "yes", level: "1", operator: "Stadtwerke", "defibrillator:location": "Foyer" }, "correct");
+    expect(result).toEqual({ ok: true, additions: {}, corrections: [], tags: {} });
+  });
+
+  it("prüft nur die Werte, die geschrieben würden: ein ungewöhnlicher, unveränderter OSM-Wert blockiert nichts", () => {
+    // Die Notiz in OSM ist länger als unsere Grenze und bleibt unverändert. Die neue Ergänzung geht trotzdem durch.
+    const longNote = "x".repeat(300);
+    const result = plan({ description: longNote.slice(0, 255), ref: "9" }, { description: longNote }, "correct");
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.additions).toEqual({ ref: "9" });
+  });
+
+  it("lehnt einen ungültigen neuen Wert ab, auch bei einer Korrektur", () => {
+    expect(plan({ phone: "anrufen!" }, { phone: "112" }, "correct")).toEqual({ ok: false, key: "phone", problem: "invalid-characters" });
+    expect(plan({ operator: "x".repeat(121) }, { operator: "Alt" }, "correct")).toEqual({ ok: false, key: "operator", problem: "too-long" });
+  });
+
+  it("ersetzt einen Wert, den das Formular nicht kennt (zum Beispiel access=permissive), durch eine gültige Wahl", () => {
+    const result = plan({ access: "yes" }, { access: "permissive" }, "correct");
+    expect(result).toMatchObject({ ok: true, corrections: [{ key: "access", before: "permissive", after: "yes" }] });
+  });
+
+  it("nimmt für die Ebene den bestehenden Wert indoor=yes, wenn die Person ihn nicht ändert", () => {
+    expect(plan({ level: 2 }, { indoor: "yes" }, "add-only")).toMatchObject({ ok: true, additions: { level: "2" } });
+    expect(plan({ level: 2 }, { indoor: "no" }, "add-only")).toMatchObject({ ok: true, additions: {} });
+    // Beim Korrigieren steht indoor im vorbelegten Formular; hier ohne Vorbelegung zählt weiter der bestehende Wert.
+    expect(plan({ level: 3 }, { indoor: "yes", level: "1" }, "correct")).toMatchObject({ ok: true, corrections: [{ key: "level", before: "1", after: "3" }] });
+  });
+
+  it("verwendet keine Detailangabe, die der Vertrag nicht kennt, nie als Schlüssel", () => {
+    const result = plan({ access: "yes" }, { "defibrillator:code": "1234", name: "Rathaus", check_date: "2025-01-01" }, "correct");
+    expect(result).toMatchObject({ ok: true, additions: { access: "yes" }, corrections: [] });
+    if (result.ok) expect(Object.keys(result.tags)).toEqual(["access"]);
+  });
+});
+
+describe("formFromExistingTags: Vorbelegung im Korrekturmodus", () => {
+  it("belegt das Formular mit allen darstellbaren Werten vor und sperrt nichts", () => {
+    const { form: prefilled, locked } = formFromExistingTags({
+      "defibrillator:location": "  Foyer links ", access: "customers", opening_hours: "Mo-Fr 08:00-18:00", indoor: "yes", level: "-1",
+      operator: "Stadtwerke", phone: "+49 911 123456", description: "Notiz", ref: "A-1", check_date: "2025-01-01", name: "Rathaus",
+    });
+    expect(prefilled).toEqual({
+      location: "Foyer links", access: "customers", hoursMode: "times", hoursText: "Mo-Fr 08:00-18:00", indoor: "yes", level: -1,
+      cabinet: null, operator: "Stadtwerke", phone: "+49 911 123456", description: "Notiz", ref: "A-1",
+    });
+    expect(locked.size).toBe(0);
+  });
+
+  it("erkennt 24/7 als „Rund um die Uhr“", () => {
+    expect(formFromExistingTags({ opening_hours: "24/7" }).form).toMatchObject({ hoursMode: "always", hoursText: "" });
+  });
+
+  it("sperrt Werte, die sich im Formular nicht darstellen lassen, und lässt sie unverändert", () => {
+    const { form: prefilled, locked } = formFromExistingTags({
+      access: "permissive", indoor: "maybe", level: "0;1", opening_hours: "x".repeat(130), phone: "bitte anrufen", description: "y".repeat(300),
+    });
+    expect([...locked].sort()).toEqual(["access", "description", "indoor", "level", "opening_hours", "phone"]);
+    expect(prefilled).toEqual({ ...EMPTY_DETAIL_FORM });
+    // Ohne Änderung entsteht daraus nichts, es wird also auch nichts blockiert oder gelöscht.
+    expect(planDetailChanges(prefilled, { access: "permissive", indoor: "maybe", level: "0;1" }, "correct")).toEqual({ ok: true, additions: {}, corrections: [], tags: {} });
+  });
+
+  it("ändert nichts, solange die Person nichts ändert (Vorbelegung ergibt keinen Unterschied)", () => {
+    const existing = { "defibrillator:location": "Foyer", access: "yes", opening_hours: "24/7", indoor: "yes", level: "0", operator: "X", phone: "112", description: "N", ref: "1" };
+    const { form: prefilled } = formFromExistingTags(existing);
+    expect(planDetailChanges(prefilled, existing, "correct")).toEqual({ ok: true, additions: {}, corrections: [], tags: {} });
+  });
+
+  it("macht aus dem Wechsel von „Rund um die Uhr“ zu Zeiten eine Korrektur", () => {
+    const existing = { opening_hours: "24/7" };
+    const { form: prefilled } = formFromExistingTags(existing);
+    expect(planDetailChanges({ ...prefilled, hoursMode: "times", hoursText: "Mo-Fr 08:00-18:00" }, existing, "correct"))
+      .toMatchObject({ ok: true, corrections: [{ key: "opening_hours", before: "24/7", after: "Mo-Fr 08:00-18:00" }] });
   });
 });

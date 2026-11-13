@@ -196,6 +196,36 @@ describe("Cloudflare Worker shell", () => {
     return { prepare: () => statement };
   }
 
+  describe("corrections availability in the session status", () => {
+    const sessionRequest = () => new Request("https://aedjaeger.example/api/auth/session", { headers: { Cookie: `aedjaeger_osm_session=${"a".repeat(43)}` } });
+    // Test-Server-Anmeldung vollständig eingerichtet, sonst meldet die App „nicht verfügbar“.
+    const devLogin = {
+      OSM_DEV_LOGIN_ENABLED: "true",
+      OSM_DEV_CLIENT_ID: "aedjaeger-dev-client",
+      OSM_DEV_CLIENT_SECRET: "aedjaeger-test-secret",
+      OSM_DEV_REDIRECT_URI: "https://aedjaeger.example/api/auth/osm/development/callback",
+      OSM_OAUTH_ENCRYPTION_KEY: "k".repeat(43),
+    };
+    const sessionBody = async (override: Record<string, string | undefined>) => (await worker.fetch(sessionRequest(), { ...environment(), ...devLogin, DB: sessionDatabase("42", "development"), ...override })).json();
+
+    it("reports corrections only when the operator allowed them and test-server writing is on", async () => {
+      expect(await sessionBody({ OSM_DEV_WRITES_ENABLED: "true", OSM_DETAIL_CORRECTIONS_ENABLED: "true" }))
+        .toMatchObject({ authenticated: true, developmentWriteAvailable: true, developmentCorrectionsAvailable: true });
+    });
+
+    it.each([
+      ["no switch at all", { OSM_DEV_WRITES_ENABLED: "true" }],
+      ["the switch set to false", { OSM_DEV_WRITES_ENABLED: "true", OSM_DETAIL_CORRECTIONS_ENABLED: "false" }],
+      ["a switch with different capitalisation", { OSM_DEV_WRITES_ENABLED: "true", OSM_DETAIL_CORRECTIONS_ENABLED: "TRUE" }],
+      ["test-server writing switched off", { OSM_DEV_WRITES_ENABLED: "false", OSM_DETAIL_CORRECTIONS_ENABLED: "true" }],
+      ["test-server writing missing", { OSM_DETAIL_CORRECTIONS_ENABLED: "true" }],
+    ])("omits the flag for %s", async (_name, override) => {
+      const body = await sessionBody(override);
+      expect(body).toMatchObject({ authenticated: true });
+      expect(body).not.toHaveProperty("developmentCorrectionsAvailable");
+    });
+  });
+
   describe("photo check availability in the session status", () => {
     const sessionRequest = () => new Request("https://aedjaeger.test/api/auth/session", { headers: { Cookie: `aedjaeger_osm_session=${"a".repeat(43)}` } });
     // Vollständige Betreiber-Konfiguration: nur dann darf „verfügbar“ gemeldet werden.

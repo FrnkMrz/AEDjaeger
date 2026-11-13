@@ -528,3 +528,143 @@ describe("OSM development writer: adding missing details", () => {
     expect(api.uploads).toHaveLength(1);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------
+// Bestehende Detailwerte korrigieren (Etappe P5): nur mit Betreiber-Schalter, Vorwert-Prüfung und Bestätigung
+// ---------------------------------------------------------------------------------------------------------------
+
+const correctionEnvironment = { ...environment, OSM_DETAIL_CORRECTIONS_ENABLED: "true" };
+const correctionRequest = { ...requestBody, details: { access: "yes" }, expected_before: { access: "private" }, confirmed_corrections: true };
+
+describe("OSM development writer: correcting existing details", () => {
+  it("replaces only the confirmed old value, keeps every other tag, and says so in the changeset comment", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch({ tags: { access: "private", operator: "Stadtwerke" } });
+    const response = await handleDevelopmentCheckDate(makeRequest(correctionRequest), { ...correctionEnvironment, DB }, { now: () => now, fetch: api.fetcher });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: "complete", version: 4 });
+    expect(api.state.tags).toEqual({
+      emergency: "defibrillator", name: "Rathaus", fixme: "Eingang prüfen", check_date: "2026-10-24", access: "yes", operator: "Stadtwerke",
+    });
+    expect(api.changesetBodies[0]).toContain("added and corrected");
+  });
+
+  it("combines additions and corrections in one upload", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch({ tags: { access: "private" } });
+    const body = { ...requestBody, details: { "defibrillator:location": "Foyer", access: "yes" }, expected_before: { access: "private" }, confirmed_corrections: true };
+    const response = await handleDevelopmentCheckDate(makeRequest(body), { ...correctionEnvironment, DB }, { now: () => now, fetch: api.fetcher });
+    expect(response.status).toBe(200);
+    expect(api.uploads).toHaveLength(1);
+    expect(api.state.tags).toMatchObject({ "defibrillator:location": "Foyer", access: "yes" });
+  });
+
+  it("can replace a value the form does not know, such as access=permissive", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch({ tags: { access: "permissive" } });
+    const body = { ...correctionRequest, expected_before: { access: "permissive" } };
+    expect((await handleDevelopmentCheckDate(makeRequest(body), { ...correctionEnvironment, DB }, { now: () => now, fetch: api.fetcher })).status).toBe(200);
+    expect(api.state.tags.access).toBe("yes");
+  });
+
+  it("refuses corrections while the operator switch is off, before any OSM call", async () => {
+    for (const env of [environment, { ...environment, OSM_DETAIL_CORRECTIONS_ENABLED: "false" }, { ...environment, OSM_DETAIL_CORRECTIONS_ENABLED: "TRUE" }]) {
+      const DB = await setupDatabase(); const api = makeStatefulFetch({ tags: { access: "private" } });
+      const response = await handleDevelopmentCheckDate(makeRequest(correctionRequest), { ...env, DB }, { now: () => now, fetch: api.fetcher });
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({ error: "corrections_disabled" });
+      expect(api.calls).toEqual([]);
+      expect(api.state.tags.access).toBe("private");
+    }
+  });
+
+  it("keeps additions working while the corrections switch is off", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch();
+    const response = await handleDevelopmentCheckDate(makeRequest({ ...requestBody, details: { access: "yes" } }), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    expect(response.status).toBe(200);
+  });
+
+  it("stops when someone changed the old value since the person saw it", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch({ tags: { access: "customers" } });
+    const response = await handleDevelopmentCheckDate(makeRequest(correctionRequest), { ...correctionEnvironment, DB }, { now: () => now, fetch: api.fetcher });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "version_conflict" });
+    expect(api.calls.some((call) => call.url.endsWith("/changeset/create"))).toBe(false);
+    expect(api.state.tags.access).toBe("customers");
+  });
+
+  it("stops when the value to correct has been removed in the meantime", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch({ tags: {} });
+    const response = await handleDevelopmentCheckDate(makeRequest(correctionRequest), { ...correctionEnvironment, DB }, { now: () => now, fetch: api.fetcher });
+    expect(response.status).toBe(409);
+    expect(api.uploads).toHaveLength(0);
+  });
+
+  it("never overwrites an addition: a key that appeared in the meantime ends in a conflict", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch({ tags: { access: "private", operator: "Jemand anderes" } });
+    const body = { ...requestBody, details: { access: "yes", operator: "Meiner" }, expected_before: { access: "private" }, confirmed_corrections: true };
+    const response = await handleDevelopmentCheckDate(makeRequest(body), { ...correctionEnvironment, DB }, { now: () => now, fetch: api.fetcher });
+    expect(response.status).toBe(409);
+    expect(api.state.tags).toMatchObject({ access: "private", operator: "Jemand anderes" });
+  });
+
+  it("stops when the object version changed", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch({ tags: { access: "private" }, version: 4 });
+    expect((await handleDevelopmentCheckDate(makeRequest(correctionRequest), { ...correctionEnvironment, DB }, { now: () => now, fetch: api.fetcher })).status).toBe(409);
+    expect(api.uploads).toHaveLength(0);
+  });
+
+  it("rejects malformed or unconfirmed correction requests before calling OSM", async () => {
+    const { expected_version: _omitted, ...withoutVersion } = correctionRequest;
+    const bad: Array<[string, unknown]> = [
+      ["no explicit confirmation", { ...correctionRequest, confirmed_corrections: undefined }],
+      ["confirmation false", { ...correctionRequest, confirmed_corrections: false }],
+      ["confirmation only", { ...requestBody, details: { access: "yes" }, confirmed_corrections: true }],
+      ["old values without details", { ...requestBody, expected_before: { access: "private" }, confirmed_corrections: true }],
+      ["no seen version", withoutVersion],
+      ["old value for a key that is not changed", { ...correctionRequest, expected_before: { access: "private", operator: "Alt" } }],
+      ["correction without a real difference", { ...correctionRequest, expected_before: { access: "yes" } }],
+      ["empty old values", { ...correctionRequest, expected_before: {} }],
+      ["empty old text", { ...correctionRequest, expected_before: { access: "" } }],
+      ["non-text old value", { ...correctionRequest, expected_before: { access: 1 } }],
+      ["old values as array", { ...correctionRequest, expected_before: [] }],
+      ["old value with control character", { ...correctionRequest, expected_before: { access: "pri\nvate" } }],
+      ["old value too long", { ...correctionRequest, expected_before: { access: "x".repeat(256) } }],
+      ["deleting through an empty value", { ...correctionRequest, details: { access: "" } }],
+      ["unapproved key", { ...requestBody, details: { "defibrillator:code": "1" }, expected_before: { "defibrillator:code": "2" }, confirmed_corrections: true }],
+    ];
+    for (const [label, body] of bad) {
+      const DB = await setupDatabase(); const api = makeStatefulFetch({ tags: { access: "private", operator: "Alt" } });
+      const response = await handleDevelopmentCheckDate(makeRequest(body), { ...correctionEnvironment, DB }, { now: () => now, fetch: api.fetcher });
+      expect(response.status, label).toBe(400);
+      expect(api.calls, label).toEqual([]);
+    }
+  });
+
+  it("reconciles a lost upload response for a correction without a second edit", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch({ tags: { access: "private", check_date: "2026-10-24" }, loseUploadResponse: true });
+    const body = { ...correctionRequest, expected_check_date: "2026-10-24" };
+    const dependencies = { now: () => now, fetch: api.fetcher };
+    expect((await handleDevelopmentCheckDate(makeRequest(body), { ...correctionEnvironment, DB }, dependencies)).status).toBe(202);
+    const retry = await handleDevelopmentCheckDate(makeRequest(body), { ...correctionEnvironment, DB }, dependencies);
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toMatchObject({ status: "complete", version: 4 });
+    expect(api.uploads).toHaveLength(1);
+  });
+
+  it("does not repeat a correction after a failed upload when the object stayed unchanged", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch({ tags: { access: "private" }, failBeforeApply: true });
+    const dependencies = { now: () => now, fetch: api.fetcher };
+    expect((await handleDevelopmentCheckDate(makeRequest(correctionRequest), { ...correctionEnvironment, DB }, dependencies)).status).toBe(202);
+    const retry = await handleDevelopmentCheckDate(makeRequest(correctionRequest), { ...correctionEnvironment, DB }, dependencies);
+    expect(retry.status).toBe(202);
+    expect(api.uploads).toHaveLength(1);
+    expect(api.state.tags.access).toBe("private");
+  });
+
+  it("rejects the same operation id with different old values", async () => {
+    const DB = await setupDatabase(); const api = makeStatefulFetch({ tags: { access: "private" } });
+    const dependencies = { now: () => now, fetch: api.fetcher };
+    expect((await handleDevelopmentCheckDate(makeRequest(correctionRequest), { ...correctionEnvironment, DB }, dependencies)).status).toBe(200);
+    const changed = await handleDevelopmentCheckDate(makeRequest({ ...correctionRequest, expected_before: { access: "customers" } }), { ...correctionEnvironment, DB }, dependencies);
+    expect(changed.status).toBe(409);
+    expect(await changed.json()).toEqual({ error: "operation_id_conflict" });
+  });
+});

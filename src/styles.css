@@ -269,3 +269,8 @@ label.detail-hint { display: block; margin-bottom: 4px; }
 #detail-form { display: grid; gap: 14px; }
 /* Gesperrte Zeile beim Ergänzen: Dieser Wert steht schon in OpenStreetMap und bleibt unverändert. */
 .detail-locked { margin: 0; border-radius: 10px; padding: 10px 12px; color: var(--ink); background: #f1f4f0; font-size: 15px; line-height: 1.45; overflow-wrap: anywhere; }
+/* Korrekturen (Etappe P5): geänderte Abschnitte sind gelb umrandet und nennen den alten Wert. */
+.detail-group.is-changed, .detail-more.is-changed { border-color: #c98a00; background: #fffaf0; }
+.detail-was { margin: 0; color: #8a650b; font-size: 14px; font-weight: 600; line-height: 1.45; }
+.detail-was[hidden] { display: none; }
+.detail-old { text-decoration: line-through; color: var(--muted); }

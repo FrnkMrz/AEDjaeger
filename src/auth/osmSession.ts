@@ -5,6 +5,8 @@ export type OSMSessionStatus = {
   developmentLoginAvailable: boolean;
   developmentSession: boolean;
   developmentWriteAvailable: boolean;
+  /** true nur, wenn der Betreiber Korrekturen bestehender Detailwerte freigegeben hat (und das Schreiben auf dem Testserver an ist). */
+  developmentCorrectionsAvailable: boolean;
   /** true nur, wenn die Fotoprüfung für dieses Konto aktiv ist (Betreiber-Konfiguration). */
   photoCheckAvailable: boolean;
 };
@@ -20,7 +22,13 @@ export async function loadOSMSession(fetcher: typeof fetch = fetch): Promise<OSM
   // disabled so a stale response can never expose a test-server write action.
   // Dasselbe gilt für die Fotoprüfung: Ein fehlendes Feld bedeutet „aus“, damit die App nie
   // einen Foto-Upload anbietet, den der Server nicht ausdrücklich freigegeben hat.
-  return { ...payload, developmentWriteAvailable: payload.developmentWriteAvailable === true, photoCheckAvailable: payload.photoCheckAvailable === true };
+  // Auch Korrekturen gelten nur bei genau `true`: Ein fehlendes oder fremdes Feld heißt „aus“.
+  return {
+    ...payload,
+    developmentWriteAvailable: payload.developmentWriteAvailable === true,
+    developmentCorrectionsAvailable: payload.developmentCorrectionsAvailable === true,
+    photoCheckAvailable: payload.photoCheckAvailable === true,
+  };
 }
 
 /** The logout route is same-origin and accepts POST only. */
@@ -39,5 +47,6 @@ function isSessionStatus(value: unknown): value is OSMSessionStatus {
   return typeof status.authenticated === "boolean" && typeof status.loginAvailable === "boolean" && typeof status.developmentLoginAvailable === "boolean"
     && typeof status.developmentSession === "boolean"
     && (status.developmentWriteAvailable === undefined || typeof status.developmentWriteAvailable === "boolean")
+    && (status.developmentCorrectionsAvailable === undefined || typeof status.developmentCorrectionsAvailable === "boolean")
     && (status.photoCheckAvailable === undefined || typeof status.photoCheckAvailable === "boolean");
 }

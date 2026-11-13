@@ -2523,11 +2523,12 @@ type NodeAnswer = { status: number; body?: unknown };
 async function openExistingAedPreview(
   page: import("@playwright/test").Page,
   context: import("@playwright/test").BrowserContext,
-  options: { nodes: NodeAnswer[]; writeStatus?: number; writeBody?: unknown },
+  options: { nodes: NodeAnswer[]; writeStatus?: number; writeBody?: unknown; corrections?: boolean },
 ) {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true } }));
+  // Mit `corrections` meldet der Server-Ersatz zusätzlich, dass der Betreiber Korrekturen freigegeben hat.
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true, ...(options.corrections ? { developmentCorrectionsAvailable: true } : {}) } }));
   await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
     status: "complete", coverage_radius_meters: 112,
     // Das Archiv kennt nur ältere, unvollständige Tags; der frische Stand kommt über die eigene Leseroute.
@@ -2691,5 +2692,160 @@ test("the add-details form fits a 320 px phone in all six languages", async ({ p
     expect(overflowing, `controls beyond the screen in ${language}`).toEqual([]);
     // Die gesperrten Zeilen nennen den bestehenden Wert in der gewählten Sprache.
     await expect(page.locator("#detail-group-access .detail-locked")).not.toBeEmpty();
+  }
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// Bestehende Angaben korrigieren (Etappe P5): nur mit Betreiber-Schalter, mit „alt → neu“ und zweiter Bestätigung
+// ---------------------------------------------------------------------------------------------------------------
+
+const knownNode = { access: "private", opening_hours: "24/7", indoor: "yes", level: "1", operator: "Stadtwerke", check_date: "2025-10-20" };
+const correctButton = (page: import("@playwright/test").Page) => page.getByRole("button", { name: "Angaben ergänzen oder korrigieren", exact: true });
+
+test("with corrections allowed the form is prefilled, shows the old value of every change and needs a second confirmation", async ({ page, context }) => {
+  const { writes } = await openExistingAedPreview(page, context, { nodes: [freshNode(knownNode)], corrections: true });
+  await correctButton(page).click();
+  await expect(page.getByRole("heading", { name: "Angaben ergänzen oder korrigieren" })).toBeVisible();
+  // Vorbelegt mit dem, was in OSM steht. „Weiß ich nicht“ gibt es bei vorhandenen Werten nicht.
+  await expect(page.locator("#detail-access-private")).toBeChecked();
+  await expect(page.locator("#detail-access-unknown")).toHaveCount(0);
+  await expect(page.locator("#detail-hoursMode-always")).toBeChecked();
+  await expect(page.locator("#detail-indoor-yes")).toBeChecked();
+  await expect(page.locator("#detail-level-value")).toHaveText("1");
+  await page.getByText("Mehr Angaben", { exact: true }).click();
+  await expect(page.locator("#detail-operator")).toHaveValue("Stadtwerke");
+  // Ohne Änderung gibt es nichts zu senden.
+  await expect(page.locator("#detail-continue")).toHaveText("Weiter ohne Angaben");
+
+  await page.getByText("Jeder", { exact: true }).click();
+  await expect(page.locator("#detail-group-access")).toContainText("Vorher: Nicht öffentlich");
+  await expect(page.locator("#detail-group-access")).toHaveClass(/is-changed/u);
+  await page.getByRole("button", { name: "Eine Ebene höher" }).click();
+  await expect(page.locator("#detail-group-indoor")).toContainText("Vorher: 1");
+  await page.locator("#detail-ref").fill("7");
+  await expect(page.locator("#detail-continue")).toHaveText("Weiter · 3 Angaben");
+  await page.locator("#detail-continue").click();
+
+  // Vorschau: Korrekturen als alt → neu, Ergänzungen getrennt, Speichern erst nach dem zweiten Haken.
+  const preview = page.locator(".capture-content");
+  await expect(preview).toContainText("Wird geändert:");
+  await expect(preview).toContainText("access=private → yes");
+  await expect(preview).toContainText("level=1 → 2");
+  await expect(preview).toContainText("Neu eingetragen werden:");
+  await expect(preview).toContainText("ref=7");
+  await expect(preview).not.toContainText("operator=");
+  const save = page.getByRole("button", { name: "Testserver: Änderungen speichern" });
+  await expect(save).toBeDisabled();
+  await page.evaluate(() => {
+    const button = document.querySelector<HTMLButtonElement>('[data-action="save-development-check"]')!;
+    button.disabled = false;
+    button.click();
+  });
+  expect(writes).toEqual([]);
+  await page.locator("#correction-confirmed").check();
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(page.getByRole("status")).toContainText("Prüfdatum und Änderungen gespeichert");
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toMatchObject({
+    confirmed: true, target: "node/123", expected_version: 9, expected_check_date: "2025-10-20",
+    details: { access: "yes", level: "2", ref: "7" },
+    expected_before: { access: "private", level: "1" },
+    confirmed_corrections: true,
+  });
+});
+
+test("an untouched prefilled form changes nothing and sends no details", async ({ page, context }) => {
+  const { writes } = await openExistingAedPreview(page, context, { nodes: [freshNode(knownNode)], corrections: true });
+  await correctButton(page).click();
+  await page.locator("#detail-continue").click();
+  await expect(page.locator(".capture-content")).not.toContainText("Wird geändert:");
+  await expect(page.locator(".capture-content")).not.toContainText("Neu eingetragen werden:");
+  await page.getByRole("button", { name: "Testserver: Prüfdatum speichern" }).click();
+  await expect(page.getByRole("status")).toContainText("Vor-Ort-Prüfung gespeichert");
+  expect(writes[0]).not.toHaveProperty("details");
+  expect(writes[0]).not.toHaveProperty("expected_before");
+  expect(writes[0]).not.toHaveProperty("confirmed_corrections");
+});
+
+test("clearing a field never deletes the value in OSM", async ({ page, context }) => {
+  await openExistingAedPreview(page, context, { nodes: [freshNode(knownNode)], corrections: true });
+  await correctButton(page).click();
+  await page.getByText("Mehr Angaben", { exact: true }).click();
+  await page.locator("#detail-operator").fill("");
+  await expect(page.locator("#detail-continue")).toHaveText("Weiter ohne Angaben");
+  await page.locator("#detail-continue").click();
+  await expect(page.locator(".capture-content")).not.toContainText("operator");
+});
+
+test("a value the form cannot show stays locked and unchanged, and does not block other details", async ({ page, context }) => {
+  const { writes } = await openExistingAedPreview(page, context, { nodes: [freshNode({
+    // Ein Zeilenumbruch mitten im Text und eine Nummer mit Wörtern lassen sich im Formular nicht darstellen.
+    access: "permissive", phone: "bitte anrufen", description: "Zeile1\nZeile2", check_date: "2025-10-20",
+  })], corrections: true });
+  await correctButton(page).click();
+  await expect(page.locator("#detail-group-access")).toContainText("Schon eingetragen: permissive");
+  await expect(page.locator("#detail-group-access")).toContainText("lässt sich hier nicht ändern");
+  await expect(page.locator("#detail-access-yes")).toHaveCount(0);
+  await page.getByText("Mehr Angaben", { exact: true }).click();
+  await expect(page.locator("#detail-phone")).toHaveCount(0);
+  await expect(page.locator("#detail-description")).toHaveCount(0);
+  await page.locator("#detail-ref").fill("9");
+  await expect(page.locator("#detail-continue")).toHaveText("Weiter · 1 Angabe");
+  await page.locator("#detail-continue").click();
+  await page.getByRole("button", { name: "Testserver: Angaben speichern" }).click();
+  await expect(page.getByRole("status")).toContainText("neue Angaben gespeichert");
+  expect(writes[0]).toMatchObject({ details: { ref: "9" } });
+  expect(writes[0]).not.toHaveProperty("expected_before");
+});
+
+test("going back from the preview keeps the changes and shows the old values again", async ({ page, context }) => {
+  await openExistingAedPreview(page, context, { nodes: [freshNode(knownNode)], corrections: true });
+  await correctButton(page).click();
+  await page.getByText("Nur Kunden", { exact: true }).click();
+  await page.locator("#detail-continue").click();
+  await expect(page.locator(".capture-content")).toContainText("access=private → customers");
+  await page.getByRole("button", { name: "Zurück zu den Angaben" }).click();
+  await expect(page.locator("#detail-access-customers")).toBeChecked();
+  await expect(page.locator("#detail-group-access")).toContainText("Vorher: Nicht öffentlich");
+  await expect(page.locator("#detail-continue")).toHaveText("Weiter · 1 Angabe");
+});
+
+test("a server conflict on a correction asks for a new check", async ({ page, context }) => {
+  await openExistingAedPreview(page, context, { nodes: [freshNode(knownNode)], corrections: true, writeStatus: 409, writeBody: { error: "version_conflict" } });
+  await correctButton(page).click();
+  await page.getByText("Jeder", { exact: true }).click();
+  await page.locator("#detail-continue").click();
+  await page.locator("#correction-confirmed").check();
+  await page.getByRole("button", { name: "Testserver: Änderungen speichern" }).click();
+  await expect(page.getByRole("status")).toContainText("OSM-Eintrag änderte sich");
+});
+
+test("without the operator switch there is no correction mode: existing values stay locked", async ({ page, context }) => {
+  await openExistingAedPreview(page, context, { nodes: [freshNode(knownNode)] });
+  await expect(correctButton(page)).toHaveCount(0);
+  await page.getByRole("button", { name: "Fehlende Angaben ergänzen" }).click();
+  await expect(page.locator("#detail-group-access")).toContainText("Schon eingetragen: Nicht öffentlich");
+  await expect(page.locator("#detail-access-yes")).toHaveCount(0);
+  await expect(page.locator("#detail-group-access")).not.toContainText("lässt sich hier nicht ändern");
+});
+
+test("the correction form fits a 320 px phone in all six languages", async ({ page, context }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await openExistingAedPreview(page, context, { nodes: [freshNode(knownNode)], corrections: true });
+  await correctButton(page).click();
+  await page.getByText("Jeder", { exact: true }).click();
+  await page.getByRole("button", { name: "Eine Ebene höher" }).click();
+  await page.getByText("Mehr Angaben", { exact: true }).click();
+  for (const language of languageCodes) {
+    await page.locator("#language").selectOption(language);
+    await expect(page.locator("#detail-form")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `horizontal page overflow in ${language}`).toBeLessThanOrEqual(320);
+    const overflowing = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>("#detail-form .chip, #detail-form .field, #detail-form .detail-was, #detail-form summary, .detail-footer .button")]
+      .filter((element) => !element.hidden && element.getBoundingClientRect().right > window.innerWidth + 0.5).map((element) => element.className));
+    expect(overflowing, `controls beyond the screen in ${language}`).toEqual([]);
+    // Die „Vorher“-Zeile steht sichtbar und nennt den alten Wert in der gewählten Sprache.
+    await expect(page.locator('[data-detail-was="access"]')).toBeVisible();
+    await expect(page.locator('[data-detail-was="access"]')).not.toBeEmpty();
   }
 });

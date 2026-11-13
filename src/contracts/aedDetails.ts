@@ -248,6 +248,17 @@ function inDetailOrder(tags: DetailTags): DetailTags {
  * @returns         Die Tags (in fester Reihenfolge) oder ein Fehler mit Schlüssel und Grund.
  */
 export function buildDetailTags(form: Readonly<AedDetailForm>, existing?: Readonly<Record<string, string>>): DetailResult {
+  // Zum Schluss laufen die Tags durch dieselbe Prüfung wie beim Server.
+  return validateDetailTags(collectFormTags(form, existing));
+}
+
+/**
+ * Sammelt die Antworten des Formulars als Tags, OHNE sie zu prüfen: nur nicht leere, getrimmte Werte, nach den
+ * Regeln von buildDetailTags („Weiß ich nicht“ ergibt nichts, 24/7 nur nach ausdrücklicher Wahl, Ebene nur bei „drinnen“).
+ * Das Prüfen übernehmen die Aufrufer, damit sie entscheiden können, WELCHE Werte geprüft werden (beim Korrigieren
+ * nur die geänderten, nicht die unveränderten Werte aus OSM).
+ */
+function collectFormTags(form: Readonly<AedDetailForm>, existing?: Readonly<Record<string, string>>): Record<string, string> {
   const candidate: Record<string, string> = {};
 
   // Hilfsfunktion: Text übernehmen, wenn nach dem Trimmen etwas drinsteht.
@@ -273,9 +284,7 @@ export function buildDetailTags(form: Readonly<AedDetailForm>, existing?: Readon
   addText("phone", form.phone);
   addText("description", form.description);
   addText("ref", form.ref);
-
-  // Zum Schluss laufen die Tags durch dieselbe Prüfung wie beim Server.
-  return validateDetailTags(candidate);
+  return candidate;
 }
 
 /** Eine einzelne Änderung gegenüber dem, was in OSM steht. */
@@ -314,4 +323,117 @@ export function diffTags(before: Readonly<Record<string, string>>, after: Readon
     else if (oldValue !== newValue) changes.push({ key, kind: "change", before: oldValue, after: newValue });
   }
   return changes;
+}
+
+/** Eine geplante Korrektur: Der Schlüssel hat in OSM schon `before`, die Person will `after`. */
+export interface DetailCorrection {
+  key: DetailKey;
+  before: string;
+  after: string;
+}
+
+/** Ergebnis von planDetailChanges: Ergänzungen, Korrekturen und beide zusammen als zu schreibende Tags. */
+export type DetailPlanResult =
+  | { ok: true; additions: DetailTags; corrections: DetailCorrection[]; tags: DetailTags }
+  | { ok: false; key: string; problem: DetailProblem };
+
+/** „add-only“ = nur Fehlendes ergänzen (Etappe P4). „correct“ = zusätzlich vorhandene Werte ersetzen (Etappe P5). */
+export type DetailChangeMode = "add-only" | "correct";
+
+/**
+ * Plant, was beim Speichern in einen BESTEHENDEN AED geschrieben würde: Vergleicht die Antworten des Formulars mit
+ * dem frisch gelesenen OSM-Stand.
+ *
+ * Regeln:
+ *  - Fehlt ein Schlüssel in OSM, ist ein Wert aus dem Formular eine **Ergänzung**.
+ *  - Steht der Schlüssel in OSM schon da: Im Modus „add-only“ wird er ignoriert (nichts wird überschrieben).
+ *    Im Modus „correct“ ist ein abweichender Wert eine **Korrektur**; ein gleicher Wert (nach dem Trimmen) ist keine Änderung.
+ *  - Gelöscht wird nie: Ein leeres Feld oder „Weiß ich nicht“ ändert nichts.
+ *  - Geprüft werden nur die Werte, die tatsächlich geschrieben würden. Ein unveränderter, aber ungewöhnlicher Wert aus OSM
+ *    (zum Beispiel eine lange Telefonnummer) darf das Speichern anderer Angaben nicht blockieren.
+ *
+ * @param form      Der Formularzustand (beim Korrigieren mit den bestehenden Werten vorbelegt).
+ * @param existing  Die frisch gelesenen OSM-Tags des Objekts.
+ * @param mode      Ob nur ergänzt oder auch korrigiert werden darf.
+ */
+export function planDetailChanges(
+  form: Readonly<AedDetailForm>,
+  existing: Readonly<Record<string, string>>,
+  mode: DetailChangeMode,
+): DetailPlanResult {
+  const candidate = collectFormTags(form, existing);
+  const wanted: Record<string, string> = {};
+  const before: Record<string, string> = {};
+  for (const key of DETAIL_KEYS) {
+    const value = candidate[key];
+    if (value === undefined) continue;
+    const old = Object.prototype.hasOwnProperty.call(existing, key) ? existing[key] : undefined;
+    if (old === undefined) {
+      wanted[key] = value; // Ergänzung
+    } else if (mode === "correct" && value !== old.trim()) {
+      wanted[key] = value; // Korrektur
+      before[key] = old;
+    }
+    // Sonst: gesperrt (add-only) oder unverändert. Nichts zu schreiben.
+  }
+  const checked = validateDetailTags(wanted);
+  if (!checked.ok) return checked;
+  const additions: DetailTags = {};
+  const corrections: DetailCorrection[] = [];
+  for (const key of DETAIL_KEYS) {
+    const after = checked.tags[key];
+    if (after === undefined) continue;
+    if (Object.prototype.hasOwnProperty.call(before, key)) corrections.push({ key, before: before[key], after });
+    else additions[key] = after;
+  }
+  return { ok: true, additions, corrections, tags: checked.tags };
+}
+
+/**
+ * Belegt das Formular mit den bestehenden OSM-Werten vor (Korrekturmodus, Etappe P5) und nennt die Schlüssel, die sich
+ * im Formular NICHT darstellen lassen (zum Beispiel `access=permissive` oder eine zu lange Notiz). Diese Werte bleiben
+ * gesperrt und unverändert; die Oberfläche zeigt sie nur als Text.
+ *
+ * @param existing  Die frisch gelesenen OSM-Tags des Objekts.
+ */
+export function formFromExistingTags(existing: Readonly<Record<string, string>>): { form: AedDetailForm; locked: ReadonlySet<DetailKey> } {
+  const form: AedDetailForm = { ...EMPTY_DETAIL_FORM };
+  const locked = new Set<DetailKey>();
+  const valid = (key: DetailKey, value: string): boolean => validateDetailTags({ [key]: value }).ok;
+  for (const key of DETAIL_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(existing, key)) continue;
+    const raw = existing[key];
+    const value = raw.trim();
+    let representable = false;
+    switch (key) {
+      case "defibrillator:location":
+        if (valid(key, value)) { form.location = value; representable = true; }
+        break;
+      case "access":
+        if ((ACCESS_VALUES as readonly string[]).includes(value)) { form.access = value as AccessValue; representable = true; }
+        break;
+      case "opening_hours":
+        if (value === "24/7") { form.hoursMode = "always"; representable = true; }
+        else if (valid(key, value)) { form.hoursMode = "times"; form.hoursText = value; representable = true; }
+        break;
+      case "indoor":
+        if ((INDOOR_VALUES as readonly string[]).includes(value)) { form.indoor = value as IndoorValue; representable = true; }
+        break;
+      case "level":
+        if (valid(key, value)) { form.level = Number(value); representable = true; }
+        break;
+      case "defibrillator:cabinet":
+        // Das Gehäuse hat noch kein Feld in der Oberfläche: nichts vorbelegen, nichts sperren.
+        representable = true;
+        break;
+      case "operator":
+      case "phone":
+      case "description":
+      case "ref":
+        if (valid(key, value)) { form[key] = value; representable = true; }
+        break;
+    }
+    if (!representable) locked.add(key);
+  }
+  return { form, locked };
 }

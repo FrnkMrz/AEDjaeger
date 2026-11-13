@@ -126,6 +126,20 @@ Ablauf:
 
 **Erster Versuch am 13.11.2026 (iPhone):** Die Neuanlage legte auf dem Testserver den Knoten `4365809370` an (Änderungssatz `725093`, Version 1, genau die zwei Angaben `emergency=defibrillator` und `check_date=2026-11-13`; der Änderungssatz wurde nach etwa 10 Sekunden geschlossen). Die App blieb trotzdem bei „Testserver: Ergebnis unklar“. Ursache: Die Statusprüfung des Änderungssatzes las nur XML, der Testserver antwortete mit JSON. Behoben im Code, mit Tests; ohne Deploy bleibt der Zustand unverändert. Nach dem Deploy bestätigt „Testserver: Status erneut prüfen“ den vorhandenen Vorgang, ohne einen zweiten Knoten anzulegen. Der Test ist erst abgehakt, wenn die App „erstellt“ meldet.
 
+### Zusatztest für den Detailweg (Etappen P2 bis P5)
+
+Erst nach C2 bis C4, am gleichen Testort und mit demselben Schalter `OSM_DEV_WRITES_ENABLED`. Der Schalter `OSM_DETAIL_CORRECTIONS_ENABLED` wird wie der Schreibschalter nur vom Projektinhaber gesetzt, nie von einem Agenten, und nur für D4 bis D6 eingeschaltet.
+
+| Nr | Schritt | Erwartetes Ergebnis | Ergebnis |
+| --- | --- | --- | --- |
+| D1 | Neuanlage mit einigen Angaben (Standort-Text, Zugang, Zeiten) | Die Vorschau nennt alle Tags. Der neue Knoten hat genau diese Tags plus `emergency=defibrillator` und `check_date` | `[ ]` |
+| D2 | Am Knoten aus D1 „Fehlende Angaben ergänzen“ und zum Beispiel Ebene und Betreiber ergänzen | Die schon eingetragenen Werte stehen als gesperrte Zeilen da. Der Änderungssatz enthält nur die neuen Tags und `check_date`; Kommentar „missing details added“; alle anderen Tags unverändert | `[ ]` |
+| D3 | Dasselbe mit einem Wert, der schon vorhanden ist, in einem zweiten Browserfenster, das vor D2 geöffnet wurde | Konflikt-Meldung; nichts wird geschrieben | `[ ]` |
+| D4 | `OSM_DETAIL_CORRECTIONS_ENABLED` = `true` setzen. `https://aedjaeger.aedjaeger.workers.dev/api/auth/session` zeigt `"developmentCorrectionsAvailable":true`. In der App erscheint „Angaben ergänzen oder korrigieren“ | Das Formular ist vorbelegt | `[ ]` |
+| D5 | Einen Wert korrigieren (zum Beispiel Zugang) | Gelb umrandet mit „Vorher: …“; die Vorschau zeigt `alt → neu`; Speichern erst nach dem Haken; der Änderungssatz ändert nur diesen Wert und `check_date`; Kommentar „details added and corrected“ | `[ ]` |
+| D6 | Den Wert in einem zweiten Fenster (oder iD) ändern und danach im alten Fenster speichern | Konflikt-Meldung; der fremde Wert bleibt unverändert | `[ ]` |
+| D7 | Beide Schalter wieder ausschalten | Der Sitzungsstatus enthält kein `developmentCorrectionsAvailable`; ein erneuter Schreibversuch mit Korrektur wird mit 403 abgelehnt | `[ ]` |
+
 Abnahmebericht (ausfüllen, ohne Tokens):
 
 | Angabe | Wert |
