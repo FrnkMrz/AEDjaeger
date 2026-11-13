@@ -4,9 +4,9 @@ Stand: **10.11.2026**. Der aktuelle nächste Schritt ist ein echter, lesender Ha
 
 ## Rückmeldungen vom 13.11.2026 (iPhone)
 
-Bestätigt vom Projektinhaber: Die Versionsnummer im Info-Dialog stimmt mit `/version.json` überein. Anmelden, Abmelden und die Lampe verhalten sich wie vorgesehen (die rote Lampe meldet nie von selbst an). Die Fotoprüfung erkannte ein Foto ohne AED nicht; die Ausnahme mit zwei Bestätigungen führte bis zur Vorschau. Der Migrationsstand der Datenbank ist geprüft (`0001` bis `0009`). Die Vorbereitung des Schreibtests ist bis auf Testort und zwei Beobachtungsdaten erledigt (siehe [Abnahme](pilot-abnahme.md), Abschnitt C0).
+Bestätigt vom Projektinhaber: Die Versionsnummer im Info-Dialog stimmt mit `/version.json` überein. Anmelden, Abmelden und die Lampe verhalten sich wie vorgesehen (die rote Lampe meldet nie von selbst an). Die Fotoprüfung lehnte ein Foto ohne AED mit „Kein AED erkennbar“ ab; die Ausnahme mit zwei Bestätigungen führte bis zur Vorschau. Der Migrationsstand der Datenbank ist geprüft (`0001` bis `0009`). Die Vorbereitung des Schreibtests ist bis auf Testort und zwei Beobachtungsdaten erledigt (siehe [Abnahme](pilot-abnahme.md), Abschnitt C0).
 
-**Offene Entscheidung:** Der Projektinhaber hat kein Android-Gerät. Die Abnahme verlangt für den Schreibtest (Abschnitt C) und für `v0.1.0` (Abschnitt E) einen Test auf Android und iPhone. Genügt das iPhone allein, oder soll ein Android-Test (zum Beispiel durch eine andere Person) Voraussetzung bleiben? Bis zur Entscheidung steht Android als „nicht getestet“ in der Abnahme.
+**Android (Stand 13.11.2026):** Der Projektinhaber hat kein Android-Gerät und holt den Android-Test später nach. Er hat den kontrollierten Schreibtest auf dem Testserver trotzdem freigegeben. Für `v0.1.0` (Abschnitt E) bleibt zu entscheiden, ob ein iPhone-Test genügt. Bis dahin steht Android als „nicht getestet“ in der Abnahme.
 
 ## Domain aedjaeger.de (13.11.2026)
 

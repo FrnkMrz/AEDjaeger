@@ -15,12 +15,15 @@ import {
 } from "../storage/osmDevelopmentWriteOperations";
 import type { D1Database } from "../storage/d1";
 import { requestOSMDevelopmentApi } from "./developmentApi";
+import { withoutXmlDeclaration } from "./xmlText";
 import { isAcceptableObservationDate } from "./observationDate";
 
 const SESSION_COOKIE = "aedjaeger_osm_session";
 const MAX_BODY_BYTES = 2_048;
 const MAX_MAP_BYTES = 512 * 1_024;
 const MAX_RESPONSE_BYTES = 1_024;
+// Die Statusantwort eines Änderungssatzes (JSON oder XML) kann mit Tags und Ausdehnung länger als 1 KiB sein.
+const MAX_CHANGESET_STATUS_BYTES = 8_192;
 
 type Environment = { DB?: D1Database; OSM_DEV_WRITES_ENABLED?: string; OSM_OAUTH_ENCRYPTION_KEY?: string };
 type Dependencies = { fetch?: typeof fetch; now?: () => number; crypto?: Crypto };
@@ -297,9 +300,28 @@ async function closeChangeset(token: string, changesetId: string, fetcher: typeo
     if (response.status !== 409) return false;
     const status = await requestOSMDevelopmentApi("development", `/api/0.6/changeset/${changesetId}`, token, { method: "GET" }, fetcher);
     if (!status.ok) return false;
-    const body = await readLimitedText(status, MAX_RESPONSE_BYTES);
-    return new RegExp(`<changeset\\b(?=[^>]*\\bid="${changesetId}"(?=[\\s>]))(?=[^>]*\\bopen="false"(?=[\\s>]))[^>]*\\/?\\s*>`, "u").test(body);
+    return isChangesetClosed(await readLimitedText(status, MAX_CHANGESET_STATUS_BYTES), changesetId);
   } catch { return false; }
+}
+
+/**
+ * Sagt, ob die Statusantwort des Servers diesen Änderungssatz als geschlossen beschreibt.
+ *
+ * Warum zwei Formate? Die Anfrage nennt "Accept: application/json, application/xml, text/plain". Der OSM-Testserver
+ * antwortet auf /api/0.6/changeset/<id> dann mit JSON ({"changeset":{"id":...,"open":false}}), andere Wege liefern XML
+ * (<changeset id="..." open="false">). Früher lasen wir nur XML: Der Knoten war angelegt und der Änderungssatz
+ * geschlossen, die App hielt ihn trotzdem für "nicht sicher geschlossen" und meldete für immer "Ergebnis unklar".
+ * Im Zweifel (anderes Format, andere Nummer, noch offen) gilt der Änderungssatz als NICHT geschlossen.
+ */
+function isChangesetClosed(body: string, changesetId: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (!isRecord(parsed) || !isRecord(parsed.changeset)) return false;
+    return String(parsed.changeset.id) === changesetId && parsed.changeset.open === false;
+  } catch {
+    // Kein JSON: als XML lesen.
+  }
+  return new RegExp(`<changeset\\b(?=[^>]*\\bid="${changesetId}"(?=[\\s>]))(?=[^>]*\\bopen="false"(?=[\\s>]))[^>]*\\/?\\s*>`, "u").test(body);
 }
 
 /** Distinguish a valid, empty OSM Changeset from malformed or unknown data. */
@@ -320,7 +342,8 @@ function buildCreateNodeChange(input: CreateRequest, tags: Record<string, string
   return `<osmChange version="0.6" generator="AEDjaeger"><create><node id="-1" changeset="${changesetId}" lat="${input.latitude}" lon="${input.longitude}">${tagXml}</node></create></osmChange>`;
 }
 
-function parseCreatedDiff(value: string): { id: number; version: number } | null {
+function parseCreatedDiff(rawValue: string): { id: number; version: number } | null {
+  const value = withoutXmlDeclaration(rawValue);
   const match = /^\s*<diffResult\b[^>]*>\s*<node\s+old_id="-1"\s+new_id="([1-9]\d*)"\s+new_version="([1-9]\d*)"\s*\/>\s*<\/diffResult>\s*$/u.exec(value);
   if (!match) return null;
   const id = Number(match[1]);

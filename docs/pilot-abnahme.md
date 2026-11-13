@@ -78,9 +78,9 @@ Bei einem Fehler gilt: Eine Fehlermeldung zu fehlenden Kacheln oder Ebenen ist *
 
 Voraussetzungen (alle erfüllt, bevor der Schalter eingeschaltet wird):
 
-1. Abschnitt A ist bestanden, mindestens auf einem Android-Handy und einem iPhone.
+1. Abschnitt A ist bestanden, mindestens auf einem Android-Handy und einem iPhone. **Stand 13.11.2026:** Der Projektinhaber hat kein Android-Gerät und holt den Android-Test später nach. Er hat den Schreibtest trotzdem freigegeben (Punkt 3). Android bleibt „nicht getestet“.
 2. Abschnitt B ist bestanden (Exit-Code 0, Datenstand aktuell).
-3. Die Projektinhaberin oder der Projektinhaber hat den Test ausdrücklich freigegeben.
+3. Die Projektinhaberin oder der Projektinhaber hat den Test ausdrücklich freigegeben. **Erteilt am 13.11.2026** vom Projektinhaber für den kontrollierten Schreibtest auf dem OSM-Testserver (nicht für das echte OSM). Der Schalter bleibt aus, bis der Projektinhaber ihn selbst setzt.
 4. Die Zielinstanz ist die OSM-Entwicklungsinstanz (`master.apis.dev.openstreetmap.org`). Die Schreibroute ist fest auf diesen Host begrenzt.
 
 ### Vorbereitung (C0): nur einrichten und prüfen, noch nichts schreiben
@@ -101,6 +101,17 @@ Der Schalter `OSM_DEV_WRITES_ENABLED` bleibt in diesem Teil **aus**. Die Punkte 
 
 **Verschiedene Daten für C3 und C2:** Setzt C3 den `check_date` des neuen Knotens auf ein Datum und C2 meldet dasselbe Datum, schreibt die Route nichts (`already_current`, kein Changeset). Das Datum von C2 muss deshalb **später** liegen als das von C3. Ein Datum in der Zukunft ist nicht erlaubt. Darum bekommt C3 ein Datum von mindestens einem Tag früher (Foto vom Vortag), oder C2 läuft am nächsten Tag. Ein Datum, das **älter** ist als das bereits gesetzte, wird als `newer_check_date_exists` abgelehnt; auch das darf beim Test nicht passieren.
 
+**Der Schreibtest in einfachen Worten (iPhone):**
+
+1. **Schalter einschalten (macht der Projektinhaber, nie ein Agent).** Cloudflare-Dashboard, Worker `aedjaeger`, Einstellungen, „Variablen und Secrets“ (die Menünamen können abweichen). Variable `OSM_DEV_WRITES_ENABLED` mit dem Wert `true` anlegen und speichern. Der Wert bleibt bei späteren Deploys erhalten (`keep_vars` in `wrangler.jsonc`). Ob der Schalter wirkt, zeigt `https://aedjaeger.aedjaeger.workers.dev/api/auth/session` im Browser, angemeldet am Testserver: Dort steht `"developmentWriteAvailable":true`. In der App steht dann in der Vorschau nicht mehr „Nur eine Vorschau“, und der Speicher-Knopf erscheint.
+2. **Neuen Test-AED anlegen.** Ein Foto eines echten AED oder Gehäuses wählen, **das keine Ortsangabe enthält**. Hat das Foto GPS-Daten, nimmt die App den Ort aus dem Foto (Foto-GPS hat Vorrang) und die Suche läuft am echten AED, nicht auf dem Feld. Auf dem iPhone entfernt man die Ortsangabe vor dem Auswählen: Fotos, Foto öffnen, Teilen, oben „Optionen“, „Standort“ ausschalten, als Kopie sichern (die Menünamen können abweichen). Dann erscheint die Standortwahl: „Kartenposition“ wählen und einen Punkt **ohne AED im Archiv** setzen, zum Beispiel mitten auf einem Feld. Die Suche muss „keine Treffer nach vollständiger Suche“ zeigen. Dann „Hier fehlt ein AED – neu eintragen“, die Position bestätigen und in der Vorschau das Häkchen setzen. Die Vorschau zeigt nur `emergency=defibrillator` und das Datum. Genau einmal speichern.
+3. **Am nächsten Tag das Prüfdatum erneuern.** Wieder das Foto ohne Ortsangabe, gleiche Kartenposition. Die Suche findet den Test-AED über die Dev-Instanz. „Noch vorhanden“ bestätigen. Das Datum muss **später** sein als beim Anlegen, sonst schreibt die App nichts.
+4. **Ergebnis auf der Dev-Seite ansehen.** Beide Änderungen auf `master.apis.dev.openstreetmap.org` öffnen. Der erste Eintrag hat genau zwei Angaben, beim zweiten hat sich nur das Datum geändert.
+5. **Schalter wieder aus.** Variable entfernen oder auf `false` setzen. Ein neuer Schreibversuch muss abgelehnt werden.
+6. **Echtes OSM ansehen.** Es darf keine Änderung durch den Test geben.
+
+Warum die Kartenposition: Die Suche liest die echten AEDs des echten OSM, geschrieben wird nur auf den Testserver. Ein echter AED aus dem Archiv (zum Beispiel der am Feuerwehrhaus) ist auf dem Testserver nicht vorhanden und darf dort nicht „bestätigt“ werden. Der Testpunkt auf dem Feld ist Testdaten auf dem Testserver; im echten OSM würde man immer die echte Position nehmen.
+
 Ablauf:
 
 | Nr | Schritt | Erwartetes Ergebnis | Ergebnis |
@@ -111,6 +122,8 @@ Ablauf:
 | C4 | Changeset auf der Dev-Instanz öffnen und prüfen | Bei C2 ist nur `check_date` geändert. Bei C3 sind nur `emergency=defibrillator` und `check_date` gesetzt | `[ ]` |
 | C5 | Schalter wieder ausschalten (`OSM_DEV_WRITES_ENABLED` entfernen oder `false`) | Ein erneuter Schreibversuch wird abgelehnt | `[ ]` |
 | C6 | Produktions-OSM prüfen | Es gibt keine Änderung durch diesen Test | `[ ]` |
+
+**Erster Versuch am 13.11.2026 (iPhone):** Die Neuanlage legte auf dem Testserver den Knoten `4365809370` an (Änderungssatz `725093`, Version 1, genau die zwei Angaben `emergency=defibrillator` und `check_date=2026-11-13`; der Änderungssatz wurde nach etwa 10 Sekunden geschlossen). Die App blieb trotzdem bei „Testserver: Ergebnis unklar“. Ursache: Die Statusprüfung des Änderungssatzes las nur XML, der Testserver antwortete mit JSON. Behoben im Code, mit Tests; ohne Deploy bleibt der Zustand unverändert. Nach dem Deploy bestätigt „Testserver: Status erneut prüfen“ den vorhandenen Vorgang, ohne einen zweiten Knoten anzulegen. Der Test ist erst abgehakt, wenn die App „erstellt“ meldet.
 
 Abnahmebericht (ausfüllen, ohne Tokens):
 
@@ -161,16 +174,16 @@ Voraussetzung: Der Betreiber hat die Fotoprüfung im Cloudflare-Dashboard einger
 | F1 | Startseite öffnen, angemeldet mit einem zugelassenen Konto | Hinweis „Das Foto geht ohne Standort und Metadaten zur Prüfung an OpenAI.“ statt der Zusage „bleibt auf deinem Gerät“ | `[ ]` |
 | F2 | Mit einem nicht zugelassenen Konto anmelden | Bisheriger Ablauf mit „AED oder Gehäuse gesehen – weiter“; kein Foto verlässt das Gerät | `[ ]` |
 | F3 | Foto eines echten AED oder Gehäuses wählen, „AED gesehen – Foto prüfen“ tippen | Ladeanzeige, danach weiter zu Datumsfrage bzw. Standort und Suche | `[ ]` |
-| F4 | Screenshot, Foto eines anderen Gegenstands (z. B. Schuhe) wählen und prüfen | „Kein AED erkennbar“; „Anderes Foto“ ist der Standardweg, keine Suche, keine einfache Selbstbestätigung | `[ ]` |
+| F4 | Screenshot, Foto eines anderen Gegenstands (z. B. Schuhe) wählen und prüfen | „Kein AED erkennbar“; „Anderes Foto“ ist der Standardweg, keine Suche, keine einfache Selbstbestätigung | `[x]` 13.11.2026, iPhone, bestätigt vom Projektinhaber: Foto vom Schreibtisch (Orangensaft, Laptop, Tastaturen) ergab „Kein AED erkennbar“. Die weiteren Teile (keine Suche, keine einfache Selbstbestätigung) sind aus dem Ablauf bis zur Ausnahme abgeleitet |
 | F5 | Unscharfes oder sehr weit entferntes AED-Foto prüfen | „Nicht eindeutig“ oder erkannt; bei „nicht eindeutig“ „Anderes Foto“ oder die Ausnahme (F10) | `[ ]` |
 | F6 | Flugmodus während der Prüfung einschalten | Hinweis „Die Prüfung ist gerade nicht möglich“ und die Selbstbestätigung steht bereit | `[ ]` |
 | F7 | Tageslimit erreichen (Limit vorübergehend sehr klein setzen) | Rückfall auf die Selbstbestätigung, keine Fehlermeldung mit Zahlen oder Kosten | `[ ]` |
 | F8 | Eine Stichprobe von mindestens 20 echten AED-Fotos und 20 Fotos ohne AED prüfen | Anzahl falsch gesperrter AED-Fotos und durchgelassener Fremdfotos notieren | `[ ]` |
 | F9 | Abrechnung im OpenAI-Konto nach den Tests ansehen | Kosten liegen im erwarteten Rahmen (je Prüfung grob unter 0,01 US-Dollar laut früherem Test) | `[ ]` |
 | F10 | Bei „Kein AED erkennbar“ „Trotzdem: Hier ist ein AED“ tippen | Rückfrage „Wirklich ein AED?“; erst „Ja, AED oder Gehäuse ist zu sehen – weiter“ führt weiter, „Anderes Foto“ bricht ab | `[x]` 13.11.2026, iPhone: Die Ausnahme wurde genutzt und führte über die Rückfrage bis zur Vorschau „neuer AED“. Die Rückfrage selbst ist aus dem Ablauf abgeleitet, nicht einzeln beobachtet |
-| F11 | Foto mit viel Text (z. B. Flasche mit Etikett) und mehreren Geräten auf dem Tisch prüfen | Kein Fehlercode „schema_mismatch“; die Prüfung liefert „Kein AED erkennbar“ | `[ ]` |
+| F11 | Foto mit viel Text (z. B. Flasche mit Etikett) und mehreren Geräten auf dem Tisch prüfen | Kein Fehlercode „schema_mismatch“; die Prüfung liefert „Kein AED erkennbar“ | `[x]` 13.11.2026, iPhone, bestätigt vom Projektinhaber: Foto mit mehreren Geräten auf dem Tisch ergab „Kein AED erkennbar“ ohne Fehlercode. Es war keine Flasche mit Etikett; das Foto deckt den Fall „mehrere Geräte“ ab |
 
-**Teilergebnis 13.11.2026 (iPhone):** Ein Foto vom Schreibtisch mit Orangensaft, Laptop, Tastaturen und Rechner wurde von der Prüfung nicht als AED erkannt; der Projektinhaber nutzte die Ausnahme (F10). Die genaue Meldung („Kein AED erkennbar“ oder „Nicht eindeutig“) ist nicht festgehalten. F4 und F11 bleiben deshalb offen, bis die Meldung dokumentiert ist.
+**Ergebnis 13.11.2026 (iPhone):** Ein Foto vom Schreibtisch mit Orangensaft, Laptop, Tastaturen und Rechner wurde von der Prüfung mit „Kein AED erkennbar“ abgelehnt; der Projektinhaber nutzte die Ausnahme (F10). Das ist ein einzelner Treffer; die Stichprobe F8 steht aus.
 
 Hinweise: F1 bis F7 prüfen Verhalten, F8 die Trefferqualität. Zeigt F8 viele falsch gesperrte AED-Fotos, ist die Sperre „kein AED“ zu streng und wird mit dem Projektinhaber neu bewertet. Bei jedem Fehler Uhrzeit und genaue Meldung notieren, keinen Schlüssel teilen.
 

@@ -10,6 +10,7 @@ import {
 } from "../storage/osmDevelopmentWriteOperations";
 import type { D1Database } from "../storage/d1";
 import { requestOSMDevelopmentApi } from "./developmentApi";
+import { withoutXmlDeclaration } from "./xmlText";
 import { isAcceptableObservationDate } from "./observationDate";
 
 const SESSION_COOKIE = "aedjaeger_osm_session";
@@ -312,7 +313,8 @@ function buildNodeUpdateChange(node: OSMNode, tags: Record<string, string>, chan
   return `<osmChange version="0.6" generator="AEDjaeger"><modify><node id="${node.id}" changeset="${changesetId}" version="${node.version}" lat="${node.latitude}" lon="${node.longitude}">${tagXml}</node></modify></osmChange>`;
 }
 
-function parseDiffResult(value: string, expectedNodeId: number): number | null {
+function parseDiffResult(rawValue: string, expectedNodeId: number): number | null {
+  const value = withoutXmlDeclaration(rawValue);
   const match = /^\s*<diffResult\b[^>]*>\s*<node\s+old_id="(\d+)"\s+new_id="(\d+)"\s+new_version="(\d+)"\s*\/>\s*<\/diffResult>\s*$/u.exec(value);
   if (!match || Number(match[1]) !== expectedNodeId || Number(match[2]) !== expectedNodeId) return null;
   const version = Number(match[3]);
