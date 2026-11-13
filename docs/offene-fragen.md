@@ -47,6 +47,14 @@ Die Prüfung bleibt aus, bis alle Punkte im Cloudflare-Dashboard (Worker `aedjae
 
 Beispielwerte sind Vorschläge, keine geprüften Vorgaben. Die Reservierung muss kleiner oder gleich beiden Limits sein, sonst bleibt die Prüfung aus.
 
+**Wie das Tageslimit rechnet (Stand 13.11.2026, aus dem Code gelesen):**
+- Jede Prüfung reserviert vorab den festen Betrag `AI_ANALYSIS_COST_RESERVATION_MICROS`. Dieser Betrag wird **nie** durch die echten Kosten ersetzt und **nie** zurückgegeben, auch nicht bei einem fehlgeschlagenen Versuch (der Zustand „released“ ist in der Datenbank vorgesehen, wird aber nirgends gesetzt).
+- Das Limit zählt daher: **Anzahl der Prüfungen am UTC-Tag × Reservierung**. Mit den Beispielwerten (Reservierung 20000, Konto-Limit 200000) sind das nur **10 Prüfungen pro Tag und Konto**, auch wenn echte Prüfungen nur etwa 0,001 US-Dollar kosten.
+- Der UTC-Tag wechselt um 01:00 Uhr deutscher Zeit (02:00 Uhr im Sommer).
+- **Für den Testbetrieb mit etwa 100 Prüfungen pro Tag:** `AI_ANALYSIS_USER_DAILY_LIMIT_MICROS` = `2000000` und `AI_ANALYSIS_GLOBAL_DAILY_LIMIT_MICROS` = `2000000`, Reservierung unverändert `20000`. Das ergibt 100 Prüfungen. Für etwas Luft (150 Prüfungen): jeweils `3000000`. Das Limit ist eine Obergrenze der Reservierung, kein Verbrauch: Die echten Kosten liegen bei etwa 0,001 bis 0,01 US-Dollar je Prüfung, also bei 100 Prüfungen grob zwischen 0,10 und 1 US-Dollar.
+- Als zweite Sicherung im OpenAI-Konto ein monatliches Budget setzen. Der Projektinhaber ändert die Werte selbst im Cloudflare-Dashboard (Variablen) und stellt danach bereit; ein Agent setzt sie nicht.
+- **Offener Verbesserungsvorschlag:** Die Reservierung durch die echten Kosten ersetzen und fehlgeschlagene Versuche vor dem Anbieteraufruf freigeben. Das braucht Code und Tests und ist noch nicht beauftragt.
+
 ### Fehlercodes der Fotoprüfung lesen
 
 Scheitert die Prüfung, zeigt die App unter „Die Prüfung ist gerade nicht möglich“ eine kleine Zeile „Fehlercode: …“ und bietet die Selbstbestätigung an. Derselbe Code steht im Betriebsprotokoll des Workers (Cloudflare-Dashboard, Worker `aedjaeger`, Logs; Ereignis `vision_analysis_failed`). Er enthält nur feste Kennungen und Statuszahlen, nie Fehlertexte, Fotos, Schlüssel oder Konten.
@@ -55,7 +63,7 @@ Scheitert die Prüfung, zeigt die App unter „Die Prüfung ist gerade nicht mö
 | --- | --- | --- |
 | `analysis_budget_unavailable (HTTP 503, missing_table)` | Die Budget-Tabelle fehlt in D1 | Migrationen `0001` und `0002` anwenden (`npx wrangler d1 migrations apply aedjaeger-pilot --remote`, vorher mit `migrations list` prüfen) |
 | `analysis_budget_unavailable (HTTP 503, storage_error)` | D1 antwortet mit einem anderen Fehler | Cloudflare-Status und Logs prüfen |
-| `analysis_budget_exceeded (HTTP 429)` | Tages- oder Kontolimit erreicht | Limit prüfen oder bis zum nächsten UTC-Tag warten |
+| `analysis_budget_exceeded (HTTP 429)` | Tages- oder Kontolimit erreicht. Es zählt die **Reservierung** je Prüfung, nicht der echte Verbrauch (siehe oben); mit den Beispielwerten sind das 10 Prüfungen pro Tag | Limits anheben (für etwa 100 Prüfungen siehe oben) oder bis zum nächsten UTC-Tag warten. Die App fällt dabei auf die Selbstbestätigung zurück |
 | `analysis_not_allowed (HTTP 403)` | Konto steht nicht in `AI_ANALYSIS_ALLOWED_OSM_SUBJECTS` | Eintrag im Format `development:<Kennung>` bzw. `production:<Kennung>` prüfen |
 | `analysis_failed (HTTP 502, OpenAI 401, invalid_api_key)` | OpenAI lehnt den Schlüssel ab | Schlüssel erneuern und als Secret setzen |
 | `analysis_failed (HTTP 502, OpenAI 404, model_not_found)` | Modellname gibt es nicht (mehr) | Modell in `src/contracts/visionObservation.ts` prüfen |

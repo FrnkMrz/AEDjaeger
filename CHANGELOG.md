@@ -22,7 +22,8 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Verwendet kein Overpass für die Umgebungssuche. Fehlende, veraltete, unvollständige oder ungültige Archivdaten bleiben ein Suchfehler und werden nie als Beleg für einen freien Standort behandelt.
 
 ### Added
-- Zeigt die Versionsnummer ganz klein in der Fußzeile jedes Bildschirms („Version <Nummer>“, markierbar), auch auf der Anmeldeseite. Dazu bleibt die ausführlichere Zeile mit Build-Zeit im Info-Dialog.
+- Spielt nach einem vom Server bestätigten Speichern auf dem Testserver einen kurzen „Ka-Ching“-Ton. Er wird im Browser erzeugt (keine Tondatei), klingt nur bei bestätigtem Erfolg (nicht bei Vorschau, Senden, Konflikt oder „Ergebnis unklar“) und lässt sich im Info-Dialog ausschalten („Ton, wenn das Speichern gelingt“; Standard: an). Der Ton wird beim Tippen auf „Speichern“ freigeschaltet, weil Safari auf dem iPhone Ton sonst nicht erlaubt. Bei stumm geschaltetem iPhone bleibt es still.
+- Zeigt die Version ganz klein in der Fußzeile jedes Bildschirms („Version <Nummer> · <Datum, Uhrzeit>“, markierbar), auch auf der Anmeldeseite. Dieselbe Zeile steht im Info-Dialog.
 - Zeigt im Info-Dialog ganz unten die Version der laufenden App: „Version <Nummer> · <Datum, Uhrzeit>“ in der Sprache der App. Die Nummer ist die Build-Revision, das Datum die daraus zurückgerechnete Build-Zeit. Zum Prüfen vergleicht man die Nummer mit der veröffentlichten Revision unter `/version.json`; sind beide gleich, läuft die neueste Version.
 - Ergänzt die Vorbereitung des OSM-Dev-Schreibtests in `docs/pilot-abnahme.md` (Abschnitt C0): Dev-Konto und OAuth-Anwendung, Worker-Einstellungen, Migrationen `0006` bis `0009`, Wahl des Testorts, geänderte Reihenfolge (zuerst Neuanlage, dann `check_date`, mit späterem Beobachtungsdatum für `check_date`) und eine Vorlage für den Abnahmebericht. Es wird nichts geschrieben; `OSM_DEV_WRITES_ENABLED` bleibt aus.
 
