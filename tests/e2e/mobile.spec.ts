@@ -2251,3 +2251,45 @@ test("the sound can be switched off for the open page even when the browser stor
   await page.locator("#open-info").click();
   await expect(page.locator("#success-sound-toggle")).not.toBeChecked();
 });
+
+// ---------------------------------------------------------------------------------------------
+// Gesperrter Browser-Speicher: Die App startet und die Sprache lässt sich trotzdem wechseln
+// ---------------------------------------------------------------------------------------------
+
+test("the app starts and works when the browser storage cannot even be accessed", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  // Wie bei „alle Cookies blockieren“: Schon der Zugriff auf localStorage und sessionStorage wirft einen Fehler.
+  await page.addInitScript(() => {
+    const blocked = () => { throw new DOMException("denied", "SecurityError"); };
+    Object.defineProperty(window, "localStorage", { get: blocked, configurable: true });
+    Object.defineProperty(window, "sessionStorage", { get: blocked, configurable: true });
+  });
+  await page.goto("/");
+  // Start mit der Gerätesprache (Deutsch im Test), Lampe und Aufnahme sind da.
+  await expect(page.locator("header .connection-lamp-on")).toBeVisible();
+  await expect(page.locator("#file-input")).toBeAttached();
+  // Der Sprachwechsel greift für die offene Seite, obwohl sich nichts merken lässt.
+  await page.locator("#language").selectOption("en");
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.locator("#build-version")).toContainText("Version");
+  await page.locator("#language").selectOption("pl");
+  await expect(page.locator("html")).toHaveAttribute("lang", "pl");
+  expect(pageErrors).toEqual([]);
+});
+
+test("switching the language still works when only writing to the browser storage fails", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.addInitScript(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (key === "aedjaeger-language") throw new DOMException("full", "QuotaExceededError");
+      return original.call(this, key, value);
+    };
+  });
+  await page.goto("/");
+  await page.locator("#language").selectOption("fr");
+  await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+  expect(pageErrors).toEqual([]);
+});

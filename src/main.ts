@@ -8,6 +8,7 @@ import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservatio
 import { isAedRecognized } from "./contracts/visionObservation";
 import { formatBuildTime } from "./pwa/buildInfo";
 import { successSound } from "./sound/successSound";
+import { readStoredValue, writeStoredValue } from "./storage/safeStorage";
 import { startUpdateWatcher } from "./pwa/updateCheck";
 import { askForLocationOnce, phoneLocationFitsPhoto, readLocationPermission, watchLocationPermission, type LocationPermission } from "./location/phoneLocationPermission";
 import { assessCandidateSearch } from "./domain/assessCandidateSearch";
@@ -86,7 +87,8 @@ let newAedPositionOverride: Coordinate | undefined;
 let mapLocationOverride: Coordinate | undefined;
 
 function readLanguage(): Language {
-  const saved = localStorage.getItem("aedjaeger-language");
+  // Nicht lesbarer Speicher (zum Beispiel "alle Cookies blockieren") darf den Start nicht verhindern: dann gilt die Gerätesprache.
+  const saved = readStoredValue("aedjaeger-language");
   if (saved && supportedLanguages.includes(saved as Language)) return saved as Language;
   const deviceLanguage = navigator.language.slice(0, 2) as Language;
   return supportedLanguages.includes(deviceLanguage) ? deviceLanguage : "de";
@@ -698,7 +700,8 @@ function render(restoreFlowFocus = false): void {
   });
   document.querySelector<HTMLSelectElement>("#language")?.addEventListener("change", (event) => {
     language = (event.currentTarget as HTMLSelectElement).value as Language;
-    localStorage.setItem("aedjaeger-language", language);
+    // Scheitert das Merken, gilt die Sprache trotzdem für die offene Seite.
+    writeStoredValue("aedjaeger-language", language);
     render();
     // Rendering replaces the select node, so return keyboard focus to its translated replacement.
     app!.querySelector<HTMLSelectElement>("#language")?.focus();
