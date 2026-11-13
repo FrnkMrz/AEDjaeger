@@ -1666,6 +1666,8 @@ test("the confirmation page shows the earlier check date only when there is one"
 
 /** Legt eine frische Datei ohne GPS in die Kamera-Eingabe, so wie ein gerade aufgenommenes iPhone-Foto im Browser. */
 async function takeFreshCameraPhotoWithoutGps(page: import("@playwright/test").Page, ageMs = 0): Promise<void> {
+  // Erst warten, bis die App den Aufnahmeknopf gezeichnet hat; sonst gibt es unter Last noch kein Eingabefeld.
+  await page.locator("#camera-input").waitFor({ state: "attached" });
   await page.evaluate((age) => {
     const file = new File(['<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#176b4b"/></svg>'], "kamera.svg", { type: "image/svg+xml", lastModified: Date.now() - age });
     const transfer = new DataTransfer();
@@ -1953,15 +1955,36 @@ test("tapping the green lamp opens the sign-out section, and signing out only ha
   await expect(page.locator(".connection-lamp-on")).toBeVisible();
 });
 
-test("tapping the red lamp starts the sign-in", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
-  // Die Anmeldung geht zu OpenStreetMap. Der Test fängt die Anfrage ab und lässt nichts durch.
-  let signInStarted = false;
-  await page.route("**/api/auth/osm/start", (route) => { signInStarted = true; return route.fulfill({ status: 200, contentType: "text/html", body: "<p>OSM</p>" }); });
+test("tapping the red lamp never signs in by itself, only the sign-in button does", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: true, developmentSession: false } }));
+  // Jede Anmeldeanfrage wird gezählt und mit einer Dummy-Seite beantwortet; nichts geht zu OpenStreetMap.
+  const signInRequests: string[] = [];
+  const countSignIn = (route: import("@playwright/test").Route) => { signInRequests.push(new URL(route.request().url()).pathname); return route.fulfill({ status: 200, contentType: "text/html", body: "<p>OSM</p>" }); };
+  await page.route("**/api/auth/osm/start", countSignIn);
+  await page.route("**/api/auth/osm/development/start", countSignIn);
   await page.goto("/");
   await expect(page.locator(".connection-lamp-off")).toBeVisible();
   await page.locator("#connection-lamp").click();
-  await expect.poll(() => signInStarted).toBe(true);
+  // Die Lampe zeigt die Anmeldeseite: Der Anmelde-Knopf hat den Fokus, es gibt keine Anmeldeanfrage, die Seite bleibt.
+  await expect(page.locator("#osm-sign-in")).toBeFocused();
+  await page.waitForTimeout(300);
+  expect(signInRequests).toEqual([]);
+  expect(new URL(page.url()).pathname).toBe("/");
+  await expect(page.locator(".connection-lamp-off")).toBeVisible();
+  // Erst das ausdrückliche Tippen auf den Knopf startet die Anmeldung.
+  await page.locator("#osm-sign-in").click();
+  await expect.poll(() => signInRequests).toEqual(["/api/auth/osm/start"]);
+});
+
+test("tapping the red lamp with only the test-server login focuses that button and does not sign in", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: false, developmentLoginAvailable: true, developmentSession: false } }));
+  let signInStarted = false;
+  await page.route("**/api/auth/osm/development/start", (route) => { signInStarted = true; return route.fulfill({ status: 200, contentType: "text/html", body: "<p>OSM</p>" }); });
+  await page.goto("/");
+  await page.locator("#connection-lamp").click();
+  await expect(page.locator("#osm-dev-sign-in")).toBeFocused();
+  await page.waitForTimeout(300);
+  expect(signInStarted).toBe(false);
 });
 
 test("tapping the red lamp without a sign-in button keeps the person on the login page", async ({ page }) => {
@@ -1982,4 +2005,41 @@ test("the lamp tap area is large enough for a finger but does not push the heade
   expect(button!.height).toBeGreaterThanOrEqual(36);
   // Die Tippfläche liegt mittig um den sichtbaren Punkt.
   expect(Math.abs(button!.x + button!.width / 2 - (dot!.x + dot!.width / 2))).toBeLessThan(1);
+});
+
+test("signing out really signs out: if the server still reports a session, the app shows an error instead of staying signed in", async ({ page }) => {
+  // Der Server antwortet auf „Abmelden“ mit 204, meldet aber weiter „angemeldet“ (zum Beispiel ein Cookie, das nicht gelöscht wurde).
+  let logoutRequests = 0;
+  await page.route("**/api/auth/logout", (route) => { logoutRequests += 1; return route.fulfill({ status: 204 }); });
+  await page.goto("/");
+  await expect(page.locator(".connection-lamp-on")).toBeVisible();
+  await page.locator("#connection-lamp").click();
+  await page.getByRole("dialog").locator("#osm-sign-out").click();
+  expect(logoutRequests).toBe(1);
+  // Keine stille Rückkehr in den angemeldeten Zustand: Fehlermeldung, rote Lampe, Wiederholen möglich.
+  await expect(page.locator(".connection-lamp-off")).toBeVisible();
+  await expect(page.locator(".login-status")).toContainText("Abmeldung fehlgeschlagen");
+  await expect(page.locator("#osm-sign-out")).toBeVisible();
+  await expect(page.locator("#camera-input")).toHaveCount(0);
+});
+
+test("signing out ends the session: after the logout request the app shows the login page and never signs in by itself", async ({ page }) => {
+  let signedIn = true;
+  let signInRequests = 0;
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: signedIn, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/auth/logout", (route) => { signedIn = false; return route.fulfill({ status: 204 }); });
+  await page.route("**/api/auth/osm/start", (route) => { signInRequests += 1; return route.fulfill({ status: 200, contentType: "text/html", body: "<p>OSM</p>" }); });
+  await page.goto("/");
+  await expect(page.locator(".connection-lamp-on")).toBeVisible();
+  await page.locator("#connection-lamp").click();
+  await page.getByRole("dialog").locator("#osm-sign-out").click();
+  await expect(page.locator(".connection-lamp-off")).toBeVisible();
+  await expect(page.locator("#osm-sign-in")).toBeVisible();
+  await expect(page.locator("#camera-input")).toHaveCount(0);
+  // Auch nach einem Neuladen und nach dem Tippen auf die rote Lampe bleibt es abgemeldet, ohne Anmeldeanfrage.
+  await page.reload();
+  await page.locator("#connection-lamp").click();
+  await page.waitForTimeout(300);
+  await expect(page.locator(".connection-lamp-off")).toBeVisible();
+  expect(signInRequests).toBe(0);
 });
