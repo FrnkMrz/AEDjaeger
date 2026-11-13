@@ -128,7 +128,7 @@ describe("PMTiles AED candidate search", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       status: "complete", data_until: metadata().osm_data_until,
-      candidates: [{ id: "node/123", osmType: "node", coordinateQuality: "exact", tags: { name: "Bahnhof", wheelchair: "yes", check_date: "2026-10-20" } }],
+      candidates: [{ id: "node/123", osmType: "node", coordinateQuality: "exact", source: "archive", tags: { name: "Bahnhof", wheelchair: "yes", check_date: "2026-10-20" } }],
     });
     expect(fetcher.mock.calls.length).toBeGreaterThan(2);
     expect(fetcher.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
@@ -146,7 +146,7 @@ describe("PMTiles AED candidate search", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
       status: "complete",
-      candidates: [{ id: "node/456", tags: { check_date: "2026-10-01", name: "Eingang" } }],
+      candidates: [{ id: "node/456", source: "development", tags: { check_date: "2026-10-01", name: "Eingang" } }],
     });
     expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).origin === "https://master.apis.dev.openstreetmap.org")).toBe(true);
   });

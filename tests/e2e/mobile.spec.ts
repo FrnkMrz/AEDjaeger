@@ -2130,7 +2130,7 @@ async function readSound(page: import("@playwright/test").Page): Promise<SoundCo
 }
 
 /** Bringt die App bis zum Speichern-Knopf für das Prüfdatum und gibt ihn zurück. */
-async function openCheckDateSaveButton(page: import("@playwright/test").Page, context: import("@playwright/test").BrowserContext, onWrite: (route: import("@playwright/test").Route) => Promise<void>, tags: Record<string, string> = { emergency: "defibrillator", name: "Rathaus", check_date: "2025-10-20" }) {
+async function openCheckDateSaveButton(page: import("@playwright/test").Page, context: import("@playwright/test").BrowserContext, onWrite: (route: import("@playwright/test").Route) => Promise<void>, tags: Record<string, string> = { emergency: "defibrillator", name: "Rathaus", check_date: "2025-10-20" }, source?: "archive" | "development") {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
@@ -2138,7 +2138,7 @@ async function openCheckDateSaveButton(page: import("@playwright/test").Page, co
   } }));
   await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
     status: "complete", coverage_radius_meters: 112,
-    candidates: [{ id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags }],
+    candidates: [{ id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", ...(source ? { source } : {}), position: { latitude: 52.52001, longitude: 13.40501 }, tags }],
   } }));
   await page.route("**/api/osm/development/check-date", onWrite);
   await page.goto("/");
@@ -2344,4 +2344,64 @@ test("a named node still shows its name", async ({ page, context }) => {
   const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ json: { status: "complete", version: 2 } }));
   await expect(saveButton).toBeVisible();
   await expect(page.locator(".result-message")).toContainText("Rathaus");
+});
+
+// ---------------------------------------------------------------------------------------------
+// AED aus dem echten Archiv lassen sich auf dem Testserver nicht ändern
+// ---------------------------------------------------------------------------------------------
+
+test("an AED from the real archive has no save button on the test server and says why, in all six languages", async ({ page, context }) => {
+  let writes = 0;
+  await openCheckDateSaveButton(page, context, async (route) => { writes += 1; await route.fulfill({ json: { status: "complete", version: 8 } }); }, undefined, "archive");
+  await expect(page.getByRole("button", { name: "Testserver: Prüfdatum speichern" })).toHaveCount(0);
+  await expect(page.locator(".result-message")).toContainText("Dieser AED stammt aus dem echten OSM");
+  await expect(page.locator(".result-message")).not.toContainText("Nur eine Vorschau");
+  const expected: Record<string, string> = {
+    de: "stammt aus dem echten OSM", en: "comes from the real OSM", pl: "pochodzi z prawdziwego OSM", ja: "本番のOSMのもの", fr: "provient du vrai OSM", es: "procede del OSM real",
+  };
+  for (const code of languageCodes) {
+    await page.locator("#language").selectOption(code);
+    await expect(page.locator(".result-message"), `Hinweis in ${code}`).toContainText(expected[code]);
+  }
+  expect(writes).toBe(0);
+});
+
+test("an AED found on the test server itself can be saved", async ({ page, context }) => {
+  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ json: { status: "complete", version: 2 } }), undefined, "development");
+  await expect(saveButton).toBeVisible();
+  await expect(page.locator(".result-message")).not.toContainText("stammt aus dem echten OSM");
+});
+
+test("a node that does not exist on the test server ends in a clear message without a retry button, in all six languages", async ({ page, context }) => {
+  let writes = 0;
+  const saveButton = await openCheckDateSaveButton(page, context, async (route) => { writes += 1; await route.fulfill({ status: 404, json: { error: "target_not_found" } }); });
+  await saveButton.click();
+  await expect(page.getByRole("status")).toContainText("existiert auf dem Testserver nicht");
+  await expect(page.getByRole("status")).not.toContainText("unklar");
+  // Kein Prüfen-Knopf: Ein Wiederholen ergäbe dasselbe.
+  await expect(page.locator('[data-action="retry-development-write"]')).toHaveCount(0);
+  expect(writes).toBe(1);
+  const expected: Record<string, string> = {
+    de: "existiert auf dem Testserver nicht", en: "does not exist on the test server", pl: "nie istnieje na serwerze testowym",
+    ja: "テストサーバーには存在しません", fr: "n'existe pas sur le serveur de test", es: "no existe en el servidor de pruebas",
+  };
+  for (const code of languageCodes) {
+    await page.locator("#language").selectOption(code);
+    await expect(page.getByRole("status"), `Meldung in ${code}`).toContainText(expected[code]);
+  }
+});
+
+test("a definitive server failure is shown as failed, not as unclear, and has no retry button", async ({ page, context }) => {
+  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ status: 502, json: { error: "write_failed" } }));
+  await saveButton.click();
+  await expect(page.getByRole("status")).toContainText("Änderung fehlgeschlagen");
+  await expect(page.getByRole("status")).not.toContainText("unklar");
+  await expect(page.locator('[data-action="retry-development-write"]')).toHaveCount(0);
+});
+
+test("a transient server error still counts as unclear and offers the retry button", async ({ page, context }) => {
+  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ status: 503, json: { error: "write_status_unavailable" } }));
+  await saveButton.click();
+  await expect(page.getByRole("status")).toContainText("Ergebnis unklar");
+  await expect(page.locator('[data-action="retry-development-write"]')).toBeVisible();
 });

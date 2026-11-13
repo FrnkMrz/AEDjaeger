@@ -140,7 +140,7 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
       if (!layer) continue;
       for (let index = 0; index < layer.length; index += 1) {
         const feature = layer.feature(index);
-        const candidate = candidateFromFeature(feature.toGeoJSON(tile.x, tile.y, tile.z));
+        const candidate = candidateFromFeature(feature.toGeoJSON(tile.x, tile.y, tile.z), "archive");
         if (!candidate || distanceMeters(location, candidate.position) > radius) continue;
         const prior = candidates.get(candidate.id);
         if (prior && JSON.stringify(prior) !== JSON.stringify(candidate)) throw new InvalidFeedError();
@@ -228,7 +228,7 @@ class FixedRangeSource implements Source {
   }
 }
 
-function candidateFromFeature(feature: GeoJSON.Feature): NearbyAedCandidate | null {
+function candidateFromFeature(feature: GeoJSON.Feature, source: "archive" | "development"): NearbyAedCandidate | null {
   if (!feature.properties || feature.geometry?.type !== "Point") return null;
   const props = feature.properties as Record<string, unknown>;
   if (props.emergency !== "defibrillator") return null;
@@ -249,7 +249,7 @@ function candidateFromFeature(feature: GeoJSON.Feature): NearbyAedCandidate | nu
     if (typeof value !== "string" || value.length > 2_048) throw new InvalidFeedError();
     tags[key] = value;
   }
-  return { id, osmType: "node", coordinateQuality: "exact", position, tags };
+  return { id, osmType: "node", coordinateQuality: "exact", source, position, tags };
 }
 
 /**
@@ -291,7 +291,7 @@ async function fetchDevelopmentCandidates(
       type: "Feature",
       properties: { ...element.tags, "@type": "node", "@id": `node/${element.id}` },
       geometry: { type: "Point", coordinates: [element.lon, element.lat] },
-    });
+    }, "development");
     if (!candidate) throw new InvalidFeedError();
     if (distanceMeters(location, candidate.position) <= Math.ceil(location.accuracyMeters + SEARCH_RADIUS)) {
       candidates.set(candidate.id, candidate);
