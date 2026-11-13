@@ -6,6 +6,7 @@ import { translateFlow, type FlowMessageKey } from "./i18n/flowTranslations";
 import { readPhotoCapture, readPhotoLocation } from "./vision/photoLocation";
 import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservation, VisionClientError } from "./vision/analyzePhoto";
 import { isAedRecognized } from "./contracts/visionObservation";
+import { formatBuildTime } from "./pwa/buildInfo";
 import { startUpdateWatcher } from "./pwa/updateCheck";
 import { askForLocationOnce, phoneLocationFitsPhoto, readLocationPermission, watchLocationPermission, type LocationPermission } from "./location/phoneLocationPermission";
 import { assessCandidateSearch } from "./domain/assessCandidateSearch";
@@ -268,6 +269,17 @@ function openAccountFromLamp(): void {
   }
   target?.scrollIntoView({ block: "center" });
   target?.focus();
+}
+
+/**
+ * Text für die Versionszeile im Info-Dialog: "Version <Revision> · <Build-Zeit>".
+ * Die Revision kommt zur Build-Zeit in die App (siehe vite.config.ts); die Zeit wird aus ihr zurückgerechnet.
+ * Lässt sich keine Zeit ableiten, steht nur die Revision da.
+ */
+function buildVersionText(): string {
+  const text = tv("buildVersion", { revision: __AEDJAEGER_BUILD_REVISION__ });
+  const time = formatBuildTime(__AEDJAEGER_BUILD_REVISION__, language);
+  return time ? `${text} · ${time}` : text;
 }
 
 function escapeHtml(value: string): string {
@@ -574,6 +586,7 @@ function render(restoreFlowFocus = false): void {
             <li class="roadmap-item"><span class="roadmap-status">${t("roadmapLater")}</span><h4>${t("roadmapOsmTitle")}</h4><p>${t("roadmapOsmBody")}</p></li>
           </ol></section>
           ${authenticated ? `<section class="info-section account-section"><h3>${developmentSession ? t("accountDevSignedIn") : t("accountSignedIn")}</h3><p>${developmentSession ? t("accountDevNotice") : t("accountIdentityOnly")}</p><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>` : ""}
+          <p class="build-version" id="build-version">${escapeHtml(buildVersionText())}</p>
         </div>
       </dialog>
     </div>`;
