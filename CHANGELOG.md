@@ -22,7 +22,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Verwendet kein Overpass für die Umgebungssuche. Fehlende, veraltete, unvollständige oder ungültige Archivdaten bleiben ein Suchfehler und werden nie als Beleg für einen freien Standort behandelt.
 
 ### Added
-- Ergänzt die Vorbereitung des OSM-Dev-Schreibtests in `docs/pilot-abnahme.md` (Abschnitt C0): Dev-Konto und OAuth-Anwendung, Worker-Einstellungen, Migrationen `0006` bis `0009`, Wahl des Testorts, geänderte Reihenfolge (zuerst Neuanlage, dann `check_date`) und eine Vorlage für den Abnahmebericht. Es wird nichts geschrieben; `OSM_DEV_WRITES_ENABLED` bleibt aus.
+- Ergänzt die Vorbereitung des OSM-Dev-Schreibtests in `docs/pilot-abnahme.md` (Abschnitt C0): Dev-Konto und OAuth-Anwendung, Worker-Einstellungen, Migrationen `0006` bis `0009`, Wahl des Testorts, geänderte Reihenfolge (zuerst Neuanlage, dann `check_date`, mit späterem Beobachtungsdatum für `check_date`) und eine Vorlage für den Abnahmebericht. Es wird nichts geschrieben; `OSM_DEV_WRITES_ENABLED` bleibt aus.
 
 ### Changed
 - Entfernt das Häkchen-Symbol vor dem Namen in der Kopfzeile: Es zeigte dasselbe wie die grüne Lampe. Die Lampe bleibt als einziger Statusanzeiger.
