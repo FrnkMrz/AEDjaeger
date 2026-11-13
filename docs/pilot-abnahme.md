@@ -77,16 +77,49 @@ Voraussetzungen (alle erfüllt, bevor der Schalter eingeschaltet wird):
 3. Die Projektinhaberin oder der Projektinhaber hat den Test ausdrücklich freigegeben.
 4. Die Zielinstanz ist die OSM-Entwicklungsinstanz (`master.apis.dev.openstreetmap.org`). Die Schreibroute ist fest auf diesen Host begrenzt.
 
+### Vorbereitung (C0): nur einrichten und prüfen, noch nichts schreiben
+
+Der Schalter `OSM_DEV_WRITES_ENABLED` bleibt in diesem Teil **aus**. Die Punkte macht der Projektinhaber im Browser und im Cloudflare-Dashboard; Secrets gehören nur dorthin, nie in Chat, Code oder Screenshots.
+
+| Nr | Vorbereitung | Prüfung | Ergebnis |
+| --- | --- | --- | --- |
+| C0.1 | Eigenes Konto auf der Dev-Instanz anlegen oder anmelden: `https://master.apis.dev.openstreetmap.org`. Die Dev-Instanz hat eigene Konten; die Zugangsdaten des echten OSM gelten dort nicht | Anmeldung auf der Dev-Instanz klappt | `[ ]` |
+| C0.2 | Auf der Dev-Instanz eine OAuth-2-Anwendung registrieren (vertraulicher Client). Redirect-URI genau: `https://aedjaeger.aedjaeger.workers.dev/api/auth/osm/development/callback`. Berechtigungen: „OpenID“ und „Karte ändern“ (`write_api`). Die Anmeldung der App fragt `openid write_api` an | Client-ID und Client-Secret liegen vor | `[ ]` |
+| C0.3 | Im Cloudflare-Dashboard setzen: `OSM_DEV_LOGIN_ENABLED` = `true` (Variable), `OSM_DEV_CLIENT_ID` (Variable), `OSM_DEV_CLIENT_SECRET` (**Secret**), `OSM_DEV_REDIRECT_URI` = die Adresse aus C0.2 (Variable), `OSM_OAUTH_ENCRYPTION_KEY` (**Secret**, falls noch nicht vorhanden). `OSM_DEV_WRITES_ENABLED` bleibt aus | Alle fünf Einträge stehen im Dashboard; der Worker ist danach neu deployt oder die Einstellung ist aktiv | `[ ]` |
+| C0.4 | Prüfen, dass die D1-Migrationen `0006` bis `0009` auf der echten Datenbank eingespielt sind (Der Deploy führt keine Migrationen aus). Auflisten mit `npx wrangler d1 migrations list <Datenbankname> --remote`, fehlende mit `... apply ... --remote` einspielen | Alle vier stehen als eingespielt da | `[ ]` |
+| C0.5 | App öffnen, abgemeldet: „Mit OSM-Testserver anmelden“ ist sichtbar. Anmelden | Nach der Rückkehr ist die Lampe grün; im Info-Dialog steht „Mit OSM-Testserver verbunden“. Es wurde nichts geschrieben | `[ ]` |
+| C0.6 | **Testort wählen.** Die Suche liest AEDs aus dem Archiv des echten OSM; geschrieben wird auf die Dev-Instanz. Ein Treffer aus dem Archiv ist ein echter OSM-Knoten, der auf der Dev-Instanz nicht oder als etwas anderes existiert. Wähle darum einen Ort **ohne AED im Archiv** (aber im abgedeckten Gebiet D, A, CH, LI, LU). Dann fragt die App bei leerem Archiv-Ergebnis die Dev-Instanz direkt ab | Suche am Testort zeigt „keine Treffer nach vollständiger Suche“ | `[ ]` |
+| C0.7 | Zwei Beobachtungsdaten planen: C3 braucht ein Foto mit GPS-Daten vom Testort (oder die Kartenposition dort) und ein Datum, das **mindestens einen Tag vor dem Datum von C2** liegt. Beispiel: C3 mit einem Foto vom Vortag (Datum in der Datumsfrage bestätigen), C2 am nächsten Tag oder mit einem Foto von heute | Beide Daten stehen im Bericht-Entwurf, das Datum von C3 liegt vor dem von C2 | `[ ]` |
+
+**Reihenfolge ändern:** Am Testort gibt es zunächst keinen AED auf der Dev-Instanz. Darum zuerst C3 (Neuanlage), danach eine neue Suche am selben Punkt: Sie findet den eben angelegten Knoten über die Dev-Instanz, und daran läuft C2 (`check_date`). Das ergibt sich aus dem Code (`server/osm/staticCandidateSearchRoute.ts`) und ist beim Test zu bestätigen; weicht es ab, gehört das in den Bericht.
+
+**Verschiedene Daten für C3 und C2:** Setzt C3 den `check_date` des neuen Knotens auf ein Datum und C2 meldet dasselbe Datum, schreibt die Route nichts (`already_current`, kein Changeset). Das Datum von C2 muss deshalb **später** liegen als das von C3. Ein Datum in der Zukunft ist nicht erlaubt. Darum bekommt C3 ein Datum von mindestens einem Tag früher (Foto vom Vortag), oder C2 läuft am nächsten Tag. Ein Datum, das **älter** ist als das bereits gesetzte, wird als `newer_check_date_exists` abgelehnt; auch das darf beim Test nicht passieren.
+
 Ablauf:
 
 | Nr | Schritt | Erwartetes Ergebnis | Ergebnis |
 | --- | --- | --- | --- |
 | C1 | `OSM_DEV_WRITES_ENABLED` als Worker-Variable im Cloudflare-Dashboard auf `true` setzen | Der Schalter ist nur für diesen Testlauf an. Ob dafür eine neue Version nötig ist, ist im Dashboard zu prüfen; das Repository belegt dazu nichts | `[ ]` |
-| C2 | Genau **eine** `check_date`-Bestätigung an einem vorhandenen AED durchführen | Vorschau zeigt nur `check_date`; nach Bestätigung genau eine Änderung auf der Dev-Instanz | `[ ]` |
+| C2 | Genau **eine** `check_date`-Bestätigung an einem vorhandenen AED durchführen, mit einem Beobachtungsdatum **nach** dem von C3 (siehe C0.7) | Vorschau zeigt nur `check_date`; nach Bestätigung genau eine Änderung auf der Dev-Instanz (ein neues Changeset, nicht `already_current`) | `[ ]` |
 | C3 | Genau **eine** Neuanlage durchführen (nur nach erfolgreicher, vollständiger Suche im Testgebiet) | Vorschau zeigt nur `emergency=defibrillator` und `check_date`; genau ein neuer Knoten | `[ ]` |
 | C4 | Changeset auf der Dev-Instanz öffnen und prüfen | Bei C2 ist nur `check_date` geändert. Bei C3 sind nur `emergency=defibrillator` und `check_date` gesetzt | `[ ]` |
 | C5 | Schalter wieder ausschalten (`OSM_DEV_WRITES_ENABLED` entfernen oder `false`) | Ein erneuter Schreibversuch wird abgelehnt | `[ ]` |
 | C6 | Produktions-OSM prüfen | Es gibt keine Änderung durch diesen Test | `[ ]` |
+
+Abnahmebericht (ausfüllen, ohne Tokens):
+
+| Angabe | Wert |
+| --- | --- |
+| Datum, Uhrzeit (Beginn und Ende) | |
+| Testort (Ungefähr, ohne Straße genügt) | |
+| Dev-Konto (Benutzername) | |
+| Schalter eingeschaltet von / bis | |
+| C2: Changeset-Nummer, Node-ID, geänderter Tag | |
+| C3: Changeset-Nummer, neue Node-ID, gesetzte Tags | |
+| C4: Beobachtung im Changeset (nur erwartete Tags?) | |
+| C5: Ablehnung nach dem Ausschalten (Meldung) | |
+| C6: Produktions-OSM geprüft von / wann | |
+| Auffälligkeiten, Abweichungen | |
 
 Hinweise: Wiederholte Klicks sind zu vermeiden. Bei einem Verbindungsabbruch darf der Vorgang nicht blind wiederholt werden; die App gleicht den Stand über das ursprüngliche Changeset ab. Ergebnisse (Changeset-Nummer, Node-ID, Zeitpunkt) gehören in den Abnahmebericht, aber keine Tokens.
 
