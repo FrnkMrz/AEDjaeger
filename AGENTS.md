@@ -47,8 +47,8 @@ Lies vor Implementierungsaufträgen die relevanten Abschnitte in `docs/architekt
 ## GitHub-Workflow, PRs und Versionen
 
 - Jede Änderung am Repository wird auf einem eigenen Arbeitsbranch vorbereitet und als Pull Request gegen `main` eingereicht. Arbeite nicht direkt auf `main` und pushe keine Änderungen direkt dorthin.
-- Die GitHub-Regel für `main` verlangt mindestens eine genehmigende Review und die Freigabe der in `.github/CODEOWNERS` eingetragenen Code Owners. Der Code Owner dieses Repositories ist `@FrnkMrz`; fremde PRs benötigen daher dessen Freigabe.
-- GitHub zählt keine Selbstfreigabe des PR-Autors. Für eigene PRs kann ausschließlich der Repository-Admin die Review-Regel über den auf PRs beschränkten Bypass umgehen; direkte Pushes auf `main` bleiben durch die PR-Pflicht untersagt.
+- Die GitHub-Regel für `main` (Stand 13.11.2026) verlangt einen Pull Request und den grünen Status-Check `validate`. Sie verlangt **keine** Freigabe mehr, weil der Projektinhaber `@FrnkMrz` der einzige Collaborator mit Schreibrecht ist und GitHub keine Selbstfreigabe zählt. Es gibt keinen Bypass; direkte Pushes, Force-Pushes und das Löschen von `main` sind gesperrt.
+- Nur der Projektinhaber kann nach `main` mergen, weil nur er Schreibrechte hat. Fremde PRs kommen aus Forks und brauchen sein Mergen. Vergibt er später Schreibrechte an andere, stellt er die Regel wieder auf mindestens eine Freigabe und die Review der Code Owners aus `.github/CODEOWNERS` um und aktualisiert diesen Abschnitt.
 - Eröffne einen PR erst, wenn die Änderung vollständig, nachvollziehbar und geprüft ist. Schreibe die Beschreibung auf Deutsch und nutze diese Abschnitte:
   1. **Kurzbeschreibung**: Ziel und Ergebnis in wenigen Sätzen.
   2. **Voraussetzungen und Entscheidungen**: relevante Produktentscheidungen, Abhängigkeiten, Zugangsdaten oder notwendige Vorbereitung; Geheimnisse selbst niemals einfügen.
