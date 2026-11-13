@@ -30,6 +30,11 @@ test("the information roadmap fits a narrow phone screen in all six languages", 
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
     await expect(dialog.getByRole("heading", { level: 2 })).toContainText("AEDjaeger");
+    const iconCredits = dialog.locator(".icon-credits");
+    await expect(iconCredits).toBeVisible();
+    await expect(iconCredits).toContainText("CC0");
+    await expect(iconCredits.locator("a").nth(0)).toHaveAttribute("href", "https://github.com/mapbox/maki/blob/main/icons/defibrillator.svg");
+    await expect(iconCredits.locator("a").nth(1)).toHaveAttribute("href", "https://creativecommons.org/publicdomain/zero/1.0/");
     await expect(dialog.getByRole("heading", { level: 3 }).last()).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `horizontal page overflow in ${language}`).toBeLessThanOrEqual(320);
     expect(await dialog.locator(".info-dialog-content").evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
@@ -37,6 +42,13 @@ test("the information roadmap fits a narrow phone screen in all six languages", 
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
   }
+});
+
+test("uses the Maki defibrillator glyph in the welcome illustration", async ({ page }) => {
+  await page.goto("/");
+  const symbol = page.locator(".empty-illustration .device-mark path").first();
+  await expect(symbol).toBeVisible();
+  await expect(symbol).toHaveAttribute("d", /^m1\.54995 7\.33811c-/);
 });
 
 test("changing the UI language keeps keyboard focus on the language selector", async ({ page }) => {
@@ -91,7 +103,8 @@ test("a sighting confirmation starts a search at the photo GPS location", async 
   const usedPhotoLocation = searchLocations[0] as { latitude: number; longitude: number; accuracy_meters: number };
   expect(usedPhotoLocation.latitude).toBeCloseTo(52.52, 5);
   expect(usedPhotoLocation.longitude).toBeCloseTo(13.405, 5);
-  expect(usedPhotoLocation.accuracy_meters).toBe(100);
+  // Foto-GPS enthält keine Genauigkeit: Es gilt der gemeinsame Annahmewert (src/domain/matchPolicy.ts).
+  expect(usedPhotoLocation.accuracy_meters).toBe(25);
   await expect(page.locator(".capture-content")).toContainText("Standort aus dem Foto verwendet");
 });
 
@@ -2135,7 +2148,7 @@ async function readSound(page: import("@playwright/test").Page): Promise<SoundCo
 }
 
 /** Bringt die App bis zum Speichern-Knopf für das Prüfdatum und gibt ihn zurück. */
-async function openCheckDateSaveButton(page: import("@playwright/test").Page, context: import("@playwright/test").BrowserContext, onWrite: (route: import("@playwright/test").Route) => Promise<void>, tags: Record<string, string> = { emergency: "defibrillator", name: "Rathaus", check_date: "2025-10-20" }) {
+async function openCheckDateSaveButton(page: import("@playwright/test").Page, context: import("@playwright/test").BrowserContext, onWrite: (route: import("@playwright/test").Route) => Promise<void>, tags: Record<string, string> = { emergency: "defibrillator", name: "Rathaus", check_date: "2025-10-20" }, source?: "archive" | "development") {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
@@ -2143,7 +2156,7 @@ async function openCheckDateSaveButton(page: import("@playwright/test").Page, co
   } }));
   await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
     status: "complete", coverage_radius_meters: 112,
-    candidates: [{ id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags }],
+    candidates: [{ id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", ...(source ? { source } : {}), position: { latitude: 52.52001, longitude: 13.40501 }, tags }],
   } }));
   await page.route("**/api/osm/development/check-date", onWrite);
   await page.goto("/");
@@ -2349,6 +2362,176 @@ test("a named node still shows its name", async ({ page, context }) => {
   const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ json: { status: "complete", version: 2 } }));
   await expect(saveButton).toBeVisible();
   await expect(page.locator(".result-message")).toContainText("Rathaus");
+});
+
+// ---------------------------------------------------------------------------------------------
+// AED aus dem echten Archiv lassen sich auf dem Testserver nicht ändern
+// ---------------------------------------------------------------------------------------------
+
+test("an AED from the real archive has no save button on the test server and says why, in all six languages", async ({ page, context }) => {
+  let writes = 0;
+  await openCheckDateSaveButton(page, context, async (route) => { writes += 1; await route.fulfill({ json: { status: "complete", version: 8 } }); }, undefined, "archive");
+  await expect(page.getByRole("button", { name: "Testserver: Prüfdatum speichern" })).toHaveCount(0);
+  await expect(page.locator(".result-message")).toContainText("Dieser AED stammt aus dem echten OSM");
+  await expect(page.locator(".result-message")).not.toContainText("Nur eine Vorschau");
+  const expected: Record<string, string> = {
+    de: "stammt aus dem echten OSM", en: "comes from the real OSM", pl: "pochodzi z prawdziwego OSM", ja: "本番のOSMのもの", fr: "provient du vrai OSM", es: "procede del OSM real",
+  };
+  for (const code of languageCodes) {
+    await page.locator("#language").selectOption(code);
+    await expect(page.locator(".result-message"), `Hinweis in ${code}`).toContainText(expected[code]);
+  }
+  expect(writes).toBe(0);
+});
+
+test("an AED found on the test server itself can be saved", async ({ page, context }) => {
+  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ json: { status: "complete", version: 2 } }), undefined, "development");
+  await expect(saveButton).toBeVisible();
+  await expect(page.locator(".result-message")).not.toContainText("stammt aus dem echten OSM");
+});
+
+test("a node that does not exist on the test server ends in a clear message without a retry button, in all six languages", async ({ page, context }) => {
+  let writes = 0;
+  const saveButton = await openCheckDateSaveButton(page, context, async (route) => { writes += 1; await route.fulfill({ status: 404, json: { error: "target_not_found" } }); });
+  await saveButton.click();
+  await expect(page.getByRole("status")).toContainText("existiert auf dem Testserver nicht");
+  await expect(page.getByRole("status")).not.toContainText("unklar");
+  // Kein Prüfen-Knopf: Ein Wiederholen ergäbe dasselbe.
+  await expect(page.locator('[data-action="retry-development-write"]')).toHaveCount(0);
+  expect(writes).toBe(1);
+  const expected: Record<string, string> = {
+    de: "existiert auf dem Testserver nicht", en: "does not exist on the test server", pl: "nie istnieje na serwerze testowym",
+    ja: "テストサーバーには存在しません", fr: "n'existe pas sur le serveur de test", es: "no existe en el servidor de pruebas",
+  };
+  for (const code of languageCodes) {
+    await page.locator("#language").selectOption(code);
+    await expect(page.getByRole("status"), `Meldung in ${code}`).toContainText(expected[code]);
+  }
+});
+
+test("a definitive server failure is shown as failed, not as unclear, and has no retry button", async ({ page, context }) => {
+  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ status: 502, json: { error: "write_failed" } }));
+  await saveButton.click();
+  await expect(page.getByRole("status")).toContainText("Änderung fehlgeschlagen");
+  await expect(page.getByRole("status")).not.toContainText("unklar");
+  await expect(page.locator('[data-action="retry-development-write"]')).toHaveCount(0);
+});
+
+test("a transient server error still counts as unclear and offers the retry button", async ({ page, context }) => {
+  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ status: 503, json: { error: "write_status_unavailable" } }));
+  await saveButton.click();
+  await expect(page.getByRole("status")).toContainText("Ergebnis unklar");
+  await expect(page.locator('[data-action="retry-development-write"]')).toBeVisible();
+});
+
+// ---------------------------------------------------------------------------------------------
+// Entfernungsstufen: bis 10 m bestätigen, bis 50 m nur Hinweis, weiter weg unsichtbar
+// ---------------------------------------------------------------------------------------------
+
+type TestCandidate = { id: string; name: string; latitudeOffsetMeters: number; tags?: Record<string, string> };
+
+/** Bringt die App bis zur Trefferliste. Die Treffer liegen nördlich des Standorts (52.52, 13.405), 1 m = 0,000009 Grad. */
+async function openCandidateList(page: import("@playwright/test").Page, context: import("@playwright/test").BrowserContext, candidates: TestCandidate[], options: { accuracy?: number; development?: boolean } = {}): Promise<{ searchRequests: () => number }> {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: options.accuracy ?? 12 });
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
+    authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: options.development ?? false, developmentWriteAvailable: options.development ?? false,
+  } }));
+  let searches = 0;
+  await page.route("**/api/osm/candidates/search", (route) => { searches += 1; return route.fulfill({ json: {
+    status: "complete", coverage_radius_meters: 200,
+    candidates: candidates.map((candidate) => ({
+      id: candidate.id, osmType: "node", version: 3, coordinateQuality: "exact",
+      position: { latitude: 52.52 + candidate.latitudeOffsetMeters * 0.000009, longitude: 13.405 },
+      tags: candidate.tags ?? { emergency: "defibrillator", name: candidate.name, check_date: "2025-10-20" },
+    })),
+  } }); });
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.locator('[data-action="confirm-sighting"]').click();
+  await beginNearbySearch(page);
+  return { searchRequests: () => searches };
+}
+
+test("only an AED within 10 m can be confirmed, one within 50 m is a hint, and one farther away is not shown", async ({ page, context }) => {
+  await openCandidateList(page, context, [
+    { id: "node/101", name: "Nah", latitudeOffsetMeters: 3 },
+    { id: "node/102", name: "Mittel", latitudeOffsetMeters: 35 },
+    { id: "node/103", name: "Weit", latitudeOffsetMeters: 120 },
+  ]);
+  const items = page.locator(".candidate-item");
+  await expect(items).toHaveCount(2); // Der AED in 120 m erscheint nicht.
+  await expect(page.locator(".capture-content")).not.toContainText("Weit");
+  // Nur der AED in 3 m bietet „Als noch vorhanden bestätigen“ an.
+  await expect(page.locator('[data-action="preview-candidate"]')).toHaveCount(1);
+  await expect(page.locator('[data-action="preview-candidate"]')).toHaveAttribute("data-candidate-id", "node/101");
+  await expect(items.nth(0)).toContainText("Nah");
+  await expect(items.nth(1)).toContainText("Mittel");
+  await expect(items.nth(1)).toContainText("35 m");
+  await expect(items.nth(1)).toContainText("Zu weit weg zum Bestätigen (über 10 m)");
+  await expect(items.nth(0)).not.toContainText("Zu weit weg");
+  // Eine Neuanlage bleibt möglich, nachdem die Treffer geprüft wurden.
+  await expect(page.getByRole("button", { name: "Keiner davon – neuen AED eintragen" })).toBeVisible();
+});
+
+test("an AED between 10 m and 50 m can only be noted, never confirmed, in all six languages", async ({ page, context }) => {
+  await openCandidateList(page, context, [{ id: "node/102", name: "Mittel", latitudeOffsetMeters: 35 }]);
+  await expect(page.locator('[data-action="preview-candidate"]')).toHaveCount(0);
+  const expected: Record<string, string> = {
+    de: "Zu weit weg zum Bestätigen", en: "Too far away to confirm", pl: "Za daleko, by potwierdzić",
+    ja: "確認するには遠すぎます", fr: "Trop loin pour confirmer", es: "Demasiado lejos para confirmar",
+  };
+  for (const code of languageCodes) {
+    await page.locator("#language").selectOption(code);
+    await expect(page.locator(".candidate-item"), `Hinweis in ${code}`).toContainText(expected[code]);
+    await expect(page.locator(".candidate-item")).toContainText("10 m");
+  }
+});
+
+test("when the only AEDs are farther than 50 m, the search shows no match and offers a new entry", async ({ page, context }) => {
+  await openCandidateList(page, context, [{ id: "node/103", name: "Weit", latitudeOffsetMeters: 170 }]);
+  await expect(page.locator(".candidate-item")).toHaveCount(0);
+  await expect(page.locator(".capture-content")).toContainText("Kein AED-Eintrag in der Nähe gefunden");
+  await expect(page.getByRole("button", { name: "Hier fehlt ein AED – neu eintragen" })).toBeVisible();
+});
+
+test("a GPS accuracy worse than 50 m sends no search and asks for the map position", async ({ page, context }) => {
+  const { searchRequests } = await openCandidateList(page, context, [{ id: "node/101", name: "Nah", latitudeOffsetMeters: 3 }], { accuracy: 70 });
+  await expect(page.locator(".capture-content")).toContainText("Der Standort ist zu ungenau");
+  expect(searchRequests()).toBe(0);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Ein Foto kann älter sein als das Prüfdatum, das schon in OSM steht
+// ---------------------------------------------------------------------------------------------
+
+test("a photo older than the check date already in OSM cannot be saved, says why, and names that date, in all six languages", async ({ page, context }) => {
+  await openCandidateList(page, context, [
+    { id: "node/101", name: "Rathaus", latitudeOffsetMeters: 3, tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2099-01-01" } },
+  ], { development: true });
+  await page.locator('[data-action="preview-candidate"]').click();
+  await expect(page.locator(".result-message")).toContainText("In OpenStreetMap steht schon ein neueres Prüfdatum (2099-01-01)");
+  await expect(page.locator(".result-message")).toContainText("Es wird nichts geändert");
+  // Kein Speichern-Knopf und kein „nur eine Vorschau“.
+  await expect(page.getByRole("button", { name: "Testserver: Prüfdatum speichern" })).toHaveCount(0);
+  await expect(page.locator(".result-message")).not.toContainText("Nur eine Vorschau");
+  await expect(page.locator(".result-message")).not.toContainText("kein einzelner AED-Knoten");
+  const expected: Record<string, string> = {
+    de: "neueres Prüfdatum", en: "newer check date", pl: "nowsza data kontroli", ja: "新しい確認日", fr: "plus récente", es: "más reciente",
+  };
+  for (const code of languageCodes) {
+    await page.locator("#language").selectOption(code);
+    await expect(page.locator(".result-message"), `Hinweis in ${code}`).toContainText(expected[code]);
+    await expect(page.locator(".result-message")).toContainText("2099-01-01");
+  }
+});
+
+test("the same or an older check date in OSM still allows saving", async ({ page, context }) => {
+  await openCandidateList(page, context, [
+    { id: "node/101", name: "Rathaus", latitudeOffsetMeters: 3, tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2020-01-01" } },
+  ], { development: true });
+  await page.locator('[data-action="preview-candidate"]').click();
+  await expect(page.getByRole("button", { name: "Testserver: Prüfdatum speichern" })).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -2674,7 +2857,7 @@ test("a server conflict while saving added details asks for a new check", async 
   await page.getByText("Nur Kunden", { exact: true }).click();
   await page.locator("#detail-continue").click();
   await page.getByRole("button", { name: "Testserver: Angaben speichern" }).click();
-  await expect(page.getByRole("status")).toContainText("OSM-Eintrag änderte sich");
+  await expect(page.getByRole("status")).toContainText("Nichts wurde geändert");
 });
 
 test("the add-details form fits a 320 px phone in all six languages", async ({ page, context }) => {
@@ -2818,7 +3001,7 @@ test("a server conflict on a correction asks for a new check", async ({ page, co
   await page.locator("#detail-continue").click();
   await page.locator("#correction-confirmed").check();
   await page.getByRole("button", { name: "Testserver: Änderungen speichern" }).click();
-  await expect(page.getByRole("status")).toContainText("OSM-Eintrag änderte sich");
+  await expect(page.getByRole("status")).toContainText("Nichts wurde geändert");
 });
 
 test("without the operator switch there is no correction mode: existing values stay locked", async ({ page, context }) => {

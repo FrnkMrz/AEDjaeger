@@ -32,6 +32,18 @@ describe("nearby candidate client", () => {
     await expect(requestNearbyCandidates(location, fetcher)).rejects.toMatchObject({ code: "source_unavailable", retryAfterSeconds: 23 });
   });
 
+  it("keeps the source of a candidate (archive or development) and accepts older answers without it", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    fetcher.mockResolvedValue(Response.json({ status: "complete", coverage_radius_meters: 112, candidates: [{ ...candidate, source: "archive" }, { ...candidate, id: "node/124", source: "development" }, { ...candidate, id: "node/125" }] }));
+    const result = await requestNearbyCandidates(location, fetcher);
+    expect(result.candidates.map((item) => item.source)).toEqual(["archive", "development", undefined]);
+  });
+
+  it("rejects an unknown candidate source", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ status: "complete", coverage_radius_meters: 112, candidates: [{ ...candidate, source: "elsewhere" }] }));
+    await expect(requestNearbyCandidates(location, fetcher)).rejects.toMatchObject({ code: "invalid_response" });
+  });
+
   it("rejects incomplete feed metadata and malformed candidate records", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ status: "complete", coverage_radius_meters: 112, snapshot_id: "aed-bad", data_until: "yesterday", candidates: [candidate] }));
     await expect(requestNearbyCandidates(location, fetcher)).rejects.toMatchObject({ code: "invalid_response" });

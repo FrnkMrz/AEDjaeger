@@ -29,6 +29,22 @@ describe("OSM change previews", () => {
     });
   });
 
+  it("blocks an observation that is older than the check date already in OSM, and names that date", () => {
+    // Ein Foto aus der Mediathek kann älter sein als der Eintrag in OSM. Ein älteres Datum darf ein neueres nie überschreiben.
+    expect(previewExistingAedCheck(nodeCandidate, true, "2023-12-31")).toEqual({ kind: "blocked", reason: "newer-check-date-exists", existingDate: "2024-01-01" });
+  });
+
+  it("still allows the same day and any later day as the check date in OSM", () => {
+    expect(previewExistingAedCheck(nodeCandidate, true, "2024-01-01")).toMatchObject({ kind: "ready" });
+    expect(previewExistingAedCheck(nodeCandidate, true, "2026-10-23")).toMatchObject({ kind: "ready" });
+  });
+
+  it("ignores an existing check_date that is not a real date instead of blocking on it", () => {
+    for (const check_date of ["gestern", "2024-13-45", "2024-1-1", ""]) {
+      expect(previewExistingAedCheck({ ...nodeCandidate, tags: { ...nodeCandidate.tags, check_date } }, true, "2023-12-31")).toMatchObject({ kind: "ready" });
+    }
+  });
+
   it("blocks an existing update until this candidate is explicitly confirmed", () => {
     expect(previewExistingAedCheck(nodeCandidate, false, "2026-10-23")).toEqual({
       kind: "blocked", reason: "confirmation-required",

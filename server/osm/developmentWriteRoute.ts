@@ -155,6 +155,7 @@ export async function handleDevelopmentCheckDate(
   } catch (error) {
     const state = error instanceof VersionConflictError ? "conflict" : "failed";
     await safelyUpdate(environment.DB, { sessionHash, operationId: input.operation_id, state, now: (dependencies.now ?? Date.now)() });
+    if (error instanceof TargetNotFoundError) return jsonResponse({ error: "target_not_found" }, 404);
     return error instanceof VersionConflictError
       ? jsonResponse({ error: "version_conflict" }, 409)
       : jsonResponse({ error: "development_api_unavailable" }, 502);
@@ -348,6 +349,10 @@ export async function readDevelopmentNode(path: string, token: string, fetcher: 
   const id = Number(path.slice("node/".length));
   const response = await requestOSMDevelopmentApi("development", `/api/0.6/node/${id}.json`, token, { method: "GET" }, fetcher);
   if (response.status === 409 || response.status === 410) throw new VersionConflictError();
+  // 404: Diesen Knoten gibt es auf dem Testserver nicht. Typisch bei einem AED aus dem Archiv des echten OSM: Die
+  // Entwicklungsinstanz hat eine eigene, getrennte Datenbank. Das ist ein eindeutiges Ergebnis (nichts wurde geschrieben),
+  // kein "unklar" und kein Grund zu wiederholen.
+  if (response.status === 404) throw new TargetNotFoundError();
   if (!response.ok) throw new Error("OSM development read failed");
   let payload: unknown;
   try {
@@ -534,3 +539,4 @@ export function jsonResponse(body: Record<string, unknown>, status: number, head
 
 class BodyTooLargeError extends Error {}
 export class VersionConflictError extends Error {}
+export class TargetNotFoundError extends Error {}

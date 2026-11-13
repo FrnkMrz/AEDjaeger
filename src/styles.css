@@ -43,9 +43,8 @@ h1 { margin-bottom: 12px; font: 800 clamp(30px, 8vw, 43px)/1.14 "Noto Sans", sys
 .capture-card { overflow: hidden; border: 1px solid #e7ebe5; border-radius: 26px; background: #fff; box-shadow: 0 16px 42px #24372b0a, 0 2px 8px #24372b06; }
 .capture-content { padding: 28px 24px 8px; }
 .empty-illustration { position: relative; width: 148px; height: 148px; display: grid; place-items: center; margin: 0 auto 20px; border-radius: 50%; background: #f1f6f1; }
-.device-card { width: 70px; height: 99px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; transform: rotate(-4deg); border: 5px solid #fff; border-radius: 14px; color: #fff; background: var(--green); box-shadow: 0 8px 16px #164d351f; }
-.device-heart { font-size: 24px; line-height: 1; }
-.device-zap { position: absolute; top: 44px; color: #f0df78; font-size: 27px; font-weight: 700; }
+.device-card { width: 70px; height: 99px; display: grid; place-items: center; transform: rotate(-4deg); border: 5px solid #fff; border-radius: 14px; color: #fff; background: var(--green); box-shadow: 0 8px 16px #164d351f; }
+.device-mark { width: 48px; height: 48px; }
 .scan-corner { position: absolute; width: 19px; height: 19px; border-color: #80ad8e; border-style: solid; }
 .corner-a { top: 22px; left: 23px; border-width: 2px 0 0 2px; border-radius: 5px 0 0; }
 .corner-b { top: 22px; right: 23px; border-width: 2px 2px 0 0; border-radius: 0 5px 0 0; }
@@ -135,6 +134,8 @@ footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: c
 .info-section { margin-top: 20px; border-top: 1px solid #edf0ec; padding-top: 17px; }
 .info-section h3 { margin: 0 0 7px; font-size: 16px; line-height: 1.35; }
 .info-section p { margin: 0 0 13px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.icon-credits a { color: #27523d; text-underline-offset: 3px; }
+.icon-credits a:focus-visible { outline: 2px solid #176b4b; outline-offset: 2px; }
 .sound-toggle { display: flex; align-items: center; gap: 10px; margin-top: 18px; border-top: 1px solid #edf0ec; padding-top: 12px; color: var(--muted); font-size: 13px; line-height: 1.4; }
 .sound-toggle input { flex: none; width: 20px; height: 20px; accent-color: #176b4b; }
 .build-version { margin: 18px 0 0; border-top: 1px solid #edf0ec; padding-top: 12px; color: var(--muted); font-size: 12px; text-align: center; user-select: all; }

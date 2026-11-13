@@ -1,3 +1,4 @@
+import { UNKNOWN_PHOTO_GPS_ACCURACY_METERS as UNKNOWN_PHOTO_GPS_ACCURACY_METERS_SHARED } from "../domain/matchPolicy";
 import exifr from "exifr";
 import { gps } from "exifr/dist/mini.esm.mjs";
 import type { SearchLocation } from "../osm/candidateSearch";
@@ -5,7 +6,8 @@ import type { SearchLocation } from "../osm/candidateSearch";
 // The browser position API accepts only an accuracy estimate. EXIF normally stores a
 // coordinate without that estimate, so use the route's maximum accepted uncertainty.
 // This deliberately searches a broader, bounded area; it does not claim meter-level accuracy.
-const UNKNOWN_PHOTO_GPS_ACCURACY_METERS = 100;
+// Die Entfernungsstufen stehen in src/domain/matchPolicy.ts.
+const UNKNOWN_PHOTO_GPS_ACCURACY_METERS = UNKNOWN_PHOTO_GPS_ACCURACY_METERS_SHARED;
 type GpsCoordinates = { latitude: number; longitude: number };
 type GpsReader = (file: File) => Promise<GpsCoordinates | undefined>;
 

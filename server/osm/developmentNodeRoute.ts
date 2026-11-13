@@ -4,7 +4,7 @@ import { findOSMDevelopmentToken } from "../storage/osmDevelopmentTokens";
 import type { D1Database } from "../storage/d1";
 import { DETAIL_KEYS } from "../../src/contracts/aedDetails";
 import {
-  SESSION_COOKIE, VersionConflictError, isCrossOrigin, jsonResponse, readCookie, readDevelopmentNode,
+  SESSION_COOKIE, TargetNotFoundError, VersionConflictError, isCrossOrigin, jsonResponse, readCookie, readDevelopmentNode,
 } from "./developmentWriteRoute";
 
 type Environment = { DB?: D1Database; OSM_DEV_WRITES_ENABLED?: string; OSM_OAUTH_ENCRYPTION_KEY?: string };
@@ -70,8 +70,9 @@ export async function handleDevelopmentNodeRead(
     }
     return jsonResponse({ status: "ok", id, version: node.version, tags }, 200);
   } catch (error) {
-    // Gelöscht, verschoben oder kein AED mehr: Die Person soll neu suchen. Alles andere ist ein Fehler beim Testserver.
-    if (error instanceof VersionConflictError) return jsonResponse({ error: "node_unavailable" }, 404);
+    // Gelöscht, verschoben, kein AED mehr oder auf dem Testserver nicht vorhanden (zum Beispiel ein AED aus dem Archiv des
+    // echten OSM): Die Person soll neu suchen. Alles andere ist ein Fehler beim Testserver.
+    if (error instanceof VersionConflictError || error instanceof TargetNotFoundError) return jsonResponse({ error: "node_unavailable" }, 404);
     return jsonResponse({ error: "development_api_unavailable" }, 502);
   }
 }

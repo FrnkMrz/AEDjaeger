@@ -1,3 +1,4 @@
+import { MAX_LOCATION_ACCURACY_METERS, NEARBY_RADIUS_METERS } from "../../src/domain/matchPolicy";
 import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 import { PMTiles, type RangeResponse, type Source } from "pmtiles";
@@ -22,8 +23,9 @@ const AED_ZOOM = 14;
 // Vor einer Neuanlage prüft die Schreibroute den Kartenausschnitt ohnehin erneut live.
 // Derselbe Wert steht in scripts/check-live-search.mjs und muss synchron bleiben.
 const MAX_SOURCE_AGE_HOURS = 5 * 24;
-const MAX_ACCURACY = 100;
-const SEARCH_RADIUS = 100;
+const MAX_ACCURACY = MAX_LOCATION_ACCURACY_METERS;
+// Reichweite der Suche und Genauigkeitsgrenze: siehe src/domain/matchPolicy.ts (gleiche Zahlen wie in der App).
+const SEARCH_RADIUS = NEARBY_RADIUS_METERS;
 const MAX_REQUEST_BYTES = 1_024;
 const MAX_METADATA_BYTES = 256 * 1_024;
 const MAX_RANGE_BYTES = 8 * 1_024 * 1_024;
@@ -140,7 +142,7 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
       if (!layer) continue;
       for (let index = 0; index < layer.length; index += 1) {
         const feature = layer.feature(index);
-        const candidate = candidateFromFeature(feature.toGeoJSON(tile.x, tile.y, tile.z));
+        const candidate = candidateFromFeature(feature.toGeoJSON(tile.x, tile.y, tile.z), "archive");
         if (!candidate || distanceMeters(location, candidate.position) > radius) continue;
         const prior = candidates.get(candidate.id);
         if (prior && JSON.stringify(prior) !== JSON.stringify(candidate)) throw new InvalidFeedError();
@@ -161,6 +163,19 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
       if (!accessToken) throw new CoverageUnavailableError();
       const mapCandidates = await fetchDevelopmentCandidates(accessToken, bounds, location, fetcher, controller.signal);
       for (const candidate of mapCandidates) candidates.set(candidate.id, candidate);
+    } else if (session.environment === "development" && env.OSM_OAUTH_ENCRYPTION_KEY) {
+      // Testserver-Sitzung mit Treffern aus dem Archiv: Auch die Entwicklungsinstanz abfragen und die Treffer
+      // zusammenführen. Der Schutz vor Doppelten beim Anlegen schaut dort ohnehin hin; ohne diese Abfrage zeigte die
+      // Suche zum Beispiel den eigenen Test-Knoten nie, und das Anlegen wurde trotzdem blockiert. Hier ist die Abfrage
+      // eine Ergänzung: Scheitert sie, bleibt es beim Ergebnis aus dem Archiv (wie bisher). Bei gleicher Kennung gewinnt
+      // der Treffer vom Testserver, weil nur er sich dort ändern lässt.
+      try {
+        const encryptionKey = await importOAuthEncryptionKey(env.OSM_OAUTH_ENCRYPTION_KEY);
+        const accessToken = await findOSMDevelopmentToken(env.DB, sessionToken, now, encryptionKey);
+        if (accessToken) {
+          for (const candidate of await fetchDevelopmentCandidates(accessToken, bounds, location, fetcher, controller.signal)) candidates.set(candidate.id, candidate);
+        }
+      } catch { /* Ergänzung scheitert: Ergebnis aus dem Archiv bleibt gültig. */ }
     }
 
     return json({
@@ -228,7 +243,7 @@ class FixedRangeSource implements Source {
   }
 }
 
-function candidateFromFeature(feature: GeoJSON.Feature): NearbyAedCandidate | null {
+function candidateFromFeature(feature: GeoJSON.Feature, source: "archive" | "development"): NearbyAedCandidate | null {
   if (!feature.properties || feature.geometry?.type !== "Point") return null;
   const props = feature.properties as Record<string, unknown>;
   if (props.emergency !== "defibrillator") return null;
@@ -249,7 +264,7 @@ function candidateFromFeature(feature: GeoJSON.Feature): NearbyAedCandidate | nu
     if (typeof value !== "string" || value.length > 2_048) throw new InvalidFeedError();
     tags[key] = value;
   }
-  return { id, osmType: "node", coordinateQuality: "exact", position, tags };
+  return { id, osmType: "node", coordinateQuality: "exact", source, position, tags };
 }
 
 /**
@@ -291,7 +306,7 @@ async function fetchDevelopmentCandidates(
       type: "Feature",
       properties: { ...element.tags, "@type": "node", "@id": `node/${element.id}` },
       geometry: { type: "Point", coordinates: [element.lon, element.lat] },
-    });
+    }, "development");
     if (!candidate) throw new InvalidFeedError();
     if (distanceMeters(location, candidate.position) <= Math.ceil(location.accuracyMeters + SEARCH_RADIUS)) {
       candidates.set(candidate.id, candidate);

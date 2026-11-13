@@ -1,3 +1,4 @@
+import { MAX_LOCATION_ACCURACY_METERS, NEARBY_RADIUS_METERS } from "./matchPolicy";
 import { assessCandidateSearch } from "./assessCandidateSearch";
 import type { CandidateAssessment, Coordinate, LocationEstimate, MatchPolicy } from "./candidateMatch";
 import type { DetailCorrection, DetailTags } from "../contracts/aedDetails";
@@ -69,8 +70,8 @@ export type FlowState =
   // zeigt das Formular, was schon eingetragen ist (gesperrt), und lässt nur Fehlendes ausfüllen.
   | { kind: "existing-aed-details"; photoUrl: string; candidateId: string; candidateLabel: string; returnState: CandidateResultState; load: ExistingAedLoad }
   // details/node sind nur gesetzt, wenn die Vorschau aus dem Ergänzen-Formular kommt: details sind die neuen Tags, node der frisch gelesene Stand.
-  | { kind: "osm-preview"; photoUrl: string; candidateId: string; candidateLabel: string; result: ProposalResult<ExistingCheckDatePreview>; returnState: CandidateResultState; details?: DetailTags; corrections?: DetailCorrection[]; node?: ExistingNode; writeStatus?: "sending" | "complete" | "unchanged" | "uncertain" | "conflict" | "failed"; operationId?: string }
-  | { kind: "development-write-recovery"; request: DevelopmentWriteRequest; writeStatus: "uncertain" | "sending" | "complete" | "unchanged" | "conflict" | "failed" }
+  | { kind: "osm-preview"; photoUrl: string; candidateId: string; candidateLabel: string; result: ProposalResult<ExistingCheckDatePreview>; returnState: CandidateResultState; details?: DetailTags; corrections?: DetailCorrection[]; node?: ExistingNode; writeStatus?: "sending" | "complete" | "unchanged" | "notFound" | "uncertain" | "conflict" | "failed"; operationId?: string }
+  | { kind: "development-write-recovery"; request: DevelopmentWriteRequest; writeStatus: "uncertain" | "sending" | "complete" | "unchanged" | "notFound" | "conflict" | "failed" }
   | { kind: "candidate-error"; photoUrl: string; reason: "location-unavailable" | "location-denied" | "location-uncertain" | "sign-in" | "rate-limited" | "service-unavailable" | "failed" | "invalid-response"; retryAvailableAt?: number }
   | { kind: "clarification"; photoUrl: string; reason: "sign-only" | "multiple" }
   | { kind: "proposal"; photoUrl: string; proposal: ProposalKind; candidateId?: CandidateId }
@@ -86,8 +87,8 @@ const demoLocation: LocationEstimate = {
   accuracyMeters: 10,
 };
 const demoMatchPolicy: MatchPolicy = {
-  nearbyRadiusMeters: 100,
-  maximumAccuracyMeters: 100,
+  nearbyRadiusMeters: NEARBY_RADIUS_METERS,
+  maximumAccuracyMeters: MAX_LOCATION_ACCURACY_METERS,
 };
 
 // Fixed candidates model the dedicated AED feed. Classification comes from the
