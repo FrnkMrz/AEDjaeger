@@ -7,6 +7,7 @@ import { readPhotoCapture, readPhotoLocation } from "./vision/photoLocation";
 import { createVisionRequestId, preparePhotoForAnalysis, requestVisionObservation, VisionClientError } from "./vision/analyzePhoto";
 import { isAedRecognized } from "./contracts/visionObservation";
 import { formatBuildTime } from "./pwa/buildInfo";
+import { isSuccessSoundEnabled, setSuccessSoundEnabled, successSound } from "./sound/successSound";
 import { startUpdateWatcher } from "./pwa/updateCheck";
 import { askForLocationOnce, phoneLocationFitsPhoto, readLocationPermission, watchLocationPermission, type LocationPermission } from "./location/phoneLocationPermission";
 import { assessCandidateSearch } from "./domain/assessCandidateSearch";
@@ -572,7 +573,7 @@ function render(restoreFlowFocus = false): void {
           ${isReady ? `<details class="demo-panel"><summary>${t("demo")}</summary><h2>${t("testStepsTitle")}</h2><p>${t("testSteps")}</p><label for="scenario">${t("scenario")}</label><select id="scenario">${(Object.keys(scenarioKeys) as DemoScenario[]).map((key) => `<option value="${key}" ${scenario === key ? "selected" : ""}>${t(scenarioKeys[key])}</option>`).join("")}</select><label class="diagnostics-opt-in" for="diagnostics-enabled"><input id="diagnostics-enabled" type="checkbox" ${diagnosticsEnabled ? "checked" : ""}><span><strong>${t("testDiagnostics")}</strong><small>${t("testDiagnosticsPrivacy")}</small></span></label></details>` : ""}
         </section>
       </main>${accountPanel()}` : `<main class="login-main">${loginEntry()}</main>`}
-      <footer><span>${t("sourceNote")}</span><span class="demo-badge">DEMO</span><span class="build-mark" id="build-mark">${escapeHtml(tv("buildVersion", { revision: __AEDJAEGER_BUILD_REVISION__ }))}</span></footer>
+      <footer><span>${t("sourceNote")}</span><span class="demo-badge">DEMO</span><span class="build-mark" id="build-mark">${escapeHtml(buildVersionText())}</span></footer>
       <dialog class="info-dialog" id="info-dialog" aria-labelledby="info-title" aria-describedby="info-intro">
         <div class="info-dialog-content">
           <div class="info-dialog-header"><div><p class="eyebrow">${t("appName")}</p><h2 id="info-title">${t("aboutTitle")}</h2></div><form method="dialog"><button class="dialog-close" aria-label="${t("closeInfo")}">×</button></form></div>
@@ -586,6 +587,7 @@ function render(restoreFlowFocus = false): void {
             <li class="roadmap-item"><span class="roadmap-status">${t("roadmapLater")}</span><h4>${t("roadmapOsmTitle")}</h4><p>${t("roadmapOsmBody")}</p></li>
           </ol></section>
           ${authenticated ? `<section class="info-section account-section"><h3>${developmentSession ? t("accountDevSignedIn") : t("accountSignedIn")}</h3><p>${developmentSession ? t("accountDevNotice") : t("accountIdentityOnly")}</p><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>` : ""}
+          <label class="sound-toggle"><input type="checkbox" id="success-sound-toggle" ${isSuccessSoundEnabled() ? "checked" : ""} /><span>${tv("soundToggle")}</span></label>
           <p class="build-version" id="build-version">${escapeHtml(buildVersionText())}</p>
         </div>
       </dialog>
@@ -677,6 +679,15 @@ function render(restoreFlowFocus = false): void {
     document.querySelector<HTMLDialogElement>("#info-dialog")?.showModal();
   });
   document.querySelector<HTMLButtonElement>("#connection-lamp")?.addEventListener("click", openAccountFromLamp);
+  document.querySelector<HTMLInputElement>("#success-sound-toggle")?.addEventListener("change", (event) => {
+    const enabled = (event.target as HTMLInputElement).checked;
+    setSuccessSoundEnabled(enabled);
+    // Beim Einschalten einmal vorspielen: So hört die Person sofort, wie es klingt, und der Ton ist freigeschaltet.
+    if (enabled) {
+      successSound.prepare();
+      successSound.play();
+    }
+  });
   document.querySelector<HTMLAnchorElement>(".brand")?.addEventListener("click", (event) => {
     if (!hasUnresolvedSave(state)) return;
 
@@ -870,6 +881,8 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
     if (response.ok && isDevelopmentWriteResponse(payload, "complete")) {
       setDevelopmentWriteStatus(requestBody.operationId, "complete");
       clearPendingDevelopmentCheck();
+      // Nur hier, bei vom Server ausdrücklich bestätigtem Erfolg, erklingt der Ton. Er ändert nichts am Ablauf.
+      successSound.play();
     } else if (response.status === 409) {
       setDevelopmentWriteStatus(requestBody.operationId, "conflict");
       clearPendingDevelopmentCheck();
@@ -1140,6 +1153,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
     state = state.returnState;
   } else if (action === "create-development-node" && state.kind === "new-aed-preview") {
+    successSound.prepare(); // Beim Tippen: Ton freischalten, er erklingt erst bei bestätigtem Erfolg.
     if (!developmentSession || !developmentWriteAvailable || !crypto.randomUUID || state.result.kind !== "ready" || state.writeStatus) return;
     // Zweite Bestätigung: Ohne gesetzten Haken „vor Ort geprüft“ wird nichts gesendet,
     // auch wenn der Knopf (z. B. per Tastatur oder Skript) trotzdem ausgelöst wurde.
@@ -1169,6 +1183,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
     state = state.returnState;
   } else if (action === "save-development-check" && state.kind === "osm-preview") {
+    successSound.prepare(); // Beim Tippen: Ton freischalten, er erklingt erst bei bestätigtem Erfolg.
     if (!developmentSession || !developmentWriteAvailable || !crypto.randomUUID || state.writeStatus === "sending" || state.writeStatus === "complete") return;
     const preview = state;
     const candidateId = preview.candidateId;
@@ -1196,6 +1211,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     render(true);
     void submitDevelopmentWrite(request);
   } else if (action === "retry-development-write" && (state.kind === "development-write-recovery" || state.kind === "new-aed-preview" || state.kind === "osm-preview")) {
+    successSound.prepare();
     if (!developmentSession || !developmentWriteAvailable || state.writeStatus !== "uncertain") return;
     const request = state.kind === "development-write-recovery" ? state.request : readPendingDevelopmentWrite();
     if (!request) return;

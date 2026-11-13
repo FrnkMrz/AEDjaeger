@@ -2077,6 +2077,8 @@ test("the build number sits small in the footer of every screen and matches the 
   const published = (await (await page.request.get("/version.json")).json()) as { revision: string };
   const mark = page.locator("footer #build-mark");
   await expect(mark).toContainText(`Version ${published.revision}`);
+  // Mit Datum und Uhrzeit des Builds, damit die Nummer nicht kryptisch bleibt.
+  await expect(mark).toContainText(String(new Date().getFullYear()));
   // Klein: höchstens 11 px Schrift, damit sie nicht stört.
   expect(await mark.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeLessThanOrEqual(11);
 
@@ -2099,4 +2101,123 @@ test("the footer with the build number fits a narrow phone screen in all six lan
     expect(mark!.x + mark!.width, `Nummer rechts im Bild (${code})`).toBeLessThanOrEqual(320);
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `Überlauf in ${code}`).toBeLessThanOrEqual(320);
   }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Ton bei bestätigtem Speichern
+// ---------------------------------------------------------------------------------------------
+
+type SoundCounters = { contexts: number; resumes: number; oscillators: number };
+
+/** Ersetzt den Audio-Baustein des Browsers durch eine Attrappe, die nur zählt. Es klingt nichts. */
+async function installFakeAudio(page: import("@playwright/test").Page): Promise<void> {
+  await page.addInitScript(() => {
+    const counters = { contexts: 0, resumes: 0, oscillators: 0 };
+    (window as unknown as { __sound: SoundCounters }).__sound = counters;
+    class FakeAudioContext {
+      state = "running"; currentTime = 0; destination = {};
+      constructor() { counters.contexts += 1; }
+      resume() { counters.resumes += 1; return Promise.resolve(); }
+      createOscillator() { counters.oscillators += 1; return { type: "sine", frequency: { value: 0 }, connect() { /* nichts */ }, start() { /* nichts */ }, stop() { /* nichts */ } }; }
+      createGain() { return { gain: { setValueAtTime() { /* nichts */ }, exponentialRampToValueAtTime() { /* nichts */ } }, connect() { /* nichts */ } }; }
+    }
+    (window as unknown as { AudioContext: unknown }).AudioContext = FakeAudioContext;
+  });
+}
+
+async function readSound(page: import("@playwright/test").Page): Promise<SoundCounters> {
+  return page.evaluate(() => (window as unknown as { __sound: SoundCounters }).__sound);
+}
+
+/** Bringt die App bis zum Speichern-Knopf für das Prüfdatum und gibt ihn zurück. */
+async function openCheckDateSaveButton(page: import("@playwright/test").Page, context: import("@playwright/test").BrowserContext, onWrite: (route: import("@playwright/test").Route) => Promise<void>) {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
+    authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true,
+  } }));
+  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
+    status: "complete", coverage_radius_meters: 112,
+    candidates: [{ id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2025-10-20" } }],
+  } }));
+  await page.route("**/api/osm/development/check-date", onWrite);
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.locator('[data-action="confirm-sighting"]').click();
+  await beginNearbySearch(page);
+  await page.getByRole("button", { name: "Als noch vorhanden bestätigen" }).click();
+  return page.getByRole("button", { name: "Testserver: Prüfdatum speichern" });
+}
+
+test("the success sound plays once, only after the server confirmed the save, and is unlocked by the tap", async ({ page, context }) => {
+  await installFakeAudio(page);
+  let releaseWrite: () => void = () => undefined;
+  const writeMayFinish = new Promise<void>((resolve) => { releaseWrite = resolve; });
+  const saveButton = await openCheckDateSaveButton(page, context, async (route) => { await writeMayFinish; await route.fulfill({ json: { status: "complete", version: 8 } }); });
+  // Vor dem Tippen: kein Audio-Baustein, kein Ton (schont Musik im Hintergrund).
+  expect(await readSound(page)).toEqual({ contexts: 0, resumes: 0, oscillators: 0 });
+  await saveButton.click();
+  await expect(page.getByRole("status")).toContainText("wird gesendet");
+  // Beim Tippen freigeschaltet, aber noch kein Ton: Der Server hat noch nicht bestätigt.
+  expect(await readSound(page)).toMatchObject({ contexts: 1, oscillators: 0 });
+  releaseWrite();
+  await expect(page.getByRole("status")).toContainText("Vor-Ort-Prüfung gespeichert");
+  // Genau ein Ton aus vier Noten.
+  expect((await readSound(page)).oscillators).toBe(4);
+});
+
+test("no success sound when the save ends unclear", async ({ page, context }) => {
+  await installFakeAudio(page);
+  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ status: 503, json: { error: "write_status_unavailable" } }));
+  await saveButton.click();
+  await expect(page.getByRole("status")).toContainText("Ergebnis unklar");
+  expect((await readSound(page)).oscillators).toBe(0);
+});
+
+test("no success sound when the server reports a conflict", async ({ page, context }) => {
+  await installFakeAudio(page);
+  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ status: 409, json: { error: "newer_check_date_exists" } }));
+  await saveButton.click();
+  await expect(page.getByRole("status")).not.toContainText("wird gesendet");
+  await page.waitForTimeout(300);
+  expect((await readSound(page)).oscillators).toBe(0);
+});
+
+test("with the sound switched off, a confirmed save is silent and no audio is even created", async ({ page, context }) => {
+  await installFakeAudio(page);
+  await page.addInitScript(() => localStorage.setItem("aedjaeger-success-sound", "off"));
+  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ json: { status: "complete", version: 8 } }));
+  await saveButton.click();
+  await expect(page.getByRole("status")).toContainText("Vor-Ort-Prüfung gespeichert");
+  expect(await readSound(page)).toEqual({ contexts: 0, resumes: 0, oscillators: 0 });
+});
+
+test("the sound switch in the info dialog is saved, plays a preview when switched on, and exists in all six languages", async ({ page }) => {
+  await installFakeAudio(page);
+  await page.goto("/");
+  const expectedLabel: Record<string, string> = {
+    de: "Ton, wenn das Speichern gelingt", en: "Sound when saving succeeds", pl: "Dźwięk po udanym zapisie",
+    ja: "保存に成功したら音を鳴らす", fr: "Son lorsque l'enregistrement réussit", es: "Sonido cuando el guardado se completa",
+  };
+  for (const code of languageCodes) {
+    await page.locator("#language").selectOption(code);
+    await page.locator("#open-info").click();
+    await expect(page.locator(".sound-toggle"), `Beschriftung in ${code}`).toContainText(expectedLabel[code]);
+    await page.keyboard.press("Escape");
+  }
+  await page.locator("#language").selectOption("de");
+  await page.locator("#open-info").click();
+  const toggle = page.locator("#success-sound-toggle");
+  await expect(toggle).toBeChecked(); // Standard: an.
+  await toggle.uncheck();
+  expect(await page.evaluate(() => localStorage.getItem("aedjaeger-success-sound"))).toBe("off");
+  expect((await readSound(page)).oscillators).toBe(0); // Ausschalten klingt nicht.
+  await toggle.check();
+  expect(await page.evaluate(() => localStorage.getItem("aedjaeger-success-sound"))).toBe("on");
+  expect((await readSound(page)).oscillators).toBe(4); // Einschalten spielt einmal vor.
+  // Nach dem Neuladen bleibt die Wahl erhalten.
+  await toggle.uncheck();
+  await page.reload();
+  await page.locator("#open-info").click();
+  await expect(page.locator("#success-sound-toggle")).not.toBeChecked();
 });
