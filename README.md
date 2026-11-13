@@ -18,6 +18,7 @@ Vorbild ist [Hydrantenjäger](https://hydrantenjaeger.de), insbesondere die einf
 - [Offene Fragen und nächste Schritte](docs/offene-fragen.md)
 - [Pilot-Abnahme: Handytest, Live-Check, OSM-Dev-Test und Release](docs/pilot-abnahme.md)
 - [Übergabe für neuen Chat oder Coding-Agenten](docs/uebergabe.md)
+- [Gesamt-Review und Arbeitsplan vom 13.11.2026](docs/review-2026-11-13.md)
 
 ## Festgelegte Produktrichtung
 
