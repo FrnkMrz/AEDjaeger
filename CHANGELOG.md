@@ -26,9 +26,11 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Changed
 - Entfernt das Häkchen-Symbol vor dem Namen in der Kopfzeile: Es zeigte dasselbe wie die grüne Lampe. Die Lampe bleibt als einziger Statusanzeiger.
-- Die Lampe ist jetzt eine Schaltfläche mit größerer Tippfläche. Grün: öffnet den Abschnitt mit „Abmelden“ im Info-Dialog (abgemeldet wird erst mit „Abmelden“). Rot: startet die Anmeldung wie der Anmelde-Knopf; fehlt dieser (Prüfung läuft, Verbindungsfehler), bleibt die Person auf der Anmeldeseite und der passende Knopf bekommt den Fokus.
+- Die Lampe ist jetzt eine Schaltfläche mit größerer Tippfläche. Grün: öffnet den Abschnitt mit „Abmelden“ im Info-Dialog (abgemeldet wird erst mit „Abmelden“). Rot: zeigt die Anmeldeseite und setzt den Fokus auf den Anmelde-Knopf; die Lampe meldet nie von selbst an, die Anmeldung braucht immer das ausdrückliche Tippen auf den Knopf. Fehlt dieser (Prüfung läuft, Verbindungsfehler), bekommt der passende andere Knopf oder die Überschrift den Fokus.
 
 ### Fixed
+- „Abmelden“ zeigt nie still wieder „angemeldet“: Meldet der Server nach der Abmeldung noch eine Sitzung, erscheint die Fehlermeldung mit dem Wiederholen-Knopf, die Lampe bleibt rot, und die Arbeitsfunktionen bleiben gesperrt.
+- Die rote Lampe startete die Anmeldung selbst. Wer bei OpenStreetMap noch angemeldet war, kam damit ohne Eingabe zurück in die App. Sie zeigt jetzt nur noch die Anmeldeseite.
 - Hält die Kopfzeile (Name, Verbindungslampe, Info) auf dem iPhone unterhalb von Uhr und Dynamic Island. Bisher lag sie in der installierten App darunter und war unsichtbar; ein e2e-Test prüft den Abstand. Der Update-Hinweis berücksichtigt den Abstand ebenfalls.
 
 ### Removed

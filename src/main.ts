@@ -230,7 +230,7 @@ function accountPanel(): string {
  * Sie steht oben, weil dort jeder Bildschirm anfängt; in der Fußzeile lag sie bei längeren Seiten außerhalb des Bildschirms
  * und war zu klein, um aufzufallen.
  *
- * Sie ist zugleich eine Schaltfläche (siehe openAccountFromLamp): Grün führt zum Abmelden, Rot zur Anmeldung.
+ * Sie ist zugleich eine Schaltfläche (siehe openAccountFromLamp): Grün führt zum Abmelden, Rot zur Anmeldeseite (angemeldet wird nur mit dem Anmelde-Knopf).
  * Der sichtbare Punkt ist klein; die Schaltfläche darum herum vergrößert nur die Tippfläche (siehe styles.css).
  * Für Screenreader trägt die Schaltfläche den Status als Text, denn Farbe allein reicht nicht.
  */
@@ -244,9 +244,10 @@ function connectionLamp(): string {
  * Tippen auf die Lampe.
  * - Verbunden (grün): öffnet den Info-Dialog an der Stelle mit „Abmelden“. Abgemeldet wird erst mit dem Tippen auf
  *   „Abmelden“, nicht schon durch die Lampe.
- * - Nicht verbunden (rot): startet die Anmeldung wie der Anmelde-Knopf auf der Anmeldeseite. Wir klicken dafür den
- *   vorhandenen Knopf, damit es nur einen Weg zur Anmeldung gibt. Gibt es ihn nicht (Prüfung läuft, Verbindungsfehler,
- *   nicht eingerichtet), bleibt die Person auf der Anmeldeseite und der passende Knopf bekommt den Fokus.
+ * - Nicht verbunden (rot): zeigt die Anmeldeseite und setzt den Fokus auf den Anmelde-Knopf. Die Lampe meldet NIE von
+ *   selbst an. Wer bei OpenStreetMap noch angemeldet ist, käme sonst ohne jede Eingabe zurück in die App; die Anmeldung
+ *   braucht immer ein ausdrückliches Tippen auf den Knopf. Gibt es keinen Anmelde-Knopf (Prüfung läuft,
+ *   Verbindungsfehler, nicht eingerichtet), bekommt der passende andere Knopf oder die Überschrift den Fokus.
  */
 function openAccountFromLamp(): void {
   if (accountState === "signed-in") {
@@ -258,12 +259,15 @@ function openAccountFromLamp(): void {
     signOut?.focus();
     return;
   }
-  const signIn = app!.querySelector<HTMLAnchorElement>("#osm-sign-in, #osm-dev-sign-in");
-  if (signIn) {
-    signIn.click();
-    return;
+  // Nur zeigen und fokussieren, nie klicken: Das Fokussieren eines Links löst keine Navigation aus.
+  // Die Reihenfolge der Auswahl ist Absicht: Ein Selektor mit Komma würde das erste Element im Dokument nehmen, also die Überschrift.
+  let target: HTMLElement | null = null;
+  for (const selector of ["#osm-sign-in", "#osm-dev-sign-in", "#osm-session-retry", "#osm-sign-out", "#login-title"]) {
+    target = app!.querySelector<HTMLElement>(selector);
+    if (target) break;
   }
-  app!.querySelector<HTMLElement>("#osm-session-retry, #osm-sign-out, #login-title")?.focus();
+  target?.scrollIntoView({ block: "center" });
+  target?.focus();
 }
 
 function escapeHtml(value: string): string {
@@ -766,7 +770,13 @@ function updateAccountPanel(focusSelector?: string): void {
   }
 }
 
-async function refreshAccountState(focusSelector?: string): Promise<void> {
+/**
+ * Fragt den Anmeldestatus beim Server ab und zeichnet die App neu.
+ * @param afterLogout true direkt nach „Abmelden“: Meldet der Server dann NOCH „angemeldet“, gilt die Abmeldung als
+ *   gescheitert (Fehlermeldung mit Wiederholen-Knopf). Die App zeigt nie still wieder „angemeldet“, wenn jemand
+ *   „Abmelden“ getippt hat.
+ */
+async function refreshAccountState(focusSelector?: string, afterLogout = false): Promise<void> {
   try {
     const status = await loadOSMSession();
     const failedOAuthReturn = oauthReturnFailed;
@@ -781,8 +791,9 @@ async function refreshAccountState(focusSelector?: string): Promise<void> {
     developmentSession = status.developmentSession;
     developmentWriteAvailable = status.developmentWriteAvailable;
     photoCheckAvailable = status.photoCheckAvailable;
-    if (status.authenticated) void askForLocationOnceAfterSignIn();
-    accountState = status.authenticated ? "signed-in" : !productionLoginAvailable && !developmentLoginAvailable ? "not-configured" : failedOAuthReturn ? "login-error" : "signed-out";
+    const stillSignedInAfterLogout = afterLogout && status.authenticated;
+    if (status.authenticated && !stillSignedInAfterLogout) void askForLocationOnceAfterSignIn();
+    accountState = stillSignedInAfterLogout ? "logout-error" : status.authenticated ? "signed-in" : !productionLoginAvailable && !developmentLoginAvailable ? "not-configured" : failedOAuthReturn ? "login-error" : "signed-out";
     if (state.kind === "photo" && accountState === "not-configured") recordDiagnostic("live_flow_blocked");
   } catch {
     // Local Vite previews and an unavailable Worker must not imply that an OSM session exists.
@@ -806,7 +817,7 @@ async function signOutFromOSM(): Promise<void> {
   render();
   try {
     await endOSMSession();
-    await refreshAccountState("next-action");
+    await refreshAccountState("next-action", true);
   } catch {
     accountState = "logout-error";
     render();
