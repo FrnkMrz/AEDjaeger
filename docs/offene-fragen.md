@@ -14,7 +14,8 @@ Bestätigt vom Projektinhaber: Die Versionsnummer im Info-Dialog stimmt mit `/ve
 
 **Offen:**
 
-- **Tags am Wiki prüfen (vor P1):** `defibrillator:cabinet` ist nicht belegt; `manufacturer` und `model` bleiben bis dahin draußen. Auch die Bedeutung von `access` am Gerät statt am Gebäude ist zu bestätigen. Das Wiki ist aus der Agentenumgebung nicht erreichbar; entweder den Host freigeben oder den Tag-Abschnitt der DE-Seite einfügen.
+- **Tags am Wiki prüfen:** Per Websuche (13.11.2026) belegt: `defibrillator:cabinet` hat die Werte `vertical_door`, `horizontal_door`, `twist`, `mechanical`, `no` und beschreibt die Art des Gehäuses; `access` kennt `yes`, `customers`, `private`, `no`, nicht aber `permissive`. Beides stammt aus Suchauszügen. Das Wiki ist aus der Agentenumgebung nicht erreichbar; zur Absicherung den Host freigeben oder den Tag-Abschnitt der DE-Seite einfügen. `manufacturer` und `model` bleiben draußen.
+- **Gehäuse-Frage (vor P2):** Die Wiki-Werte sind technisch (Tür senkrecht, Tür waagerecht, Drehverschluss, mechanisch). Offen ist, was die Oberfläche Laien anbietet: nur „Nein, offen“ (`no`), eine Auswahl mit Bildern, oder das Feld ganz streichen.
 - **Korrekturen (P5):** Bleibt hinter einem Betreiber-Schalter. Offen ist der Name der Variable und ob der Schalter zusätzlich nur für zugelassene Konten gilt.
 - **`opening_hours`:** Version 1 prüft nur Länge und Zeichen. Ob später eine Syntaxprüfung (eigene Bibliothek) lohnt, braucht eine eigene Entscheidung.
 - **Telefon und Betreiber:** Es gilt „nur von Gerät oder Schild“. Offen ist, ob die App Nummern zusätzlich automatisch auf Privatnummern prüfen soll (eher nein).

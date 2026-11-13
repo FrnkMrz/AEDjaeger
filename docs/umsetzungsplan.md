@@ -32,7 +32,7 @@ Entscheidung vom 13.11.2026, Mockup abgenommen. Je Etappe ein kleiner PR gegen `
 | Etappe | Ergebnis | Status |
 | --- | --- | --- |
 | P0 | Entscheidung und Dokumentation: `AGENTS.md`, `docs/osm.md`, `docs/konzept.md`, `docs/architektur.md`, `docs/offene-fragen.md`, `CHANGELOG.md` | Umgesetzt auf dem Arbeitsbranch, noch nicht gemergt |
-| P1 | Gemeinsamer Datenvertrag `src/contracts/aedDetails.ts` (Schlüsselliste, Werte, Grenzen, `buildDetailTags`, `diffTags`) mit Tests; vorher Tags am Wiki prüfen | Offen |
+| P1 | Gemeinsamer Datenvertrag `src/contracts/aedDetails.ts` (Schlüsselliste, Werte, Grenzen, `buildDetailTags`, `validateDetailTags`, `diffTags`) mit 31 Tests in `tests/aedDetails.test.ts`. Noch von keinem Programmteil benutzt | Umgesetzt auf dem Arbeitsbranch, noch nicht gemergt |
 | P2 | Formular für Neuanlage im Browser (neuer Zustand `new-aed-details`), Texte in allen sechs Sprachen, E2E bei 320 px | Offen |
 | P3 | Worker schreibt die Detailtags bei Neuanlage (`details` statt `location_description`), Hash und Wiederaufnahme rückwärtskompatibel | Offen |
 | P4 | Bestehenden AED ergänzen: frisches Lesen von Version und Tags, Schreibroute mit `expected_version` und `expected_before`, nur fehlende Tags | Offen |
