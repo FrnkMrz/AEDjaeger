@@ -2,6 +2,12 @@
 
 Stand: **10.11.2026**. Der aktuelle nächste Schritt ist ein echter, lesender Handytest des nach PR #49 deployten AED-Abgleichs. Diese Liste ersetzt ältere Statusangaben in diesem Dokument; frühere Einträge bleiben nur als historische Begründung erhalten.
 
+## Rückmeldungen vom 13.11.2026 (iPhone)
+
+Bestätigt vom Projektinhaber: Die Versionsnummer im Info-Dialog stimmt mit `/version.json` überein. Anmelden, Abmelden und die Lampe verhalten sich wie vorgesehen (die rote Lampe meldet nie von selbst an). Die Fotoprüfung erkannte ein Foto ohne AED nicht; die Ausnahme mit zwei Bestätigungen führte bis zur Vorschau. Der Migrationsstand der Datenbank ist geprüft (`0001` bis `0009`). Die Vorbereitung des Schreibtests ist bis auf Testort und zwei Beobachtungsdaten erledigt (siehe [Abnahme](pilot-abnahme.md), Abschnitt C0).
+
+**Offene Entscheidung:** Der Projektinhaber hat kein Android-Gerät. Die Abnahme verlangt für den Schreibtest (Abschnitt C) und für `v0.1.0` (Abschnitt E) einen Test auf Android und iPhone. Genügt das iPhone allein, oder soll ein Android-Test (zum Beispiel durch eine andere Person) Voraussetzung bleiben? Bis zur Entscheidung steht Android als „nicht getestet“ in der Abnahme.
+
 ## Domain aedjaeger.de (13.11.2026)
 
 Der Projektinhaber hat `aedjaeger.de` bei united domains für 12 Monate gesichert. **Entscheidung des Projektinhabers (13.11.2026):** Die Domain ist vorerst nur gesichert. Die App zieht erst um, wenn das Projekt öffentlich online geht; bis dahin bleibt `workers.dev` die Pilotadresse. Die neun Umzugsschritte stehen in [Domain](domain.md). **Offen:** Ablaufdatum und Verlängerung, `www`-Umleitung, ob `workers_dev` nach dem Umzug ausgeschaltet wird.

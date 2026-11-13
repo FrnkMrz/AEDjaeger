@@ -2019,7 +2019,8 @@ test("signing out really signs out: if the server still reports a session, the a
   await expect(page.locator(".connection-lamp-on")).toBeVisible();
   await page.locator("#connection-lamp").click();
   await page.getByRole("dialog").locator("#osm-sign-out").click();
-  expect(logoutRequests).toBe(1);
+  // Die Abmelde-Anfrage kommt asynchron an; darauf warten statt sofort zu zählen.
+  await expect.poll(() => logoutRequests).toBe(1);
   // Keine stille Rückkehr in den angemeldeten Zustand: Fehlermeldung, rote Lampe, Wiederholen möglich.
   await expect(page.locator(".connection-lamp-off")).toBeVisible();
   await expect(page.locator(".login-status")).toContainText("Abmeldung fehlgeschlagen");
@@ -2069,4 +2070,33 @@ test("the build version is also visible in the info dialog when signed out", asy
   await page.goto("/");
   await page.locator("#open-info").click();
   await expect(page.locator("#build-version")).toContainText("Version ");
+});
+
+test("the build number sits small in the footer of every screen and matches the published one", async ({ page }) => {
+  await page.goto("/");
+  const published = (await (await page.request.get("/version.json")).json()) as { revision: string };
+  const mark = page.locator("footer #build-mark");
+  await expect(mark).toContainText(`Version ${published.revision}`);
+  // Klein: höchstens 11 px Schrift, damit sie nicht stört.
+  expect(await mark.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeLessThanOrEqual(11);
+
+  // Auch nach der Fotoauswahl und auf der Anmeldeseite.
+  await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
+  await expect(page.locator('[data-action="confirm-sighting"]')).toBeVisible();
+  await expect(mark).toContainText(published.revision);
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.reload();
+  await expect(page.locator("footer #build-mark")).toContainText(published.revision);
+});
+
+test("the footer with the build number fits a narrow phone screen in all six languages", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto("/");
+  for (const code of languageCodes) {
+    await page.locator("#language").selectOption(code);
+    const mark = await page.locator("footer #build-mark").boundingBox();
+    expect(mark!.x, `Nummer links im Bild (${code})`).toBeGreaterThanOrEqual(0);
+    expect(mark!.x + mark!.width, `Nummer rechts im Bild (${code})`).toBeLessThanOrEqual(320);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `Überlauf in ${code}`).toBeLessThanOrEqual(320);
+  }
 });
