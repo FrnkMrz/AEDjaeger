@@ -18,7 +18,7 @@ Eine gültige OSM-Anmeldung ist Voraussetzung für die Arbeitsfunktionen. Das Zi
 
 ## Bereits vorhanden
 
-Der normale Weg bestätigt nur, dass der fotografierte AED noch vorhanden ist. Keine Pflicht zur Vervollständigung aller OSM-Felder. Bestehende Position, Öffnungszeiten und sonstige Angaben bleiben unverändert. Die Bestätigung wird mit dem Beobachtungsdatum als `check_date` gespeichert. Die recherchierte Grundlage und die Regeln für ältere Aufnahmen stehen im [Architekturentwurf](architektur.md#8-bestehenden-aed-bestätigen).
+Der normale Weg bestätigt nur, dass der fotografierte AED noch vorhanden ist. Keine Pflicht zur Vervollständigung aller OSM-Felder. Bestehende Position, Öffnungszeiten und sonstige Angaben bleiben auf diesem Weg unverändert; wer mehr beitragen will, öffnet daneben den Detailweg (Abschnitt „Details ergänzen“). Die Bestätigung wird mit dem Beobachtungsdatum als `check_date` gespeichert. Die recherchierte Grundlage und die Regeln für ältere Aufnahmen stehen im [Architekturentwurf](architektur.md#8-bestehenden-aed-bestätigen).
 
 Ein heutiges Foto bestätigt nicht automatisch die bisherigen Zugangszeiten oder die Funktionsfähigkeit des Geräts. Erkennt die App einen echten Widerspruch, stellt sie dazu genau eine kurze Frage, statt Daten still zu überschreiben.
 
@@ -27,6 +27,21 @@ Ein heutiges Foto bestätigt nicht automatisch die bisherigen Zugangszeiten oder
 Die App bereitet den neuen Eintrag aus bestätigter Sichtbarkeit und gewählter Position vor. Das Gerät muss im Gehäuse nicht sichtbar sein. Angaben wie Hersteller, Modell oder Standortbeschriftung werden nicht automatisch aus dem Foto übernommen.
 
 Fehlen entscheidende Angaben, fragt die App gezielt nach, zum Beispiel „Wo im Gebäude?“ oder bei unsicherer Position „Wo hängt der AED?“. Eine kleine Karte erscheint nur, wenn die Lage geklärt werden muss oder der Benutzer sie korrigieren möchte. Optionale Angaben dürfen fehlen; es gibt keinen Fragenkatalog zum vollständigen Ausfüllen.
+
+## Details ergänzen (Entscheidung vom 13.11.2026)
+
+Der Schnellweg bleibt der Standard und bleibt ein Tipp. Daneben gibt es einen freiwilligen **Detailweg**, bei Neuanlagen und bei bestehenden AEDs („Angaben ergänzen / korrigieren“). Die Person soll damit in wenigen Tipps festhalten, was im Notfall zählt: wo das Gerät hängt, wer es nutzen darf, wann es erreichbar ist, ob es drinnen oder draußen steht und auf welcher Ebene.
+
+Bedienung (abgenommenes Mockup vom 13.11.2026, orientiert am Hydrantenjäger):
+
+- Eine scrollbare Seite mit großen Auswahlfeldern statt Aufklapplisten, mindestens 48 px hoch, Schrift mindestens 14 px.
+- „Weiß ich nicht“ ist überall die Vorgabe. Sie schreibt nichts und löscht nichts.
+- Folgefelder erscheinen nur, wenn sie gebraucht werden: Zeiten bei „Zu bestimmten Zeiten“, Ebene bei „Drinnen“.
+- Seltene Angaben (Gehäuse, Betreiber, Telefon, Notiz, Nummer) stehen eingeklappt unter „Mehr Angaben“.
+- Eine feste Fußleiste zeigt einen Hauptknopf mit der Zahl der Änderungen („Weiter · 3 Angaben“). Ohne Änderung bleibt er gesperrt.
+- Die Vorschau zeigt jede Änderung. Bei bestehenden AEDs steht `alt → neu` da, unveränderte Tags erscheinen als „bleibt“. Gespeichert wird erst nach der Bestätigung für diesen Vorgang.
+
+Die App liest Zugang, Zeiten oder Lage nie aus dem Foto. Die Tags, ihre Grenzen und die drei Schreibstufen (Neuanlage, Ergänzen, Korrigieren) stehen in [OSM-Datenmodell](osm.md#detailangaben-entscheidung-vom-13112026). Korrigieren bestehender Werte ist ein eigener Betreiber-Schalter und standardmäßig aus.
 
 ## Nur bei Unklarheit nachfragen
 

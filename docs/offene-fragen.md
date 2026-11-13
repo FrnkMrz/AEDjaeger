@@ -8,6 +8,19 @@ Bestätigt vom Projektinhaber: Die Versionsnummer im Info-Dialog stimmt mit `/ve
 
 **Android (Stand 13.11.2026):** Der Projektinhaber hat kein Android-Gerät und holt den Android-Test später nach. Er hat den kontrollierten Schreibtest auf dem Testserver trotzdem freigegeben. Für `v0.1.0` (Abschnitt E) bleibt zu entscheiden, ob ein iPhone-Test genügt. Bis dahin steht Android als „nicht getestet“ in der Abnahme.
 
+## Detailangaben für AEDs (Entscheidung vom 13.11.2026)
+
+**Entscheidung des Projektinhabers:** Die App erfasst zusätzlich zum Schnellweg Standortbeschreibung, Zugang, Zeiten, drinnen/draußen, Ebene und unter „Mehr Angaben“ Gehäuse, Betreiber, Telefon, Notiz und Nummer. Das gilt für Neuanlagen und für bestehende AEDs, **einschließlich Korrekturen** vorhandener Werte. Das Mockup ist abgenommen. Umsetzung in den Etappen P1 bis P6 ([Umsetzungsplan](umsetzungsplan.md#detailweg-für-aed-angaben)); `AGENTS.md` ist angepasst.
+
+**Offen:**
+
+- **Tags am Wiki prüfen (vor P1):** `defibrillator:cabinet` ist nicht belegt; `manufacturer` und `model` bleiben bis dahin draußen. Auch die Bedeutung von `access` am Gerät statt am Gebäude ist zu bestätigen. Das Wiki ist aus der Agentenumgebung nicht erreichbar; entweder den Host freigeben oder den Tag-Abschnitt der DE-Seite einfügen.
+- **Korrekturen (P5):** Bleibt hinter einem Betreiber-Schalter. Offen ist der Name der Variable und ob der Schalter zusätzlich nur für zugelassene Konten gilt.
+- **`opening_hours`:** Version 1 prüft nur Länge und Zeichen. Ob später eine Syntaxprüfung (eigene Bibliothek) lohnt, braucht eine eigene Entscheidung.
+- **Telefon und Betreiber:** Es gilt „nur von Gerät oder Schild“. Offen ist, ob die App Nummern zusätzlich automatisch auf Privatnummern prüfen soll (eher nein).
+- **Texte:** Die Mockup-Texte sind nur Deutsch. Die fünf weiteren Sprachen entstehen in P2 und sind nicht muttersprachlich geprüft.
+- **Messung:** Ziel in P6 sind Tipps und Sekunden von „Foto“ bis „gespeichert“, getrennt für „nur bestätigen“ und „mit Details“. Ein Zielwert ist nicht festgelegt.
+
 ## Domain aedjaeger.de (13.11.2026)
 
 Der Projektinhaber hat `aedjaeger.de` bei united domains für 12 Monate gesichert. **Entscheidung des Projektinhabers (13.11.2026):** Die Domain ist vorerst nur gesichert. Die App zieht erst um, wenn das Projekt öffentlich online geht; bis dahin bleibt `workers.dev` die Pilotadresse. Die neun Umzugsschritte stehen in [Domain](domain.md). **Offen:** Ablaufdatum und Verlängerung, `www`-Umleitung, ob `workers_dev` nach dem Umzug ausgeschaltet wird.

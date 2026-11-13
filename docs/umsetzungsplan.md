@@ -25,6 +25,22 @@ Der Merge von PR #49 löste den automatischen Deploy aus; GitHub-Actions-Lauf [#
 
 Im ersten Code-Schritt ist Vite mit TypeScript ohne React gewählt. Der lokale Prototyp benötigt keine UI-Bibliothek; der App-Zustand bleibt in einem kleinen Fachmodul, damit Worker-, Feed- und OSM-Adapter getrennt bleiben. Produktive Dienste werden erst nach Abschluss und Prüfung der vorherigen Schritte angeschlossen.
 
+## Detailweg für AED-Angaben
+
+Entscheidung vom 13.11.2026, Mockup abgenommen. Je Etappe ein kleiner PR gegen `main`. Regeln und Tag-Liste: [OSM-Datenmodell](osm.md#detailangaben-entscheidung-vom-13112026); Bedienung: [Produktkonzept](konzept.md).
+
+| Etappe | Ergebnis | Status |
+| --- | --- | --- |
+| P0 | Entscheidung und Dokumentation: `AGENTS.md`, `docs/osm.md`, `docs/konzept.md`, `docs/architektur.md`, `docs/offene-fragen.md`, `CHANGELOG.md` | Umgesetzt auf dem Arbeitsbranch, noch nicht gemergt |
+| P1 | Gemeinsamer Datenvertrag `src/contracts/aedDetails.ts` (Schlüsselliste, Werte, Grenzen, `buildDetailTags`, `diffTags`) mit Tests; vorher Tags am Wiki prüfen | Offen |
+| P2 | Formular für Neuanlage im Browser (neuer Zustand `new-aed-details`), Texte in allen sechs Sprachen, E2E bei 320 px | Offen |
+| P3 | Worker schreibt die Detailtags bei Neuanlage (`details` statt `location_description`), Hash und Wiederaufnahme rückwärtskompatibel | Offen |
+| P4 | Bestehenden AED ergänzen: frisches Lesen von Version und Tags, Schreibroute mit `expected_version` und `expected_before`, nur fehlende Tags | Offen |
+| P5 | Korrekturen bestehender Werte hinter einem Betreiber-Schalter (Standard aus), Vorschau `alt → neu`, zusätzliche Bestätigung | Offen |
+| P6 | Praxistest auf iPhone (und später Android), Messung der Tipps und Sekunden bis „gespeichert“, Übergabe aktualisieren | Offen |
+
+Alle Schreibwege bleiben auf den OSM-Testserver begrenzt und hinter `OSM_DEV_WRITES_ENABLED`. Tests rufen weder echtes OSM noch OpenAI auf.
+
 ## Rollen und Werkzeuge
 
 Der Projektinitiator beschreibt gewünschtes Verhalten, bewertet vorzeigbare Ergebnisse und entscheidet über Konten, Ausgaben und Veröffentlichung. Der programmierende AI-Agent übernimmt Code, Tests, Konfiguration, Dokumentation und Fehlerbehebung. Er muss dafür Zugriff auf das Repository und eine Ausführungsumgebung haben; ein Chat, der nur Code ausgibt, erledigt diese Arbeit nicht vollständig.
