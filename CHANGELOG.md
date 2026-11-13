@@ -30,6 +30,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Changed
 - Verwendet das grün-gelbe Fadenkreuz mit größerem Maki-Herz ausschließlich als Installationssymbol für den Homescreen (Android und iOS); das Maki-Zeichen in der App und das Browser-Favicon bleiben unverändert.
+- Zeichnet die gelben Achsen des installierten Homescreen-Fadenkreuzes über das weiße Maki-Herz.
 - Hält fest, dass `aedjaeger.de` seit dem 13.11.2026 bei united domains für 12 Monate gesichert ist, und legt den Umzug in `docs/domain.md` fest (Cloudflare-Zone im Free-Tarif, Custom Domain am Worker, OSM-Dev-Redirect-URI, Prüfung, Aufräumen). Reine Dokumentation: Code, Deploy-Ziel und Anmeldung bleiben bis zum Umzug unverändert auf `workers.dev`.
 - Entfernt das Häkchen-Symbol vor dem Namen in der Kopfzeile: Es zeigte dasselbe wie die grüne Lampe. Die Lampe bleibt als einziger Statusanzeiger.
 - Die Lampe ist jetzt eine Schaltfläche mit größerer Tippfläche. Grün: öffnet den Abschnitt mit „Abmelden“ im Info-Dialog (abgemeldet wird erst mit „Abmelden“). Rot: zeigt die Anmeldeseite und setzt den Fokus auf den Anmelde-Knopf; die Lampe meldet nie von selbst an, die Anmeldung braucht immer das ausdrückliche Tippen auf den Knopf. Fehlt dieser (Prüfung läuft, Verbindungsfehler), bekommt der passende andere Knopf oder die Überschrift den Fokus.
