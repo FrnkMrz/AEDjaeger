@@ -8,9 +8,10 @@ Stand: **13.11.2026**
 - Die Domain bleibt bei united domains registriert. Cloudflare bekommt nur das DNS (Free-Tarif, 0 €). Es gibt keinen Registrar-Umzug.
 - Das Enddatum der Laufzeit steht im united-domains-Konto. **Offen:** Datum dort ablesen, automatische Verlängerung prüfen und eine Erinnerung für rund 4 Wochen vorher setzen. Läuft die Domain ab, fällt die App unter dieser Adresse aus und OSM-Anmeldungen schlagen fehl.
 - Hauptadresse soll `https://aedjaeger.de` werden (ohne `www`). `www.aedjaeger.de` leitet später dorthin um; das ist kein Pilotbedarf.
-- Bis zum Umzug bleibt `aedjaeger.aedjaeger.workers.dev` die Pilotadresse. Der Code ändert sich erst, wenn die Zone bei Cloudflare aktiv ist (siehe Reihenfolge).
+- **Zeitpunkt (Entscheidung des Projektinhabers, 13.11.2026):** Die Domain ist vorerst nur gesichert. Der Umzug der App erfolgt erst, wenn das Projekt öffentlich online geht. Bis dahin bleibt `aedjaeger.aedjaeger.workers.dev` die Pilotadresse.
+- Die Weiterleitung zu Cloudflare ist möglich und kostenlos: Man trägt bei united domains die Cloudflare-Nameserver ein; die Domain bleibt dort registriert. Der Code ändert sich erst, wenn die Zone bei Cloudflare aktiv ist (siehe Reihenfolge).
 
-## Warum jetzt umziehen
+## Warum früh umziehen (spätestens vor dem öffentlichen Start)
 
 Der Pilot ist klein. Jede Adresse ist für den Browser ein eigener Ursprung (Origin). Beim Wechsel gehen deshalb verloren oder müssen neu erteilt werden:
 

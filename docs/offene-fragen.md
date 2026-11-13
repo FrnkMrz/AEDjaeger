@@ -4,7 +4,7 @@ Stand: **10.11.2026**. Der aktuelle nächste Schritt ist ein echter, lesender Ha
 
 ## Domain aedjaeger.de (13.11.2026)
 
-Der Projektinhaber hat `aedjaeger.de` bei united domains für 12 Monate gesichert. Der Umzug der App folgt in neun Schritten, die [Domain](domain.md) auflistet. **Als Nächstes** (Projektinhaber): DNSSEC und E-Mail bei united domains prüfen, die Domain als Website im Cloudflare-Dashboard hinzufügen (Free), die zwei Nameserver bei united domains eintragen. Danach folgt der Rest. **Offen:** Ablaufdatum und Verlängerung, `www`-Umleitung, ob `workers_dev` nach dem Umzug ausgeschaltet wird.
+Der Projektinhaber hat `aedjaeger.de` bei united domains für 12 Monate gesichert. **Entscheidung des Projektinhabers (13.11.2026):** Die Domain ist vorerst nur gesichert. Die App zieht erst um, wenn das Projekt öffentlich online geht; bis dahin bleibt `workers.dev` die Pilotadresse. Die neun Umzugsschritte stehen in [Domain](domain.md). **Offen:** Ablaufdatum und Verlängerung, `www`-Umleitung, ob `workers_dev` nach dem Umzug ausgeschaltet wird.
 
 ## Aufgeräumte Oberfläche (11.11.2026)
 
