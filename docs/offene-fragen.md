@@ -2,6 +2,10 @@
 
 Stand: **10.11.2026**. Der aktuelle nächste Schritt ist ein echter, lesender Handytest des nach PR #49 deployten AED-Abgleichs. Diese Liste ersetzt ältere Statusangaben in diesem Dokument; frühere Einträge bleiben nur als historische Begründung erhalten.
 
+## Domain aedjaeger.de (13.11.2026)
+
+Der Projektinhaber hat `aedjaeger.de` bei united domains für 12 Monate gesichert. **Entscheidung des Projektinhabers (13.11.2026):** Die Domain ist vorerst nur gesichert. Die App zieht erst um, wenn das Projekt öffentlich online geht; bis dahin bleibt `workers.dev` die Pilotadresse. Die neun Umzugsschritte stehen in [Domain](domain.md). **Offen:** Ablaufdatum und Verlängerung, `www`-Umleitung, ob `workers_dev` nach dem Umzug ausgeschaltet wird.
+
 ## Aufgeräumte Oberfläche (11.11.2026)
 
 Rückmeldung aus dem Handytest: zu viel Text auf der Bestätigungsseite, Verweise nach OpenStreetMap unerwünscht, „Zurück zu den Treffern“ ohne Bedeutung, der Block „Mit OSM-Testserver verbunden“ dauerhaft überflüssig. Umgesetzt: kurze Bestätigungsseite, keine Verweise nach außen, „Zurück“ nur bei mehreren Treffern, grüne bzw. rote Verbindungslampe in der Kopfzeile neben dem Namen, „Abmelden“ im Info-Dialog. **Offen:** Ob „Abmelden“ im Info-Dialog der richtige Ort ist, und ob auch auf der Seite „Neuen AED eintragen“ weniger Text stehen soll. Die Texte aller sechs Sprachen sind nicht muttersprachlich geprüft.
@@ -124,7 +128,7 @@ Für eine leere Suche im OSM-Dev-Test bestätigt ein begrenzter, authentifiziert
 - Fotoprüfung per OpenAI, optional und nur bei Betreiber-Freigabe (Entscheidung vom 10.11.2026, ersetzt „ohne OpenAI“). Ohne Freigabe bleibt das Foto lokal und die Person bestätigt selbst.
 - Deutsch, Englisch, Polnisch, Japanisch, Französisch und Spanisch.
 - Gamification bleibt im Pilot unsichtbar; keine öffentliche Teil- oder Ranglistenfunktion.
-- Cloudflare Workers Free und bestehende workers.dev-Adresse; keine zusätzlichen Kosten oder Domain ohne Auftrag.
+- Cloudflare Workers Free; keine zusätzlichen Kosten ohne Auftrag. Domain: `aedjaeger.de` ist seit dem 13.11.2026 bei united domains für 12 Monate gesichert. Bis zum Umzug bleibt die workers.dev-Adresse die Pilotadresse ([Domain](domain.md)).
 - `check_date` ist das Prüfdatum. Bei einem vorhandenen AED dürfen andere Tags nicht überschrieben werden.
 
 ## Weiterführende Unterlagen

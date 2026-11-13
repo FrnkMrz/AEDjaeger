@@ -248,7 +248,7 @@ Dieser Vorschlag schützt Tokens vor direktem Auslesen durch Browser-JavaScript,
 
 ### Betriebskosten
 
-Der aktuelle Pilot ruft keine kostenpflichtige KI-API auf und benötigt weder KI-Schlüssel noch Reservierung eines Modellbudgets. Die App verwendet Workers Free als Hosting-Richtung; Paid-Tarif und eigene Domain bleiben bis zu einem belegten Bedarf ausgeschlossen. Die Suche liest den AED-Layer im regionalen PMTiles-Archiv. OSM-Schreibzugriffe sind ein eigener, standardmäßig abgeschalteter Testserver-Schalter. [Workers-Preise](https://developers.cloudflare.com/workers/platform/pricing/)
+Der aktuelle Pilot ruft keine kostenpflichtige KI-API auf und benötigt weder KI-Schlüssel noch Reservierung eines Modellbudgets. Die App verwendet Workers Free als Hosting-Richtung; Der Paid-Tarif bleibt bis zu einem belegten Bedarf ausgeschlossen. Die Domain `aedjaeger.de` ist seit dem 13.11.2026 gesichert (united domains, 12 Monate); die Zone läuft dafür im Cloudflare-Free-Tarif. Ablauf: [Domain](domain.md). Die Suche liest den AED-Layer im regionalen PMTiles-Archiv. OSM-Schreibzugriffe sind ein eigener, standardmäßig abgeschalteter Testserver-Schalter. [Workers-Preise](https://developers.cloudflare.com/workers/platform/pricing/)
 
 ### Fotos und personenbezogene Daten
 
