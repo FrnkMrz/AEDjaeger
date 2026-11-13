@@ -26,4 +26,30 @@ describe("first-version UI languages", () => {
       expect(translateFlow(language, "searchFound", { count: 2 })).not.toContain("{count}");
     }
   });
+
+  // Detailformular (Etappe P2): jeder Text in jeder Sprache vorhanden, die Platzhalter ersetzt, kein Rest in geschweiften Klammern.
+  it("keeps the AED detail form copy complete in all six languages", () => {
+    const detailKeys = Object.keys(translations.de).length > 0
+      ? ["detailsTitle", "detailsIntro", "detailLocationLabel", "detailLocationHint", "detailLocationPlaceholder", "detailLocEntrance", "detailLocFoyer", "detailLocOutside", "detailLocReception", "detailLocStairs", "detailAccessLabel", "detailAccessHint", "detailAccessYes", "detailAccessCustomers", "detailAccessPrivate", "detailUnknown", "detailHoursLabel", "detailHoursHint", "detailHoursAlways", "detailHoursTimes", "detailHoursTextLabel", "detailIndoorLabel", "detailIndoorYes", "detailIndoorNo", "detailLevelLabel", "detailLevelLower", "detailLevelHigher", "detailMoreTitle", "detailMoreOptional", "detailMoreCount", "detailOperatorLabel", "detailPhoneLabel", "detailPhoneHint", "detailDescriptionLabel", "detailRefLabel", "detailNoCode", "detailContinueNone", "detailContinueOne", "detailContinueMany", "detailInvalid", "detailsBackToForm", "detailsBackToMap"] as FlowMessageKey[]
+      : [];
+    expect(detailKeys).toHaveLength(42);
+    for (const language of Object.keys(translations) as Array<keyof typeof translations>) {
+      for (const key of detailKeys) expect(translateFlow(language, key).trim(), `${language}.${key}`).not.toBe("");
+      // Zähler-Texte: Die Zahl wird eingesetzt, und es bleibt kein Platzhalter stehen.
+      for (const key of ["detailContinueMany", "detailMoreCount"] as const) {
+        const filled = translateFlow(language, key, { count: 3 });
+        expect(filled, `${language}.${key}`).toContain("3");
+        expect(filled, `${language}.${key}`).not.toContain("{");
+      }
+      // Ergänzen bestehender AEDs (Etappe P4): Texte vorhanden, der Platzhalter für den bestehenden Wert wird ersetzt.
+      for (const key of ["detailsExistingTitle", "detailsExistingIntro", "detailLoading", "detailLoadFailed", "detailLoadChanged", "detailLoadRetry", "detailsAddAction", "detailsAddedTitle", "detailsAllPresent"] as FlowMessageKey[]) {
+        expect(translateFlow(language, key).trim(), `${language}.${key}`).not.toBe("");
+      }
+      const existing = translateFlow(language, "detailExistingValue", { value: "WERT" });
+      expect(existing, language).toContain("WERT");
+      expect(existing, language).not.toContain("{");
+      // Die Frage nach dem Zugang muss das Gerät meinen; der Hinweis darf in keiner Sprache fehlen oder leer sein.
+      expect(translateFlow(language, "detailAccessHint").length, language).toBeGreaterThan(8);
+    }
+  });
 });

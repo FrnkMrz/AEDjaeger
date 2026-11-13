@@ -6,7 +6,7 @@ describe("OSM session client", () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false, developmentWriteAvailable: false })));
 
     // Ein fehlendes Feld „photoCheckAvailable“ muss als „aus“ gelesen werden.
-    await expect(loadOSMSession(fetcher)).resolves.toEqual({ authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false, developmentWriteAvailable: false, photoCheckAvailable: false });
+    await expect(loadOSMSession(fetcher)).resolves.toEqual({ authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false, developmentWriteAvailable: false, developmentCorrectionsAvailable: false, photoCheckAvailable: false });
     expect(fetcher).toHaveBeenCalledWith("/api/auth/session", {
       credentials: "same-origin",
       headers: { Accept: "application/json" },
@@ -19,6 +19,19 @@ describe("OSM session client", () => {
     await expect(loadOSMSession(enabled)).resolves.toMatchObject({ photoCheckAvailable: true });
 
     const wrongType = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ ...status, photoCheckAvailable: "yes" })));
+    await expect(loadOSMSession(wrongType)).rejects.toThrow("OSM session status is invalid.");
+  });
+
+  it("reads the corrections flag only when it is exactly true", async () => {
+    const status = { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true };
+    const enabled = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ ...status, developmentCorrectionsAvailable: true })));
+    await expect(loadOSMSession(enabled)).resolves.toMatchObject({ developmentCorrectionsAvailable: true });
+
+    // Fehlt das Feld, heißt das „aus“.
+    const missing = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(status)));
+    await expect(loadOSMSession(missing)).resolves.toMatchObject({ developmentCorrectionsAvailable: false });
+
+    const wrongType = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ ...status, developmentCorrectionsAvailable: "yes" })));
     await expect(loadOSMSession(wrongType)).rejects.toThrow("OSM session status is invalid.");
   });
 

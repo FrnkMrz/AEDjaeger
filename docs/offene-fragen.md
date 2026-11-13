@@ -8,6 +8,24 @@ Bestätigt vom Projektinhaber: Die Versionsnummer im Info-Dialog stimmt mit `/ve
 
 **Android (Stand 13.11.2026):** Der Projektinhaber hat kein Android-Gerät und holt den Android-Test später nach. Er hat den kontrollierten Schreibtest auf dem Testserver trotzdem freigegeben. Für `v0.1.0` (Abschnitt E) bleibt zu entscheiden, ob ein iPhone-Test genügt. Bis dahin steht Android als „nicht getestet“ in der Abnahme.
 
+## Detailangaben für AEDs (Entscheidung vom 13.11.2026)
+
+**Entscheidung des Projektinhabers:** Die App erfasst zusätzlich zum Schnellweg Standortbeschreibung, Zugang, Zeiten, drinnen/draußen, Ebene und unter „Mehr Angaben“ Gehäuse, Betreiber, Telefon, Notiz und Nummer. Das gilt für Neuanlagen und für bestehende AEDs, **einschließlich Korrekturen** vorhandener Werte. Das Mockup ist abgenommen. Umsetzung in den Etappen P1 bis P6 ([Umsetzungsplan](umsetzungsplan.md#detailweg-für-aed-angaben)); `AGENTS.md` ist angepasst.
+
+**Offen:**
+
+- **Tags am Wiki prüfen:** Per Websuche (13.11.2026) belegt: `defibrillator:cabinet` hat die Werte `vertical_door`, `horizontal_door`, `twist`, `mechanical`, `no` und beschreibt die Art des Gehäuses; `access` kennt `yes`, `customers`, `private`, `no`, nicht aber `permissive`. Beides stammt aus Suchauszügen. Das Wiki ist aus der Agentenumgebung nicht erreichbar; zur Absicherung den Host freigeben oder den Tag-Abschnitt der DE-Seite einfügen. `manufacturer` und `model` bleiben draußen.
+- **Gehäuse-Frage:** Die Wiki-Werte sind technisch (Tür senkrecht, Tür waagerecht, Drehverschluss, mechanisch). Offen ist, was die Oberfläche Laien anbietet: nur „Nein, offen“ (`no`), eine Auswahl mit Bildern, oder das Feld ganz streichen. **Vorläufig (ohne Rückmeldung des Projektinhabers):** P2 zeigt das Feld nicht. Der Datenvertrag erlaubt es weiterhin, sodass eine spätere Ergänzung keine Serveränderung braucht.
+- **Formular auf dem Handy (P2):** Nur im Browser mit Playwright geprüft (Pixel-7-Profil, 320 px, alle sechs Sprachen, Tastatur). Nicht geprüft: echtes iPhone und Android, Bildschirmtastatur (verdeckt sie die Fußleiste?), japanische Eingabemethode, Lesbarkeit im Freien.
+- **Ergänzen bestehender AEDs (P4):** Nur mit simulierten OSM-Antworten und im Browser mit Playwright geprüft. Ein echter Test gegen den OSM-Testserver mit `OSM_DEV_WRITES_ENABLED=true` steht aus (gesonderte Freigabe nötig, siehe [Abnahme](pilot-abnahme.md)). Offen ist außerdem: Soll ein bestehender AED ohne jede ergänzbare Lücke den Knopf „Fehlende Angaben ergänzen“ trotzdem zeigen (heute ja, mit dem Hinweis „schon alles eingetragen“)?
+- **Zeiten-Eingabe:** Zwei feste Vorlagen („Mo-Fr 08:00-18:00“, „Mo-Sa 07:00-20:00“). Offen ist, ob mehr oder gar keine Vorlagen sinnvoll sind.
+- **Schnellwahl beim Standort:** Fünf Wörter (Eingang, Foyer, Außenwand, Empfang, Treppenhaus). Offen ist, ob das die richtigen sind.
+- **Korrekturen (P5):** Umgesetzt hinter dem Betreiber-Schalter `OSM_DETAIL_CORRECTIONS_ENABLED` (Standard aus). Der Schalter gilt für alle angemeldeten Testserver-Konten; eine Beschränkung auf zugelassene Konten gibt es nicht. Offen: Ob eine solche Beschränkung nötig ist, und die Frage, ob nach einer Änderung von „drinnen“ auf „draußen“ das stehen gebliebene `level` im Formular wenigstens gemeldet werden soll. Ein echter Test gegen den OSM-Testserver steht aus (siehe [Abnahme](pilot-abnahme.md), Abschnitt D).
+- **`opening_hours`:** Version 1 prüft nur Länge und Zeichen. Ob später eine Syntaxprüfung (eigene Bibliothek) lohnt, braucht eine eigene Entscheidung.
+- **Telefon und Betreiber:** Es gilt „nur von Gerät oder Schild“. Offen ist, ob die App Nummern zusätzlich automatisch auf Privatnummern prüfen soll (eher nein).
+- **Texte:** Die Mockup-Texte sind nur Deutsch. Die fünf weiteren Sprachen entstehen in P2 und sind nicht muttersprachlich geprüft.
+- **Messung:** Ziel in P6 sind Tipps und Sekunden von „Foto“ bis „gespeichert“, getrennt für „nur bestätigen“ und „mit Details“. Ein Zielwert ist nicht festgelegt.
+
 ## Domain aedjaeger.de (13.11.2026)
 
 Der Projektinhaber hat `aedjaeger.de` bei united domains für 12 Monate gesichert. **Entscheidung des Projektinhabers (13.11.2026):** Die Domain ist vorerst nur gesichert. Die App zieht erst um, wenn das Projekt öffentlich online geht; bis dahin bleibt `workers.dev` die Pilotadresse. Die neun Umzugsschritte stehen in [Domain](domain.md). **Offen:** Ablaufdatum und Verlängerung, `www`-Umleitung, ob `workers_dev` nach dem Umzug ausgeschaltet wird.

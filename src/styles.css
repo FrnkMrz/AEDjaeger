@@ -228,3 +228,50 @@ footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: c
 .update-banner-button { min-height: 44px; padding: 0 18px; border: 0; border-radius: 999px; background: #fff; color: var(--green-dark); font: inherit; font-weight: 700; cursor: pointer; }
 .update-banner-button:disabled { opacity: 0.6; cursor: not-allowed; }
 .update-banner-button:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+
+/* ---------------------------------------------------------------------------------------------------------------
+   Detailformular für eine Neuanlage (Etappe P2). Große Tipp-Flächen (mindestens 48 px), Schrift mindestens 14 px,
+   eine feste Fußleiste mit dem Hauptknopf. Auswahlfelder sind echte Radio-Felder mit sichtbarem Etikett.
+   --------------------------------------------------------------------------------------------------------------- */
+/* Die Karte schneidet sonst alles ab, was „klebt“; ohne diese Ausnahme würde die Fußleiste nicht am Rand haften. */
+.capture-card:has(.detail-form-root) { overflow: visible; }
+.detail-form-root { display: grid; gap: 14px; }
+.photo-thumb { width: 96px; max-height: 120px; margin: 0 auto; }
+.detail-group { min-width: 0; margin: 0; display: grid; gap: 10px; border: 1px solid var(--line); border-radius: 16px; padding: 14px; background: #fff; }
+.detail-legend { margin: 0; font-size: 16px; font-weight: 700; line-height: 1.35; }
+.detail-hint { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+label.detail-hint { display: block; margin-bottom: 4px; }
+.detail-error { margin: 0; border-radius: 10px; padding: 9px 11px; color: #8f2d24; background: #fdecea; font-size: 14px; line-height: 1.45; }
+.detail-error[hidden] { display: none; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-wrap { position: relative; display: inline-flex; }
+/* Das echte Radio-Feld bleibt für Tastatur und Screenreader da, ist aber unsichtbar. */
+.chip-input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; }
+.chip { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; border: 2px solid var(--line); border-radius: 12px; padding: 8px 14px; color: var(--ink); background: #fff; font-family: inherit; font-size: 15px; font-weight: 600; line-height: 1.25; text-align: center; cursor: pointer; }
+.chip-small { min-height: 44px; font-size: 14px; font-weight: 500; }
+.chip-input:checked + .chip { border-color: var(--green); color: var(--green-dark); background: var(--mint); }
+.chip-input:checked + .chip-unknown { border-color: #9aa59f; color: var(--muted); background: transparent; }
+.chip-input:focus-visible + .chip, button.chip:focus-visible, .step-button:focus-visible { outline: 3px solid #176b4b; outline-offset: 2px; }
+.detail-sub { display: grid; gap: 8px; border-left: 3px solid var(--line); padding-left: 12px; }
+.detail-group .field, .detail-more .field { width: 100%; min-height: 48px; border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; color: var(--ink); background: #fff; font: inherit; font-size: 16px; }
+.detail-group .field:focus-visible, .detail-more .field:focus-visible { outline: 3px solid #176b4b; outline-offset: 1px; }
+.stepper { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.step-button { width: 48px; height: 48px; border: 2px solid var(--line); border-radius: 12px; color: var(--ink); background: #fff; font-size: 24px; font-weight: 700; cursor: pointer; }
+.step-value { min-width: 56px; text-align: center; font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.detail-more { border: 1px solid var(--line); border-radius: 16px; padding: 2px 14px; background: #fff; }
+.detail-more summary { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 16px; font-weight: 700; cursor: pointer; }
+.detail-more summary:focus-visible { outline: 3px solid #176b4b; outline-offset: 2px; }
+.detail-more-count { color: var(--muted); font-size: 14px; font-weight: 600; }
+.detail-more-body { display: grid; gap: 14px; padding-bottom: 14px; }
+/* Feste Fußleiste: Der Hauptknopf bleibt beim Scrollen am unteren Rand erreichbar und berücksichtigt die iPhone-Leiste. */
+.detail-footer { position: sticky; bottom: 0; z-index: 5; margin: 0 -4px; padding: 10px 4px calc(10px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(to top, #fff 78%, transparent); }
+.detail-form-root .button { width: 100%; }
+/* Abstand zwischen den Abschnitten des Formulars. */
+#detail-form { display: grid; gap: 14px; }
+/* Gesperrte Zeile beim Ergänzen: Dieser Wert steht schon in OpenStreetMap und bleibt unverändert. */
+.detail-locked { margin: 0; border-radius: 10px; padding: 10px 12px; color: var(--ink); background: #f1f4f0; font-size: 15px; line-height: 1.45; overflow-wrap: anywhere; }
+/* Korrekturen (Etappe P5): geänderte Abschnitte sind gelb umrandet und nennen den alten Wert. */
+.detail-group.is-changed, .detail-more.is-changed { border-color: #c98a00; background: #fffaf0; }
+.detail-was { margin: 0; color: #8a650b; font-size: 14px; font-weight: 600; line-height: 1.45; }
+.detail-was[hidden] { display: none; }
+.detail-old { text-decoration: line-through; color: var(--muted); }

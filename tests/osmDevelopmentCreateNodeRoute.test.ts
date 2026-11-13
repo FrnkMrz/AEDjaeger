@@ -130,7 +130,15 @@ function makeRequest(body: unknown = input): Request {
   });
 }
 
-function makeFetch(options: { nearbyAedAt?: { lat: number; lon: number; type?: "node" | "way" }; nearbyAed?: boolean; nearbyAedId?: number; loseUploadResponse?: boolean; invalidMap?: boolean; emptyChangeset?: boolean; observedOn?: string; alreadyClosed?: "json" | "xml" | "json-open" | "json-other-id" } = {}) {
+/** Maskiert Text wie der Server für XML-Attribute; der Testserver-Ersatz braucht dieselbe Schreibweise zum Vergleichen. */
+function xmlAttribute(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
+}
+
+function makeFetch(options: { detailTags?: Record<string, string>; nearbyAedAt?: { lat: number; lon: number; type?: "node" | "way" }; nearbyAed?: boolean; nearbyAedId?: number; loseUploadResponse?: boolean; invalidMap?: boolean; emptyChangeset?: boolean; observedOn?: string; alreadyClosed?: "json" | "xml" | "json-open" | "json-other-id" } = {}) {
+  // Die Tags, die der Server nach den Pflicht-Tags (emergency, check_date) schreiben soll. Standard wie früher: nur der Standort-Text.
+  const detailTags = options.detailTags ?? { "defibrillator:location": "Near main entrance" };
+  const detailTagXml = Object.entries(detailTags).map(([key, value]) => `<tag k="${xmlAttribute(key)}" v="${xmlAttribute(value)}"/>`).join("");
   let loseUploadResponse = options.loseUploadResponse ?? false;
   let uploadCount = 0;
   const calls: Array<{ url: string; method: string; body?: string }> = [];
@@ -146,13 +154,15 @@ function makeFetch(options: { nearbyAedAt?: { lat: number; lon: number; type?: "
       expect(body).toContain('<node id="-1" changeset="77" lat="52.52" lon="13.405">');
       expect(body).toContain('<tag k="emergency" v="defibrillator"/>');
       expect(body).toContain(`<tag k="check_date" v="${options.observedOn ?? "2026-10-24"}"/>`);
-      expect(body).toContain('<tag k="defibrillator:location" v="Near main entrance"/>');
+      for (const [key, value] of Object.entries(detailTags)) expect(body).toContain(`<tag k="${xmlAttribute(key)}" v="${xmlAttribute(value)}"/>`);
+      // Genau die erwarteten Tags und keine weiteren: zwei Pflicht-Tags plus die Detailtags.
+      expect((body ?? "").match(/<tag /g)).toHaveLength(2 + Object.keys(detailTags).length);
       if (loseUploadResponse) { loseUploadResponse = false; throw new Error("connection lost after upload"); }
       return new Response('<?xml version="1.0" encoding="UTF-8"?>\n<diffResult generator="OpenStreetMap server" version="0.6">\n <node old_id="-1" new_id="456" new_version="1"/>\n</diffResult>\n', { status: 200 });
     }
     if (url.endsWith("/changeset/77/download")) return new Response(options.emptyChangeset
       ? '<?xml version="1.0" encoding="UTF-8"?><osmChange version="0.6" generator="test"><create/><modify/><delete/></osmChange>'
-      : '<osmChange version="0.6"><create><node id="456" version="1" lat="52.52" lon="13.405" changeset="77"><tag k="check_date" v="2026-10-24"/><tag k="emergency" v="defibrillator"/><tag k="defibrillator:location" v="Near main entrance"/></node></create><modify/><delete/></osmChange>', { status: 200 });
+      : `<osmChange version="0.6"><create><node id="456" version="1" lat="52.52" lon="13.405" changeset="77"><tag k="check_date" v="2026-10-24"/><tag k="emergency" v="defibrillator"/>${detailTagXml}</node></create><modify/><delete/></osmChange>`, { status: 200 });
     // Wie der echte Testserver: Der Änderungssatz ist schon geschlossen, "close" meldet 409, und der Status kommt als JSON
     // (wegen "Accept: application/json, ...") oder als XML.
     if (options.alreadyClosed && url.endsWith("/changeset/77/close")) return new Response("The changeset 77 was closed at 2026-10-24 10:00:00 UTC", { status: 409 });
@@ -180,6 +190,92 @@ describe("OSM development node creation", () => {
     const replay = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
     expect(replay.status).toBe(200);
     expect(api.calls.filter((call) => call.url.endsWith("/upload"))).toHaveLength(1);
+  });
+
+  it("writes every approved detail tag in one upload, with XML-safe values", async () => {
+    const DB = await setupDatabase();
+    const details = {
+      "defibrillator:location": "Foyer & Café, links", access: "customers", opening_hours: "Mo-Fr 08:00-18:00", indoor: "yes", level: "-1", operator: "Stadtwerke <Nord>", phone: "+49 911 123456", description: "Schlüssel \"beim\" Empfang", ref: "A-12",
+    };
+    const api = makeFetch({ detailTags: details });
+    const { operation_id, confirmed, latitude, longitude, observed_on } = input;
+    const response = await handleDevelopmentCreateNode(makeRequest({ operation_id, confirmed, latitude, longitude, observed_on, details }), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ status: "complete", node_id: "456", version: 1 });
+    // Die Prüfung der Tags (genau diese, keine weiteren) steckt im Testserver-Ersatz makeFetch.
+    expect(api.uploadCount).toBe(1);
+  });
+
+  it("writes only the two required tags when the person gave no details", async () => {
+    const DB = await setupDatabase();
+    const api = makeFetch({ detailTags: {} });
+    const { operation_id, confirmed, latitude, longitude, observed_on } = input;
+    const response = await handleDevelopmentCreateNode(makeRequest({ operation_id, confirmed, latitude, longitude, observed_on, details: {} }), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    expect(response.status).toBe(200);
+    expect(api.uploadCount).toBe(1);
+  });
+
+  it("treats the old location_description request and the same location in details as one operation", async () => {
+    const DB = await setupDatabase(); const api = makeFetch();
+    const dependencies = { now: () => now, fetch: api.fetcher };
+    const { operation_id, confirmed, latitude, longitude, observed_on } = input;
+    const first = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies);
+    expect(first.status).toBe(200);
+    // Eine Wiederholung aus der neuen App-Version (gleiche Vorgangs-ID, gleicher Standort) darf nicht als fremder Vorgang gelten.
+    const replay = await handleDevelopmentCreateNode(makeRequest({ operation_id, confirmed, latitude, longitude, observed_on, details: { "defibrillator:location": "Near main entrance" } }), { ...environment, DB }, dependencies);
+    expect(replay.status).toBe(200);
+    expect(api.uploadCount).toBe(1);
+  });
+
+  it("rejects the same operation id with different details", async () => {
+    const DB = await setupDatabase(); const api = makeFetch({ detailTags: { access: "yes" } });
+    const dependencies = { now: () => now, fetch: api.fetcher };
+    const { operation_id, confirmed, latitude, longitude, observed_on } = input;
+    const base = { operation_id, confirmed, latitude, longitude, observed_on };
+    expect((await handleDevelopmentCreateNode(makeRequest({ ...base, details: { access: "yes" } }), { ...environment, DB }, dependencies)).status).toBe(200);
+    const changed = await handleDevelopmentCreateNode(makeRequest({ ...base, details: { access: "private" } }), { ...environment, DB }, dependencies);
+    expect(changed.status).toBe(409);
+    expect(await changed.json()).toEqual({ error: "operation_id_conflict" });
+    expect(api.uploadCount).toBe(1);
+  });
+
+  it("reconciles a lost upload response that carried detail tags without a second create", async () => {
+    const DB = await setupDatabase();
+    const details = { access: "customers", indoor: "yes", level: "1", opening_hours: "24/7" };
+    const api = makeFetch({ loseUploadResponse: true, detailTags: details });
+    const dependencies = { now: () => now, fetch: api.fetcher };
+    const { operation_id, confirmed, latitude, longitude, observed_on } = input;
+    const body = { operation_id, confirmed, latitude, longitude, observed_on, details };
+    expect((await handleDevelopmentCreateNode(makeRequest(body), { ...environment, DB }, dependencies)).status).toBe(202);
+    const retry = await handleDevelopmentCreateNode(makeRequest(body), { ...environment, DB }, dependencies);
+    expect(retry.status).toBe(200);
+    expect(api.uploadCount).toBe(1);
+  });
+
+  it("rejects unapproved, malformed or ambiguous detail requests before calling OSM", async () => {
+    const { operation_id, confirmed, latitude, longitude, observed_on } = input;
+    const base = { operation_id, confirmed, latitude, longitude, observed_on };
+    const bad: Array<[string, unknown]> = [
+      ["access code key", { ...base, details: { "defibrillator:code": "1234" } }],
+      ["protected tag", { ...base, details: { check_date: "2020-01-01" } }],
+      ["emergency override", { ...base, details: { emergency: "no" } }],
+      ["invalid access value", { ...base, details: { access: "permissive" } }],
+      ["level outside the range", { ...base, details: { indoor: "yes", level: "100" } }],
+      ["too long text", { ...base, details: { description: "x".repeat(256) } }],
+      ["control character inside", { ...base, details: { "defibrillator:location": "Eingang\nlinks" } }],
+      ["array instead of object", { ...base, details: [] }],
+      ["null instead of object", { ...base, details: null }],
+      ["non-text value", { ...base, details: { level: 1 } }],
+      ["details and old field together", { ...base, details: {}, location_description: null }],
+      ["neither details nor old field", base],
+      ["unknown top-level field", { ...base, details: {}, extra: true }],
+    ];
+    for (const [label, body] of bad) {
+      const DB = await setupDatabase(); const api = makeFetch();
+      const response = await handleDevelopmentCreateNode(makeRequest(body), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+      expect(response.status, label).toBe(400);
+      expect(api.calls, label).toEqual([]);
+    }
   });
 
   it("creates a confirmed node with the historical date from an older photo", async () => {

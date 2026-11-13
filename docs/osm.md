@@ -27,6 +27,39 @@ Die [Dokumentation zu `check_date`](https://wiki.openstreetmap.org/wiki/Key:chec
 
 Das Prüfdatum beschreibt den Tag der tatsächlichen Beobachtung, auch wenn ein älteres Foto verwendet wird. Beide OSM-Entwicklungs-Schreibrouten akzeptieren deshalb vergangene, gültige Kalenderdaten, nachdem die Person sie ausdrücklich bestätigt hat. Ungültige oder zukünftige Daten werden serverseitig abgewiesen. Ein älteres Prüfdatum darf ein neueres vorhandenes Datum weiterhin nicht zurücksetzen.
 
+## Detailangaben (Entscheidung vom 13.11.2026)
+
+Neben dem Schnellweg „Noch da – bestätigen“ (schreibt nur `check_date`) gibt es einen **Detailweg**. Die Oberfläche steht als abgenommenes Mockup fest; die Umsetzung folgt in den Etappen P1 bis P6 ([Umsetzungsplan](umsetzungsplan.md#detailweg-für-aed-angaben)). Nur diese Schlüssel darf der Detailweg schreiben. Der Server lehnt jeden anderen Schlüssel ab.
+
+| Schlüssel | Erlaubte Werte | Eingabe in der App | Regel |
+| --- | --- | --- | --- |
+| `defibrillator:location` | Freitext, 1 bis 160 Zeichen, keine Steuerzeichen | Textfeld mit Schnellwahl („Eingang“, „Foyer“ …) | Kurz und für Fremde auffindbar. Die Schnellwahl hängt nur ein Wort an. |
+| `access` | `yes`, `customers`, `private` | Auswahlfelder „Jeder“, „Nur Kunden“, „Nicht öffentlich“ | Frage meint das Gerät, nicht das Gebäude. „Weiß ich nicht“ schreibt kein Tag. `no` kennt OSM auch, die App bietet es nicht an; `permissive` ist für AEDs nicht belegt und wird abgelehnt. Die Diskussionsseite weist darauf hin, dass `access` oft für das Gebäude steht; die Fragetexte müssen das Gerät meinen. |
+| `opening_hours` | `24/7` oder ein OSM-Zeitausdruck, höchstens 120 Zeichen | „Rund um die Uhr“, „Zu bestimmten Zeiten“ (mit Textfeld) | `24/7` nur bei ausdrücklicher Wahl, nie abgeleitet. Version 1 prüft nur Länge und Zeichen, nicht die Syntax. |
+| `indoor` | `yes`, `no` | „Drinnen“, „Draußen“ | Nur bei eindeutiger Antwort. |
+| `level` | ganze Zahl von −9 bis 99 | Zähler (0 = Erdgeschoss, −1 = Keller) | Nur sichtbar und nur geschrieben, wenn `indoor=yes` gewählt ist. |
+| `defibrillator:cabinet` | `vertical_door`, `horizontal_door`, `twist`, `mechanical`, `no` | Noch nicht in der Oberfläche (offene Entscheidung); der Server akzeptiert den Schlüssel | Beschreibt die **Art** des Gehäuses, kein einfaches Ja/Nein. Werte laut Websuche-Auszug des Wikis vom 13.11.2026; die Seite selbst war nicht lesbar. Die Oberfläche bietet nur an, was für Laien verständlich ist. |
+| `operator` | Freitext, höchstens 120 Zeichen | „Mehr Angaben“ | Nur, was am Gerät oder Schild steht. |
+| `phone` | Telefonnummer, höchstens 40 Zeichen | „Mehr Angaben“ | Nur Nummern von Gerät oder Schild. Hinweis „Keine Privatnummern“ in der App. |
+| `description` | Freitext, höchstens 255 Zeichen | „Mehr Angaben“ | Notiz für andere Mapper. |
+| `ref` | Freitext, höchstens 60 Zeichen | „Mehr Angaben“ | Nummer am Gerät. |
+
+**Nie erfasst:** `defibrillator:code` (ein Zugangscode kann ein Schloss aushebeln), Position bestehender Objekte, `name`, alle übrigen Schlüssel. `manufacturer` und `model` bleiben draußen, bis die Tags am Wiki geprüft sind.
+
+**Drei Schreibstufen, getrennt schaltbar:**
+
+1. **Neuanlage:** `emergency=defibrillator`, `check_date` und die ausgewählten Detailtags in einem Vorgang.
+2. **Bestehender AED ergänzen:** nur Schlüssel, die am Objekt noch fehlen. Nichts wird überschrieben.
+3. **Bestehender AED korrigieren:** ersetzt vorhandene Werte der Liste. Läuft nur mit eingeschaltetem Betreiber-Schalter (Standard aus), zeigt jede Änderung als `alt → neu` und braucht die zusätzliche Bestätigung „Ich habe vor Ort gesehen, dass der alte Wert nicht stimmt“.
+
+**Gemeinsame Schutzregeln für Stufe 2 und 3:** Die Oberfläche füllt das Formular aus einer frischen OSM-Abfrage vor, nicht aus dem bis zu fünf Tage alten PMTiles-Archiv. Der Server liest das Objekt unmittelbar vor dem Schreiben erneut und bricht bei geänderter Version oder geändertem Vorwert ab (Konflikt, neue Prüfung). Alle übrigen Tags bleiben unverändert. Es gibt kein Löschen und kein Verschieben. Eine Antwort „Weiß ich nicht“ ändert nie etwas. Das Prüfdatum `check_date` wird mit gesetzt, weil die Person das Gerät vor Ort gesehen hat. Alle Eingaben werden im Worker erneut gegen dieselbe Liste und dieselben Grenzen geprüft wie im Browser (gemeinsamer Vertrag `src/contracts/aedDetails.ts`, seit Etappe P1 umgesetzt und getestet). Unsichtbare und richtungsumkehrende Zeichen sind in Freitexten verboten, `phone` verlangt ein Nummernmuster mit mindestens drei Ziffern.
+
+**Umsetzung der Stufe 2 (Etappe P4):** Der Browser liest das Objekt über `GET /api/osm/development/node?id=node/<Zahl>` frisch vom Testserver. Die Route ist nur lesend, braucht eine Testserver-Sitzung und gibt nur die Detail-Schlüssel und `check_date` zurück (kein `name`, kein Zugangscode). Gespeichert wird über die bestehende Route `check-date` mit dem zusätzlichen Feld `details`. Mit `details` ist `expected_version` Pflicht. Der Server liest das Objekt vor dem Schreiben erneut und lehnt mit 409 ab, wenn die Version abweicht, ein angefragter Schlüssel inzwischen vorhanden ist (auch mit gleichem Wert) oder ein neueres Prüfdatum existiert. Geschrieben wird `{ alle bestehenden Tags, check_date, Details }` in einem Änderungssatz mit dem Kommentar „AEDjaeger: AED checked on site, missing details added“. Nach einem unklaren Upload gilt die eigene Änderung nur dann als angewendet, wenn die Version höher ist und alle angefragten Werte genau so dastehen; sonst bleibt der Vorgang unklar.
+
+**Umsetzung der Stufe 3 (Etappe P5):** Betreiber-Variable `OSM_DETAIL_CORRECTIONS_ENABLED` (nur der exakte Wert `true`, Standard aus; wirkt nur zusammen mit `OSM_DEV_WRITES_ENABLED`). Der Sitzungsstatus meldet `developmentCorrectionsAvailable: true` nur dann. Die Route `check-date` bekommt zusätzlich `expected_before` (die alten Werte genau wie gesehen, nur Länge und Zeichen geprüft, weil sie aus OSM stammen und nicht unserem Vertrag entsprechen müssen) und `confirmed_corrections: true`. Der Server lehnt ab: ohne Schalter mit 403 `corrections_disabled` (vor jedem OSM-Zugriff); eine Anfrage ohne die Bestätigung, mit alten Werten zu Schlüsseln außerhalb von `details` oder mit einer „Korrektur“ ohne Unterschied mit 400; beim erneuten Lesen einen alten Wert, der nicht mehr genau so dasteht, mit 409. Alle Schlüssel in `details`, die nicht in `expected_before` stehen, sind Ergänzungen und müssen weiter fehlen. Gelöscht wird nie: Ein leerer Wert ist ungültig, und das Formular sendet für leere Felder nichts. **Bekannte Grenze:** Wird `indoor` von „drinnen“ auf „draußen“ korrigiert, bleibt ein vorhandenes `level` stehen (Löschen ist ausgeschlossen); das ist in OSM nachzupflegen.
+
+**Hinweise zur Datenquelle:** Die Umgebungssuche reicht an den Browser nur die Schlüssel aus `ALLOWED_TAGS` (`server/osm/staticCandidateSearchRoute.ts`) weiter. `description`, `phone` und `defibrillator:cabinet` fehlen dort und ob die Ebene `defibrillators` sie überhaupt trägt, ist nicht belegt. Deshalb liest der Detailweg das Objekt frisch.
+
 ## Eigene Regeln für eine verlässliche Erfassung
 
 - Einen Punkt am Gerät anlegen; ein AED-Hinweisschild ist nicht zwangsläufig der Gerätestandort.

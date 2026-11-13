@@ -12,15 +12,20 @@ import type { D1Database } from "../storage/d1";
 import { requestOSMDevelopmentApi } from "./developmentApi";
 import { withoutXmlDeclaration } from "./xmlText";
 import { isAcceptableObservationDate } from "./observationDate";
+import { validateDetailTags, type DetailTags } from "../../src/contracts/aedDetails";
 
-const SESSION_COOKIE = "aedjaeger_osm_session";
-const MAX_BODY_BYTES = 2_048;
+export const SESSION_COOKIE = "aedjaeger_osm_session";
+// Genug Platz für Detailtags auch mit Mehrbyte-Zeichen (Japanisch: 3 Byte je Zeichen); die Längengrenzen des Vertrags
+// halten die Anfrage trotzdem klein.
+const MAX_BODY_BYTES = 8_192;
 const MAX_NODE_BYTES = 64 * 1_024;
 const MAX_WRITE_RESPONSE_BYTES = 1_024;
 
 export type DevelopmentWriteEnvironment = {
   DB?: D1Database;
   OSM_DEV_WRITES_ENABLED?: string;
+  /** Betreiber-Schalter (Etappe P5): nur bei "true" darf die Route bestehende Detailwerte ERSETZEN. Standard: aus. */
+  OSM_DETAIL_CORRECTIONS_ENABLED?: string;
   OSM_OAUTH_ENCRYPTION_KEY?: string;
 };
 
@@ -33,9 +38,23 @@ type ConfirmedCheckDate = {
   expected_version?: number;
   expected_check_date: string | null;
   observed_on: string;
+  /**
+   * Detailtags, die ERGÄNZT werden sollen (Etappe P4, „nur Fehlendes“). Fehlt das Feld, schreibt die Route wie bisher
+   * ausschließlich das Prüfdatum. Mit Details ist `expected_version` Pflicht: Die Person hat das Objekt frisch gesehen,
+   * und der Server schreibt nur, wenn es seitdem unverändert blieb.
+   */
+  details?: DetailTags;
+  /**
+   * Korrekturen (Etappe P5): die alten Werte jener Detailschlüssel, die ersetzt werden sollen, genau so, wie die Person sie
+   * gesehen hat. Der Server liest das Objekt vor dem Schreiben neu und schreibt nur, wenn jeder dieser Werte noch genau so
+   * dasteht. Alle übrigen Schlüssel in `details` sind Ergänzungen und müssen am Objekt fehlen.
+   * Gehört zusammen mit `confirmed_corrections`: Die Person hat ausdrücklich bestätigt, dass der alte Wert nicht stimmt.
+   */
+  expected_before?: Record<string, string>;
+  confirmed_corrections?: true;
 };
 
-type OSMNode = {
+export type OSMNode = {
   id: number;
   version: number;
   latitude: number;
@@ -43,7 +62,13 @@ type OSMNode = {
   tags: Record<string, string>;
 };
 
-/** Updates only check_date on an existing OSM development-server node. */
+/**
+ * Aktualisiert einen bestehenden AED auf dem OSM-Testserver.
+ *  - Ohne `details`: ändert ausschließlich `check_date` (Schnellweg „noch vorhanden“).
+ *  - Mit `details` (Etappe P4): setzt zusätzlich die genannten Detailtags, aber NUR solche, die am Objekt noch fehlen.
+ *    Ist einer davon inzwischen vorhanden, gilt das als Konflikt (409), und die Person prüft neu. Alle übrigen Tags
+ *    des Objekts bleiben unverändert. Ersetzen bestehender Werte ist bewusst nicht möglich (das wäre Etappe P5).
+ */
 export async function handleDevelopmentCheckDate(
   request: Request,
   environment: DevelopmentWriteEnvironment,
@@ -75,6 +100,12 @@ export async function handleDevelopmentCheckDate(
     input = parseRequest(await readLimitedBody(request, MAX_BODY_BYTES), now);
   } catch (error) {
     return jsonResponse({ error: error instanceof BodyTooLargeError ? "request_too_large" : "invalid_request" }, error instanceof BodyTooLargeError ? 413 : 400);
+  }
+
+  // Korrekturen (bestehende Werte ersetzen) erlaubt nur der Betreiber-Schalter. Ohne ihn geschieht nichts: weder eine
+  // Reservierung noch ein Lesen oder Schreiben bei OSM.
+  if (input.expected_before !== undefined && environment.OSM_DETAIL_CORRECTIONS_ENABLED !== "true") {
+    return jsonResponse({ error: "corrections_disabled" }, 403);
   }
 
   let token: string;
@@ -132,7 +163,8 @@ export async function handleDevelopmentCheckDate(
 
   if ((input.expected_version !== undefined && currentNode.version !== input.expected_version)
     || (currentNode.tags.check_date ?? null) !== input.expected_check_date
-    || currentNode.tags.emergency !== "defibrillator") {
+    || currentNode.tags.emergency !== "defibrillator"
+    || detailsConflict(currentNode, input)) {
     await safelyUpdate(environment.DB, { sessionHash, operationId: input.operation_id, state: "conflict", now: (dependencies.now ?? Date.now)() });
     return jsonResponse({ error: "version_conflict" }, 409);
   }
@@ -140,14 +172,15 @@ export async function handleDevelopmentCheckDate(
     await safelyUpdate(environment.DB, { sessionHash, operationId: input.operation_id, state: "conflict", now: (dependencies.now ?? Date.now)() });
     return jsonResponse({ error: "newer_check_date_exists" }, 409);
   }
-  if (currentNode.tags.check_date === input.observed_on) {
+  // „Schon aktuell“ gilt nur, wenn es auch keine Detailtags zu schreiben gibt.
+  if (currentNode.tags.check_date === input.observed_on && !hasDetails(input)) {
     await safelyUpdate(environment.DB, { sessionHash, operationId: input.operation_id, state: "complete", resultVersion: currentNode.version, now: (dependencies.now ?? Date.now)() });
     return jsonResponse({ status: "complete", version: currentNode.version, already_current: true }, 200);
   }
 
   let changesetId: string;
   try {
-    changesetId = await createChangeset(token, dependencies.fetch ?? fetch);
+    changesetId = await createChangeset(token, dependencies.fetch ?? fetch, hasCorrections(input) ? "corrections" : hasDetails(input) ? "details" : "none");
   } catch {
     await safelyUpdate(environment.DB, { sessionHash, operationId: input.operation_id, state: "uncertain", now: (dependencies.now ?? Date.now)() });
     return jsonResponse({ status: "uncertain" }, 202);
@@ -185,12 +218,15 @@ async function uploadNodeChange(
     await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state, changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
     return error instanceof VersionConflictError ? jsonResponse({ error: "version_conflict" }, 409) : jsonResponse({ error: "development_api_unavailable" }, 502);
   }
-  if ((input.expected_version !== undefined && node.version !== input.expected_version) || (node.tags.check_date ?? null) !== input.expected_check_date || node.tags.emergency !== "defibrillator") {
+  if ((input.expected_version !== undefined && node.version !== input.expected_version) || (node.tags.check_date ?? null) !== input.expected_check_date || node.tags.emergency !== "defibrillator" || detailsConflict(node, input)) {
     await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state: "conflict", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
     return jsonResponse({ error: "version_conflict" }, 409);
   }
 
-  const updatedTags = { ...node.tags, check_date: input.observed_on };
+  // Alle bestehenden Tags bleiben; dazu kommen das Prüfdatum und (falls angefragt) die ergänzten Detailtags.
+  // Die Reihenfolge ist wichtig: Detailtags können `check_date` und `emergency` nie überschreiben, weil der Vertrag
+  // diese Schlüssel nicht enthält.
+  const updatedTags = { ...node.tags, check_date: input.observed_on, ...(input.details ?? {}) };
   let response: Response;
   try {
     const xml = buildNodeUpdateChange(node, updatedTags, operation.changeset_id);
@@ -241,8 +277,7 @@ async function reconcileUncertainWrite(
   if (!operation.changeset_id) return jsonResponse({ status: "uncertain" }, 202);
   try {
     const node = await readDevelopmentNode(input.target, token, dependencies.fetch ?? fetch);
-    if (node.tags.check_date === input.observed_on && input.expected_check_date !== input.observed_on && node.tags.emergency === "defibrillator"
-      && (input.expected_version === undefined || node.version > input.expected_version)) {
+    if (writeAppearsApplied(node, input)) {
       await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state: "uploaded", changesetId: operation.changeset_id, resultVersion: node.version, now: (dependencies.now ?? Date.now)() });
       return finishChangeset(database, sessionHash, input.operation_id, { ...operation, state: "uploaded", result_version: node.version }, token, dependencies);
     }
@@ -268,7 +303,49 @@ async function finishChangeset(
   return jsonResponse({ status: "uploaded", close_pending: true, version: operation.result_version }, 202);
 }
 
-async function readDevelopmentNode(path: string, token: string, fetcher: typeof fetch): Promise<OSMNode> {
+/** Gibt es in dieser Anfrage Detailtags zu schreiben? */
+function hasDetails(input: ConfirmedCheckDate): boolean {
+  return input.details !== undefined && Object.keys(input.details).length > 0;
+}
+
+/**
+ * Stimmt der frisch gelesene Stand nicht mehr mit dem überein, was die Person gesehen hat? Dann schreibt der Server nichts
+ * (Konflikt), und die Person prüft neu. Es gelten zwei Regeln, je Schlüssel in `details`:
+ *  - Ergänzung (nicht in `expected_before`): Der Schlüssel muss am Objekt noch FEHLEN. Hat ihn jemand anderes inzwischen
+ *    gesetzt, wird nichts überschrieben (auch ein gleicher Wert zählt; der Fall ist selten und mit Neuprüfen harmlos).
+ *  - Korrektur (in `expected_before`): Der Schlüssel muss noch GENAU den Wert haben, den die Person als alt gesehen hat.
+ */
+function detailsConflict(node: OSMNode, input: ConfirmedCheckDate): boolean {
+  const before = input.expected_before ?? {};
+  return Object.keys(input.details ?? {}).some((key) => {
+    const present = Object.prototype.hasOwnProperty.call(node.tags, key);
+    if (Object.prototype.hasOwnProperty.call(before, key)) return !present || node.tags[key] !== before[key];
+    return present;
+  });
+}
+
+/** Enthält die Anfrage Korrekturen (ersetzt sie bestehende Werte)? */
+function hasCorrections(input: ConfirmedCheckDate): boolean {
+  return input.expected_before !== undefined && Object.keys(input.expected_before).length > 0;
+}
+
+/**
+ * Nach einem unklaren Upload: Sieht es so aus, als hätte genau diese Anfrage das Objekt geändert?
+ *  - Ohne Details: Das Prüfdatum steht auf dem Beobachtungsdatum, war es vorher nicht, und die Version ist neuer.
+ *  - Mit Details: Zusätzlich müssen ALLE Detailtags mit genau den angefragten Werten dastehen. Weil das Prüfdatum bereits
+ *    vorher gleich gewesen sein kann, zählt hier vor allem die neue Version (sie ist bei Details Pflicht).
+ * Im Zweifel bleibt der Vorgang „unklar“ und wird nie blind wiederholt.
+ */
+function writeAppearsApplied(node: OSMNode, input: ConfirmedCheckDate): boolean {
+  if (node.tags.emergency !== "defibrillator" || node.tags.check_date !== input.observed_on) return false;
+  if (hasDetails(input)) {
+    return input.expected_version !== undefined && node.version > input.expected_version
+      && Object.entries(input.details ?? {}).every(([key, value]) => node.tags[key] === value);
+  }
+  return input.expected_check_date !== input.observed_on && (input.expected_version === undefined || node.version > input.expected_version);
+}
+
+export async function readDevelopmentNode(path: string, token: string, fetcher: typeof fetch): Promise<OSMNode> {
   const id = Number(path.slice("node/".length));
   const response = await requestOSMDevelopmentApi("development", `/api/0.6/node/${id}.json`, token, { method: "GET" }, fetcher);
   if (response.status === 409 || response.status === 410) throw new VersionConflictError();
@@ -294,8 +371,12 @@ async function readDevelopmentNode(path: string, token: string, fetcher: typeof 
   return { id, version: element.version, latitude: element.lat, longitude: element.lon, tags: element.tags };
 }
 
-async function createChangeset(token: string, fetcher: typeof fetch): Promise<string> {
-  const body = '<osm><changeset><tag k="created_by" v="AEDjaeger 0.1.0"/><tag k="comment" v="AEDjaeger: AED presence checked on site"/></changeset></osm>';
+async function createChangeset(token: string, fetcher: typeof fetch, kind: "none" | "details" | "corrections" = "none"): Promise<string> {
+  // Der Kommentar steht öffentlich im Änderungsverlauf von OSM und sagt ehrlich, was geschah.
+  const comment = kind === "corrections" ? "AEDjaeger: AED checked on site, details added and corrected"
+    : kind === "details" ? "AEDjaeger: AED checked on site, missing details added"
+      : "AEDjaeger: AED presence checked on site";
+  const body = `<osm><changeset><tag k="created_by" v="AEDjaeger 0.1.0"/><tag k="comment" v="${comment}"/></changeset></osm>`;
   const response = await requestOSMDevelopmentApi("development", "/api/0.6/changeset/create", token, { method: "PUT", body }, fetcher);
   if (!response.ok) throw new Error("OSM development changeset could not be opened");
   const id = (await readLimitedText(response, 64)).trim();
@@ -333,7 +414,9 @@ function parseRequest(bytes: Uint8Array, now: number): ConfirmedCheckDate {
   } catch {
     throw new Error("Invalid JSON");
   }
-  if (!isRecord(value) || !["confirmed,expected_check_date,expected_version,observed_on,operation_id,target", "confirmed,expected_check_date,observed_on,operation_id,target"].includes(Object.keys(value).sort().join(","))
+  // `details` ist ein optionales zusätzliches Feld. Alle übrigen Felder müssen genau einer der beiden bekannten Formen entsprechen.
+  const keysWithoutDetails = isRecord(value) ? Object.keys(value).filter((key) => key !== "details" && key !== "expected_before" && key !== "confirmed_corrections").sort().join(",") : "";
+  if (!isRecord(value) || !["confirmed,expected_check_date,expected_version,observed_on,operation_id,target", "confirmed,expected_check_date,observed_on,operation_id,target"].includes(keysWithoutDetails)
     || value.confirmed !== true || typeof value.operation_id !== "string"
     || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value.operation_id)
     || typeof value.target !== "string" || !/^node\/[1-9]\d{0,15}$/u.test(value.target)
@@ -341,6 +424,27 @@ function parseRequest(bytes: Uint8Array, now: number): ConfirmedCheckDate {
     || !(value.expected_check_date === null || isCalendarDate(value.expected_check_date))
     || !isAcceptableObservationDate(value.observed_on, now)) {
     throw new Error("Invalid request");
+  }
+  const hasCorrectionFields = "expected_before" in value || "confirmed_corrections" in value;
+  if (hasCorrectionFields && !("details" in value)) throw new Error("Invalid request");
+  if ("details" in value) {
+    // Details brauchen die Version, die die Person gesehen hat, und mindestens ein gültiges Detailtag. Ein leeres
+    // Objekt ist ein Fehler: Die App lässt das Feld in diesem Fall einfach weg.
+    const checked = validateDetailTags(value.details);
+    if (!checked.ok || Object.keys(checked.tags).length === 0 || !isPositiveInteger(value.expected_version)) throw new Error("Invalid request");
+    if (hasCorrectionFields) {
+      // Korrekturen: beide Felder gehören zusammen. Die Person hat ausdrücklich bestätigt (confirmed_corrections), und die
+      // alten Werte gehören zu Schlüsseln, die auch in `details` stehen. Die alten Werte stammen aus OSM und müssen
+      // nicht unserem Vertrag entsprechen (zum Beispiel access=permissive); sie dienen nur dem Vergleich und sind darum
+      // nur auf Länge und Zeichen geprüft. Ein „Korrektur“ ohne tatsächlichen Unterschied ist ein Fehler.
+      const before = value.expected_before;
+      if (value.confirmed_corrections !== true || !isStringRecord(before) || Object.keys(before).length === 0
+        || Object.entries(before).some(([key, old]) => !(key in checked.tags) || old.length === 0 || /[\x00-\x1f\x7f]/u.test(old) || old.trim() === checked.tags[key as keyof typeof checked.tags])) {
+        throw new Error("Invalid request");
+      }
+      return { ...value, details: checked.tags, expected_before: before } as ConfirmedCheckDate;
+    }
+    return { ...value, details: checked.tags } as ConfirmedCheckDate;
   }
   return value as ConfirmedCheckDate;
 }
@@ -401,12 +505,12 @@ function escapeXml(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
 }
 
-function isCrossOrigin(request: Request, requestOrigin: string): boolean {
+export function isCrossOrigin(request: Request, requestOrigin: string): boolean {
   const origin = request.headers.get("Origin");
   return (origin !== null && origin !== requestOrigin) || request.headers.get("Sec-Fetch-Site") === "cross-site";
 }
 
-function readCookie(header: string | null, name: string): string | null {
+export function readCookie(header: string | null, name: string): string | null {
   if (!header || header.length > 8_192) return null;
   const values = header.split(";").map((part) => part.trim()).filter((part) => part.startsWith(`${name}=`));
   if (values.length !== 1) return null;
@@ -426,7 +530,7 @@ function completeResponse(operation: OSMDevelopmentWriteOperation): Response {
   return jsonResponse({ status: "complete", version: operation.result_version }, 200);
 }
 
-function jsonResponse(body: Record<string, unknown>, status: number, headers: Record<string, string> = {}): Response {
+export function jsonResponse(body: Record<string, unknown>, status: number, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", ...headers },
@@ -434,5 +538,5 @@ function jsonResponse(body: Record<string, unknown>, status: number, headers: Re
 }
 
 class BodyTooLargeError extends Error {}
-class VersionConflictError extends Error {}
-class TargetNotFoundError extends Error {}
+export class VersionConflictError extends Error {}
+export class TargetNotFoundError extends Error {}

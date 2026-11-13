@@ -209,7 +209,7 @@ Vollständige Vermeidung zeitgleicher Neuanlagen durch verschiedene externe OSM-
 
 ## 8. Bestehenden AED bestätigen
 
-**Korrektur zur früheren Sammlung:** Die aktuelle OSM-Dokumentation beschreibt `check_date=YYYY-MM-DD` ausdrücklich auch für die zuletzt überprüfte Existenz eines Objekts. Für „noch vorhanden“ empfehlen wir deshalb diesen Tag. Andere Angaben bleiben unverändert; Änderungen an Zugangszeiten brauchen eine eigene Beobachtung. [OSM: check_date](https://wiki.openstreetmap.org/wiki/Key:check_date)
+**Korrektur zur früheren Sammlung:** Die aktuelle OSM-Dokumentation beschreibt `check_date=YYYY-MM-DD` ausdrücklich auch für die zuletzt überprüfte Existenz eines Objekts. Für „noch vorhanden“ empfehlen wir deshalb diesen Tag. Der Schnellweg ändert keine anderen Angaben. Zugang, Zeiten, Lage und Ebene gehören zum getrennten Detailweg, der jede Änderung als `alt → neu` zeigt und eine eigene Beobachtung vor Ort verlangt (Regeln: [OSM-Datenmodell](osm.md#detailangaben-entscheidung-vom-13112026)). [OSM: check_date](https://wiki.openstreetmap.org/wiki/Key:check_date)
 
 Bei derselben Bestätigung am gleichen Tag ist kein erneuter identischer Upload nötig. Ein älteres Offline-Foto darf ein neueres Prüfdatum nicht zurücksetzen. Verwendet wird das bestätigte Beobachtungsdatum, nicht automatisch das spätere Uploaddatum. Ein Foto ohne EXIF-Aufnahmedatum oder mit einem Datum ungleich heute belegt weder eine heutige Aufnahme noch den aktuellen Standort; vor Suche oder Prüfdatum muss die Person Beobachtungsdatum und Ort bestätigen.
 

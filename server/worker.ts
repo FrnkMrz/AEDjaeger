@@ -8,6 +8,7 @@ import { storeOSMDevelopmentToken } from "./storage/osmDevelopmentTokens";
 import { handleStaticCandidateSearch } from "./osm/staticCandidateSearchRoute";
 import { handleDevelopmentCheckDate } from "./osm/developmentWriteRoute";
 import { handleDevelopmentCreateNode } from "./osm/developmentCreateNodeRoute";
+import { handleDevelopmentNodeRead } from "./osm/developmentNodeRoute";
 import { handleTestDiagnostic } from "./testDiagnostics";
 import { handleVisionAnalysis, isPhotoCheckAvailable } from "./vision/analyzeRoute";
 
@@ -22,6 +23,8 @@ type WorkerEnvironment = {
   OSM_DEV_CLIENT_SECRET?: string;
   OSM_DEV_REDIRECT_URI?: string;
   OSM_DEV_WRITES_ENABLED?: string;
+  // Betreiber-Schalter für Korrekturen bestehender Detailwerte (Etappe P5). Standard: aus.
+  OSM_DETAIL_CORRECTIONS_ENABLED?: string;
   OSM_OAUTH_ENCRYPTION_KEY?: string;
   // Fotoprüfung (optional). OPENAI_API_KEY ist ein Secret und gehört nur ins Cloudflare-Dashboard.
   OPENAI_API_KEY?: string;
@@ -81,6 +84,8 @@ const worker = {
     if (pathname === "/api/osm/candidates/search") return handleStaticCandidateSearch(request, environment);
     if (pathname === "/api/osm/development/check-date") return handleDevelopmentCheckDate(request, environment);
     if (pathname === "/api/osm/development/create-node") return handleDevelopmentCreateNode(request, environment);
+    // Frisches Lesen eines bestehenden AED (nur lesend) für das Ergänzen von Angaben.
+    if (pathname === "/api/osm/development/node") return handleDevelopmentNodeRead(request, environment);
     // Fotoprüfung: Die Route ist standardmäßig AUS. Sie arbeitet nur, wenn der Betreiber
     // AI_ANALYSIS_ENABLED, OPENAI_API_KEY, die Zulassungsliste und die Kostenlimits gesetzt hat
     // (siehe server/vision/analyzeRoute.ts). Ohne diese Werte antwortet sie mit 503 und es
@@ -205,13 +210,16 @@ async function getSession(request: Request, environment: WorkerEnvironment): Pro
   const loginAvailable = await isOSMLoginAvailable(environment, requestOrigin);
   const developmentLoginAvailable = await isOSMLoginAvailable(environment, requestOrigin, "development");
   const developmentWriteAvailable = environment.OSM_DEV_WRITES_ENABLED === "true" && developmentLoginAvailable;
+  // „developmentCorrectionsAvailable“ erscheint nur, wenn der Betreiber Korrekturen freigegeben hat UND das Schreiben auf dem
+  // Testserver an ist. Fehlt das Feld, gilt für die App „aus“.
+  const correctionsAvailable = developmentWriteAvailable && environment.OSM_DETAIL_CORRECTIONS_ENABLED === "true";
   if (!token || !environment.DB) return jsonResponse({ authenticated: false, loginAvailable, developmentLoginAvailable, developmentSession: false, developmentWriteAvailable }, 200);
   try {
     const session = await findOSMSession(environment.DB, token, Date.now());
     // „photoCheckAvailable“ erscheint nur, wenn die Fotoprüfung für dieses Konto aktiv ist.
     // Fehlt das Feld, gilt für die App „aus“ – so ändert sich für alle anderen nichts.
     const photoCheckAvailable = session !== null && isPhotoCheckAvailable(environment, session);
-    return jsonResponse({ authenticated: session !== null, loginAvailable, developmentLoginAvailable, developmentSession: session?.environment === "development", developmentWriteAvailable, ...(photoCheckAvailable ? { photoCheckAvailable: true } : {}) }, 200);
+    return jsonResponse({ authenticated: session !== null, loginAvailable, developmentLoginAvailable, developmentSession: session?.environment === "development", developmentWriteAvailable, ...(correctionsAvailable ? { developmentCorrectionsAvailable: true } : {}), ...(photoCheckAvailable ? { photoCheckAvailable: true } : {}) }, 200);
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
