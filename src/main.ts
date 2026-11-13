@@ -21,13 +21,13 @@ const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root element was not found.");
 
 const languageNames: Record<Language, string> = { de: "Deutsch", en: "English", pl: "Polski", ja: "日本語", fr: "Français", es: "Español" };
-const developmentWriteCopy: Record<Language, { action: string; createAction: string; retry: string; sending: string; complete: string; created: string; uncertain: string; conflict: string; failed: string; }> = {
-  de: { action: "Testserver: Prüfdatum speichern", createAction: "Testserver: AED eintragen", retry: "Testserver: Status erneut prüfen", sending: "Testserver: Änderung wird gesendet…", complete: "Testserver: Vor-Ort-Prüfung gespeichert.", created: "Testserver: Neuer AED wurde eingetragen.", uncertain: "Testserver: Ergebnis unklar. Mit derselben Anfrage erneut prüfen; keine neue Änderung wird blind gesendet.", conflict: "Testserver: In der Nähe gibt es einen AED oder der OSM-Eintrag änderte sich. Suche bitte erneut.", failed: "Testserver: Änderung fehlgeschlagen. Bitte Eintrag erneut prüfen." },
-  en: { action: "Test server: Save visit date", createAction: "Test server: Add AED", retry: "Test server: Check status again", sending: "Test server: Sending update…", complete: "Test server: Visit confirmation saved.", created: "Test server: New AED added.", uncertain: "Test server: Result is unclear. Check again using the same request; no new edit will be sent blindly.", conflict: "Test server: An AED is nearby or the OSM entry changed. Search again.", failed: "Test server: Update failed. Please check the entry again." },
-  pl: { action: "Serwer testowy: zapisz datę kontroli", createAction: "Serwer testowy: dodaj AED", retry: "Serwer testowy: sprawdź ponownie stan", sending: "Serwer testowy: wysyłanie zmiany…", complete: "Serwer testowy: zapisano potwierdzenie kontroli.", created: "Serwer testowy: dodano nowy AED.", uncertain: "Serwer testowy: wynik jest niepewny. Sprawdź ponownie to samo żądanie; nie wyślemy w ciemno nowej zmiany.", conflict: "Serwer testowy: w pobliżu jest AED albo wpis OSM został zmieniony. Wyszukaj ponownie.", failed: "Serwer testowy: nie udało się zapisać zmiany. Sprawdź ponownie wpis." },
-  ja: { action: "テストサーバー：確認日を保存", createAction: "テストサーバー：AEDを登録", retry: "テストサーバー：状態を再確認", sending: "テストサーバー：変更を送信中…", complete: "テストサーバー：現地確認を保存しました。", created: "テストサーバー：新しいAEDを登録しました。", uncertain: "テストサーバー：結果を確認できません。同じリクエストで再確認してください。新しい変更を無確認で送信しません。", conflict: "テストサーバー：近くにAEDがあるか、OSMの項目が変更されています。再検索してください。", failed: "テストサーバー：変更に失敗しました。項目を再確認してください。" },
-  fr: { action: "Serveur de test : enregistrer la date", createAction: "Serveur de test : ajouter un DAE", retry: "Serveur de test : vérifier à nouveau", sending: "Serveur de test : envoi de la modification…", complete: "Serveur de test : visite confirmée.", created: "Serveur de test : nouveau DAE ajouté.", uncertain: "Serveur de test : résultat incertain. Vérifiez à nouveau avec la même requête ; aucune nouvelle modification ne sera envoyée à l’aveugle.", conflict: "Serveur de test : un DAE est proche ou la fiche OSM a changé. Relancez la recherche.", failed: "Serveur de test : échec de la modification. Vérifiez à nouveau la fiche." },
-  es: { action: "Servidor de pruebas: guardar fecha", createAction: "Servidor de pruebas: añadir DEA", retry: "Servidor de pruebas: comprobar estado", sending: "Servidor de pruebas: enviando cambio…", complete: "Servidor de pruebas: visita confirmada.", created: "Servidor de pruebas: se añadió un DEA.", uncertain: "Servidor de pruebas: resultado incierto. Comprueba de nuevo con la misma solicitud; no enviaremos otro cambio a ciegas.", conflict: "Servidor de pruebas: hay un DEA cerca o la ficha OSM ha cambiado. Vuelve a buscar.", failed: "Servidor de pruebas: no se pudo guardar. Comprueba de nuevo la ficha." },
+const developmentWriteCopy: Record<Language, { action: string; createAction: string; retry: string; sending: string; complete: string; unchanged: string; created: string; uncertain: string; conflict: string; failed: string; }> = {
+  de: { action: "Testserver: Prüfdatum speichern", createAction: "Testserver: AED eintragen", retry: "Testserver: Status erneut prüfen", sending: "Testserver: Änderung wird gesendet…", complete: "Testserver: Vor-Ort-Prüfung gespeichert.", unchanged: "Testserver: Schon aktuell. Es wurde nichts geändert.", created: "Testserver: Neuer AED wurde eingetragen.", uncertain: "Testserver: Ergebnis unklar. Mit derselben Anfrage erneut prüfen; keine neue Änderung wird blind gesendet.", conflict: "Testserver: In der Nähe gibt es einen AED oder der OSM-Eintrag änderte sich. Suche bitte erneut.", failed: "Testserver: Änderung fehlgeschlagen. Bitte Eintrag erneut prüfen." },
+  en: { action: "Test server: Save visit date", createAction: "Test server: Add AED", retry: "Test server: Check status again", sending: "Test server: Sending update…", complete: "Test server: Visit confirmation saved.", unchanged: "Test server: Already up to date. Nothing was changed.", created: "Test server: New AED added.", uncertain: "Test server: Result is unclear. Check again using the same request; no new edit will be sent blindly.", conflict: "Test server: An AED is nearby or the OSM entry changed. Search again.", failed: "Test server: Update failed. Please check the entry again." },
+  pl: { action: "Serwer testowy: zapisz datę kontroli", createAction: "Serwer testowy: dodaj AED", retry: "Serwer testowy: sprawdź ponownie stan", sending: "Serwer testowy: wysyłanie zmiany…", complete: "Serwer testowy: zapisano potwierdzenie kontroli.", unchanged: "Serwer testowy: Już aktualne. Nic nie zmieniono.", created: "Serwer testowy: dodano nowy AED.", uncertain: "Serwer testowy: wynik jest niepewny. Sprawdź ponownie to samo żądanie; nie wyślemy w ciemno nowej zmiany.", conflict: "Serwer testowy: w pobliżu jest AED albo wpis OSM został zmieniony. Wyszukaj ponownie.", failed: "Serwer testowy: nie udało się zapisać zmiany. Sprawdź ponownie wpis." },
+  ja: { action: "テストサーバー：確認日を保存", createAction: "テストサーバー：AEDを登録", retry: "テストサーバー：状態を再確認", sending: "テストサーバー：変更を送信中…", complete: "テストサーバー：現地確認を保存しました。", unchanged: "テストサーバー：すでに最新です。変更はありません。", created: "テストサーバー：新しいAEDを登録しました。", uncertain: "テストサーバー：結果を確認できません。同じリクエストで再確認してください。新しい変更を無確認で送信しません。", conflict: "テストサーバー：近くにAEDがあるか、OSMの項目が変更されています。再検索してください。", failed: "テストサーバー：変更に失敗しました。項目を再確認してください。" },
+  fr: { action: "Serveur de test : enregistrer la date", createAction: "Serveur de test : ajouter un DAE", retry: "Serveur de test : vérifier à nouveau", sending: "Serveur de test : envoi de la modification…", complete: "Serveur de test : visite confirmée.", unchanged: "Serveur de test : déjà à jour. Rien n'a été modifié.", created: "Serveur de test : nouveau DAE ajouté.", uncertain: "Serveur de test : résultat incertain. Vérifiez à nouveau avec la même requête ; aucune nouvelle modification ne sera envoyée à l’aveugle.", conflict: "Serveur de test : un DAE est proche ou la fiche OSM a changé. Relancez la recherche.", failed: "Serveur de test : échec de la modification. Vérifiez à nouveau la fiche." },
+  es: { action: "Servidor de pruebas: guardar fecha", createAction: "Servidor de pruebas: añadir DEA", retry: "Servidor de pruebas: comprobar estado", sending: "Servidor de pruebas: enviando cambio…", complete: "Servidor de pruebas: visita confirmada.", unchanged: "Servidor de pruebas: ya está actualizado. No se cambió nada.", created: "Servidor de pruebas: se añadió un DEA.", uncertain: "Servidor de pruebas: resultado incierto. Comprueba de nuevo con la misma solicitud; no enviaremos otro cambio a ciegas.", conflict: "Servidor de pruebas: hay un DEA cerca o la ficha OSM ha cambiado. Vuelve a buscar.", failed: "Servidor de pruebas: no se pudo guardar. Comprueba de nuevo la ficha." },
 };
 const scenarioKeys: Record<DemoScenario, TranslationKey> = {
   existing: "existingScenario", new: "newScenario", multiple: "multipleScenario", unclear: "unclearScenario", "search-error": "searchErrorScenario", "upload-unclear": "uploadErrorScenario",
@@ -285,6 +285,11 @@ function buildVersionText(): string {
   return time ? `${text} · ${time}` : text;
 }
 
+/** Bezeichnung eines AED für die Anzeige: Ist keine bekannt (leer), steht ein lesbarer Ersatz da, in der gewählten Sprache. */
+function displayCandidateLabel(label: string): string {
+  return label.trim() === "" ? tv("unnamedAed") : label;
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
 }
@@ -505,7 +510,7 @@ function statusContent(): string {
       const shownCandidates = state.returnState.assessment.kind === "candidate-review" ? state.returnState.assessment.candidates.length : state.returnState.search.candidates.length;
       const hasOtherCandidates = shownCandidates > 1;
       const navigation = recoverableWrite ? "" : `${hasOtherCandidates ? `<button class="button button-quiet" data-action="back-to-candidates">${tv("previewBack")}</button>` : ""}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(state.candidateLabel)}</strong></p>${content}${noWriteNotice}${writeStatus}</div></div>${writeAction}${navigation}`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.candidateLabel))}</strong></p>${content}${noWriteNotice}${writeStatus}</div></div>${writeAction}${navigation}`;
     }
     case "development-write-recovery": {
       const copy = developmentWriteCopy[language];
@@ -515,7 +520,7 @@ function statusContent(): string {
       // Bei einer Neuanlage steht die Position da; bei einem Prüfdatum genügt die Bezeichnung des AED.
       const targetLink = state.request.kind === "check-date" ? "" : `<p>${state.request.latitude.toFixed(5)}, ${state.request.longitude.toFixed(5)}</p>`;
       const recoveryMessage = state.request.kind === "create-node" && state.writeStatus === "complete" ? copy.created : copy[state.writeStatus];
-      return `<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(state.request.candidateLabel)}</strong></p>${targetLink}<p class="simulation-note" role="status">${recoveryMessage}</p></div></div>${retry}`;
+      return `<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.request.candidateLabel))}</strong></p>${targetLink}<p class="simulation-note" role="status">${recoveryMessage}</p></div></div>${retry}`;
     }
     case "candidate-error": {
       const errorKey: Record<typeof state.reason, FlowMessageKey> = {
@@ -882,10 +887,14 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
       || (state.kind === "development-write-recovery" && state.request.operationId === requestBody.operationId);
     if (!matchesCurrentRequest) return;
     if (response.ok && isDevelopmentWriteResponse(payload, "complete")) {
-      setDevelopmentWriteStatus(requestBody.operationId, "complete");
+      // "already_current": Das Datum stand schon so auf dem Knoten. Der Server hat bewusst nichts geschrieben (kein neuer
+      // Änderungssatz). Das ist ein Erfolg im Sinne von "der Stand stimmt", aber kein Speichern. Darum eine eigene
+      // Meldung ("Schon aktuell. Es wurde nichts geändert.") und kein Ton: Ein Ton für nichts wäre eine Belohnung ohne Leistung.
+      const unchanged = isCheckDate && payload.already_current === true;
+      setDevelopmentWriteStatus(requestBody.operationId, unchanged ? "unchanged" : "complete");
       clearPendingDevelopmentCheck();
-      // Nur hier, bei vom Server ausdrücklich bestätigtem Erfolg, erklingt der Ton. Er ändert nichts am Ablauf.
-      successSound.play();
+      // Nur bei einem vom Server bestätigten, echten Schreibvorgang erklingt der Ton. Er ändert nichts am Ablauf.
+      if (!unchanged) successSound.play();
     } else if (response.status === 409) {
       setDevelopmentWriteStatus(requestBody.operationId, "conflict");
       clearPendingDevelopmentCheck();
@@ -903,9 +912,10 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
     || (state.kind === "development-write-recovery" && state.request.operationId === requestBody.operationId)) render(true);
 }
 
-function setDevelopmentWriteStatus(operationId: string, writeStatus: "uncertain" | "sending" | "complete" | "conflict" | "failed"): void {
+function setDevelopmentWriteStatus(operationId: string, writeStatus: "uncertain" | "sending" | "complete" | "unchanged" | "conflict" | "failed"): void {
   if (state.kind === "new-aed-preview" && state.operationId === operationId) {
-    state = { ...state, writeStatus };
+    // Eine Neuanlage kennt kein "schon aktuell"; der Server meldet es dort nie. Sicherheitshalber gilt es als erstellt.
+    state = { ...state, writeStatus: writeStatus === "unchanged" ? "complete" : writeStatus };
   } else if (state.kind === "osm-preview" && state.operationId === operationId) {
     state = { ...state, writeStatus };
   } else if (state.kind === "development-write-recovery" && state.request.operationId === operationId) {
@@ -913,7 +923,7 @@ function setDevelopmentWriteStatus(operationId: string, writeStatus: "uncertain"
   }
 }
 
-function isDevelopmentWriteResponse(value: unknown, expectedStatus: string): value is { status: string; version: number } {
+function isDevelopmentWriteResponse(value: unknown, expectedStatus: string): value is { status: string; version: number; already_current?: unknown } {
   return isRecord(value) && value.status === expectedStatus && Number.isSafeInteger(value.version) && (value.version as number) > 0;
 }
 
@@ -1120,7 +1130,9 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     const candidate = state.search.candidates.find((item) => item.id === candidateId);
     if (!candidate || !candidateId) return;
     const result = previewExistingAedCheck(candidate, true, observedOn);
-    const candidateLabel = candidate.tags.name || candidate.tags["defibrillator:location"] || candidate.id;
+    // Ohne Name und Ortsangabe bleibt die Bezeichnung leer. Beim Anzeigen steht dann "AED (ohne Namen)" da (siehe
+    // displayCandidateLabel), in der gerade gewählten Sprache und nie die technische Kennung (node/123…).
+    const candidateLabel = candidate.tags.name || candidate.tags["defibrillator:location"] || "";
     state = { kind: "osm-preview", photoUrl: state.photoUrl, candidateId, candidateLabel, result, returnState: state };
   } else if (action === "none-of-these" && state.kind === "candidate-result" && state.search.status === "complete" && state.assessment.kind === "candidate-review") {
     // The person explicitly rejects each displayed nearby AED as the photographed device.
@@ -1187,7 +1199,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     state = state.returnState;
   } else if (action === "save-development-check" && state.kind === "osm-preview") {
     successSound.prepare(); // Beim Tippen: Ton freischalten, er erklingt erst bei bestätigtem Erfolg.
-    if (!developmentSession || !developmentWriteAvailable || !crypto.randomUUID || state.writeStatus === "sending" || state.writeStatus === "complete") return;
+    if (!developmentSession || !developmentWriteAvailable || !crypto.randomUUID || state.writeStatus === "sending" || state.writeStatus === "complete" || state.writeStatus === "unchanged") return;
     const preview = state;
     const candidateId = preview.candidateId;
     const candidate = preview.returnState.search.candidates.find((item) => item.id === candidateId);
