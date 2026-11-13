@@ -2,7 +2,15 @@
 // its full shell first, then activation removes prior revisions and their obsolete hashed bundles.
 const BUILD_REVISION = new URL(self.location.href).searchParams.get("revision") || "development";
 const CACHE_NAME = `aedjaeger-shell-${BUILD_REVISION}`;
-const APP_SHELL = ["/", "/manifest.webmanifest", "/aed-icon.svg"];
+const APP_SHELL = [
+  "/",
+  "/manifest.webmanifest",
+  "/aed-icon.svg",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/icon-maskable-512.png",
+  "/apple-touch-icon.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
