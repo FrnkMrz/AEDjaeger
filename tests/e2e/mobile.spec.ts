@@ -711,7 +711,7 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   await page.locator("#new-aed-position-confirmed").check();
   await page.locator("#new-aed-position-map").evaluate((element) => {
     const map = element as HTMLDivElement;
-    // Simulate a two-finger pinch: zoom changes, but the selected point does not move.
+    // Commit a pending one-finger pan when a second finger lands, even if it only taps.
     map.setPointerCapture = () => {};
     map.hasPointerCapture = () => false;
     const dispatch = (type: string, pointerId: number, clientX: number, clientY: number) => {
@@ -721,10 +721,31 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
       }));
     };
     dispatch("pointerdown", 1, 120, 120);
+    dispatch("pointermove", 1, 170, 120);
     dispatch("pointerdown", 2, 220, 120);
-    dispatch("pointermove", 2, 160, 120);
-    dispatch("pointerup", 2, 160, 120);
-    dispatch("pointerup", 1, 120, 120);
+    dispatch("pointerup", 2, 220, 120);
+    dispatch("pointerup", 1, 170, 120);
+  });
+  await expect(page.locator("#new-aed-position-confirmed")).not.toBeChecked();
+  await expect(page.locator("#new-aed-position-coordinates")).not.toContainText("52.52000, 13.40500");
+  expect(await page.locator("#new-aed-position-map .position-map-tiles").evaluate((layer) => (layer as HTMLElement).style.transform)).toBe("");
+
+  await page.locator("#new-aed-position-confirmed").check();
+  await page.locator("#new-aed-position-map").evaluate((element) => {
+    const map = element as HTMLDivElement;
+    map.setPointerCapture = () => {};
+    map.hasPointerCapture = () => false;
+    const dispatch = (type: string, pointerId: number, clientX: number, clientY: number) => {
+      map.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId, pointerType: "touch",
+        isPrimary: pointerId === 3, button: 0, clientX, clientY,
+      }));
+    };
+    dispatch("pointerdown", 3, 120, 120);
+    dispatch("pointerdown", 4, 220, 120);
+    dispatch("pointermove", 4, 160, 120);
+    dispatch("pointerup", 4, 160, 120);
+    dispatch("pointerup", 3, 120, 120);
   });
   const zoomAfterPinch = await page.locator("#new-aed-position-map .position-map-tiles img").first().getAttribute("src");
   expect(zoomAfterPinch).not.toBeNull();
@@ -798,7 +819,7 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
     // Ohne Angaben im Formular geht ein leeres Detail-Objekt an den Server (Etappe P2/P3).
     details: {},
   });
-  expect(Math.abs(Number(createRequest?.longitude) - 13.40495)).toBeLessThan(0.0001);
+  expect(Math.abs(Number(createRequest?.longitude) - 13.40476)).toBeLessThan(0.00001);
   expect(createRequest?.operation_id).toMatch(/^[0-9a-f-]{36}$/iu);
 });
 

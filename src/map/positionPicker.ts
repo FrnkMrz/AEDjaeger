@@ -214,6 +214,16 @@ export function createPositionPicker(
       container.setPointerCapture(event.pointerId);
       if (touchPointers.size === 2) {
         const [first, second] = [...touchPointers.values()];
+        // A first finger may already have moved the tiles before the second finger lands.
+        // Commit that pan before replacing it with a pinch so pixels and selected coordinates stay aligned.
+        if (pointer?.moved) {
+          const firstTouch = touchPointers.get(pointer.id);
+          if (firstTouch) {
+            center = moveMapCenter(center, firstTouch.x - pointer.x, firstTouch.y - pointer.y, zoom);
+            options.onPositionChange(center);
+          }
+        }
+        renderTiles();
         pinchStart = { distance: Math.hypot(first.x - second.x, first.y - second.y), zoom };
         pointer = undefined;
         container.classList.remove("is-dragging");
