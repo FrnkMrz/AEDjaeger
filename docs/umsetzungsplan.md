@@ -16,7 +16,7 @@ Der Merge von PR #49 löste den automatischen Deploy aus; GitHub-Actions-Lauf [#
 
 | Schritt | Ergebnis | Status |
 | --- | --- | --- |
-| A. Bedienprototyp | Mobil nutzbarer Fotoablauf mit simulierten Treffern, Rückfragen und Fehlern; sechs Sprachen | Begonnen |
+| A. Bedienprototyp | Mobil nutzbarer Fotoablauf mit simulierten Treffern, Rückfragen und Fehlern; sechs Sprachen | Abgelöst durch den echten Ablauf. Die Simulation („Vorschau testen“) wurde am 14.11.2026 entfernt |
 | B. Vor-Ort-Prüfung | Schmale Browseransicht, Info-Texte in sechs Sprachen, Auswahlablauf und Offline-Cache automatisiert geprüft; Kamera, Lesbarkeit und Berechtigungen auf echten Mobilgeräten | Teilweise: Fotoaufnahme und Fotoauswahl wurden lokal auf einem Handy geprüft; die öffentliche PWA ist erreichbar. Der neue Testablauf erklärt Beispieldaten und bietet optionale, datensparsame Diagnose-Logs. Android/iPhone, Berechtigungen, PWA-Installation und Offlinebetrieb bleiben zu prüfen |
 | C. Frühe Erkennungsvorprüfung (historisch) | Damalige qualitative Modellprüfung | Kleine externe Modelltests waren kein kontrollierter Genauigkeitsnachweis und sind keine App-Laufzeitfunktion. Historische Auswertung: [Bildtest](bildtest.md). |
 | D. API-Vorschau (historisch) | Früherer Bildanalyse- und Overpass-Prototyp | Dieser Ablauf ist durch manuelle Sichtbestätigung und den PMTiles-Consumer ersetzt. Der Live-Range-Abruf und der mobile Ende-zu-Ende-Ablauf sind noch separat zu prüfen. |
