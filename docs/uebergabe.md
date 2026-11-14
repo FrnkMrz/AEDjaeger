@@ -84,9 +84,9 @@ Nicht belegt:
 - Die Zeile „Standort aus dem Foto verwendet“ steht noch im Suchergebnis. Sie blieb bewusst, kann aber auf Wunsch entfallen.
 - Die Übersichtskarte lädt Kacheln von `tile.openstreetmap.org`, sobald Treffer angezeigt werden.
 - Die zweite Bestätigung für Neuanlagen wirkt nur im Browser; die Schreibroute des Testservers kennt den Haken nicht.
-- Die Konstanten in `scripts/check-live-search.mjs` sind aus `server/osm/staticCandidateSearchRoute.ts` kopiert und müssen synchron bleiben.
+- Die Konstanten in `scripts/check-live-search.mjs` sind aus `server/osm/staticCandidateSearchRoute.ts` kopiert. Ein Test (`tests/checkLiveSearch.test.ts`) vergleicht sie und wird rot, wenn sie auseinanderlaufen.
 - Für einen späteren Produktivbetrieb fehlt eine Absicherung gegen Dubletten bei bis zu 5 Tage alten Daten; auf dem Testserver prüft die Schreibroute den Kartenausschnitt vor einer Neuanlage erneut.
-- Punkt B5 der Pilot-Abnahme (Live-Check an einer zweiten Koordinate) steht aus; der Workflow hat dafür noch keine Eingabefelder.
+- Punkt B5 der Pilot-Abnahme (Live-Check an einer zweiten Koordinate) steht aus. Der Workflow hat jetzt die Eingaben `lat` und `lon`; der Lauf selbst ist Sache des Projektinhabers.
 ## Wie die Datenquelle funktioniert – und was sie nicht bedeutet
 
 AEDjaeger fragt direkt das bestehende Archiv unter [pipeline.openfiremap.org/openfiremap.pmtiles](https://pipeline.openfiremap.org/openfiremap.pmtiles) ab. Der Worker lädt nicht die gesamte Datei: Er prüft frische Metadaten und liest nur die benötigten Zoom-14-Kacheln um den gewählten Standort per HTTP Range aus der Ebene `defibrillators`. Dabei werden Datenalter, Länderextrakte, Abdeckung und Antworten kontrolliert. Ein Fehler oder eine unvollständige Abdeckung sperrt die Suche bzw. Neuanlage.

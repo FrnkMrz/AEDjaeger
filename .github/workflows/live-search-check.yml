@@ -8,6 +8,15 @@ name: Live-Check AED-Datenquelle
 
 on:
   workflow_dispatch:
+    inputs:
+      lat:
+        description: "Breitengrad der Testkoordinate (leer = Nürnberg Hbf, 49.4456)"
+        required: false
+        type: string
+      lon:
+        description: "Längengrad der Testkoordinate (leer = Nürnberg Hbf, 11.0825)"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -22,4 +31,14 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run check:live-search
+      # Die Eingaben gehen über Umgebungsvariablen und nie direkt in den Shell-Text,
+      # damit eine Eingabe keine Befehle einschleusen kann. Das Skript prüft beide Zahlen streng.
+      - name: Live-Check ausführen
+        env:
+          INPUT_LAT: ${{ inputs.lat }}
+          INPUT_LON: ${{ inputs.lon }}
+        run: |
+          args=()
+          if [ -n "$INPUT_LAT" ]; then args+=(--lat "$INPUT_LAT"); fi
+          if [ -n "$INPUT_LON" ]; then args+=(--lon "$INPUT_LON"); fi
+          npm run check:live-search -- "${args[@]}"

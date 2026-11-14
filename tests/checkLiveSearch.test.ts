@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { PbfWriter } from "pbf";
 import {
@@ -220,5 +222,48 @@ describe("readLimited (Größenbegrenzung beim Lesen)", () => {
   it("lehnt eine zu groß angekündigte Antwort ab, ohne den Inhalt zu lesen", async () => {
     const response = new Response(new Uint8Array(10), { headers: { "Content-Length": "999999" } });
     await expect(readLimited(response, 100)).rejects.toThrow("größer als erlaubt");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Gleichlauf mit der Worker-Route
+// ---------------------------------------------------------------------------
+// Das Skript läuft ohne TypeScript-Build und hat deshalb Kopien der Konstanten aus
+// server/osm/staticCandidateSearchRoute.ts. Dieser Test liest beide Quelltexte als reinen Text
+// und vergleicht die Werte. Ändert jemand die Route, ohne das Skript anzupassen, wird der Test rot,
+// und der Live-Check prüft nicht mehr dasselbe wie die App.
+describe("Konstanten des Live-Checks stimmen mit der Worker-Route überein", () => {
+  const routeSource = readFileSync(resolve(__dirname, "../server/osm/staticCandidateSearchRoute.ts"), "utf8");
+  const scriptSource = readFileSync(resolve(__dirname, "../scripts/check-live-search.mjs"), "utf8");
+
+  /** Liest den Ausdruck rechts von `const NAME =` (bis zum Semikolon) aus einem Quelltext. */
+  function constantExpression(source: string, name: string): string {
+    const match = source.match(new RegExp(`^const ${name} = (.+?);\\s*$`, "m"));
+    if (!match) throw new Error(`Konstante ${name} nicht gefunden`);
+    // Leerzeichen vereinheitlichen, damit Formatierungsunterschiede nicht stören.
+    return match[1].replace(/\s+/g, " ").trim();
+  }
+
+  it.each([
+    "DATA_ORIGIN",
+    "PMTILES_PATH",
+    "AED_LAYER",
+    "AED_ZOOM",
+    "MAX_SOURCE_AGE_HOURS",
+    "MAX_TILE_BYTES",
+    "MAX_METADATA_BYTES",
+    "REQUIRED_EXTRACTS",
+    "EXTRACT_STATUSES",
+  ])("%s ist in Skript und Route gleich", (name) => {
+    expect(constantExpression(scriptSource, name)).toBe(constantExpression(routeSource, name));
+  });
+
+  it("die DACH-Grenzen des Skripts entsprechen der Prüfung in der Route", () => {
+    // Route: bounds.minLat >= 45 && bounds.maxLat <= 56 ...; Skript: COVERAGE_BOUNDS.
+    const routeBounds = routeSource.match(/bounds\.minLat >= (\d+)\s*&&\s*bounds\.maxLat <= (\d+)\s*&&\s*bounds\.minLon >= (\d+)\s*&&\s*bounds\.maxLon <= (\d+)/);
+    const scriptBounds = scriptSource.match(/COVERAGE_BOUNDS = \{ minLat: (\d+), maxLat: (\d+), minLon: (\d+), maxLon: (\d+) \}/);
+    expect(routeBounds, "Prüfung in der Route nicht gefunden").not.toBeNull();
+    expect(scriptBounds, "COVERAGE_BOUNDS im Skript nicht gefunden").not.toBeNull();
+    expect(scriptBounds!.slice(1)).toEqual(routeBounds!.slice(1));
   });
 });
