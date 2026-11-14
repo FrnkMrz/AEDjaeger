@@ -21,7 +21,7 @@ import {
 } from "./contracts/aedDetails";
 import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } from "./osm/candidateSearch";
 import { ExistingNodeError, requestExistingNode } from "./osm/existingNode";
-import { isCalendarDate, isFreshCapture, isValidObservedDate, localCalendarDate, photoDateNeedsConfirmation } from "./domain/localDate";
+import { formatCalendarDate, isCalendarDate, isFreshCapture, isValidObservedDate, localCalendarDate, photoDateNeedsConfirmation } from "./domain/localDate";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root element was not found.");
@@ -90,6 +90,7 @@ let activeSearchLocationSource: "photo" | "phone" | "phone-auto" | "map" | undef
 // Keep a stable ID while this photo is active; the server uses it to avoid double reservations after retries.
 let photoSelectionVersion = 0;
 let photoSelectionPending = false;
+let photoSelectionError = false;
 let activePositionPicker: { destroy(): void } | undefined;
 let newAedPositionOverride: Coordinate | undefined;
 let mapLocationOverride: Coordinate | undefined;
@@ -859,7 +860,7 @@ function statusContent(): string {
       // Listeneintrag dieselbe Nummer wie sein Marker auf der Karte.
       const numbered = assessment.kind === "candidate-review";
       const candidates = candidatesToShow.map(({ candidate, distanceMeters }, index) => {
-          const name = candidate.tags.name || candidate.tags["defibrillator:location"] || candidate.id;
+          const name = displayCandidateLabel(candidate.tags.name || candidate.tags["defibrillator:location"] || "");
           const label = numbered ? `${index + 1}. ${name}` : name;
           const distance = distanceMeters === undefined ? "" : `<span>${escapeHtml(tv("distance", { distance: Math.round(distanceMeters) }))}</span>`;
           // Zwei Stufen (siehe src/domain/matchPolicy.ts): Bis 10 m ist es ein Treffer zum Bestätigen. Zwischen 10 und
@@ -960,9 +961,9 @@ function statusContent(): string {
       const canWrite = developmentSession && developmentWriteAvailable && candidate?.osmType === "node" && result.kind === "ready" && !archiveOnly;
       // Nur das Wesentliche: das neue Prüfdatum. Der bisherige Wert steht nur da, wenn es einen gibt.
       const content = result.kind === "ready"
-        ? `<p><strong>${tv("previewNewDate", { date: result.changes[0].after })}</strong></p>${result.changes[0].before ? `<p>${tv("previewOldDate", { date: escapeHtml(result.changes[0].before) })}</p>` : ""}`
+        ? `<p><strong>${tv("previewNewDate", { date: formatCalendarDate(result.changes[0].after, language) })}</strong></p>${result.changes[0].before ? `<p>${tv("previewOldDate", { date: escapeHtml(formatCalendarDate(result.changes[0].before, language)) })}</p>` : ""}`
         : result.reason === "newer-check-date-exists" && result.existingDate
-          ? `<p>${tv("previewNewerDate", { date: escapeHtml(result.existingDate) })}</p>`
+          ? `<p>${tv("previewNewerDate", { date: escapeHtml(formatCalendarDate(result.existingDate, language)) })}</p>`
           : `<p>${tv("previewUnsupported")}</p>`;
       // Kommt die Vorschau aus dem Ergänzen-Formular, stehen hier die neuen Tags. Sie werden vor dem Speichern genau gezeigt.
       const corrections = state.corrections ?? [];
@@ -1025,7 +1026,7 @@ function statusContent(): string {
       const thumbnail = photoMarkup.replace('class="photo-preview"', 'class="photo-preview photo-thumb"');
       const allPresent = detailEverythingPresent() ? `<p class="simulation-note">${tv("detailsAllPresent")}</p>` : "";
       // Das bisherige Prüfdatum aus OSM, damit die Person sieht, wie aktuell der Eintrag ist, bevor sie etwas ändert.
-      const lastCheck = state.load.node.tags.check_date ? `<p class="supporting-copy">${tv("previewOldDate", { date: escapeHtml(state.load.node.tags.check_date) })}</p>` : "";
+      const lastCheck = state.load.node.tags.check_date ? `<p class="supporting-copy">${tv("previewOldDate", { date: escapeHtml(formatCalendarDate(state.load.node.tags.check_date, language)) })}</p>` : "";
       return `<div class="detail-form-root">${thumbnail}${header}${lastCheck}${allPresent}<div id="detail-form">${detailFormMarkup()}</div>${detailFooterMarkup()}</div>`;
     }
     case "development-write-recovery": {
@@ -1095,7 +1096,7 @@ function render(restoreFlowFocus = false): void {
       ${authenticated ? `<main>
         <section class="hero ${isReady ? "" : "hero-compact"}"><div class="hero-kicker"><span></span>${t("eyebrow")}</div><h1>${isReady ? t("title") : state.kind === "analyzing" || state.kind === "photo-checking" || state.kind === "candidate-searching" || state.kind === "sending" ? t("checking") : t("tagline")}</h1>${isReady ? `<p>${t("intro")}</p>` : ""}</section>
         <section class="capture-card" aria-live="polite" aria-atomic="false">
-          <div class="capture-content">${isReady ? `<div class="empty-illustration" aria-hidden="true"><span class="device-card">${defibrillatorMark()}</span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>` : statusContent()}</div>
+          <div class="capture-content">${isReady ? `${photoSelectionError ? `<p class="photo-selection-error" role="alert" tabindex="-1">${t("cameraError")}</p>` : ""}<div class="empty-illustration" aria-hidden="true"><span class="device-card">${defibrillatorMark()}</span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>` : statusContent()}</div>
           ${isReady ? `<div class="capture-actions"><label class="button button-primary camera-label">${icon("camera")}<span>${t("camera")}</span><input id="camera-input" type="file" accept="image/*" capture="environment" /></label><label class="button button-secondary camera-label">${t("choosePhoto")}<input id="file-input" type="file" accept="image/*" /></label><p class="supporting-copy">${photoCheckAvailable ? tv("photoCheckNotice") : t("privacy")}</p></div>` : ""}
           ${isReady ? `<details class="demo-panel"><summary>${t("demo")}</summary><h2>${t("testStepsTitle")}</h2><p>${t("testSteps")}</p><label for="scenario">${t("scenario")}</label><select id="scenario">${(Object.keys(scenarioKeys) as DemoScenario[]).map((key) => `<option value="${key}" ${scenario === key ? "selected" : ""}>${t(scenarioKeys[key])}</option>`).join("")}</select><label class="diagnostics-opt-in" for="diagnostics-enabled"><input id="diagnostics-enabled" type="checkbox" ${diagnosticsEnabled ? "checked" : ""}><span><strong>${t("testDiagnostics")}</strong><small>${t("testDiagnosticsPrivacy")}</small></span></label></details>` : ""}
         </section>
@@ -1527,8 +1528,7 @@ async function onPhotoSelected(event: Event): Promise<void> {
   updateAccountPanel();
   if (!file.type.startsWith("image/")) {
     photoSelectionPending = false;
-    updateAccountPanel();
-    window.alert(t("cameraError"));
+    showPhotoSelectionError();
     return;
   }
 
@@ -1555,8 +1555,7 @@ async function onPhotoSelected(event: Event): Promise<void> {
     URL.revokeObjectURL(photoUrl);
     if (selectionVersion === photoSelectionVersion) {
       photoSelectionPending = false;
-      updateAccountPanel();
-      window.alert(t("cameraError"));
+      showPhotoSelectionError();
     }
     return;
   }
@@ -1566,6 +1565,7 @@ async function onPhotoSelected(event: Event): Promise<void> {
   }
 
   photoSelectionPending = false;
+  photoSelectionError = false;
   clearTimers();
   releasePhoto();
   // The open disclosure is an explicit user choice; carry that preview mode into this photo.
@@ -1591,6 +1591,12 @@ async function onPhotoSelected(event: Event): Promise<void> {
   if (accountState === "not-configured") recordDiagnostic("live_flow_blocked");
   state = { kind: "photo", photoUrl };
   render(true);
+}
+
+function showPhotoSelectionError(): void {
+  photoSelectionError = true;
+  render();
+  app?.querySelector<HTMLElement>(".photo-selection-error")?.focus();
 }
 
 async function handleAction(action: string | undefined, source?: HTMLElement): Promise<void> {
@@ -2119,6 +2125,7 @@ async function askForLocationOnceAfterSignIn(): Promise<void> {
 function releasePhoto(): void {
   newAedPositionOverride = undefined;
   resetDetailForm();
+  photoSelectionError = false;
   const photoUrl = getPhotoUrl(state);
   if (photoUrl?.startsWith("blob:")) URL.revokeObjectURL(photoUrl);
   selectedPhotoLocation = undefined;

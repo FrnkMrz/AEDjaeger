@@ -6,6 +6,12 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 > Die jüngsten Einträge am Anfang beschreiben den aktuellen Pilotstand. Ältere Einträge darunter dokumentieren frühere, inzwischen teilweise abgelöste Zwischenstände und sind keine Beschreibung des aktuellen Laufzeitverhaltens.
 
+### Fixed
+- Zeigt AED-Treffer ohne Namen oder Standortbeschreibung mit einer verständlichen neutralen Bezeichnung statt ihrer technischen OSM-ID. Meldet ungültige oder unlesbare Fotos direkt im Fotoablauf, formatiert Prüf- und Vergleichsdaten passend zur gewählten Sprache und verbessert den Kontrast kleiner Texte.
+
+### Security
+- Begrenzte die Rechte des CI-Validierungsjobs auf lesenden Repository-Zugriff, ergänzte wöchentliche Dependabot-Prüfungen für npm und GitHub Actions und aktualisierte verwundbare Abhängigkeiten. OSM-Änderungssätze führen jetzt die Version aus den Paketmetadaten.
+
 ### Changed
 - Legt den Detailweg für AED-Angaben fest (nur Entscheidung und Dokumentation, noch keine Programmänderung): Neben „Noch da – bestätigen“ soll die App Standortbeschreibung, Zugang, Zeiten, drinnen/draußen, Ebene und optionale Zusatzangaben erfassen, bei Neuanlagen und bei bestehenden AEDs. Die Regel in `AGENTS.md`, die bisher bei „noch vorhanden“ nur das Prüfdatum erlaubte, ist dafür enger neu gefasst: nur Schlüssel einer festen Liste, Anzeige `alt → neu`, Neulesen vor dem Schreiben, kein Löschen, kein Zugangscode. Korrekturen bestehender Werte bleiben hinter einem eigenen Betreiber-Schalter (Standard aus). Die Etappen P1 bis P6 stehen in `docs/umsetzungsplan.md`.
 

@@ -131,9 +131,9 @@ test("an older gallery photo requires an explicit observation date before search
   expect(searchRequests).toBe(1);
   await page.locator('[data-action="preview-candidate"]').click();
   await expect(page.getByRole("heading", { name: "Änderungsvorschau" })).toBeVisible();
-  await expect(page.locator(".capture-content")).toContainText("Prüfdatum: 2025-10-20");
+  await expect(page.locator(".capture-content")).toContainText("Prüfdatum: 20. Oktober 2025");
   // Der bisherige Wert steht dabei, weil es einen gibt.
-  await expect(page.locator(".capture-content")).toContainText("Bisher: 2025-01-01");
+  await expect(page.locator(".capture-content")).toContainText("Bisher: 1. Januar 2025");
 });
 
 test("a camera input photo with an old EXIF date requires confirmation", async ({ page }) => {
@@ -351,8 +351,7 @@ test("a user-confirmed location search shows nearby candidates without writing t
   await expect(page.locator(".capture-content")).toContainText("Bisher: <img src=x onerror=alert(1)>");
   await expect(page.locator(".capture-content img[onerror]")).toHaveCount(0);
   await expect(page.locator(".capture-content")).toContainText(await page.evaluate(() => {
-    const date = new Date();
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    return new Intl.DateTimeFormat("de-DE", { dateStyle: "long" }).format(new Date());
   }));
   await expect(page.locator(".capture-content")).toContainText("Nur eine Vorschau. Nichts wurde gespeichert.");
   await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
@@ -1105,11 +1104,10 @@ test("the brand link stays disabled while saving and checking the save status", 
 
 test("a damaged image is rejected before the AED flow can start", async ({ page }) => {
   await page.goto("/");
-  const dialogPromise = page.waitForEvent("dialog");
   await page.locator("#file-input").setInputFiles("tests/fixtures/invalid-image.svg");
-  const dialog = await dialogPromise;
-  expect(dialog.message()).toContain("Das Bild konnte nicht geöffnet werden");
-  await dialog.accept();
+  const alert = page.getByRole("alert");
+  await expect(alert).toContainText("Das Bild konnte nicht geöffnet werden");
+  await expect(alert).toBeFocused();
   await expect(page.getByRole("button", { name: "Demoablauf simulieren" })).toHaveCount(0);
 });
 
@@ -1194,6 +1192,21 @@ test("the demo disclosure text keeps readable contrast", async ({ page }) => {
   const summary = page.locator(".demo-panel summary");
   await expect.poll(() => summary.evaluate((element) => getComputedStyle(element).color)).toBe("rgb(98, 109, 102)");
   await expect.poll(() => page.locator(".demo-badge").evaluate((element) => getComputedStyle(element).color)).toBe("rgb(98, 109, 102)");
+});
+
+test("the muted text and version footer use the accessible contrast colors", async ({ page }) => {
+  await page.goto("/");
+  const styles = await page.evaluate(() => {
+    const version = document.querySelector(".build-mark")!;
+    return {
+      muted: getComputedStyle(document.documentElement).getPropertyValue("--muted").trim(),
+      versionColor: getComputedStyle(version).color,
+      versionSize: getComputedStyle(version).fontSize,
+    };
+  });
+  expect(styles.muted).toBe("#5c6861");
+  expect(styles.versionColor).toBe("rgb(98, 109, 102)");
+  expect(styles.versionSize).toBe("11px");
 });
 
 test("the ready screen introduction keeps readable contrast", async ({ page }) => {
@@ -1678,7 +1691,7 @@ test("the confirmation page shows the earlier check date only when there is one"
   const dateConfirm = page.locator('[data-action="confirm-photo-date"]');
   if (await dateConfirm.isVisible()) await dateConfirm.click();
   await page.locator('[data-action="preview-candidate"]').click();
-  await expect(page.locator(".capture-content")).toContainText("Bisher: 2025-01-01");
+  await expect(page.locator(".capture-content")).toContainText("Bisher: 1. Januar 2025");
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -2474,6 +2487,21 @@ test("only an AED within 10 m can be confirmed, one within 50 m is a hint, and o
   await expect(page.getByRole("button", { name: "Keiner davon – neuen AED eintragen" })).toBeVisible();
 });
 
+test("an unnamed AED in the candidate list gets a readable label in all six languages", async ({ page, context }) => {
+  await openCandidateList(page, context, [
+    { id: "node/114", name: "", latitudeOffsetMeters: 3, tags: { emergency: "defibrillator" } },
+  ]);
+  const item = page.locator(".candidate-item");
+  const expected: Record<string, string> = {
+    de: "AED (ohne Namen)", en: "AED (no name)", pl: "AED (bez nazwy)", ja: "AED（名称なし）", fr: "DAE (sans nom)", es: "DEA (sin nombre)",
+  };
+  for (const code of languageCodes) {
+    await page.locator("#language").selectOption(code);
+    await expect(item, `Bezeichnung in ${code}`).toContainText(expected[code]);
+    await expect(item).not.toContainText("node/114");
+  }
+});
+
 test("an AED between 10 m and 50 m can only be noted, never confirmed, in all six languages", async ({ page, context }) => {
   await openCandidateList(page, context, [{ id: "node/102", name: "Mittel", latitudeOffsetMeters: 35 }]);
   await expect(page.locator('[data-action="preview-candidate"]')).toHaveCount(0);
@@ -2510,7 +2538,7 @@ test("a photo older than the check date already in OSM cannot be saved, says why
     { id: "node/101", name: "Rathaus", latitudeOffsetMeters: 3, tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2099-01-01" } },
   ], { development: true });
   await page.locator('[data-action="preview-candidate"]').click();
-  await expect(page.locator(".result-message")).toContainText("In OpenStreetMap steht schon ein neueres Prüfdatum (2099-01-01)");
+  await expect(page.locator(".result-message")).toContainText("In OpenStreetMap steht schon ein neueres Prüfdatum (1. Januar 2099)");
   await expect(page.locator(".result-message")).toContainText("Es wird nichts geändert");
   // Kein Speichern-Knopf und kein „nur eine Vorschau“.
   await expect(page.getByRole("button", { name: "Testserver: Prüfdatum speichern" })).toHaveCount(0);
@@ -2519,10 +2547,14 @@ test("a photo older than the check date already in OSM cannot be saved, says why
   const expected: Record<string, string> = {
     de: "neueres Prüfdatum", en: "newer check date", pl: "nowsza data kontroli", ja: "新しい確認日", fr: "plus récente", es: "más reciente",
   };
+  const dates: Record<string, string> = {
+    de: "1. Januar 2099", en: "January 1, 2099", pl: "1 stycznia 2099", ja: "2099年1月1日", fr: "1 janvier 2099", es: "1 de enero de 2099",
+  };
   for (const code of languageCodes) {
     await page.locator("#language").selectOption(code);
     await expect(page.locator(".result-message"), `Hinweis in ${code}`).toContainText(expected[code]);
-    await expect(page.locator(".result-message")).toContainText("2099-01-01");
+    await expect(page.locator(".result-message")).toContainText(dates[code]);
+    await expect(page.locator(".result-message")).not.toContainText("2099-01-01");
   }
 });
 
@@ -3056,7 +3088,7 @@ test("the hit list offers the tags before the date: view, add, and confirm the d
   await expect(page.getByRole("heading", { name: "Angaben ergänzen" })).toBeVisible();
   await expect(page.locator("#detail-group-access")).toContainText("Schon eingetragen: Jeder");
   await expect(page.locator("#detail-group-location")).toContainText("Links neben dem Garagentor");
-  await expect(page.locator(".capture-content")).toContainText("Bisher: 2025-10-20");
+  await expect(page.locator(".capture-content")).toContainText("Bisher: 20. Oktober 2025");
   expect(nodeRequests).toHaveLength(1);
   expect(writes).toEqual([]);
   await page.getByText("Rund um die Uhr", { exact: true }).click();
