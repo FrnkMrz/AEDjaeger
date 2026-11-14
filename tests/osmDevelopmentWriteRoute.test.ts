@@ -99,6 +99,16 @@ class MemoryD1 implements D1Database {
           if (!row || row.state !== "changeset-created" || row.expires_at <= time) return { success: true, meta: { changes: 0 } };
           row.state = "uploading"; return { success: true, meta: { changes: 1 } };
         }
+        if (sql.includes("state IN ('uploading', 'uncertain')")) {
+          const [updated, hash, id, changeset, time] = params as [number, string, string, string, number];
+          const row = this.operations.get(hash + ":" + id);
+          if (!row || row.changeset_id !== changeset || !["uploading", "uncertain"].includes(row.state) || row.expires_at <= time) {
+            return { success: true, meta: { changes: 0 } };
+          }
+          row.state = "failed";
+          row.updated_at = updated;
+          return { success: true, meta: { changes: 1 } };
+        }
         if (sql.includes("SET state = ?, changeset_id = COALESCE")) {
           const [state, changesetId, resultVersion, resultNodeId, _updated, hash, id] = params as [string, string | null, number | null, string | null, number, string, string];
           const row = this.operations.get(`${hash}:${id}`);
@@ -178,6 +188,16 @@ class MemoryD1 implements D1Database {
       if (!row || row.state !== "changeset-created" || row.expires_at <= time) return { success: true, meta: { changes: 0 } };
       row.state = "uploading"; return { success: true, meta: { changes: 1 } };
     }
+    if (sql.includes("state IN ('uploading', 'uncertain')")) {
+      const [updated, hash, id, changeset, time] = params as [number, string, string, string, number];
+      const row = this.operations.get(hash + ":" + id);
+      if (!row || row.changeset_id !== changeset || !["uploading", "uncertain"].includes(row.state) || row.expires_at <= time) {
+        return { success: true, meta: { changes: 0 } };
+      }
+      row.state = "failed";
+      row.updated_at = updated;
+      return { success: true, meta: { changes: 1 } };
+    }
     if (sql.includes("SET state = ?, changeset_id = COALESCE")) {
       const [state, changesetId, resultVersion, resultNodeId, _updated, hash, id] = params as [string, string | null, number | null, string | null, number, string, string];
       const row = this.operations.get(`${hash}:${id}`);
@@ -209,11 +229,21 @@ function makeRequest(payload: unknown = requestBody): Request {
   });
 }
 
-function makeFetch(options: { appliedAfterUploadFailure?: boolean; conflictVersion?: number; observedOn?: string; missingNode?: boolean } = {}) {
+function makeFetch(options: {
+  appliedAfterUploadFailure?: boolean;
+  changesetCloseConflict?: "closed" | "open";
+  malformedChangesetDownloads?: string[];
+  changesetOpenFailure?: boolean;
+  conflictVersion?: number;
+  observedOn?: string;
+  missingNode?: boolean;
+} = {}) {
   let version = options.conflictVersion ?? 3;
   let checkDate = "2025-10-20";
   const calls: Array<{ method: string; url: string; body?: string }> = [];
   let failAfterUpload = options.appliedAfterUploadFailure ?? false;
+  let uploadApplied = false;
+  const malformedDownloads = [...(options.malformedChangesetDownloads ?? [])];
   const fetcher: typeof fetch = async (input, init = {}) => {
     const url = String(input);
     const method = init.method ?? "GET";
@@ -223,21 +253,38 @@ function makeFetch(options: { appliedAfterUploadFailure?: boolean; conflictVersi
     if (url.endsWith("/api/0.6/node/42.json")) {
       return Response.json({ version: "0.6", elements: [{ type: "node", id: 42, lat: 52.52, lon: 13.4, version, tags: { emergency: "defibrillator", name: "Clinic & hall", check_date: checkDate } }] });
     }
-    if (url.endsWith("/api/0.6/changeset/create")) return new Response("77", { status: 200 });
+    if (url.endsWith("/api/0.6/changeset/create")) {
+      return options.changesetOpenFailure ? new Response("unavailable", { status: 503 }) : new Response("77", { status: 200 });
+    }
     if (url.endsWith("/api/0.6/changeset/77/upload")) {
       expect(body).toContain(`<tag k="check_date" v="${options.observedOn ?? "2026-10-24"}"/>`);
       expect(body).toContain('<tag k="name" v="Clinic &amp; hall"/>');
       if (failAfterUpload) {
         failAfterUpload = false;
+        uploadApplied = true;
         version = 4;
         checkDate = options.observedOn ?? "2026-10-24";
         throw new Error("simulated connection loss after server accepted the write");
       }
+      uploadApplied = true;
       version = 4;
       checkDate = options.observedOn ?? "2026-10-24";
       return new Response('<?xml version="1.0" encoding="UTF-8"?>\n<diffResult generator="OpenStreetMap server" version="0.6">\n <node old_id="42" new_id="42" new_version="4"/>\n</diffResult>\n', { status: 200 });
     }
-    if (url.endsWith("/api/0.6/changeset/77/close")) return new Response(null, { status: 200 });
+    if (url.endsWith("/api/0.6/changeset/77/close")) {
+      return options.changesetCloseConflict ? new Response("conflict", { status: 409 }) : new Response(null, { status: 200 });
+    }
+    if (url.endsWith("/api/0.6/changeset/77")) {
+      return Response.json({ changeset: { id: "77", open: options.changesetCloseConflict === "open" } });
+    }
+    if (url.endsWith("/api/0.6/changeset/77/download")) {
+      if (!uploadApplied) return new Response('<osmChange version="0.6"><create/><modify/><delete/></osmChange>', { status: 200 });
+      if (malformedDownloads.length > 0) return new Response(malformedDownloads.shift(), { status: 200 });
+      const download = '<osmChange version="0.6"><modify><node id="42" changeset="77" version="' + version
+        + '"><tag k="emergency" v="defibrillator"/><tag k="check_date" v="' + checkDate
+        + '"/></node></modify></osmChange>';
+      return new Response(download, { status: 200 });
+    }
     throw new Error(`Unexpected OSM API request: ${method} ${url}`);
   };
   return { fetcher, calls };
@@ -321,7 +368,7 @@ describe("OSM development check-date writer", () => {
 
   it("reconciles a lost upload response without creating a duplicate edit", async () => {
     const DB = await setupDatabase();
-    const { fetcher, calls } = makeFetch({ appliedAfterUploadFailure: true });
+    const { fetcher, calls } = makeFetch({ appliedAfterUploadFailure: true, changesetCloseConflict: "closed" });
     const workerEnvironment = { ...environment, DB };
     const dependencies = { now: () => now, fetch: fetcher };
     const first = await handleDevelopmentCheckDate(makeRequest(), workerEnvironment, dependencies);
@@ -332,9 +379,11 @@ describe("OSM development check-date writer", () => {
     expect(retry.status).toBe(200);
     expect(await retry.json()).toMatchObject({ status: "complete", version: 4 });
     expect(calls.filter((call) => call.url.endsWith("/upload"))).toHaveLength(1);
+    expect(calls.some((call) => call.url.endsWith("/changeset/77/download"))).toBe(true);
+    expect(calls.some((call) => call.url.endsWith("/changeset/77") && call.method === "GET")).toBe(true);
   });
 
-  it("keeps an unapplied timeout uncertain and never retries the write automatically", async () => {
+  it("retires an unapplied timeout after closing and confirming an empty changeset", async () => {
     const DB = await setupDatabase();
     const { fetcher, calls } = makeFetch();
     let shouldFail = true;
@@ -347,9 +396,69 @@ describe("OSM development check-date writer", () => {
     const first = await handleDevelopmentCheckDate(makeRequest(), workerEnvironment, dependencies);
     expect(first.status).toBe(202);
     const retry = await handleDevelopmentCheckDate(makeRequest(), workerEnvironment, dependencies);
+    expect(retry.status).toBe(502);
+    expect(await retry.json()).toEqual({ error: "write_failed" });
+    const duplicate = await handleDevelopmentCheckDate(makeRequest(), workerEnvironment, dependencies);
+    expect(duplicate.status).toBe(502);
+    expect(await duplicate.json()).toEqual({ error: "write_failed" });
+    expect(calls.some((call) => call.url.endsWith("/changeset/77/close"))).toBe(true);
+    expect(calls.some((call) => call.url.endsWith("/changeset/77/download"))).toBe(true);
+    expect(calls.filter((call) => call.url.endsWith("/upload"))).toHaveLength(0);
+  });
+
+  it("marks a failed changeset-open request as failed without uploading", async () => {
+    const DB = await setupDatabase();
+    const { fetcher, calls } = makeFetch({ changesetOpenFailure: true });
+    const dependencies = { now: () => now, fetch: fetcher };
+    const first = await handleDevelopmentCheckDate(makeRequest(), { ...environment, DB }, dependencies);
+    expect(first.status).toBe(502);
+    expect(await first.json()).toEqual({ error: "write_failed" });
+    const duplicate = await handleDevelopmentCheckDate(makeRequest(), { ...environment, DB }, dependencies);
+    expect(duplicate.status).toBe(502);
+    expect(await duplicate.json()).toEqual({ error: "write_failed" });
+    expect(calls.filter((call) => call.url.endsWith("/upload"))).toHaveLength(0);
+    expect(calls.some((call) => call.url.endsWith("/changeset/77/close"))).toBe(false);
+  });
+
+  it("keeps the request uncertain when a 409 does not confirm that the changeset is closed", async () => {
+    const DB = await setupDatabase();
+    const { fetcher, calls } = makeFetch({ appliedAfterUploadFailure: true, changesetCloseConflict: "open" });
+    const dependencies = { now: () => now, fetch: fetcher };
+    const first = await handleDevelopmentCheckDate(makeRequest(), { ...environment, DB }, dependencies);
+    expect(first.status).toBe(202);
+    expect(await first.json()).toEqual({ status: "uncertain" });
+    const retry = await handleDevelopmentCheckDate(makeRequest(), { ...environment, DB }, dependencies);
     expect(retry.status).toBe(202);
     expect(await retry.json()).toEqual({ status: "uncertain" });
-    expect(calls.filter((call) => call.url.endsWith("/upload"))).toHaveLength(0);
+    expect(calls.filter((call) => call.url.endsWith("/upload"))).toHaveLength(1);
+  });
+
+  it.each([
+    ["empty HTTP 200 body", ""],
+    ["truncated XML", '<osmChange version="0.6"><modify><node id="42" changeset="77" version="4">'],
+    ["mismatched closing tag", '<osmChange version="0.6"><modify></create></osmChange>'],
+  ])("keeps an uncertain write recoverable after a %s changeset download", async (_label, download) => {
+    const DB = await setupDatabase();
+    const { fetcher, calls } = makeFetch({
+      appliedAfterUploadFailure: true,
+      changesetCloseConflict: "closed",
+      malformedChangesetDownloads: [download],
+    });
+    const dependencies = { now: () => now, fetch: fetcher };
+    const workerEnvironment = { ...environment, DB };
+
+    const first = await handleDevelopmentCheckDate(makeRequest(), workerEnvironment, dependencies);
+    expect(first.status).toBe(202);
+    expect(await first.json()).toEqual({ status: "uncertain" });
+
+    const malformedRecovery = await handleDevelopmentCheckDate(makeRequest(), workerEnvironment, dependencies);
+    expect(malformedRecovery.status).toBe(202);
+    expect(await malformedRecovery.json()).toEqual({ status: "uncertain" });
+
+    const laterRecovery = await handleDevelopmentCheckDate(makeRequest(), workerEnvironment, dependencies);
+    expect(laterRecovery.status).toBe(200);
+    expect(await laterRecovery.json()).toMatchObject({ status: "complete", version: 4 });
+    expect(calls.filter((call) => call.url.endsWith("/upload"))).toHaveLength(1);
   });
 
   it("fails closed when the test-write switch is off or the proposal was not confirmed", async () => {
@@ -386,6 +495,7 @@ function makeStatefulFetch(options: { tags?: Record<string, string>; version?: n
   const changesetBodies: string[] = [];
   let loseUpload = options.loseUploadResponse ?? false;
   let failBeforeApply = options.failBeforeApply ?? false;
+  let uploadApplied = false;
   const fetcher: typeof fetch = async (input, init = {}) => {
     const url = String(input); const method = init.method ?? "GET"; const body = typeof init.body === "string" ? init.body : undefined;
     calls.push({ method, url, body });
@@ -398,10 +508,17 @@ function makeStatefulFetch(options: { tags?: Record<string, string>; version?: n
       expect(body).toContain(`version="${state.version}"`);
       state.tags = tagsFromUpload(body ?? "");
       state.version += 1;
+      uploadApplied = true;
       if (loseUpload) { loseUpload = false; throw new Error("connection lost after the server applied the write"); }
       return new Response(`<?xml version="1.0" encoding="UTF-8"?>\n<diffResult generator="OpenStreetMap server" version="0.6">\n <node old_id="42" new_id="42" new_version="${state.version}"/>\n</diffResult>\n`, { status: 200 });
     }
     if (url.endsWith("/api/0.6/changeset/77/close")) return new Response(null, { status: 200 });
+    if (url.endsWith("/api/0.6/changeset/77/download")) {
+      if (!uploadApplied) return new Response('<osmChange version="0.6"><create/><modify/><delete/></osmChange>', { status: 200 });
+      const tags = Object.entries(state.tags).map(([key, value]) => '<tag k="' + key + '" v="' + value + '"/>').join("");
+      const download = '<osmChange version="0.6"><modify><node id="42" changeset="77" version="' + state.version + '">' + tags + '</node></modify></osmChange>';
+      return new Response(download, { status: 200 });
+    }
     throw new Error(`Unexpected OSM API request: ${method} ${url}`);
   };
   return { fetcher, calls, state, changesetBodies, get uploads() { return calls.filter((call) => call.url.endsWith("/upload")); } };
@@ -501,24 +618,25 @@ describe("OSM development writer: adding missing details", () => {
     expect(api.uploads).toHaveLength(1);
   });
 
-  it("stays uncertain when the failed upload was not applied, and never retries the write by itself", async () => {
+  it("retires a failed details upload after confirming that the changeset is empty", async () => {
     const DB = await setupDatabase(); const api = makeStatefulFetch({ failBeforeApply: true });
     const dependencies = { now: () => now, fetch: api.fetcher };
     expect((await handleDevelopmentCheckDate(makeRequest(detailsRequest), { ...environment, DB }, dependencies)).status).toBe(202);
     const retry = await handleDevelopmentCheckDate(makeRequest(detailsRequest), { ...environment, DB }, dependencies);
-    expect(retry.status).toBe(202);
-    expect(await retry.json()).toEqual({ status: "uncertain" });
+    expect(retry.status).toBe(502);
+    expect(await retry.json()).toEqual({ error: "write_failed" });
     expect(api.state.tags.access).toBeUndefined();
   });
 
-  it("does not take a foreign edit for its own: a changed version without the requested values stays uncertain", async () => {
+  it("does not take a foreign edit for its own when retiring an empty changeset", async () => {
     const DB = await setupDatabase(); const api = makeStatefulFetch({ failBeforeApply: true });
     const dependencies = { now: () => now, fetch: api.fetcher };
     expect((await handleDevelopmentCheckDate(makeRequest(detailsRequest), { ...environment, DB }, dependencies)).status).toBe(202);
     // Jemand anderes ändert das Objekt (neue Version, anderes Prüfdatum, andere Werte).
     api.state.version = 4; api.state.tags = { ...api.state.tags, check_date: "2026-10-24", access: "yes" };
     const retry = await handleDevelopmentCheckDate(makeRequest(detailsRequest), { ...environment, DB }, dependencies);
-    expect(retry.status).toBe(202);
+    expect(retry.status).toBe(502);
+    expect(await retry.json()).toEqual({ error: "write_failed" });
     // Nur der ursprüngliche, gescheiterte Versuch: Die Wiederholung schreibt nichts und überschreibt den fremden Wert nicht.
     expect(api.uploads).toHaveLength(1);
     expect(api.state.tags.access).toBe("yes");
@@ -665,12 +783,13 @@ describe("OSM development writer: correcting existing details", () => {
     expect(api.uploads).toHaveLength(1);
   });
 
-  it("does not repeat a correction after a failed upload when the object stayed unchanged", async () => {
+  it("retires a failed correction after confirming that the changeset is empty", async () => {
     const DB = await setupDatabase(); const api = makeStatefulFetch({ tags: { access: "private" }, failBeforeApply: true });
     const dependencies = { now: () => now, fetch: api.fetcher };
     expect((await handleDevelopmentCheckDate(makeRequest(correctionRequest), { ...correctionEnvironment, DB }, dependencies)).status).toBe(202);
     const retry = await handleDevelopmentCheckDate(makeRequest(correctionRequest), { ...correctionEnvironment, DB }, dependencies);
-    expect(retry.status).toBe(202);
+    expect(retry.status).toBe(502);
+    expect(await retry.json()).toEqual({ error: "write_failed" });
     expect(api.uploads).toHaveLength(1);
     expect(api.state.tags.access).toBe("private");
   });
