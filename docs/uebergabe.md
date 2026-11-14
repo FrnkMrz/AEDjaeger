@@ -114,7 +114,7 @@ Bei einem Fehler Zeitpunkt, genaue Meldung und einen Screenshot notieren. Keine 
 - Arbeitsweise, die sich bewährt hat: kleine Änderung → alle Prüfungen lokal → Commit auf dem Arbeitsbranch → Projektinhaber fragen → PR gegen `main` mit den sechs Abschnitten aus `AGENTS.md` → PR beobachten und Befunde des Codex-Review-Bots prüfen und beheben. Der Bot prüft nur beim Öffnen eines PRs oder nach dem Kommentar `@codex review`. Mergen, Tags und Releases bleiben beim Projektinhaber.
 - Nach einem Merge den Arbeitsbranch frisch von `main` neu aufsetzen; nie auf gemergter Historie weiterarbeiten. Nie direkt auf `main` pushen.
 - Prüfbefehle: `npm test`, `npm run build`, `npm run worker:check`, `npm run test:worker-http`, `npm run test:e2e`. Tests, die Dateien mit Node lesen, sind `.mjs`-Dateien, weil die Typprüfung keine Node-Typen kennt.
-- UI-Texte stehen in `src/i18n/translations.ts` (Start, Info, Demo) und `src/i18n/flowTranslations.ts` (Foto- und Suchablauf). Jede Änderung gilt für alle sechs Sprachen; `tests/translations.test.ts` listet die Schlüssel.
+- UI-Texte stehen in `src/i18n/translations.ts` (Start, Info) und `src/i18n/flowTranslations.ts` (Foto- und Suchablauf). Jede Änderung gilt für alle sechs Sprachen; `tests/translations.test.ts` listet die Schlüssel.
 - Neuen Code ausführlich auf Deutsch kommentieren, so dass ein Einsteiger die Logik versteht; bestehende Kommentare erhalten.
 - Halte `CHANGELOG.md` und `docs/offene-fragen.md` aktuell.
 - Keine neuen Pipeline-/VM-Aufgaben, keine Tests gegen die echte OpenAI-API, keine weiteren Anbieter-APIs, keine kostenpflichtigen Aufrufe außerhalb der freigegebenen Limits, keine Secrets, keine OSM-Schreibvorgänge ohne ausdrücklichen Auftrag. Produktions-OSM bleibt tabu.
