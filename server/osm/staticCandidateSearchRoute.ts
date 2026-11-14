@@ -106,6 +106,12 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
   const location = parseLocation(body);
   if (!location) return jsonResponse({ error: "invalid_request" }, 400);
   if (location.accuracyMeters > MAX_ACCURACY) return jsonResponse({ error: "location_too_uncertain" }, 422);
+  if (location.latitude < 45 || location.latitude > 56 || location.longitude < 5 || location.longitude > 18) {
+    return jsonResponse({ error: "outside_coverage" }, 422);
+  }
+  const radius = Math.ceil(location.accuracyMeters + SEARCH_RADIUS);
+  const bounds = searchBounds(location, radius);
+  if (!boundsFitArchive(bounds)) return jsonResponse({ error: "outside_coverage" }, 422);
 
   const now = (deps.now ?? Date.now)();
   let retryAfter = 30;
@@ -120,9 +126,7 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
   try {
     const fetcher = deps.fetch ?? fetch;
     const metadata = await fetchMetadata(fetcher, controller.signal, now);
-    const radius = Math.ceil(location.accuracyMeters + SEARCH_RADIUS);
-    const bounds = searchBounds(location, radius);
-    if (!boundsFitArchive(bounds, metadata)) throw new CoverageUnavailableError();
+    if (metadata.region !== "dachlilu") throw new CoverageUnavailableError();
 
     // metadata.json is the current pointer. Putting its build time in the archive URL
     // prevents a warm Worker from mixing cached tile directories from two builds.
@@ -130,8 +134,8 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
     archiveUrl.searchParams.set("v", metadata.generated_at);
     const archive = new PMTiles(new FixedRangeSource(archiveUrl, fetcher, controller.signal));
     const header = await archive.getHeader();
-    if (header.tileType !== 1 || header.minZoom > AED_ZOOM || header.maxZoom < AED_ZOOM
-      || !boundsFitHeader(bounds, header)) throw new CoverageUnavailableError();
+    if (header.tileType !== 1 || header.minZoom > AED_ZOOM || header.maxZoom < AED_ZOOM) throw new CoverageUnavailableError();
+    if (!boundsFitHeader(bounds, header)) throw new OutsideCoverageError();
 
     const tiles = tilesForBounds(bounds, AED_ZOOM);
     if (tiles.length === 0 || tiles.length > MAX_TILES) throw new CoverageUnavailableError();
@@ -186,6 +190,7 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
       snapshot_id: await snapshotId(metadata), data_until: metadata.osm_data_until,
     }, 200, { "Retry-After": String(retryAfter) });
   } catch (error) {
+    if (error instanceof OutsideCoverageError) return jsonResponse({ error: "outside_coverage" }, 422);
     if (error instanceof CoverageUnavailableError) return jsonResponse({ error: "coverage_unavailable" }, 503, { "Retry-After": String(retryAfter) });
     if (error instanceof InvalidFeedError) return jsonResponse({ error: "invalid_response" }, 503, { "Retry-After": String(retryAfter) });
     if (error instanceof FeedHTTPError) return jsonResponse({ error: "source_unavailable" }, 502, { "Retry-After": String(retryAfter) });
@@ -333,9 +338,9 @@ function searchBounds(location: Location, radius: number): { minLat: number; min
     minLon: Math.max(-180, location.longitude - longitudeDelta), maxLon: Math.min(180, location.longitude + longitudeDelta),
   };
 }
-function boundsFitArchive(bounds: ReturnType<typeof searchBounds>, metadata: PipelineMetadata): boolean {
-  // Header bounds are checked again after opening the archive; this first check rejects obvious non-DACH locations.
-  return metadata.region === "dachlilu" && bounds.minLat >= 45 && bounds.maxLat <= 56
+function boundsFitArchive(bounds: ReturnType<typeof searchBounds>): boolean {
+  // Reject an unsupported location separately from a temporarily unavailable or stale data feed.
+  return bounds.minLat >= 45 && bounds.maxLat <= 56
     && bounds.minLon >= 5 && bounds.maxLon <= 18;
 }
 function boundsFitHeader(bounds: ReturnType<typeof searchBounds>, header: Awaited<ReturnType<PMTiles["getHeader"]>>): boolean {
@@ -382,6 +387,7 @@ function timestamp(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 class CoverageUnavailableError extends Error {}
+class OutsideCoverageError extends Error {}
 class InvalidFeedError extends Error {}
 class FeedHTTPError extends Error { constructor(readonly status: number) { super("feed_http_error"); } }
 async function failureCode(response: Response): Promise<string | null> {
@@ -391,7 +397,7 @@ async function failureCode(response: Response): Promise<string | null> {
     if (isRecord(payload) && typeof payload.error === "string" && new Set([
       "method_not_allowed", "invalid_origin", "search_unavailable", "unsupported_media_type", "authentication_required",
       "session_unavailable", "request_too_large", "invalid_request", "location_too_uncertain", "search_rate_limited",
-      "source_unavailable", "source_timeout", "coverage_unavailable", "invalid_response",
+      "source_unavailable", "source_timeout", "coverage_unavailable", "outside_coverage", "invalid_response",
     ]).has(payload.error)) return payload.error;
   } catch { /* Fixed fallback only. */ }
   return "http_error";

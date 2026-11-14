@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { translations } from "../src/i18n/translations";
-import { translateFlow, type FlowMessageKey } from "../src/i18n/flowTranslations";
+import { flowTranslations, translateFlow, type FlowMessageKey } from "../src/i18n/flowTranslations";
 
 describe("first-version UI languages", () => {
   it("includes all six requested languages", () => {
@@ -10,6 +10,20 @@ describe("first-version UI languages", () => {
   it("uses the exact same umlaut-free product name in every language", () => {
     for (const language of Object.keys(translations) as Array<keyof typeof translations>) {
       expect(translations[language].appName).toBe("AEDjaeger");
+    }
+  });
+
+  it("keeps the same flow-message keys and nonempty translations in all six languages", () => {
+    const languages = Object.keys(translations) as Array<keyof typeof translations>;
+    const expectedKeys = Object.keys(flowTranslations.de).sort();
+    expect(Object.keys(flowTranslations).sort()).toEqual(languages.slice().sort());
+
+    for (const language of languages) {
+      const messages = flowTranslations[language];
+      expect(Object.keys(messages).sort(), language).toEqual(expectedKeys);
+      for (const [key, value] of Object.entries(messages)) {
+        expect(value.trim(), `${language}.${key}`).not.toBe("");
+      }
     }
   });
 
