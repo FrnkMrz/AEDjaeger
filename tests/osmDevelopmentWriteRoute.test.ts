@@ -86,8 +86,8 @@ class MemoryD1 implements D1Database {
           return { success: true, meta: { changes: 1 } };
         }
         if (sql.startsWith("DELETE FROM osm_development_write_operations")) {
-          const [hash, time] = params as [string, number];
-          for (const [id, row] of this.operations) if (row.owner_hash === hash && row.expires_at <= time) this.operations.delete(id);
+          const [time] = params as [number];
+          for (const [id, row] of this.operations) if (row.expires_at <= time) this.operations.delete(id);
           return { success: true, meta: { changes: 1 } };
         }
         if (sql.startsWith("INSERT OR IGNORE INTO osm_development_write_operations")) {
@@ -176,8 +176,8 @@ class MemoryD1 implements D1Database {
       return { success: true, meta: { changes: 1 } };
     }
     if (sql.startsWith("DELETE FROM osm_development_write_operations")) {
-      const [hash, time] = params as [string, number];
-      for (const [id, row] of this.operations) if (row.owner_hash === hash && row.expires_at <= time) this.operations.delete(id);
+      const [time] = params as [number];
+      for (const [id, row] of this.operations) if (row.expires_at <= time) this.operations.delete(id);
       return { success: true, meta: { changes: 1 } };
     }
     if (sql.startsWith("INSERT OR IGNORE INTO osm_development_write_operations")) {
@@ -369,6 +369,20 @@ describe("OSM development check-date writer", () => {
     expect(retry.status).toBe(502);
     expect(await retry.json()).toEqual({ error: "write_failed" });
     expect(calls.some((call) => call.url.endsWith("/changeset/create"))).toBe(false);
+  });
+
+  it("removes expired operation rows even when their owner is inactive", async () => {
+    const DB = await setupDatabase();
+    DB.operations.set(`inactive-owner:${operationId}`, {
+      owner_hash: "c".repeat(64), operation_id: operationId, request_hash: "d".repeat(64), state: "complete",
+      changeset_id: "77", result_version: 4, result_node_id: null, updated_at: now - 100_000, expires_at: now - 1,
+    });
+    const { fetcher } = makeFetch();
+
+    const response = await handleDevelopmentCheckDate(makeRequest(), { ...environment, DB }, { now: () => now, fetch: fetcher });
+
+    expect(response.status).toBe(200);
+    expect(DB.operations.has(`inactive-owner:${operationId}`)).toBe(false);
   });
 
   it("reconciles a lost upload response without creating a duplicate edit", async () => {

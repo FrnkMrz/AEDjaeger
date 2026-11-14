@@ -74,8 +74,9 @@ export async function reserveOSMDevelopmentWrite(
     throw new Error("Ungültige OSM-Teständerung.");
   }
   try {
-    const cleanup = await database.prepare("DELETE FROM osm_development_write_operations WHERE owner_hash = ? AND expires_at <= ?")
-      .bind(ownerHash, now).run();
+    // Expiry cleanup is owner-independent so abandoned accounts do not leave activity rows behind forever.
+    const cleanup = await database.prepare("DELETE FROM osm_development_write_operations WHERE expires_at <= ?")
+      .bind(now).run();
     if (!cleanup.success) throw new Error("D1 cleanup failed");
 
     const insert = await database.prepare(

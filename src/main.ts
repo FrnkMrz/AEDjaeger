@@ -1406,7 +1406,12 @@ async function refreshAccountState(focusSelector?: string, afterLogout = false):
     photoCheckAvailable = status.photoCheckAvailable;
     if (pendingDevelopmentWrite && !pendingDevelopmentWriteOwnerHash && developmentSession && developmentWriteOwnerHash) {
       // Upgrade a same-session pre-owner marker as soon as the Worker confirms the development account.
-      persistPendingDevelopmentWrite(pendingDevelopmentWrite, true, developmentWriteOwnerHash);
+      try {
+        persistPendingDevelopmentWrite(pendingDevelopmentWrite, true, developmentWriteOwnerHash);
+      } catch {
+        // Storage migration is best-effort: keep the authenticated session and legacy marker usable in this tab.
+        pendingDevelopmentWriteOwnerHash = developmentWriteOwnerHash;
+      }
     }
     const stillSignedInAfterLogout = afterLogout && status.authenticated;
     if (status.authenticated && !stillSignedInAfterLogout) void askForLocationOnceAfterSignIn();

@@ -472,6 +472,29 @@ test("a pending write from the previous session-storage format is migrated", asy
   expect(storage.legacy).toBeNull();
 });
 
+test("a legacy pending write still recovers when localStorage migration fails", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
+    authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true,
+    developmentWriteAvailable: true, developmentWriteOwnerHash: testDevelopmentOwnerHash,
+  } }));
+  await page.addInitScript(() => {
+    sessionStorage.setItem("aedjaeger-pending-osm-development-write", JSON.stringify({
+      kind: "check-date", operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", target: "node/42", candidateLabel: "Rathaus", expectedVersion: 3, expectedCheckDate: null, observedOn: "2026-11-14",
+    }));
+    const originalSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key.startsWith("aedjaeger-pending-osm-development-write:")) throw new DOMException("quota exceeded", "QuotaExceededError");
+      originalSetItem.call(this, key, value);
+    };
+  });
+
+  await page.goto("/");
+
+  await expect(page.getByRole("button", { name: "Mit OSM-Testserver verbunden" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Testserver: Status erneut prüfen" })).toBeVisible();
+  expect(await page.evaluate(() => sessionStorage.getItem("aedjaeger-pending-osm-development-write"))).not.toBeNull();
+});
+
 test("a pending write stays visible while signed out and continue starts test-server sign-in", async ({ page }) => {
   let testServerLoginStarted = false;
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
