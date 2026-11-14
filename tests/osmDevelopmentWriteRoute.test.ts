@@ -232,6 +232,7 @@ function makeRequest(payload: unknown = requestBody): Request {
 function makeFetch(options: {
   appliedAfterUploadFailure?: boolean;
   changesetCloseConflict?: "closed" | "open";
+  malformedChangesetDownloads?: string[];
   changesetOpenFailure?: boolean;
   conflictVersion?: number;
   observedOn?: string;
@@ -242,6 +243,7 @@ function makeFetch(options: {
   const calls: Array<{ method: string; url: string; body?: string }> = [];
   let failAfterUpload = options.appliedAfterUploadFailure ?? false;
   let uploadApplied = false;
+  const malformedDownloads = [...(options.malformedChangesetDownloads ?? [])];
   const fetcher: typeof fetch = async (input, init = {}) => {
     const url = String(input);
     const method = init.method ?? "GET";
@@ -277,6 +279,7 @@ function makeFetch(options: {
     }
     if (url.endsWith("/api/0.6/changeset/77/download")) {
       if (!uploadApplied) return new Response('<osmChange version="0.6"><create/><modify/><delete/></osmChange>', { status: 200 });
+      if (malformedDownloads.length > 0) return new Response(malformedDownloads.shift(), { status: 200 });
       const download = '<osmChange version="0.6"><modify><node id="42" changeset="77" version="' + version
         + '"><tag k="emergency" v="defibrillator"/><tag k="check_date" v="' + checkDate
         + '"/></node></modify></osmChange>';
@@ -427,6 +430,34 @@ describe("OSM development check-date writer", () => {
     const retry = await handleDevelopmentCheckDate(makeRequest(), { ...environment, DB }, dependencies);
     expect(retry.status).toBe(202);
     expect(await retry.json()).toEqual({ status: "uncertain" });
+    expect(calls.filter((call) => call.url.endsWith("/upload"))).toHaveLength(1);
+  });
+
+  it.each([
+    ["empty HTTP 200 body", ""],
+    ["truncated XML", '<osmChange version="0.6"><modify><node id="42" changeset="77" version="4">'],
+    ["mismatched closing tag", '<osmChange version="0.6"><modify></create></osmChange>'],
+  ])("keeps an uncertain write recoverable after a %s changeset download", async (_label, download) => {
+    const DB = await setupDatabase();
+    const { fetcher, calls } = makeFetch({
+      appliedAfterUploadFailure: true,
+      changesetCloseConflict: "closed",
+      malformedChangesetDownloads: [download],
+    });
+    const dependencies = { now: () => now, fetch: fetcher };
+    const workerEnvironment = { ...environment, DB };
+
+    const first = await handleDevelopmentCheckDate(makeRequest(), workerEnvironment, dependencies);
+    expect(first.status).toBe(202);
+    expect(await first.json()).toEqual({ status: "uncertain" });
+
+    const malformedRecovery = await handleDevelopmentCheckDate(makeRequest(), workerEnvironment, dependencies);
+    expect(malformedRecovery.status).toBe(202);
+    expect(await malformedRecovery.json()).toEqual({ status: "uncertain" });
+
+    const laterRecovery = await handleDevelopmentCheckDate(makeRequest(), workerEnvironment, dependencies);
+    expect(laterRecovery.status).toBe(200);
+    expect(await laterRecovery.json()).toMatchObject({ status: "complete", version: 4 });
     expect(calls.filter((call) => call.url.endsWith("/upload"))).toHaveLength(1);
   });
 

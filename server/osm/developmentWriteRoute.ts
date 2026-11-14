@@ -295,14 +295,18 @@ async function reconcileUncertainWrite(
     const response = await requestOSMDevelopmentApi("development", `/api/0.6/changeset/${operation.changeset_id}/download`, token, { method: "GET" }, dependencies.fetch ?? fetch);
     if (!response.ok) return jsonResponse({ status: "uncertain" }, 202);
     const body = await readLimitedText(response, MAX_CHANGESET_DOWNLOAD_BYTES);
-    const updatedNode = findUpdatedNodeInChangeset(body, operation.changeset_id, input.target);
+    const changeset = parseChangesetDownload(body, operation.changeset_id, input.target);
+    // An HTTP 200 does not guarantee a complete XML document. Only classify a
+    // fully parsed changeset; truncated or malformed downloads stay recoverable.
+    if (!changeset) return jsonResponse({ status: "uncertain" }, 202);
 
-    if (updatedNode && writeAppearsApplied(updatedNode, input)) {
+    if (changeset.updatedNode && writeAppearsApplied(changeset.updatedNode, input)) {
+      const updatedNode = changeset.updatedNode;
       await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state: "uploaded", changesetId: operation.changeset_id, resultVersion: updatedNode.version, now: (dependencies.now ?? Date.now)() });
       return finishChangeset(database, sessionHash, input.operation_id, { ...operation, state: "uploaded", result_version: updatedNode.version }, token, dependencies);
     }
 
-    if (isEmptyChangesetDownload(body)) {
+    if (changeset.empty) {
       const failed = await failEmptyUncertainOSMDevelopmentWrite(database, {
         sessionHash,
         operationId: input.operation_id,
@@ -448,50 +452,181 @@ function isChangesetClosed(body: string, changesetId: string): boolean {
   return new RegExp("<changeset\\b(?=[^>]*\\bid=\"" + changesetId + "\"(?=[\\s>]))(?=[^>]*\\bopen=\"false\"(?=[\\s>]))[^>]*\\/?\\s*>", "u").test(body);
 }
 
-function isEmptyChangesetDownload(value: string): boolean {
-  const withoutDeclaration = withoutXmlDeclaration(value);
-  const root = /^<osmChange\b[^>]*>([\s\S]*)<\/osmChange>\s*$/u.exec(withoutDeclaration);
-  if (!root) return false;
-  const content = root[1].replace(/<!--([\s\S]*?)-->/gu, "").trim();
-  if (!content) return true;
-  return content.replace(/<(create|modify|delete)\s*\/\s*>/giu, "")
-    .replace(/<(create|modify|delete)\s*>\s*<\/\1\s*>/giu, "").trim().length === 0;
-}
+type ParsedChangesetDownload = {
+  empty: boolean;
+  updatedNode: Pick<OSMNode, "version" | "tags"> | null;
+};
 
-function findUpdatedNodeInChangeset(
+/** Parse only the OSM Change XML shape we need, rejecting incomplete XML. */
+function parseChangesetDownload(
   value: string,
   changesetId: string,
   target: string,
-): Pick<OSMNode, "version" | "tags"> | null {
+): ParsedChangesetDownload | null {
+  const stack: string[] = [];
+  let cursor = 0;
+  let sawRoot = false;
+  let closedRoot = false;
+  let hasObjects = false;
+  let declarationSeen = false;
+  let capture: { version: number; tags: Record<string, string> } | null = null;
+  let updatedNode: Pick<OSMNode, "version" | "tags"> | null = null;
   const targetId = target.slice("node/".length);
-  for (const action of value.matchAll(/<modify\b[^>]*>([\s\S]*?)<\/modify\s*>/giu)) {
-    for (const node of action[1].matchAll(/<node\b([^>]*)>([\s\S]*?)<\/node\s*>/giu)) {
-      const attributes = parseXmlAttributes(node[1]);
-      const version = Number(attributes.version);
-      if (attributes.id !== targetId || attributes.changeset !== changesetId
-        || !/^[1-9]\d{0,15}$/u.test(attributes.version ?? "") || !Number.isSafeInteger(version)) continue;
-      const tags = new Map<string, string>();
-      for (const tag of node[2].matchAll(/<tag\b([^>]*)\/?\s*>/giu)) {
-        const tagAttributes = parseXmlAttributes(tag[1]);
-        if (tagAttributes.k !== undefined && tagAttributes.v !== undefined) tags.set(tagAttributes.k, tagAttributes.v);
-      }
-      return { version, tags: Object.fromEntries(tags) };
+
+  while (cursor < value.length) {
+    if (value[cursor] !== "<") {
+      const nextTag = value.indexOf("<", cursor);
+      const text = value.slice(cursor, nextTag < 0 ? value.length : nextTag);
+      if (!/^[\t\n\r ]*$/u.test(text)) return null;
+      cursor = nextTag < 0 ? value.length : nextTag;
+      continue;
     }
+
+    if (value.startsWith("<!--", cursor)) {
+      const end = value.indexOf("-->", cursor + 4);
+      const comment = end < 0 ? "" : value.slice(cursor + 4, end);
+      if (end < 0 || comment.includes("--") || comment.endsWith("-")) return null;
+      cursor = end + 3;
+      continue;
+    }
+
+    if (value.startsWith("<?", cursor)) {
+      const end = value.indexOf("?>", cursor + 2);
+      const declaration = end < 0 ? "" : value.slice(cursor, end + 2);
+      if (cursor !== 0 || sawRoot || declarationSeen || !/^<\?xml\s+version=(?:"1\.0"|'1\.0')(?:\s+encoding=(?:"UTF-8"|'UTF-8'))?(?:\s+standalone=(?:"(?:yes|no)"|'(?:yes|no)'))?\s*\?>$/u.test(declaration)) return null;
+      declarationSeen = true;
+      cursor = end + 2;
+      continue;
+    }
+
+    const tagEnd = findXmlTagEnd(value, cursor + 1);
+    if (tagEnd < 0) return null;
+    const rawTag = value.slice(cursor + 1, tagEnd);
+    if (rawTag.startsWith("!")) return null; // No DTD or CDATA in OSM Change responses.
+
+    if (rawTag.startsWith("/")) {
+      const closingName = /^\/([A-Za-z_][\w:.-]*)\s*$/u.exec(rawTag)?.[1];
+      const openName = stack.pop();
+      if (!closingName || openName !== closingName) return null;
+      if (closingName === "node" && capture) {
+        if (updatedNode) return null;
+        updatedNode = { version: capture.version, tags: capture.tags };
+        capture = null;
+      }
+      if (closingName === "osmChange") closedRoot = true;
+    } else {
+      const parsed = parseXmlStartTag(rawTag);
+      if (!parsed) return null;
+      const parent = stack.at(-1);
+      if (!parent) {
+        if (sawRoot || parsed.name !== "osmChange" || parsed.attributes.version !== "0.6") return null;
+        sawRoot = true;
+      } else if (parent === "osmChange") {
+        if (!["create", "modify", "delete"].includes(parsed.name)) return null;
+      } else if (["create", "modify", "delete"].includes(parent)) {
+        if (!["node", "way", "relation"].includes(parsed.name)) return null;
+        hasObjects = true;
+        const version = Number(parsed.attributes.version);
+        if (parent === "modify" && parsed.name === "node" && parsed.attributes.id === targetId
+          && parsed.attributes.changeset === changesetId && /^[1-9]\d{0,15}$/u.test(parsed.attributes.version ?? "")
+          && Number.isSafeInteger(version)) {
+          capture = { version, tags: {} };
+        }
+      } else if (["node", "way", "relation"].includes(parent)) {
+        const allowed = parsed.name === "tag" || (parent === "way" && parsed.name === "nd") || (parent === "relation" && parsed.name === "member");
+        if (!allowed) return null;
+        if (parsed.name === "tag" && (!parsed.attributes.k || parsed.attributes.v === undefined)) return null;
+        if (parsed.name === "tag" && capture && parent === "node") {
+          if (Object.hasOwn(capture.tags, parsed.attributes.k!)) return null;
+          capture.tags[parsed.attributes.k!] = parsed.attributes.v!;
+        }
+      } else {
+        return null;
+      }
+      if (!parsed.selfClosing) stack.push(parsed.name);
+      else if (parsed.name === "node" && capture) {
+        if (updatedNode) return null;
+        updatedNode = { version: capture.version, tags: capture.tags };
+        capture = null;
+      }
+    }
+    cursor = tagEnd + 1;
   }
-  return null;
+
+  if (!sawRoot || !closedRoot || stack.length !== 0) return null;
+  return { empty: !hasObjects, updatedNode };
 }
 
-function parseXmlAttributes(value: string): Record<string, string> {
-  const attributes: Record<string, string> = {};
-  for (const match of value.matchAll(/([A-Za-z_:][\w:.-]*)="([^"]*)"/gu)) {
-    attributes[match[1]] = match[2]
-      .replaceAll("&quot;", '"')
-      .replaceAll("&apos;", "'")
-      .replaceAll("&lt;", "<")
-      .replaceAll("&gt;", ">")
-      .replaceAll("&amp;", "&");
+function findXmlTagEnd(value: string, cursor: number): number {
+  let quote: "\"" | "'" | null = null;
+  for (let index = cursor; index < value.length; index += 1) {
+    const character = value[index];
+    if (quote) {
+      if (character === quote) quote = null;
+    } else if (character === "\"" || character === "'") {
+      quote = character;
+    } else if (character === ">") {
+      return index;
+    }
   }
-  return attributes;
+  return -1;
+}
+
+function parseXmlStartTag(value: string): { name: string; attributes: Record<string, string>; selfClosing: boolean } | null {
+  const match = /^([A-Za-z_][\w:.-]*)([\s\S]*)$/u.exec(value);
+  if (!match) return null;
+  const name = match[1];
+  let rest = match[2];
+  const selfClosing = /\/\s*$/u.test(rest);
+  if (selfClosing) rest = rest.replace(/\/\s*$/u, "");
+  const attributes: Record<string, string> = {};
+  let cursor = 0;
+  while (cursor < rest.length) {
+    const whitespace = /^\s*/u.exec(rest.slice(cursor))?.[0].length ?? 0;
+    cursor += whitespace;
+    if (cursor === rest.length) break;
+    if (whitespace === 0) return null;
+    const attribute = /^([A-Za-z_][\w:.-]*)\s*=\s*("([^"]*)"|'([^']*)')/u.exec(rest.slice(cursor));
+    if (!attribute || Object.hasOwn(attributes, attribute[1])) return null;
+    const decoded = decodeXmlAttribute(attribute[3] ?? attribute[4] ?? "");
+    if (decoded === null) return null;
+    attributes[attribute[1]] = decoded;
+    cursor += attribute[0].length;
+  }
+  return { name, attributes, selfClosing };
+}
+
+function decodeXmlAttribute(value: string): string | null {
+  const validXmlCharacters = Array.from(value).every((character) => {
+    const codePoint = character.codePointAt(0)!;
+    return codePoint === 0x9 || codePoint === 0xa || codePoint === 0xd
+      || (codePoint >= 0x20 && codePoint <= 0xd7ff)
+      || (codePoint >= 0xe000 && codePoint <= 0xfffd)
+      || (codePoint >= 0x10000 && codePoint <= 0x10ffff);
+  });
+  if (!validXmlCharacters) return null;
+  let invalid = false;
+  const decoded = value.replace(/&([^;]+);/gu, (_entity, name: string) => {
+    if (name === "amp") return "&";
+    if (name === "quot") return '"';
+    if (name === "apos") return "'";
+    if (name === "lt") return "<";
+    if (name === "gt") return ">";
+    const numeric = /^#(?:x([\da-f]+)|(\d+))$/iu.exec(name);
+    if (!numeric) { invalid = true; return ""; }
+    const codePoint = numeric[1] ? Number.parseInt(numeric[1], 16) : Number.parseInt(numeric[2], 10);
+    const validCodePoint = codePoint === 0x9 || codePoint === 0xa || codePoint === 0xd
+      || (codePoint >= 0x20 && codePoint <= 0xd7ff)
+      || (codePoint >= 0xe000 && codePoint <= 0xfffd)
+      || (codePoint >= 0x10000 && codePoint <= 0x10ffff);
+    if (!Number.isInteger(codePoint) || !validCodePoint) {
+      invalid = true;
+      return "";
+    }
+    return String.fromCodePoint(codePoint);
+  });
+  if (invalid || /&(?![^;]+;)/u.test(value) || value.includes("<")) return null;
+  return decoded;
 }
 
 function buildNodeUpdateChange(node: OSMNode, tags: Record<string, string>, changesetId: string): string {
