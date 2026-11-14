@@ -46,8 +46,8 @@ function describeServerDetail(payload: unknown, httpStatus: number): string {
 }
 
 /**
- * Decode and re-encode locally before upload. Canvas output strips EXIF metadata,
- * including GPS coordinates, while resizing bounds the request and provider cost.
+ * Decode, re-encode, and remove JPEG metadata locally before upload. The explicit
+ * APP1 removal protects the privacy boundary even if a browser retains EXIF in canvas output.
  */
 export async function preparePhotoForAnalysis(file: File): Promise<Blob> {
   if (file.size > MAX_SOURCE_BYTES) throw new VisionClientError("image_too_large");
@@ -72,7 +72,7 @@ export async function preparePhotoForAnalysis(file: File): Promise<Blob> {
 
     // Re-encoding normalizes accepted browser formats to a MIME type the Worker validates.
     for (const quality of [0.84, 0.7, 0.55]) {
-      const jpeg = await canvasToJpeg(canvas, quality);
+      const jpeg = await stripJpegExif(await canvasToJpeg(canvas, quality));
       if (jpeg.size <= MAX_IMAGE_BYTES) return jpeg;
     }
     throw new VisionClientError("image_too_large");
@@ -82,6 +82,44 @@ export async function preparePhotoForAnalysis(file: File): Promise<Blob> {
   } finally {
     URL.revokeObjectURL(sourceUrl);
   }
+}
+
+/** Explicitly remove JPEG APP1 segments so browser-specific canvas encoders cannot retain EXIF/GPS. */
+export async function stripJpegExif(blob: Blob): Promise<Blob> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) throw new VisionClientError("invalid_image");
+
+  const parts: Uint8Array[] = [bytes.subarray(0, 2)];
+  let offset = 2;
+  while (offset + 1 < bytes.length && bytes[offset] === 0xff) {
+    const markerStart = offset;
+    while (offset < bytes.length && bytes[offset] === 0xff) offset += 1;
+    if (offset >= bytes.length) break;
+    const marker = bytes[offset];
+    offset += 1;
+
+    // SOS starts the compressed image stream; marker-looking bytes after this point are pixel data.
+    if (marker === 0xda) {
+      parts.push(bytes.subarray(markerStart));
+      offset = bytes.length;
+      break;
+    }
+    // Standalone markers have no length field and should be preserved as-is.
+    if (marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7) || marker === 0x01) {
+      parts.push(bytes.subarray(markerStart, offset));
+      continue;
+    }
+    if (offset + 1 >= bytes.length) throw new VisionClientError("invalid_image");
+    const segmentLength = (bytes[offset] << 8) | bytes[offset + 1];
+    const segmentEnd = offset + segmentLength;
+    if (segmentLength < 2 || segmentEnd > bytes.length) throw new VisionClientError("invalid_image");
+    const isApp1 = marker === 0xe1;
+    if (!isApp1) parts.push(bytes.subarray(markerStart, segmentEnd));
+    offset = segmentEnd;
+  }
+  if (offset < bytes.length) parts.push(bytes.subarray(offset));
+  const blobParts = parts.map((part) => part.slice().buffer as ArrayBuffer);
+  return new Blob(blobParts, { type: "image/jpeg" });
 }
 
 /** Send one user-requested image and validate the server response at the UI boundary. */

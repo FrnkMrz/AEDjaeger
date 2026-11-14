@@ -6,6 +6,16 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 > Die jüngsten Einträge am Anfang beschreiben den aktuellen Pilotstand. Ältere Einträge darunter dokumentieren frühere, inzwischen teilweise abgelöste Zwischenstände und sind keine Beschreibung des aktuellen Laufzeitverhaltens.
 
+### Added
+- Automatisierte axe-Prüfungen für Start-, Foto-, Karten-, Such-, Vorschau- und Fehlerzustände sowie ein WebKit/iPhone-14-Projekt in der E2E-Suite. Die manuelle VoiceOver-/TalkBack-Abnahme ist dokumentiert und bleibt offen.
+
+### Changed
+- Kartenbedienung per Zwei-Finger-Zoom sowie Plus-/Minus-Tasten ergänzt; Kartenrollen nennen jetzt zugängliche Kurzhinweise. Kleine Texte nutzen skalierbare `rem`-Größen mit mindestens 12 px.
+- Verbindungsstatus zeigt Haken oder Strich zusätzlich zur Farbe. Info-, Schließen-, Konto- und Kartenzoom-Schaltflächen bieten mindestens 44 px Tippfläche.
+
+### Security
+- Entfernt JPEG-APP1-Metadatensegmente zusätzlich zur lokalen Neucodierung ausdrücklich vor dem optionalen Foto-Upload, damit EXIF/GPS auch bei abweichendem Canvas-Verhalten eines Browsers nicht mitgesendet werden.
+
 ### Fixed
 - Meldet Standorte außerhalb der AED-Datenabdeckung klar und getrennt von vorübergehenden Datenquellenfehlern. Verschiebt die Testserver-Schreibtexte in die gemeinsame Übersetzungsdatei und prüft, dass alle sechs Sprachen denselben vollständigen Schlüsselsatz haben.
 - Bewahrt unklare Testserver-Schreibvorgänge bis zu sieben Tage lokal auf, getrennt nach Vorgangs-ID und OSM-Konto. Nach Session-Rotation führt die App denselben Vorgang nur für das gebundene Konto mit derselben Vorgangs-ID fort; alte Serverdatensätze werden vor Session-Löschung an eine geheime HMAC-Kennung des Kontos gebunden. Zwei Tabs können sich ihre Marker nicht überschreiben. Wenn ein alter Marker wegen gesperrtem Browser-Speicher nicht migriert werden kann, bleibt die Anmeldung funktionsfähig und der Marker im aktuellen Tab wiederherstellbar. Wechselt ein anderes Tab das gemeinsame Testserver-Konto, bleibt ein wegen der Kontoprüfung abgewiesener Vorgang für die Rückkehr zum ursprünglichen Konto erhalten. Abgelaufene Serverdatensätze werden beim nächsten Schreibvorgang kontenübergreifend bereinigt. Nach bestätigtem Erfolg zeigen Status und nächster Schritt den Abschluss klar an; ein dabei offenes Info-Fenster samt Ton-Auswahl bleibt erhalten.

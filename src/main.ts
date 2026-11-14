@@ -338,7 +338,7 @@ function accountPanel(): string {
 function connectionLamp(): string {
   const connected = accountState === "signed-in";
   const label = connected ? (developmentSession ? t("accountDevSignedIn") : t("accountSignedIn")) : tv("connectionOff");
-  return `<button class="connection-lamp-button" id="connection-lamp" type="button" aria-label="${escapeHtml(label)}"><span class="connection-lamp ${connected ? "connection-lamp-on" : "connection-lamp-off"}" aria-hidden="true"></span></button>`;
+  return `<button class="connection-lamp-button" id="connection-lamp" type="button" aria-label="${escapeHtml(label)}"><span class="connection-lamp ${connected ? "connection-lamp-on" : "connection-lamp-off"}" aria-hidden="true">${connected ? "✓" : "−"}</span></button>`;
 }
 
 /**
@@ -895,7 +895,7 @@ function statusContent(): string {
       const mapPositionLabel = mapHasSelection
         ? tv("mapLocationCoordinates", { latitude: selectedPosition.latitude.toFixed(5), longitude: selectedPosition.longitude.toFixed(5) })
         : tv("mapLocationInitial");
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">◎</span><div><h2>${tv("chooseMapLocation")}</h2><p>${tv("mapLocationHelp")}</p></div></div><div id="search-location-map" class="position-map" role="application" tabindex="0" aria-label="${tv("chooseMapLocation")}"></div><p class="position-map-coordinates" id="search-location-coordinates" aria-live="polite">${mapPositionLabel}</p><button class="button button-primary" data-action="confirm-map-location"${mapHasSelection ? "" : " disabled"}>${tv("searchAction")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">◎</span><div><h2>${tv("chooseMapLocation")}</h2><p>${tv("mapLocationHelp")}</p></div></div><div id="search-location-map" class="position-map" role="application" tabindex="0" aria-label="${tv("chooseMapLocation")}" aria-describedby="search-map-instructions"></div><p class="sr-only" id="search-map-instructions">${tv("mapNavigationHelp")}</p><p class="position-map-coordinates" id="search-location-coordinates" aria-live="polite">${mapPositionLabel}</p><button class="button button-primary" data-action="confirm-map-location"${mapHasSelection ? "" : " disabled"}>${tv("searchAction")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
     }
     case "candidate-searching":
       return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv("searchProgress")}</span></div>`;
@@ -943,7 +943,7 @@ function statusContent(): string {
       const selectedPosition = newAedPositionOverride ?? state.location;
       const mayPrepareNewEntry = newEntryPanelOpen(state);
       const newEntryAction = mayPrepareNewEntry
-        ? `<section class="position-picker-panel" aria-labelledby="new-aed-position-title"><h3 id="new-aed-position-title">${tv("newPositionMapLabel")}</h3><p class="position-picker-help">${tv("newPositionMapHelp")}</p><div id="new-aed-position-map" class="position-map" role="application" tabindex="0" aria-label="${tv("newPositionMapLabel")}"></div><p class="position-map-coordinates" id="new-aed-position-coordinates" aria-live="polite">${tv("newPreviewCoordinates", { latitude: selectedPosition.latitude.toFixed(5), longitude: selectedPosition.longitude.toFixed(5) })}</p><div class="position-confirmation"><label for="new-aed-position-confirmed"><input id="new-aed-position-confirmed" type="checkbox" /><span id="new-aed-position-label">${tv("newPositionConfirm", { latitude: selectedPosition.latitude.toFixed(5), longitude: selectedPosition.longitude.toFixed(5) })}</span></label><button class="button button-primary" data-action="preview-new-aed">${tv("newPreviewAction")}</button></div></section>`
+        ? `<section class="position-picker-panel" aria-labelledby="new-aed-position-title"><h3 id="new-aed-position-title">${tv("newPositionMapLabel")}</h3><p class="position-picker-help">${tv("newPositionMapHelp")}</p><div id="new-aed-position-map" class="position-map" role="application" tabindex="0" aria-label="${tv("newPositionMapLabel")}" aria-describedby="new-position-map-instructions"></div><p class="sr-only" id="new-position-map-instructions">${tv("mapNavigationHelp")}</p><p class="position-map-coordinates" id="new-aed-position-coordinates" aria-live="polite">${tv("newPreviewCoordinates", { latitude: selectedPosition.latitude.toFixed(5), longitude: selectedPosition.longitude.toFixed(5) })}</p><div class="position-confirmation"><label for="new-aed-position-confirmed"><input id="new-aed-position-confirmed" type="checkbox" /><span id="new-aed-position-label">${tv("newPositionConfirm", { latitude: selectedPosition.latitude.toFixed(5), longitude: selectedPosition.longitude.toFixed(5) })}</span></label><button class="button button-primary" data-action="preview-new-aed">${tv("newPreviewAction")}</button></div></section>`
         : "";
       // Erste von zwei Bestätigungen für eine Neuanlage (siehe newEntryPanelOpen):
       // Erst dieser bewusste Tastendruck öffnet Karte und Positionsbestätigung.
@@ -957,7 +957,7 @@ function statusContent(): string {
       // Übersichtskarte: zeigt den gesuchten Standort (roter Punkt) und die nummerierten Treffer.
       // Sie entfällt, sobald der Neuanlage-Bereich offen ist – dessen Karte zeigt dieselben Marker.
       const overviewMap = numbered && candidatesToShow.length > 0 && !mayPrepareNewEntry
-        ? `<div id="candidate-overview-map" class="position-map" role="application" tabindex="0" aria-label="${tv("overviewMapLabel")}"></div><p class="position-map-privacy">${tv("overviewMapLegend")}</p>`
+        ? `<div id="candidate-overview-map" class="position-map" role="application" tabindex="0" aria-label="${tv("overviewMapLabel")}" aria-describedby="overview-map-instructions"></div><p class="sr-only" id="overview-map-instructions">${tv("mapNavigationHelp")}</p><p class="position-map-privacy">${tv("overviewMapLegend")}</p>`
         : "";
       const retryWaitSeconds = state.retryAvailableAt === undefined ? 0 : Math.max(0, Math.ceil((state.retryAvailableAt - Date.now()) / 1000));
       const retry = search.status === "partial" || assessment.kind === "search-incomplete"
@@ -1008,7 +1008,7 @@ function statusContent(): string {
         : state.writeStatus === "complete" ? `<button class="button button-primary" data-action="retake">${tv("nextAed")}</button>`
           : `${backButton}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
       const successful = state.writeStatus === "complete";
-      return `${photoMarkup}<div class="result-message"><span class="status-icon ${successful ? "status-good" : "status-warn"}" aria-hidden="true">${successful ? "✓" : "?"}</span><div><h2>${tv("newPreviewTitle")}</h2>${content}${noWriteNotice}${writeStatus}</div></div>${writeAction}${navigation}`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon ${successful ? "status-good" : "status-warn"}" aria-hidden="true">${successful ? "✓" : "!"}</span><div><h2>${tv("newPreviewTitle")}</h2>${content}${noWriteNotice}${writeStatus}</div></div>${writeAction}${navigation}`;
     }
     case "osm-preview": {
       const { result } = state;
@@ -1074,7 +1074,7 @@ function statusContent(): string {
         : state.writeStatus === "complete" ? `<button class="button button-primary" data-action="retake">${tv("nextAed")}</button>`
           : `${backButton}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
       const successful = state.writeStatus === "complete";
-      return `${photoMarkup}<div class="result-message"><span class="status-icon ${successful ? "status-good" : "status-warn"}" aria-hidden="true">${successful ? "✓" : "?"}</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.candidateLabel))}</strong></p>${content}${changedList}${addedList}${levelLeftNote}${noWriteNotice}${writeStatus}</div></div>${writeAction}${addDetailsButton}${navigation}`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon ${successful ? "status-good" : "status-warn"}" aria-hidden="true">${successful ? "✓" : "!"}</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.candidateLabel))}</strong></p>${content}${changedList}${addedList}${levelLeftNote}${noWriteNotice}${writeStatus}</div></div>${writeAction}${addDetailsButton}${navigation}`;
     }
     case "existing-aed-details": {
       const label = escapeHtml(displayCandidateLabel(state.candidateLabel));
