@@ -7,6 +7,8 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 > Die jüngsten Einträge am Anfang beschreiben den aktuellen Pilotstand. Ältere Einträge darunter dokumentieren frühere, inzwischen teilweise abgelöste Zwischenstände und sind keine Beschreibung des aktuellen Laufzeitverhaltens.
 
 ### Added
+- Täglicher, rein lesender Live-Check der AED-Datenquelle und ein D1-Migrationsschutz vor Worker-Deploys.
+- Betriebshandbuch für Secrets, Migrationen, Bereitstellung, Wiederherstellung und Fehlerdiagnose.
 - Automatisierte axe-Prüfungen für Start-, Foto-, Karten-, Such-, Vorschau- und Fehlerzustände sowie ein WebKit/iPhone-14-Projekt in der E2E-Suite. Die manuelle VoiceOver-/TalkBack-Abnahme ist dokumentiert und bleibt offen.
 
 ### Changed
