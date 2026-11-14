@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { D1Database, D1Result, D1Statement } from "../server/storage/d1";
 import { createOSMSession } from "../server/storage/osmSessions";
-import { storeOSMDevelopmentToken } from "../server/storage/osmDevelopmentTokens";
+import { storeOSMOAuthToken } from "../server/storage/osmOAuthTokens";
 import { importOAuthEncryptionKey } from "../server/auth/osmOAuth";
 import { handleDevelopmentCreateNode } from "../server/osm/developmentCreateNodeRoute";
 import { hashOSMDevelopmentWriteOwner, hashOSMDevelopmentWriteValue } from "../server/storage/osmDevelopmentWriteOperations";
@@ -10,7 +10,7 @@ const now = Date.UTC(2026, 9, 24, 12);
 const cookieToken = "s".repeat(43);
 const encryptionSecret = "k".repeat(43);
 const operationId = "f1234567-89ab-4cde-8fab-123456789abc";
-const input = { recovery_identity: await hashOSMDevelopmentWriteOwner({ subject: "test-subject", environment: "development" }, encryptionSecret), operation_id: operationId, confirmed: true, latitude: 52.52, longitude: 13.405, observed_on: "2026-10-24", location_description: "Near main entrance" };
+const input = { recovery_identity: await hashOSMDevelopmentWriteOwner({ subject: "test-subject", environment: "development" }, encryptionSecret), operation_id: operationId, confirmed: true, absence_confirmed: true, latitude: 52.52, longitude: 13.405, observed_on: "2026-10-24", location_description: "Near main entrance" };
 
 type SessionRow = { session_hash: string; osm_subject: string; osm_environment: string; expires_at: number };
 type TokenRow = { session_hash: string; token_iv: string; token_ciphertext: string; token_expires_at: number };
@@ -41,7 +41,7 @@ class MemoryD1 implements D1Database {
       const [hash, time] = values as [string, number]; const row = this.sessions.get(hash);
       return row && row.expires_at > time ? { session_hash: hash } as T : null;
     }
-    if (sql.includes("FROM osm_development_tokens")) {
+    if (sql.includes("FROM osm_oauth_tokens")) {
       const [hash, tokenTime, activeHash, sessionTime] = values as [string, number, string, number];
       const token = this.tokens.get(hash); const session = this.sessions.get(activeHash);
       return token && token.token_expires_at > tokenTime && session && session.expires_at > sessionTime
@@ -64,7 +64,7 @@ class MemoryD1 implements D1Database {
       this.sessions.set(hash, { session_hash: hash, osm_subject: subject, osm_environment: env, expires_at: expires });
       return { success: true, meta: { changes: 1 } };
     }
-    if (sql.startsWith("INSERT INTO osm_development_tokens")) {
+    if (sql.startsWith("INSERT INTO osm_oauth_tokens")) {
       const [hash, iv, cipher, expires, _created] = values as [string, string, string, number, number];
       this.tokens.set(hash, { session_hash: hash, token_iv: iv, token_ciphertext: cipher, token_expires_at: expires });
       return { success: true, meta: { changes: 1 } };
@@ -121,7 +121,7 @@ async function setupDatabase(environment: "development" | "production" = "develo
   const database = new MemoryD1();
   await createOSMSession(database, cookieToken, "test-subject", now - 1_000, environment);
   const key = await importOAuthEncryptionKey(encryptionSecret);
-  await storeOSMDevelopmentToken(database, cookieToken, "dev-bearer-token", now + 60 * 60 * 1_000, now, key);
+  await storeOSMOAuthToken(database, cookieToken, "dev-bearer-token", now + 60 * 60 * 1_000, now, key);
   return database;
 }
 
@@ -181,6 +181,19 @@ function makeFetch(options: { detailTags?: Record<string, string>; nearbyAedAt?:
 const environment = { OSM_DEV_WRITES_ENABLED: "true", OSM_OAUTH_ENCRYPTION_KEY: encryptionSecret };
 
 describe("OSM development node creation", () => {
+  it("requires the second explicit confirmation on the server", async () => {
+    const DB = await setupDatabase();
+    let providerCalls = 0;
+    const { absence_confirmed: _omitted, ...withoutAbsenceConfirmation } = input;
+    const response = await handleDevelopmentCreateNode(makeRequest(withoutAbsenceConfirmation), { ...environment, DB }, {
+      now: () => now,
+      fetch: async () => { providerCalls += 1; return new Response(); },
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid_request" });
+    expect(providerCalls).toBe(0);
+  });
   it("creates only the approved minimal tags after a fresh empty API map check", async () => {
     const DB = await setupDatabase(); const api = makeFetch();
     const response = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
@@ -199,8 +212,8 @@ describe("OSM development node creation", () => {
       "defibrillator:location": "Foyer & Café, links", access: "customers", opening_hours: "Mo-Fr 08:00-18:00", indoor: "yes", level: "-1", operator: "Stadtwerke <Nord>", phone: "+49 911 123456", description: "Schlüssel \"beim\" Empfang", ref: "A-12",
     };
     const api = makeFetch({ detailTags: details });
-    const { operation_id, confirmed, latitude, longitude, observed_on } = input;
-    const response = await handleDevelopmentCreateNode(makeRequest({ operation_id, confirmed, latitude, longitude, observed_on, details }), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    const { operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on } = input;
+    const response = await handleDevelopmentCreateNode(makeRequest({ operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on, details }), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ status: "complete", node_id: "456", version: 1 });
     // Die Prüfung der Tags (genau diese, keine weiteren) steckt im Testserver-Ersatz makeFetch.
@@ -210,8 +223,8 @@ describe("OSM development node creation", () => {
   it("writes only the two required tags when the person gave no details", async () => {
     const DB = await setupDatabase();
     const api = makeFetch({ detailTags: {} });
-    const { operation_id, confirmed, latitude, longitude, observed_on } = input;
-    const response = await handleDevelopmentCreateNode(makeRequest({ operation_id, confirmed, latitude, longitude, observed_on, details: {} }), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    const { operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on } = input;
+    const response = await handleDevelopmentCreateNode(makeRequest({ operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on, details: {} }), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
     expect(response.status).toBe(200);
     expect(api.uploadCount).toBe(1);
   });
@@ -219,11 +232,11 @@ describe("OSM development node creation", () => {
   it("treats the old location_description request and the same location in details as one operation", async () => {
     const DB = await setupDatabase(); const api = makeFetch();
     const dependencies = { now: () => now, fetch: api.fetcher };
-    const { operation_id, confirmed, latitude, longitude, observed_on } = input;
+    const { operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on } = input;
     const first = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies);
     expect(first.status).toBe(200);
     // Eine Wiederholung aus der neuen App-Version (gleiche Vorgangs-ID, gleicher Standort) darf nicht als fremder Vorgang gelten.
-    const replay = await handleDevelopmentCreateNode(makeRequest({ operation_id, confirmed, latitude, longitude, observed_on, details: { "defibrillator:location": "Near main entrance" } }), { ...environment, DB }, dependencies);
+    const replay = await handleDevelopmentCreateNode(makeRequest({ operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on, details: { "defibrillator:location": "Near main entrance" } }), { ...environment, DB }, dependencies);
     expect(replay.status).toBe(200);
     expect(api.uploadCount).toBe(1);
   });
@@ -231,8 +244,8 @@ describe("OSM development node creation", () => {
   it("rejects the same operation id with different details", async () => {
     const DB = await setupDatabase(); const api = makeFetch({ detailTags: { access: "yes" } });
     const dependencies = { now: () => now, fetch: api.fetcher };
-    const { operation_id, confirmed, latitude, longitude, observed_on } = input;
-    const base = { operation_id, confirmed, latitude, longitude, observed_on };
+    const { operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on } = input;
+    const base = { operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on };
     expect((await handleDevelopmentCreateNode(makeRequest({ ...base, details: { access: "yes" } }), { ...environment, DB }, dependencies)).status).toBe(200);
     const changed = await handleDevelopmentCreateNode(makeRequest({ ...base, details: { access: "private" } }), { ...environment, DB }, dependencies);
     expect(changed.status).toBe(409);
@@ -245,8 +258,8 @@ describe("OSM development node creation", () => {
     const details = { access: "customers", indoor: "yes", level: "1", opening_hours: "24/7" };
     const api = makeFetch({ loseUploadResponse: true, detailTags: details });
     const dependencies = { now: () => now, fetch: api.fetcher };
-    const { operation_id, confirmed, latitude, longitude, observed_on } = input;
-    const body = { operation_id, confirmed, latitude, longitude, observed_on, details };
+    const { operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on } = input;
+    const body = { operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on, details };
     expect((await handleDevelopmentCreateNode(makeRequest(body), { ...environment, DB }, dependencies)).status).toBe(202);
     const retry = await handleDevelopmentCreateNode(makeRequest(body), { ...environment, DB }, dependencies);
     expect(retry.status).toBe(200);

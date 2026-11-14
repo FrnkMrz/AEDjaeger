@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createOSMSession } from "../server/storage/osmSessions";
-import { storeOSMDevelopmentToken } from "../server/storage/osmDevelopmentTokens";
+import { storeOSMOAuthToken } from "../server/storage/osmOAuthTokens";
 import type { D1Database, D1Result, D1Statement } from "../server/storage/d1";
 import { importOAuthEncryptionKey } from "../server/auth/osmOAuth";
 import { hashOSMDevelopmentWriteOwner, hashOSMDevelopmentWriteValue } from "../server/storage/osmDevelopmentWriteOperations";
@@ -51,7 +51,7 @@ class MemoryD1 implements D1Database {
           const row = this.sessions.get(hash);
           return row && row.expires_at > time ? { session_hash: hash } as T : null;
         }
-        if (sql.includes("FROM osm_development_tokens")) {
+        if (sql.includes("FROM osm_oauth_tokens")) {
           const [hash, tokenTime, activeHash, sessionTime] = params as [string, number, string, number];
           const token = this.tokens.get(hash);
           const session = this.sessions.get(activeHash);
@@ -76,12 +76,12 @@ class MemoryD1 implements D1Database {
           this.sessions.set(hash, { session_hash: hash, osm_subject: subject, osm_environment: env, expires_at: expires });
           return { success: true, meta: { changes: 1 } };
         }
-        if (sql.startsWith("INSERT INTO osm_development_tokens")) {
+        if (sql.startsWith("INSERT INTO osm_oauth_tokens")) {
           const [hash, iv, cipher, expires, _created] = params as [string, string, string, number, number];
           this.tokens.set(hash, { session_hash: hash, token_iv: iv, token_ciphertext: cipher, token_expires_at: expires });
           return { success: true, meta: { changes: 1 } };
         }
-        if (sql.startsWith("DELETE FROM osm_development_tokens")) {
+        if (sql.startsWith("DELETE FROM osm_oauth_tokens")) {
           this.tokens.delete(params[0] as string);
           return { success: true, meta: { changes: 1 } };
         }
@@ -140,7 +140,7 @@ class MemoryD1 implements D1Database {
       const row = this.sessions.get(hash);
       return row && row.expires_at > time ? { session_hash: hash } as T : null;
     }
-    if (sql.includes("FROM osm_development_tokens")) {
+    if (sql.includes("FROM osm_oauth_tokens")) {
       const [hash, tokenTime, activeHash, sessionTime] = params as [string, number, string, number];
       const token = this.tokens.get(hash);
       const session = this.sessions.get(activeHash);
@@ -166,12 +166,12 @@ class MemoryD1 implements D1Database {
       this.sessions.set(hash, { session_hash: hash, osm_subject: subject, osm_environment: env, expires_at: expires });
       return { success: true, meta: { changes: 1 } };
     }
-    if (sql.startsWith("INSERT INTO osm_development_tokens")) {
+    if (sql.startsWith("INSERT INTO osm_oauth_tokens")) {
       const [hash, iv, cipher, expires, _created] = params as [string, string, string, number, number];
       this.tokens.set(hash, { session_hash: hash, token_iv: iv, token_ciphertext: cipher, token_expires_at: expires });
       return { success: true, meta: { changes: 1 } };
     }
-    if (sql.startsWith("DELETE FROM osm_development_tokens")) {
+    if (sql.startsWith("DELETE FROM osm_oauth_tokens")) {
       this.tokens.delete(params[0] as string);
       return { success: true, meta: { changes: 1 } };
     }
@@ -222,7 +222,7 @@ async function setupDatabase(environmentName: "development" | "production" = "de
   const database = new MemoryD1();
   await createOSMSession(database, sessionToken, "test-subject", now - 1_000, environmentName);
   const key = await importOAuthEncryptionKey(keySecret);
-  await storeOSMDevelopmentToken(database, sessionToken, "dev-bearer-token", now + 60 * 60 * 1_000, now, key);
+  await storeOSMOAuthToken(database, sessionToken, "dev-bearer-token", now + 60 * 60 * 1_000, now, key);
   return database;
 }
 
@@ -389,7 +389,7 @@ describe("OSM development check-date writer", () => {
     const DB = await setupDatabase();
     await createOSMSession(DB, rotatedSessionToken, "test-subject", now, "development");
     const key = await importOAuthEncryptionKey(keySecret);
-    await storeOSMDevelopmentToken(DB, rotatedSessionToken, "replacement-dev-bearer-token", now + 60 * 60 * 1_000, now, key);
+    await storeOSMOAuthToken(DB, rotatedSessionToken, "replacement-dev-bearer-token", now + 60 * 60 * 1_000, now, key);
     const { fetcher, calls } = makeFetch({ appliedAfterUploadFailure: true, changesetCloseConflict: "closed" });
     const workerEnvironment = { ...environment, DB };
     const dependencies = { now: () => now, fetch: fetcher };
@@ -409,7 +409,7 @@ describe("OSM development check-date writer", () => {
     const DB = await setupDatabase();
     await createOSMSession(DB, rotatedSessionToken, "test-subject", now, "development");
     const key = await importOAuthEncryptionKey(keySecret);
-    await storeOSMDevelopmentToken(DB, rotatedSessionToken, "replacement-dev-bearer-token", now + 60 * 60 * 1_000, now, key);
+    await storeOSMOAuthToken(DB, rotatedSessionToken, "replacement-dev-bearer-token", now + 60 * 60 * 1_000, now, key);
     const { fetcher, calls } = makeFetch({ appliedAfterUploadFailure: true, changesetCloseConflict: "closed" });
     const dependencies = { now: () => now, fetch: fetcher };
     const first = await handleDevelopmentCheckDate(makeRequest(), { ...environment, DB }, dependencies);
@@ -425,7 +425,7 @@ describe("OSM development check-date writer", () => {
     const DB = await setupDatabase();
     await createOSMSession(DB, rotatedSessionToken, "test-subject", now, "development");
     const key = await importOAuthEncryptionKey(keySecret);
-    await storeOSMDevelopmentToken(DB, rotatedSessionToken, "replacement-dev-bearer-token", now + 60 * 60 * 1_000, now, key);
+    await storeOSMOAuthToken(DB, rotatedSessionToken, "replacement-dev-bearer-token", now + 60 * 60 * 1_000, now, key);
     const ownerHash = await hashOSMDevelopmentWriteOwner({ subject: "test-subject", environment: "development" }, keySecret);
     const oldPayloadHash = await hashOSMDevelopmentWriteValue(JSON.stringify({ ...requestBody, recovery_identity: undefined }));
     const { fetcher, calls } = makeFetch({ appliedAfterUploadFailure: true, changesetCloseConflict: "closed" });
@@ -447,7 +447,7 @@ describe("OSM development check-date writer", () => {
     const otherSession = "o".repeat(43);
     await createOSMSession(DB, otherSession, "another-test-subject", now, "development");
     const key = await importOAuthEncryptionKey(keySecret);
-    await storeOSMDevelopmentToken(DB, otherSession, "another-dev-bearer-token", now + 60 * 60 * 1_000, now, key);
+    await storeOSMOAuthToken(DB, otherSession, "another-dev-bearer-token", now + 60 * 60 * 1_000, now, key);
     const { fetcher, calls } = makeFetch();
 
     const response = await handleDevelopmentCheckDate(makeRequest(requestBody, otherSession), { ...environment, DB }, { now: () => now, fetch: fetcher });

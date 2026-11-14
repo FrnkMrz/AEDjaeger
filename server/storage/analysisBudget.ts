@@ -40,6 +40,19 @@ export async function reserveAnalysisBudget(
 ): Promise<AnalysisBudgetResult> {
   validateRequest(request);
 
+  // Alte Reservierungen können die Tageslimits nicht mehr beeinflussen, da
+  // diese immer nach `utc_day` gruppiert werden. Nach 30 Tagen brauchen wir
+  // sie auch nicht mehr zur Fehlersuche aufzubewahren.
+  try {
+    const cleanup = await database
+      .prepare("DELETE FROM analysis_budget_reservations WHERE created_at < ?")
+      .bind(request.createdAt - 30 * 24 * 60 * 60 * 1_000)
+      .run();
+    if (!cleanup.success) throw new Error();
+  } catch (cause) {
+    throw new Error("Die Analyse konnte nicht sicher reserviert werden.", { cause });
+  }
+
   let result: D1Result<unknown>;
   try {
     result = await database
@@ -98,6 +111,30 @@ export async function reserveAnalysisBudget(
   const duplicate = await findExistingReservation(database, request.userId, request.requestId);
   if (isResumableReservation(duplicate, request)) return { reserved: true };
   return duplicate ? { reserved: false, reason: "duplicate" } : { reserved: false, reason: "budget_exceeded" };
+}
+
+/** Gibt eine noch nicht begonnene Anbieterreservierung atomar wieder frei. */
+export async function releaseAnalysisBudgetReservation(
+  database: D1Database,
+  userId: string,
+  requestId: string,
+): Promise<void> {
+  if (!isShortIdentifier(userId) || !isShortIdentifier(requestId)) {
+    throw new Error("Ungültige Kennung für die Analyse-Reservierung.");
+  }
+  try {
+    const result = await database
+      .prepare(
+        `UPDATE analysis_budget_reservations
+         SET status = 'released'
+         WHERE user_id = ? AND request_id = ? AND status = 'reserved' AND provider_started_at IS NULL`,
+      )
+      .bind(userId, requestId)
+      .run();
+    if (!result.success) throw new Error();
+  } catch (cause) {
+    throw new Error("Die Analyse-Reservierung konnte nicht sicher freigegeben werden.", { cause });
+  }
 }
 
 /** Atomically ensure only one request for an ID can begin the paid provider call. */

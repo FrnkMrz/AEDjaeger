@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { markAnalysisProviderStarted, reserveAnalysisBudget, type D1Database, type D1Result, type D1Statement } from "../server/storage/analysisBudget";
+import { markAnalysisProviderStarted, releaseAnalysisBudgetReservation, reserveAnalysisBudget, type D1Database, type D1Result, type D1Statement } from "../server/storage/analysisBudget";
 
 function createDatabase(options: {
   changes?: number;
@@ -19,7 +19,7 @@ function createDatabase(options: {
         },
         async run<T>() {
           calls.push({ query, values });
-          if (options.runError) throw options.runError;
+          if (options.runError && query.includes("INSERT INTO analysis_budget_reservations")) throw options.runError;
           return {
             success: options.success ?? true,
             meta: { changes: options.changes ?? 1 },
@@ -54,11 +54,13 @@ describe("analysis budget reservation", () => {
 
     await expect(reserveAnalysisBudget(database, validRequest)).resolves.toEqual({ reserved: true });
 
-    expect(calls).toHaveLength(1);
-    expect(calls[0].query).toContain("INSERT INTO analysis_budget_reservations");
-    expect(calls[0].query).toContain("SUM(cost_micros)");
-    expect(calls[0].query).toContain("ON CONFLICT (user_id, request_id) DO NOTHING");
-    expect(calls[0].values).toEqual([
+    expect(calls).toHaveLength(2);
+    expect(calls[0].query).toContain("DELETE FROM analysis_budget_reservations");
+    expect(calls[0].values).toEqual([validRequest.createdAt - 30 * 24 * 60 * 60 * 1_000]);
+    expect(calls[1].query).toContain("INSERT INTO analysis_budget_reservations");
+    expect(calls[1].query).toContain("SUM(cost_micros)");
+    expect(calls[1].query).toContain("ON CONFLICT (user_id, request_id) DO NOTHING");
+    expect(calls[1].values).toEqual([
       "reservation-1",
       "osm-user-7",
       "request-1",
@@ -86,8 +88,8 @@ describe("analysis budget reservation", () => {
       reserved: false,
       reason: "budget_exceeded",
     });
-    expect(duplicateDatabase.calls).toHaveLength(2);
-    expect(fullDatabase.calls).toHaveLength(2);
+    expect(duplicateDatabase.calls).toHaveLength(3);
+    expect(fullDatabase.calls).toHaveLength(3);
   });
 
   it("resumes a reservation after an ambiguous insert response if no provider claim exists", async () => {
@@ -122,6 +124,15 @@ describe("analysis budget reservation", () => {
 
     await expect(markAnalysisProviderStarted(database, validRequest.userId, validRequest.requestId, validRequest.createdAt)).resolves.toBe(true);
     expect(calls[0].query).toContain("provider_started_at IS NULL");
+  });
+
+  it("releases only a reservation that has not started a provider call", async () => {
+    const { database, calls } = createDatabase();
+
+    await expect(releaseAnalysisBudgetReservation(database, validRequest.userId, validRequest.requestId)).resolves.toBeUndefined();
+    expect(calls[0].query).toContain("status = 'reserved'");
+    expect(calls[0].query).toContain("provider_started_at IS NULL");
+    expect(calls[0].values).toEqual([validRequest.userId, validRequest.requestId]);
   });
 
   it("fails closed when the database cannot confirm the reservation", async () => {

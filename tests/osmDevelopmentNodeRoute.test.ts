@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createOSMSession } from "../server/storage/osmSessions";
-import { storeOSMDevelopmentToken } from "../server/storage/osmDevelopmentTokens";
+import { storeOSMOAuthToken } from "../server/storage/osmOAuthTokens";
 import type { D1Database, D1Result, D1Statement } from "../server/storage/d1";
 import { importOAuthEncryptionKey } from "../server/auth/osmOAuth";
 import { handleDevelopmentNodeRead } from "../server/osm/developmentNodeRoute";
@@ -34,7 +34,7 @@ class MemoryD1 implements D1Database {
       const [hash, time] = values as [string, number]; const row = this.sessions.get(hash);
       return row && row.expires_at > time ? { session_hash: hash } as T : null;
     }
-    if (sql.includes("FROM osm_development_tokens")) {
+    if (sql.includes("FROM osm_oauth_tokens")) {
       const [hash, tokenTime, activeHash, sessionTime] = values as [string, number, string, number];
       const token = this.tokens.get(hash); const session = this.sessions.get(activeHash);
       return token && token.token_expires_at > tokenTime && session && session.expires_at > sessionTime
@@ -49,7 +49,7 @@ class MemoryD1 implements D1Database {
       this.sessions.set(hash, { osm_subject: subject, osm_environment: env, expires_at: expires });
       return { success: true, meta: { changes: 1 } };
     }
-    if (sql.startsWith("INSERT INTO osm_development_tokens")) {
+    if (sql.startsWith("INSERT INTO osm_oauth_tokens")) {
       const [hash, iv, cipher, expires] = values as [string, string, string, number];
       this.tokens.set(hash, { token_iv: iv, token_ciphertext: cipher, token_expires_at: expires });
       return { success: true, meta: { changes: 1 } };
@@ -62,7 +62,7 @@ async function setupDatabase(environmentName: "development" | "production" = "de
   const database = new MemoryD1();
   await createOSMSession(database, sessionToken, "test-subject", now - 1_000, environmentName);
   const key = await importOAuthEncryptionKey(keySecret);
-  await storeOSMDevelopmentToken(database, sessionToken, "dev-bearer-token", now + 60 * 60 * 1_000, now, key);
+  await storeOSMOAuthToken(database, sessionToken, "dev-bearer-token", now + 60 * 60 * 1_000, now, key);
   return database;
 }
 

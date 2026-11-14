@@ -9,6 +9,9 @@ const MAX_CLIENT_SECRET_LENGTH = 1_024;
 
 export type OSMIdentityToken = {
   subject: string;
+  /** Optional because identity verification does not depend on API-token scopes. */
+  accessToken?: string;
+  expiresAt?: number;
 };
 
 export type OSMDevelopmentAuthorization = OSMIdentityToken & {
@@ -60,8 +63,16 @@ export async function exchangeOSMCodeForIdentity(input: {
   fetcher?: Fetcher;
   cryptoApi?: Crypto;
 }): Promise<OSMIdentityToken> {
-  const { subject } = await exchangeCode(input, "production");
-  return { subject };
+  const { subject, tokenResponse } = await exchangeCode(input, "production");
+  const accessToken = tokenResponse.access_token;
+  if (typeof accessToken !== "string" || !isAccessToken(accessToken) || tokenResponse.token_type !== "Bearer") return { subject };
+  const now = input.now ?? Date.now();
+  const expiresIn = tokenResponse.expires_in;
+  const expiresAt = typeof expiresIn === "number" && Number.isSafeInteger(expiresIn) && expiresIn > 0
+    ? now + expiresIn * 1_000
+    : now + OSM_SESSION_LIFETIME_MS;
+  if (!Number.isSafeInteger(expiresAt) || expiresAt <= now) return { subject };
+  return { subject, accessToken, expiresAt };
 }
 
 /**

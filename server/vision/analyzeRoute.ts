@@ -1,11 +1,10 @@
 import { findOSMSession } from "../storage/osmSessions";
 import type { D1Database } from "../storage/d1";
-import { markAnalysisProviderStarted, reserveAnalysisBudget } from "../storage/analysisBudget";
+import { markAnalysisProviderStarted, releaseAnalysisBudgetReservation, reserveAnalysisBudget } from "../storage/analysisBudget";
 import { analyzeAedPhoto, MAX_VISION_IMAGE_BYTES, OPENAI_VISION_MODEL, validateAedImage, VisionAnalysisError, type SupportedImageType } from "./openai";
-import { BodyTooLargeError, isCrossOrigin, jsonResponse, readCookie, readLimitedBody } from "../http/requestGuards";
+import { BodyTooLargeError, isCrossOrigin, jsonResponse, readOSMSessionCookie, readLimitedBody } from "../http/requestGuards";
 import { sha256Hex } from "../crypto/hash";
 
-const SESSION_COOKIE = "aedjaeger_osm_session";
 // JSON base64 encoding adds about one third to the original image size.
 const MAX_REQUEST_BYTES = Math.ceil(MAX_VISION_IMAGE_BYTES / 3) * 4 + 1_024;
 const ALLOWED_IMAGE_TYPES: readonly SupportedImageType[] = ["image/jpeg", "image/png", "image/webp"];
@@ -45,7 +44,7 @@ export async function handleVisionAnalysis(
     return jsonResponse({ error: "analysis_unavailable" }, 503);
   }
 
-  const sessionToken = readCookie(request.headers.get("Cookie"), SESSION_COOKIE);
+  const sessionToken = readOSMSessionCookie(request.headers.get("Cookie"));
   if (!sessionToken) return jsonResponse({ error: "authentication_required" }, 401);
 
   let session: { subject: string; environment: "production" | "development" } | null;
@@ -102,12 +101,19 @@ export async function handleVisionAnalysis(
     return failure("analysis_budget_unavailable", 503, undefined, { detailCode: describeStorageFailure(error) });
   }
 
+  let claimed: boolean;
   try {
-    const claimed = await markAnalysisProviderStarted(environment.DB, budgetUserId, payload.requestId, now);
-    if (!claimed) return jsonResponse({ error: "duplicate_request" }, 409);
+    claimed = await markAnalysisProviderStarted(environment.DB, budgetUserId, payload.requestId, now);
   } catch (error) {
     // D1 may have committed the claim before losing its reply; this state must not be retried blindly.
+    // If the claim did not commit, the conditional release recovers the budget. If it
+    // did commit, provider_started_at prevents release and preserves fail-closed behavior.
+    await safelyReleaseAnalysisReservation(environment.DB, budgetUserId, payload.requestId);
     return failure("analysis_claim_uncertain", 503, undefined, { detailCode: describeStorageFailure(error) });
+  }
+  if (!claimed) {
+    await safelyReleaseAnalysisReservation(environment.DB, budgetUserId, payload.requestId);
+    return jsonResponse({ error: "duplicate_request" }, 409);
   }
 
   try {
@@ -121,6 +127,15 @@ export async function handleVisionAnalysis(
     const code = error instanceof VisionAnalysisError && error.code === "invalid_image" ? "invalid_image" : "analysis_failed";
     const detail = error instanceof VisionAnalysisError ? error.detail : {};
     return failure(code, status, payload.requestId, { detailStatus: detail.providerStatus, detailCode: detail.providerCode });
+  }
+}
+
+async function safelyReleaseAnalysisReservation(database: D1Database, userId: string, requestId: string): Promise<void> {
+  try {
+    await releaseAnalysisBudgetReservation(database, userId, requestId);
+  } catch {
+    // A failed cleanup must not make a pre-provider failure look successful.
+    // The original reservation expires from budget accounting at the UTC day boundary.
   }
 }
 

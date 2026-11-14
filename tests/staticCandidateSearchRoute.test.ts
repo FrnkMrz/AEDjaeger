@@ -38,7 +38,7 @@ vi.mock("@mapbox/vector-tile", () => ({
   },
 }));
 vi.mock("../server/auth/osmOAuth", () => ({ importOAuthEncryptionKey: vi.fn(async () => ({ testKey: true })) }));
-vi.mock("../server/storage/osmDevelopmentTokens", () => ({ findOSMDevelopmentToken: vi.fn(async () => "dev-access-token") }));
+vi.mock("../server/storage/osmOAuthTokens", () => ({ findOSMOAuthToken: vi.fn(async () => "dev-access-token") }));
 
 const now = Date.parse("2026-11-08T12:00:00.000Z");
 const session = "s".repeat(43);

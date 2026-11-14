@@ -1,11 +1,11 @@
 import { importOAuthEncryptionKey } from "../auth/osmOAuth";
 import { findOSMSession } from "../storage/osmSessions";
-import { findOSMDevelopmentToken } from "../storage/osmDevelopmentTokens";
+import { findOSMOAuthToken } from "../storage/osmOAuthTokens";
 import type { D1Database } from "../storage/d1";
 import { DETAIL_KEYS } from "../../src/contracts/aedDetails";
-import { isCrossOrigin, jsonResponse, readCookie } from "../http/requestGuards";
+import { isCrossOrigin, jsonResponse, readOSMSessionCookie } from "../http/requestGuards";
 import {
-  SESSION_COOKIE, TargetNotFoundError, VersionConflictError, readDevelopmentNode,
+  TargetNotFoundError, VersionConflictError, readDevelopmentNode,
 } from "./developmentWriteRoute";
 
 type Environment = { DB?: D1Database; OSM_DEV_WRITES_ENABLED?: string; OSM_OAUTH_ENCRYPTION_KEY?: string };
@@ -39,7 +39,7 @@ export async function handleDevelopmentNodeRead(
   if (environment.OSM_DEV_WRITES_ENABLED !== "true" || !environment.DB || !environment.OSM_OAUTH_ENCRYPTION_KEY) {
     return jsonResponse({ error: "development_write_unavailable" }, 503);
   }
-  const sessionToken = readCookie(request.headers.get("Cookie"), SESSION_COOKIE);
+  const sessionToken = readOSMSessionCookie(request.headers.get("Cookie"));
   if (!sessionToken) return jsonResponse({ error: "authentication_required" }, 401);
   const now = (dependencies.now ?? Date.now)();
   let session: { subject: string; environment: "production" | "development" } | null;
@@ -56,7 +56,7 @@ export async function handleDevelopmentNodeRead(
   let token: string;
   try {
     const key = await importOAuthEncryptionKey(environment.OSM_OAUTH_ENCRYPTION_KEY);
-    const storedToken = await findOSMDevelopmentToken(environment.DB, sessionToken, now, key, dependencies.crypto);
+    const storedToken = await findOSMOAuthToken(environment.DB, sessionToken, now, key, dependencies.crypto);
     if (!storedToken) return jsonResponse({ error: "development_token_unavailable" }, 401);
     token = storedToken;
   } catch {

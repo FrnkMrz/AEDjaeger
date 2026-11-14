@@ -1,11 +1,12 @@
-import { readCookie } from "./http/requestGuards";
+import { readCookie, readOSMSessionCookie } from "./http/requestGuards";
 import { buildOSMAuthorizationUrl, createOAuthSecret, createPkceTransaction, importOAuthEncryptionKey, validateOSMAuthorizationCallback } from "./auth/osmOAuth";
 import { exchangeOSMCodeForIdentity, exchangeOSMDevelopmentCodeForAccess, OSMOAuthDiagnosticError } from "./auth/osmOidc";
-import type { OSMEnvironment } from "./auth/osmProvider";
+import { getOSMProviderEndpoints, type OSMEnvironment } from "./auth/osmProvider";
+import { fetchWithoutRedirects } from "./http/fetchWithoutRedirects";
 import type { D1Database } from "./storage/d1";
 import { consumeOSMOAuthTransaction, storeOSMOAuthTransaction } from "./storage/osmOAuthTransactions";
 import { deleteOSMSession, findOSMSession, rotateOSMSession, OSM_SESSION_LIFETIME_MS } from "./storage/osmSessions";
-import { storeOSMDevelopmentToken } from "./storage/osmDevelopmentTokens";
+import { findOSMOAuthToken, storeOSMOAuthToken } from "./storage/osmOAuthTokens";
 import { hashOSMDevelopmentWriteOwner } from "./storage/osmDevelopmentWriteOperations";
 import { handleStaticCandidateSearch } from "./osm/staticCandidateSearchRoute";
 import { handleDevelopmentCheckDate } from "./osm/developmentWriteRoute";
@@ -45,8 +46,10 @@ type OSMAuthConfiguration = {
   | { provider: "development"; clientSecret: string }
 );
 
-const AUTH_COOKIE = "aedjaeger_osm_auth";
-const SESSION_COOKIE = "aedjaeger_osm_session";
+const AUTH_COOKIE = "__Host-aedjaeger_osm_auth";
+const LEGACY_AUTH_COOKIE = "aedjaeger_osm_auth";
+const SESSION_COOKIE = "__Host-aedjaeger_osm_session";
+const LEGACY_SESSION_COOKIE = "aedjaeger_osm_session";
 
 /** Cloudflare entry point for the PWA, OSM login, and health endpoint. */
 const worker = {
@@ -119,7 +122,7 @@ async function startOSMLogin(request: Request, environment: WorkerEnvironment, o
         Location: authorizationUrl.toString(),
         "Cache-Control": "no-store",
         "Referrer-Policy": "no-referrer",
-        "Set-Cookie": buildCookie(AUTH_COOKIE, browserBinding, 10 * 60, requestUrl.protocol === "https:"),
+        "Set-Cookie": buildCookie(cookieName(AUTH_COOKIE, LEGACY_AUTH_COOKIE, requestUrl.protocol === "https:"), browserBinding, 10 * 60, requestUrl.protocol === "https:"),
       },
     });
   } catch {
@@ -133,7 +136,7 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment, 
   const callbackUrl = new URL(request.url);
   if (callbackUrl.origin !== new URL(configuration.redirectUri).origin) return loginFailure(callbackUrl.protocol === "https:");
   const states = callbackUrl.searchParams.getAll("state");
-  const browserBinding = readCookie(request.headers.get("Cookie"), AUTH_COOKIE);
+  const browserBinding = readMigratingCookie(request.headers.get("Cookie"), AUTH_COOKIE, LEGACY_AUTH_COOKIE);
   if (states.length !== 1 || !browserBinding) return loginFailure(callbackUrl.protocol === "https:");
 
   let stage = "consume_transaction";
@@ -169,18 +172,18 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment, 
     const now = Date.now();
     await rotateOSMSession(
       environment.DB,
-      readCookie(request.headers.get("Cookie"), SESSION_COOKIE),
+      readOSMSessionCookie(request.headers.get("Cookie")),
       sessionToken,
       exchanged.identity.subject,
       now,
       exchanged.environment,
       configuration.encryptionKey,
     );
-    if (exchanged.environment === "development") {
-      stage = "store_development_token";
+    if (exchanged.identity.accessToken && exchanged.identity.expiresAt) {
+      stage = "store_osm_token";
       try {
         const tokenExpiry = Math.min(exchanged.identity.expiresAt, now + OSM_SESSION_LIFETIME_MS);
-        await storeOSMDevelopmentToken(environment.DB, sessionToken, exchanged.identity.accessToken, tokenExpiry, now, key);
+        await storeOSMOAuthToken(environment.DB, sessionToken, exchanged.identity.accessToken, tokenExpiry, now, key);
       } catch (error) {
         await deleteOSMSession(environment.DB, sessionToken, environment.OSM_OAUTH_ENCRYPTION_KEY);
         throw error;
@@ -191,8 +194,10 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment, 
       "Cache-Control": "no-store",
       "Referrer-Policy": "no-referrer",
     });
-    headers.append("Set-Cookie", buildCookie(AUTH_COOKIE, "", 0, callbackUrl.protocol === "https:"));
-    headers.append("Set-Cookie", buildCookie(SESSION_COOKIE, sessionToken, 12 * 60 * 60, callbackUrl.protocol === "https:"));
+    headers.append("Set-Cookie", buildCookie(cookieName(AUTH_COOKIE, LEGACY_AUTH_COOKIE, callbackUrl.protocol === "https:"), "", 0, callbackUrl.protocol === "https:"));
+    if (callbackUrl.protocol === "https:") headers.append("Set-Cookie", buildCookie(LEGACY_AUTH_COOKIE, "", 0, false));
+    headers.append("Set-Cookie", buildCookie(cookieName(SESSION_COOKIE, LEGACY_SESSION_COOKIE, callbackUrl.protocol === "https:"), sessionToken, 12 * 60 * 60, callbackUrl.protocol === "https:"));
+    if (callbackUrl.protocol === "https:") headers.append("Set-Cookie", buildCookie(LEGACY_SESSION_COOKIE, "", 0, false));
     return new Response(null, {
       status: 303,
       headers,
@@ -206,7 +211,7 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment, 
 }
 
 async function getSession(request: Request, environment: WorkerEnvironment): Promise<Response> {
-  const token = readCookie(request.headers.get("Cookie"), SESSION_COOKIE);
+  const token = readOSMSessionCookie(request.headers.get("Cookie"));
   const requestOrigin = new URL(request.url).origin;
   const loginAvailable = await isOSMLoginAvailable(environment, requestOrigin);
   const developmentLoginAvailable = await isOSMLoginAvailable(environment, requestOrigin, "development");
@@ -234,19 +239,52 @@ async function logout(request: Request, environment: WorkerEnvironment): Promise
   const origin = request.headers.get("Origin");
   const fetchSite = request.headers.get("Sec-Fetch-Site");
   if ((origin !== null && origin !== requestUrl.origin) || fetchSite === "cross-site") return jsonResponse({ error: "invalid_origin" }, 403);
-  const token = readCookie(request.headers.get("Cookie"), SESSION_COOKIE);
+  const token = readOSMSessionCookie(request.headers.get("Cookie"));
   if (token && !environment.DB) return jsonResponse({ error: "logout_unavailable" }, 503);
   if (token && environment.DB) {
+    let osmToken: string | null = null;
+    const session = await findOSMSession(environment.DB, token, Date.now()).catch(() => null);
+    const key = environment.OSM_OAUTH_ENCRYPTION_KEY
+      ? await importOAuthEncryptionKey(environment.OSM_OAUTH_ENCRYPTION_KEY).catch(() => null)
+      : null;
+    if (session && key) osmToken = await findOSMOAuthToken(environment.DB, token, Date.now(), key).catch(() => null);
     try {
       await deleteOSMSession(environment.DB, token, environment.OSM_OAUTH_ENCRYPTION_KEY);
     } catch {
       return jsonResponse({ error: "logout_unavailable" }, 503);
     }
+    if (session && osmToken) await revokeOSMToken(osmToken, session.environment, environment);
   }
+  const secure = requestUrl.protocol === "https:";
+  const headers = new Headers({ "Cache-Control": "no-store" });
+  headers.append("Set-Cookie", buildCookie(cookieName(SESSION_COOKIE, LEGACY_SESSION_COOKIE, secure), "", 0, secure));
+  if (secure) headers.append("Set-Cookie", buildCookie(LEGACY_SESSION_COOKIE, "", 0, false));
   return new Response(null, {
     status: 204,
-    headers: { "Cache-Control": "no-store", "Set-Cookie": buildCookie(SESSION_COOKIE, "", 0, requestUrl.protocol === "https:") },
+    headers,
   });
+}
+
+export async function revokeOSMToken(token: string, osmEnvironment: OSMEnvironment, environment: WorkerEnvironment, fetcher: typeof fetch = fetch): Promise<void> {
+  const configuration = getAuthConfiguration(environment, osmEnvironment);
+  if (!configuration) return;
+  const body = new URLSearchParams({ token, token_type_hint: "access_token" });
+  const headers = new Headers({ "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" });
+  if (configuration.provider === "development") {
+    const formEncode = (value: string): string => new URLSearchParams({ value }).toString().slice("value=".length);
+    const credentials = btoa(`${formEncode(configuration.clientId)}:${formEncode(configuration.clientSecret)}`);
+    headers.set("Authorization", `Basic ${credentials}`);
+  } else {
+    body.set("client_id", configuration.clientId);
+  }
+  try {
+    await fetchWithoutRedirects(getOSMProviderEndpoints(osmEnvironment).revocation, {
+      method: "POST", headers, body, signal: AbortSignal.timeout(5_000),
+    }, fetcher);
+  } catch {
+    // Local logout already succeeded; provider revocation is best effort and
+    // must never re-create a usable local session or expose provider details.
+  }
 }
 
 function getAuthConfiguration(
@@ -297,6 +335,18 @@ function buildCookie(name: string, value: string, maxAge: number, secure: boolea
   return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? "; Secure" : ""}`;
 }
 
+function cookieName(hostName: string, legacyName: string, secure: boolean): string {
+  // __Host cookies are accepted only over HTTPS. Keep localhost HTTP usable
+  // for development, where no browser would accept a __Host cookie anyway.
+  return secure ? hostName : legacyName;
+}
+
+function readMigratingCookie(header: string | null, currentName: string, legacyName: string): string | null {
+  if (!header || header.length > 8_192) return null;
+  const hasCurrent = header.split(";").some((part) => part.trim().startsWith(`${currentName}=`));
+  return readCookie(header, hasCurrent ? currentName : legacyName);
+}
+
 function authUnavailable(): Response {
   return jsonResponse({ error: "login_unavailable" }, 503);
 }
@@ -307,7 +357,8 @@ function loginFailure(secure: boolean): Response {
     "Cache-Control": "no-store",
     "Referrer-Policy": "no-referrer",
   });
-  headers.append("Set-Cookie", buildCookie(AUTH_COOKIE, "", 0, secure));
+  headers.append("Set-Cookie", buildCookie(cookieName(AUTH_COOKIE, LEGACY_AUTH_COOKIE, secure), "", 0, secure));
+  if (secure) headers.append("Set-Cookie", buildCookie(LEGACY_AUTH_COOKIE, "", 0, false));
   return new Response(null, {
     status: 303,
     headers,

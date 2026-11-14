@@ -4,18 +4,18 @@ import type { D1Database } from "./d1";
 const AES_GCM_IV_BYTES = 12;
 const MAX_TOKEN_LENGTH = 8_192;
 
-type StoredDevelopmentToken = {
+type StoredOSMOAuthToken = {
   token_iv: string;
   token_ciphertext: string;
   token_expires_at: number;
 };
 
 /**
- * Legt ausschließlich ein OSM-Entwicklungstoken ab. Der Sitzungsschlüssel wird
+ * Legt ein OSM-Zugriffstoken an die zugehörige Sitzung gebunden ab. Der Sitzungsschlüssel wird
  * gehasht und das Token mit AES-GCM verschlüsselt, damit weder Cookie noch
  * verwendbarer OSM-Zugriff im Klartext in D1 stehen.
  */
-export async function storeOSMDevelopmentToken(
+export async function storeOSMOAuthToken(
   database: D1Database,
   sessionToken: string,
   accessToken: string,
@@ -25,7 +25,7 @@ export async function storeOSMDevelopmentToken(
   cryptoApi: Crypto = crypto,
 ): Promise<void> {
   if (!isSecret(sessionToken) || !isAccessToken(accessToken) || !isTimestamp(now) || !isTimestamp(expiresAt) || expiresAt <= now) {
-    throw new Error("Ungültiger OSM-Entwicklungszugriff.");
+    throw new Error("Ungültiger OSM-Zugriff.");
   }
 
   try {
@@ -42,7 +42,7 @@ export async function storeOSMDevelopmentToken(
     const ciphertext = await encryptToken(accessToken, sessionHash, expiresAt, iv, encryptionKey, cryptoApi);
     const result = await database
       .prepare(
-        `INSERT INTO osm_development_tokens
+        `INSERT INTO osm_oauth_tokens
           (session_hash, token_iv, token_ciphertext, token_expires_at, created_at)
          VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(session_hash) DO UPDATE SET
@@ -55,12 +55,12 @@ export async function storeOSMDevelopmentToken(
       .run();
     if (!result.success || result.meta?.changes !== 1) throw new Error("D1 write failed");
   } catch {
-    throw new Error("Der OSM-Entwicklungszugriff konnte nicht sicher gespeichert werden.");
+    throw new Error("Der OSM-Zugriff konnte nicht sicher gespeichert werden.");
   }
 }
 
-/** Gibt ein Entwicklungstoken nur für die zugehörige, noch gültige Sitzung zurück. */
-export async function findOSMDevelopmentToken(
+/** Gibt ein Zugriffstoken nur für die zugehörige, noch gültige Sitzung zurück. */
+export async function findOSMOAuthToken(
   database: D1Database,
   sessionToken: string,
   now: number,
@@ -74,15 +74,15 @@ export async function findOSMDevelopmentToken(
     const row = await database
       .prepare(
         `SELECT token_iv, token_ciphertext, token_expires_at
-         FROM osm_development_tokens
+         FROM osm_oauth_tokens
          WHERE session_hash = ? AND token_expires_at > ?
            AND EXISTS (SELECT 1 FROM osm_sessions WHERE session_hash = ? AND expires_at > ?)`,
       )
       .bind(sessionHash, now, sessionHash, now)
-      .first<StoredDevelopmentToken>();
+      .first<StoredOSMOAuthToken>();
     if (!row) {
       await database
-        .prepare("DELETE FROM osm_development_tokens WHERE session_hash = ? AND token_expires_at <= ?")
+        .prepare("DELETE FROM osm_oauth_tokens WHERE session_hash = ? AND token_expires_at <= ?")
         .bind(sessionHash, now)
         .run();
       return null;
@@ -95,12 +95,12 @@ export async function findOSMDevelopmentToken(
     if (!isAccessToken(token)) throw new Error("Invalid decrypted token");
     return token;
   } catch {
-    throw new Error("Der OSM-Entwicklungszugriff konnte nicht sicher gelesen werden.");
+    throw new Error("Der OSM-Zugriff konnte nicht sicher gelesen werden.");
   }
 }
 
-/** Entfernt das Entwicklungstoken beim Logout oder beim Austausch der Sitzung. */
-export async function deleteOSMDevelopmentToken(
+/** Entfernt das Zugriffstoken beim Logout oder beim Austausch der Sitzung. */
+export async function deleteOSMOAuthToken(
   database: D1Database,
   sessionToken: string,
   cryptoApi: Crypto = crypto,
@@ -108,10 +108,10 @@ export async function deleteOSMDevelopmentToken(
   if (!isSecret(sessionToken)) return;
   try {
     const sessionHash = await sha256Hex(sessionToken, cryptoApi);
-    const result = await database.prepare("DELETE FROM osm_development_tokens WHERE session_hash = ?").bind(sessionHash).run();
+    const result = await database.prepare("DELETE FROM osm_oauth_tokens WHERE session_hash = ?").bind(sessionHash).run();
     if (!result.success) throw new Error("D1 delete failed");
   } catch {
-    throw new Error("Der OSM-Entwicklungszugriff konnte nicht sicher gelöscht werden.");
+    throw new Error("Der OSM-Zugriff konnte nicht sicher gelöscht werden.");
   }
 }
 

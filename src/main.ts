@@ -1465,7 +1465,7 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
         // Nur bei Korrekturen: die alten Werte und die ausdrückliche Bestätigung der Person.
         ...(requestBody.expectedBefore && requestBody.confirmedCorrections === true ? { expected_before: requestBody.expectedBefore, confirmed_corrections: true } : {}),
       } : {
-        recovery_identity: developmentWriteOwnerHash, operation_id: requestBody.operationId, confirmed: true, latitude: requestBody.latitude, longitude: requestBody.longitude,
+        recovery_identity: developmentWriteOwnerHash, operation_id: requestBody.operationId, confirmed: true, absence_confirmed: true, latitude: requestBody.latitude, longitude: requestBody.longitude,
         observed_on: requestBody.observedOn, details: requestBody.details,
         confirmed_different_candidate_ids: requestBody.confirmedDifferentCandidateIds,
       }),

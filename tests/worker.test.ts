@@ -1,12 +1,73 @@
 import { describe, expect, it, vi } from "vitest";
-import worker from "../server/worker";
+import worker, { revokeOSMToken } from "../server/worker";
 import type { D1Database, D1Result, D1Statement } from "../server/storage/d1";
+import { importOAuthEncryptionKey } from "../server/auth/osmOAuth";
+import { createOSMSession } from "../server/storage/osmSessions";
+import { storeOSMOAuthToken } from "../server/storage/osmOAuthTokens";
 
 function environment() {
   return { ASSETS: { fetch: vi.fn(async () => new Response("app shell")) } };
 }
 
 describe("Cloudflare Worker shell", () => {
+  it("revokes OSM tokens only at the fixed HTTPS issuer endpoint and never fails logout", async () => {
+    const rawKey = crypto.getRandomValues(new Uint8Array(32));
+    const encryptionKey = btoa(String.fromCharCode(...rawKey)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+    const requests: Array<{ url: string; body: string }> = [];
+    const fetcher: typeof fetch = async (input, init) => {
+      requests.push({ url: String(input), body: String(init?.body) });
+      return new Response("provider unavailable", { status: 503 });
+    };
+    const env = {
+      ...environment(),
+      OSM_CLIENT_ID: "aedjaeger-client",
+      OSM_REDIRECT_URI: "https://aedjaeger.example/api/auth/osm/callback",
+      OSM_OAUTH_ENCRYPTION_KEY: encryptionKey,
+    };
+
+    await expect(revokeOSMToken("secret-access-token", "production", env, fetcher)).resolves.toBeUndefined();
+    expect(requests).toEqual([{
+      url: "https://www.openstreetmap.org/oauth2/revoke",
+      body: "token=secret-access-token&token_type_hint=access_token&client_id=aedjaeger-client",
+    }]);
+  });
+
+  it("ends the local session even when OSM rejects the best-effort token revocation", async () => {
+    const database = new LogoutDatabase();
+    const sessionToken = "s".repeat(43);
+    const rawKey = crypto.getRandomValues(new Uint8Array(32));
+    const encryptionSecret = btoa(String.fromCharCode(...rawKey)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+    const encryptionKey = await importOAuthEncryptionKey(encryptionSecret);
+    const now = Date.now();
+    await createOSMSession(database, sessionToken, "12345", now, "production");
+    await storeOSMOAuthToken(database, sessionToken, "stored-osm-access-token", now + 60_000, now, encryptionKey);
+    const providerRequests: Array<{ url: string; body: string }> = [];
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      providerRequests.push({ url: String(input), body: String(init?.body) });
+      return Response.json({ error: "temporarily_unavailable" }, { status: 503 });
+    });
+    try {
+      const response = await worker.fetch(new Request("https://aedjaeger.example/api/auth/logout", {
+        method: "POST",
+        headers: { Origin: "https://aedjaeger.example", Cookie: `__Host-aedjaeger_osm_session=${sessionToken}` },
+      }), {
+        ...environment(), DB: database,
+        OSM_CLIENT_ID: "aedjaeger-client",
+        OSM_REDIRECT_URI: "https://aedjaeger.example/api/auth/osm/callback",
+        OSM_OAUTH_ENCRYPTION_KEY: encryptionSecret,
+      });
+
+      expect(response.status).toBe(204);
+      expect(database.sessions.size).toBe(0);
+      expect(providerRequests).toHaveLength(1);
+      expect(providerRequests[0].url).toBe("https://www.openstreetmap.org/oauth2/revoke");
+      expect(providerRequests[0].body).toContain("token=stored-osm-access-token");
+      expect(response.headers.get("Set-Cookie")).toContain("__Host-aedjaeger_osm_session=");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("returns a minimal, non-cacheable health response", async () => {
     const env = environment();
     const response = await worker.fetch(new Request("https://aedjaeger.test/api/health"), env);
@@ -112,6 +173,7 @@ describe("Cloudflare Worker shell", () => {
     expect(redirect.searchParams.get("scope")).toBe("openid");
     expect(redirect.searchParams.get("code_challenge_method")).toBe("S256");
     expect(redirect.searchParams.get("code_verifier")).toBeNull();
+    expect(cookie).toContain("__Host-aedjaeger_osm_auth=");
     expect(cookie).toContain("HttpOnly");
     expect(cookie).toContain("Secure");
     expect(cookie).toContain("SameSite=Lax");
@@ -341,3 +403,57 @@ describe("Cloudflare Worker shell", () => {
     expect(env.ASSETS.fetch).toHaveBeenCalledWith(request);
   });
 });
+
+class LogoutDatabase implements D1Database {
+  sessions = new Map<string, { osm_subject: string; osm_environment: string; expires_at: number }>();
+  tokens = new Map<string, { token_iv: string; token_ciphertext: string; token_expires_at: number }>();
+
+  prepare(query: string): D1Statement {
+    const database = this;
+    let values: unknown[] = [];
+    return {
+      bind(...bound) { values = bound; return this; },
+      async run<T>() { return database.execute<T>(query, values); },
+      async first<T>() { return database.query<T>(query, values); },
+    } as D1Statement;
+  }
+
+  private query<T>(sql: string, values: unknown[]): T | null {
+    if (sql.includes("FROM osm_sessions") && sql.includes("osm_subject")) {
+      const [hash] = values as [string];
+      const session = this.sessions.get(hash);
+      return session ? { osm_subject: session.osm_subject, osm_environment: session.osm_environment } as T : null;
+    }
+    if (sql.includes("SELECT session_hash FROM osm_sessions")) {
+      const [hash] = values as [string];
+      return this.sessions.has(hash) ? { session_hash: hash } as T : null;
+    }
+    if (sql.includes("FROM osm_oauth_tokens")) {
+      const [hash] = values as [string];
+      return this.tokens.get(hash) as T ?? null;
+    }
+    throw new Error(`Unexpected D1 query in logout test: ${sql}`);
+  }
+
+  private execute<T>(sql: string, values: unknown[]): D1Result<T> {
+    if (sql.startsWith("DELETE FROM osm_sessions WHERE expires_at")) return { success: true, meta: { changes: 0 } };
+    if (sql.startsWith("UPDATE osm_development_write_operations SET owner_hash")) return { success: true, meta: { changes: 0 } };
+    if (sql.startsWith("INSERT INTO osm_sessions")) {
+      const [hash, subject, env, , expiresAt] = values as [string, string, string, number, number];
+      this.sessions.set(hash, { osm_subject: subject, osm_environment: env, expires_at: expiresAt });
+      return { success: true, meta: { changes: 1 } };
+    }
+    if (sql.startsWith("INSERT INTO osm_oauth_tokens")) {
+      const [hash, token_iv, token_ciphertext, token_expires_at] = values as [string, string, string, number];
+      this.tokens.set(hash, { token_iv, token_ciphertext, token_expires_at });
+      return { success: true, meta: { changes: 1 } };
+    }
+    if (sql.startsWith("DELETE FROM osm_sessions WHERE session_hash")) {
+      const [hash] = values as [string];
+      this.sessions.delete(hash);
+      this.tokens.delete(hash);
+      return { success: true, meta: { changes: 1 } };
+    }
+    throw new Error(`Unexpected D1 statement in logout test: ${sql}`);
+  }
+}
