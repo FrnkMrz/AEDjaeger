@@ -80,7 +80,7 @@ test("the OSM account gate is shown before app features and is localized in all 
     await expect(signIn).toHaveAttribute("href", "/api/auth/osm/start");
     const createAccount = page.getByRole("link", { name: ["OpenStreetMap-Konto erstellen", "Create an OpenStreetMap account", "Utwórz konto OpenStreetMap", "OpenStreetMapアカウントを作成", "Créer un compte OpenStreetMap", "Crear una cuenta de OpenStreetMap"][index] });
     await expect(createAccount).toHaveAttribute("href", "https://www.openstreetmap.org/user/new");
-    await expect(page.locator("#camera-input, #file-input, .demo-panel")).toHaveCount(0);
+    await expect(page.locator("#camera-input, #file-input")).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1 })).toContainText(language === "de" ? "OpenStreetMap-Konto" : "OpenStreetMap");
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `horizontal page overflow in ${language}`).toBeLessThanOrEqual(320);
   }
@@ -233,65 +233,6 @@ test.describe("local photo dates near UTC midnight", () => {
     await page.locator('[data-action="confirm-photo-date"]').click();
     await expect(page.getByRole("heading", { name: "Standort für die Suche wählen" })).toBeVisible();
   });
-});
-
-test("the local demo photo flow stays on-device", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false } }));
-  await page.goto("/");
-  await page.getByText("Vorschau testen", { exact: true }).click();
-  await page.locator("#scenario").selectOption("existing");
-  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
-
-  await expect(page.locator(".capture-content")).toContainText("Das Foto bleibt auf deinem Gerät");
-  await expect(page.locator(".capture-content")).toContainText("wertet dein Foto nicht aus");
-  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
-  await expect(page.getByRole("heading", { name: "AED gefunden" })).toBeVisible();
-});
-
-test("diagnostic consent applies to one run and requires a fresh opt-in next time", async ({ page }) => {
-  const diagnosticEvents: Array<{ event: string; flowId: string }> = [];
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false } }));
-  await page.route("**/api/diagnostics", async (route) => {
-    diagnosticEvents.push(route.request().postDataJSON() as { event: string; flowId: string });
-    await route.fulfill({ status: 204 });
-  });
-  await page.goto("/");
-  await page.getByText("Vorschau testen", { exact: true }).click();
-  await page.locator("#diagnostics-enabled").check();
-  await expect.poll(() => diagnosticEvents.filter(({ event }) => event === "test_run_started").length).toBe(1);
-  const firstFlowId = diagnosticEvents.find(({ event }) => event === "test_run_started")!.flowId;
-
-  await page.locator("#scenario").selectOption("existing");
-  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
-  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
-  await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
-  await expect(page.getByRole("heading", { name: "Vorschau abgeschlossen" })).toBeVisible();
-  await expect.poll(() => diagnosticEvents.some(({ event }) => event === "demo_confirmed")).toBe(true);
-
-  await page.getByRole("button", { name: "Nächsten AED fotografieren" }).click();
-  await expect(page.locator("#diagnostics-enabled")).not.toBeChecked();
-  const eventCountAfterOptedInRun = diagnosticEvents.length;
-  // A new demo run requires reopening the explicit preview before selecting its photo.
-  await page.getByText("Vorschau testen", { exact: true }).click();
-  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
-  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
-  await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
-  await expect(page.getByRole("heading", { name: "Vorschau abgeschlossen" })).toBeVisible();
-  expect(diagnosticEvents).toHaveLength(eventCountAfterOptedInRun);
-
-  await page.getByRole("button", { name: "Nächsten AED fotografieren" }).click();
-  await page.getByText("Vorschau testen", { exact: true }).click();
-  await page.locator("#diagnostics-enabled").check();
-  await expect.poll(() => diagnosticEvents.filter(({ event }) => event === "test_run_started").length).toBe(2);
-  const flowIds = diagnosticEvents.filter(({ event }) => event === "test_run_started").map(({ flowId }) => flowId);
-  expect(flowIds[1]).not.toBe(firstFlowId);
-
-  await page.locator("#scenario").selectOption("existing");
-  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
-  await expect.poll(() => diagnosticEvents.some(({ event, flowId }) => event === "photo_selected" && flowId === flowIds[1])).toBe(true);
-  await page.getByRole("button", { name: "Anderes Foto" }).click();
-  await expect(page.locator("#diagnostics-enabled")).not.toBeChecked();
-  await expect.poll(() => diagnosticEvents.some(({ event, flowId }) => event === "test_run_abandoned" && flowId === flowIds[1])).toBe(true);
 });
 
 test("a user-confirmed location search shows nearby candidates without writing to OSM", async ({ page, context }) => {
@@ -958,12 +899,11 @@ test("a failed OAuth return shows a localized retry message and removes the call
   await expect(page).not.toHaveURL(/login=error/u);
 });
 
-test("signed-out visitors cannot start the photo demo or select a photo", async ({ page }) => {
+test("signed-out visitors cannot select a photo", async ({ page }) => {
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "AEDjaeger braucht dein OpenStreetMap-Konto" })).toBeVisible();
-  await expect(page.getByText("Vorschau testen", { exact: true })).toHaveCount(0);
-  await expect(page.locator("#camera-input, #file-input, .demo-panel, [data-action]")).toHaveCount(0);
+  await expect(page.locator("#camera-input, #file-input, [data-action]")).toHaveCount(0);
 });
 
 test("the OSM test server login is still offered only when its OAuth setup is available", async ({ page }) => {
@@ -980,7 +920,7 @@ test("the app stays locked while the OSM session check is pending", async ({ pag
   }));
   await page.goto("/");
   await expect(page.getByRole("status")).toContainText("OpenStreetMap-Anmeldung wird geprüft");
-  await expect(page.locator("#camera-input, #file-input, .demo-panel")).toHaveCount(0);
+  await expect(page.locator("#camera-input, #file-input")).toHaveCount(0);
   releaseSessionCheck?.();
   await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toBeVisible();
 });
@@ -995,7 +935,7 @@ test("a session status connection error can be retried while the app remains loc
   });
   await page.goto("/");
   await expect(page.locator(".login-card")).toContainText("Anmeldung ist gerade nicht erreichbar");
-  await expect(page.locator("#camera-input, #file-input, .demo-panel")).toHaveCount(0);
+  await expect(page.locator("#camera-input, #file-input")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Erneut prüfen" }).click();
 
@@ -1016,90 +956,13 @@ test("a repeated session status error focuses the retry action", async ({ page }
 
 test("keyboard focus indicators use a high-contrast color throughout the controls", async ({ page }) => {
   await page.goto("/");
-  await page.getByText("Vorschau testen", { exact: true }).focus();
-  await page.getByText("Vorschau testen", { exact: true }).press("Enter");
 
-  const controls = ["#language", "#open-info", "#scenario", ".brand"];
+  const controls = ["#language", "#open-info", ".brand"];
   for (const selector of controls) {
     const control = page.locator(selector);
     await control.focus();
     await expect.poll(() => control.evaluate((element) => getComputedStyle(element).outlineColor)).toBe("rgb(23, 107, 75)");
   }
-});
-
-test("a mobile photo can select a nearby AED and reach the preview confirmation", async ({ page }) => {
-  await page.goto("/");
-  await page.getByText("Vorschau testen", { exact: true }).click();
-  await page.locator("#scenario").selectOption("multiple");
-  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
-  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
-
-  await expect(page.getByRole("heading", { name: "Welcher AED ist es?" })).toBeVisible();
-  await page.getByRole("button", { name: "Rathaus · Sporthalle" }).click();
-  await expect(page.getByRole("heading", { name: "AED gefunden" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Noch vorhanden bestätigen" })).toBeFocused();
-  await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
-  await expect(page.getByRole("heading", { name: "Vorschau abgeschlossen" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Nächsten AED fotografieren" })).toBeFocused();
-  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
-});
-
-test("an unclear save results the draft stays available for status recovery", async ({ page }) => {
-  await page.goto("/");
-  await page.getByText("Vorschau testen", { exact: true }).click();
-  await page.locator("#scenario").selectOption("upload-unclear");
-  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
-  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
-  await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
-
-  await expect(page.getByRole("heading", { name: "Ergebnis noch unklar" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Ergebnis noch unklar" })).toBeFocused();
-  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
-  await page.getByRole("button", { name: "Vorgangsstatus prüfen" }).click();
-  await expect(page.getByRole("heading", { name: "Vorschau abgeschlossen" })).toBeVisible();
-  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
-});
-
-test("the brand link cannot discard a draft while save status is unclear", async ({ page }) => {
-  await page.goto("/");
-  await page.getByText("Vorschau testen", { exact: true }).click();
-  await page.locator("#scenario").selectOption("upload-unclear");
-  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
-  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
-  await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
-  await expect(page.getByRole("heading", { name: "Ergebnis noch unklar" })).toBeVisible();
-
-  const currentUrl = page.url();
-  const brand = page.locator(".brand");
-  await expect(brand).toHaveAttribute("aria-disabled", "true");
-  await brand.dispatchEvent("click");
-
-  await expect(page).toHaveURL(currentUrl);
-  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Vorgangsstatus prüfen" })).toBeFocused();
-});
-
-test("the brand link stays disabled while saving and checking the save status", async ({ page }) => {
-  await page.goto("/");
-  await page.getByText("Vorschau testen", { exact: true }).click();
-  await page.locator("#scenario").selectOption("upload-unclear");
-  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
-  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
-  await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
-
-  const brand = page.locator(".brand");
-  await expect(page.getByRole("status")).toContainText("Vorschau wird gespeichert");
-  await expect(brand).toHaveAttribute("aria-disabled", "true");
-  await brand.dispatchEvent("click");
-  await expect(page.getByRole("status")).toBeVisible();
-
-  await expect(page.getByRole("heading", { name: "Ergebnis noch unklar" })).toBeVisible();
-  await page.getByRole("button", { name: "Vorgangsstatus prüfen" }).click();
-  await expect(page.getByRole("status")).toContainText("Gespeicherten Vorgang wird geprüft");
-  await expect(brand).toHaveAttribute("aria-disabled", "true");
-  await brand.dispatchEvent("click");
-  await expect(page.getByRole("status")).toBeVisible();
-  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
 });
 
 test("a damaged image is rejected before the AED flow can start", async ({ page }) => {
@@ -1108,7 +971,6 @@ test("a damaged image is rejected before the AED flow can start", async ({ page 
   const alert = page.getByRole("alert");
   await expect(alert).toContainText("Das Bild konnte nicht geöffnet werden");
   await expect(alert).toBeFocused();
-  await expect(page.getByRole("button", { name: "Demoablauf simulieren" })).toHaveCount(0);
 });
 
 test("the installed app shell and hashed assets remain fetchable after going offline", async ({ page, context }) => {
@@ -1184,16 +1046,6 @@ test("service worker activation removes obsolete AEDjaeger shell caches", async 
   await expect.poll(() => page.evaluate((name) => caches.has(name), otherFeatureCacheName)).toBe(true);
 });
 
-test("the demo disclosure text keeps readable contrast", async ({ page }) => {
-  await page.goto("/");
-  await page.getByText("Vorschau testen", { exact: true }).focus();
-  await page.getByText("Vorschau testen", { exact: true }).press("Enter");
-
-  const summary = page.locator(".demo-panel summary");
-  await expect.poll(() => summary.evaluate((element) => getComputedStyle(element).color)).toBe("rgb(98, 109, 102)");
-  await expect.poll(() => page.locator(".demo-badge").evaluate((element) => getComputedStyle(element).color)).toBe("rgb(98, 109, 102)");
-});
-
 test("the muted text and version footer use the accessible contrast colors", async ({ page }) => {
   await page.goto("/");
   const styles = await page.evaluate(() => {
@@ -1208,7 +1060,6 @@ test("the muted text and version footer use the accessible contrast colors", asy
   expect(styles.versionColor).toBe("rgb(98, 109, 102)");
   expect(styles.versionSize).toBe("11px");
 });
-
 test("the ready screen introduction keeps readable contrast", async ({ page }) => {
   await page.goto("/");
 
@@ -1519,28 +1370,6 @@ test("a failing version check never shows a banner", async ({ page }) => {
   await page.goto("/");
   await versionResponse;
   await expect(page.locator("#update-banner")).toHaveCount(0);
-});
-
-test("the reload button stays blocked while a save result is unclear", async ({ page }) => {
-  await publishNewVersion(page);
-  await page.goto("/");
-  await expect(page.locator("#update-banner")).toBeVisible();
-  await page.getByText("Vorschau testen", { exact: true }).click();
-  await page.locator("#scenario").selectOption("upload-unclear");
-  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
-  await page.getByRole("button", { name: "Demoablauf simulieren" }).click();
-  await page.getByRole("button", { name: "Noch vorhanden bestätigen" }).click();
-  await expect(page.getByRole("heading", { name: "Ergebnis noch unklar" })).toBeVisible();
-
-  // Ungeklärtes Speichern: Neuladen wäre gefährlich, der Knopf ist gesperrt und der Grund steht da.
-  const banner = page.locator("#update-banner");
-  await expect(banner.getByRole("button", { name: "Neu laden" })).toBeDisabled();
-  await expect(banner).toContainText("Neu laden geht, sobald das Speichern abgeschlossen ist.");
-
-  // Nach der Statusprüfung ist der Vorgang abgeschlossen und der Knopf wieder frei.
-  await page.getByRole("button", { name: "Vorgangsstatus prüfen" }).click();
-  await expect(page.getByRole("heading", { name: "Vorschau abgeschlossen" })).toBeVisible();
-  await expect(banner.getByRole("button", { name: "Neu laden" })).toBeEnabled();
 });
 
 test("the update banner exists in all six languages", async ({ page }) => {
@@ -3160,4 +2989,66 @@ test("the tag button in the list fits a 320 px phone in all six languages", asyn
     expect(box!.x + box!.width, `button beyond the screen in ${language}`).toBeLessThanOrEqual(320);
     expect(box!.height, `touch target in ${language}`).toBeGreaterThanOrEqual(44);
   }
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// Marken-Link und Neuladen-Knopf beim Speichern (echter Ablauf, früher mit der Demo geprüft)
+// ---------------------------------------------------------------------------------------------------------------
+
+test("the brand link cannot discard a draft while the save result is unclear", async ({ page, context }) => {
+  await openExistingAedPreview(page, context, { nodes: [freshNode({})], writeStatus: 202, writeBody: { status: "uncertain" } });
+  await page.getByRole("button", { name: "Testserver: Prüfdatum speichern" }).click();
+  await expect(page.getByRole("status")).toContainText("Ergebnis unklar");
+
+  const currentUrl = page.url();
+  const brand = page.locator(".brand");
+  await expect(brand).toHaveAttribute("aria-disabled", "true");
+  await brand.dispatchEvent("click");
+
+  // Der Entwurf bleibt: kein Seitenwechsel, das Foto steht noch da, und die Wiederaufnahme bleibt erreichbar.
+  await expect(page).toHaveURL(currentUrl);
+  await expect(page.getByRole("img", { name: "Dein AED-Foto" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Testserver: Status erneut prüfen" })).toBeVisible();
+});
+
+test("the brand link stays disabled while a save is being sent and is free again afterwards", async ({ page, context }) => {
+  await openExistingAedPreview(page, context, { nodes: [freshNode({})] });
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  // Die spätere Route gewinnt: Die Antwort kommt erst, wenn der Test sie freigibt.
+  await page.route("**/api/osm/development/check-date", async (route) => {
+    await gate;
+    await route.fulfill({ json: { status: "complete", version: 10 } });
+  });
+  await page.getByRole("button", { name: "Testserver: Prüfdatum speichern" }).click();
+
+  const brand = page.locator(".brand");
+  await expect(page.getByRole("status")).toContainText("wird gesendet");
+  await expect(brand).toHaveAttribute("aria-disabled", "true");
+  await brand.dispatchEvent("click");
+  await expect(page.getByRole("status")).toBeVisible();
+
+  release();
+  await expect(page.getByRole("status")).toContainText("Vor-Ort-Prüfung gespeichert");
+  await expect(brand).not.toHaveAttribute("aria-disabled", "true");
+});
+
+test("the reload button stays blocked while a save result is unclear", async ({ page, context }) => {
+  await publishNewVersion(page);
+  await openExistingAedPreview(page, context, { nodes: [freshNode({})], writeStatus: 202, writeBody: { status: "uncertain" } });
+  await expect(page.locator("#update-banner")).toBeVisible();
+  await page.getByRole("button", { name: "Testserver: Prüfdatum speichern" }).click();
+  // Der Update-Hinweis ist selbst ein Status; die Meldung zum Speichern steht im Inhaltsbereich.
+  await expect(page.locator(".capture-content").getByRole("status")).toContainText("Ergebnis unklar");
+
+  // Ungeklärtes Speichern: Neuladen wäre gefährlich, der Knopf ist gesperrt und der Grund steht da.
+  const banner = page.locator("#update-banner");
+  await expect(banner.getByRole("button", { name: "Neu laden" })).toBeDisabled();
+  await expect(banner).toContainText("Neu laden geht, sobald das Speichern abgeschlossen ist.");
+
+  // Nach der Statusprüfung ist der Vorgang abgeschlossen und der Knopf wieder frei.
+  await page.route("**/api/osm/development/check-date", (route) => route.fulfill({ json: { status: "complete", version: 10 } }));
+  await page.getByRole("button", { name: "Testserver: Status erneut prüfen" }).click();
+  await expect(page.locator(".capture-content")).toContainText("Vor-Ort-Prüfung gespeichert");
+  await expect(banner.getByRole("button", { name: "Neu laden" })).toBeEnabled();
 });

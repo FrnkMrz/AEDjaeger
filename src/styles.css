@@ -63,10 +63,6 @@ h1 { margin-bottom: 12px; font: 800 clamp(30px, 8vw, 43px)/1.14 "Noto Sans", sys
 .camera-label { overflow: hidden; }
 .camera-label input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
 .supporting-copy { margin: 2px 4px 0; color: #626d66; font-size: 12px; line-height: 1.55; text-align: center; }
-.demo-panel { margin: 0 22px 21px; border-top: 1px solid #edf0ec; padding-top: 14px; color: #626d66; font-size: 12px; }
-.demo-panel summary { width: fit-content; margin: 0 auto; cursor: pointer; }
-.demo-panel label { display: block; margin: 12px 0 6px; color: #57645d; }
-.demo-panel select { width: 100%; min-height: 42px; border: 1px solid var(--line); border-radius: 10px; padding: 0 11px; color: var(--ink); background: white; }
 .photo-preview { display: block; width: min(100%, 350px); max-height: 290px; margin: 0 auto 22px; border-radius: 17px; object-fit: cover; background: #f2f4f1; }
 .result-message { display: flex; align-items: flex-start; gap: 14px; margin: 0 auto 22px; max-width: 410px; }
 .status-icon { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 50%; font-size: 18px; font-weight: 700; }
@@ -123,7 +119,6 @@ footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: c
 .connection-lamp { flex: none; width: 14px; height: 14px; border-radius: 50%; }
 .connection-lamp-on { background: #1f9d55; box-shadow: 0 0 0 4px rgba(31, 157, 85, 0.2); }
 .connection-lamp-off { background: #d64545; box-shadow: 0 0 0 4px rgba(214, 69, 69, 0.2); }
-.demo-badge { margin-left: 3px; border: 1px solid #dce4dc; border-radius: 5px; padding: 2px 5px; color: #626d66; font-size: 9px; font-weight: 700; letter-spacing: .06em; }
 .info-dialog { width: min(540px, calc(100% - 28px)); max-width: none; max-height: min(86dvh, 780px); overflow: hidden; border: 1px solid #e0e8df; border-radius: 24px; padding: 0; color: var(--ink); background: #fff; box-shadow: 0 24px 80px #14251b35; }
 .info-dialog::backdrop { background: #13231bcc; backdrop-filter: blur(3px); }
 .info-dialog-content { max-height: min(86dvh, 780px); overflow-y: auto; overscroll-behavior: contain; padding: 24px; }
@@ -140,16 +135,6 @@ footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: c
 .sound-toggle { display: flex; align-items: center; gap: 10px; margin-top: 18px; border-top: 1px solid #edf0ec; padding-top: 12px; color: var(--muted); font-size: 13px; line-height: 1.4; }
 .sound-toggle input { flex: none; width: 20px; height: 20px; accent-color: #176b4b; }
 .build-version { margin: 18px 0 0; border-top: 1px solid #edf0ec; padding-top: 12px; color: var(--muted); font-size: 12px; text-align: center; user-select: all; }
-.roadmap-list { display: grid; gap: 10px; margin: 15px 0 0; padding: 0; list-style: none; counter-reset: roadmap; }
-.roadmap-item { position: relative; border: 1px solid #e8ece7; border-radius: 14px; padding: 13px 14px 12px; counter-increment: roadmap; }
-.roadmap-item::before { content: counter(roadmap); position: absolute; top: 14px; left: 14px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; color: #50705b; background: #edf4ee; font-size: 11px; font-weight: 800; }
-.roadmap-item h4 { margin: 0 0 5px 31px; font-size: 14px; line-height: 1.4; }
-.roadmap-item p { margin: 0 0 0 31px; font-size: 12px; }
-.roadmap-status { display: inline-block; margin: 0 0 6px 31px; border-radius: 5px; padding: 3px 6px; color: #50695a; background: #f1f4f0; font-size: 10px; font-weight: 700; }
-.roadmap-current { border-color: #bfd7c4; background: #f7fbf7; }
-.roadmap-current .roadmap-status { color: #fff; background: var(--green); }
-.roadmap-next { border-color: #e6d7a5; background: #fffdf7; }
-.roadmap-next .roadmap-status { color: #755c13; background: #fbf1cc; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; clip-path: inset(50%); }
 
 @media (max-width: 420px) {
@@ -162,7 +147,6 @@ footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: c
   .hero { padding-top: 38px; }
   .capture-content { padding: 22px 18px 6px; }
   .capture-actions { padding: 0 18px 19px; }
-  .demo-panel { margin-right: 18px; margin-left: 18px; }
   .result-message { gap: 11px; }
   .info-dialog-content { padding: 20px 17px; }
 }
@@ -202,13 +186,6 @@ footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: c
 @media (max-width: 420px) { .position-picker-panel { padding: 11px; } .position-map { height: 225px; } }
 
 .position-map-privacy { margin: 0 0 9px; color: #65726a; font-size: 11px; line-height: 1.45; }
-.demo-panel h2 { margin: 14px 0 5px; color: var(--ink); font-size: 14px; }
-.demo-panel p { margin: 0 0 10px; line-height: 1.5; }
-.diagnostics-opt-in { display: flex !important; align-items: flex-start; gap: 10px; margin: 15px 0 0 !important; border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: #fff; cursor: pointer; }
-.diagnostics-opt-in input { width: 20px; height: 20px; flex: none; margin: 1px 0 0; accent-color: var(--green); }
-.diagnostics-opt-in span { display: grid; gap: 4px; }
-.diagnostics-opt-in strong { color: var(--ink); font-size: 12px; }
-.diagnostics-opt-in small { color: var(--muted); font-size: 11px; line-height: 1.45; }
 
 /* Zusatzmarker auf der Karte: nummerierte, bereits in OpenStreetMap eingetragene AEDs. */
 .position-map-markers { position: absolute; inset: 0; pointer-events: none; }
