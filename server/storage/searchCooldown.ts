@@ -1,3 +1,4 @@
+import { sha256Hex } from "../crypto/hash";
 import type { D1Database, D1Result } from "./d1";
 
 const SEARCH_INTERVAL_MS = 30_000;
@@ -35,6 +36,5 @@ export async function reserveSearchSlot(database: D1Database, userId: string, no
 }
 
 async function hashSubject(subject: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(subject));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return sha256Hex(subject);
 }

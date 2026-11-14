@@ -1,4 +1,5 @@
 import { getOSMProviderEndpoints, type OSMEnvironment } from "./osmProvider";
+import { sha256Bytes } from "../crypto/hash";
 const RANDOM_BYTES = 32;
 
 export type PkceTransaction = {
@@ -35,8 +36,7 @@ export async function createCodeChallenge(verifier: string, cryptoApi: Crypto = 
     throw new Error("Ungültiger PKCE-Verifier.");
   }
 
-  const digest = await cryptoApi.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
-  return toBase64Url(new Uint8Array(digest));
+  return toBase64Url(await sha256Bytes(verifier, cryptoApi));
 }
 
 /** Baut die feste OSM-Anmelde-URL; Endpunkt und Scope sind nicht frei wählbar. */

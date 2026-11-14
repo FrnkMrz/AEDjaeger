@@ -1,3 +1,4 @@
+import { isRecord } from "../http/requestGuards";
 import { OSM_SESSION_LIFETIME_MS } from "../storage/osmSessions";
 import { getOSMProviderEndpoints, type OSMEnvironment } from "./osmProvider";
 import { ExternalRedirectError, fetchWithoutRedirects } from "../http/fetchWithoutRedirects";
@@ -334,9 +335,6 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return buffer;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function isAccessToken(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= MAX_ACCESS_TOKEN_LENGTH && /^[\x21-\x7E]+$/u.test(value);

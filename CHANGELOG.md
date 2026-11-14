@@ -7,6 +7,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 > Die jüngsten Einträge am Anfang beschreiben den aktuellen Pilotstand. Ältere Einträge darunter dokumentieren frühere, inzwischen teilweise abgelöste Zwischenstände und sind keine Beschreibung des aktuellen Laufzeitverhaltens.
 
 ### Fixed
+- Vereinheitlicht serverseitige Request-, JSON-, Hash- und OSM-Changeset-Helfer. Die Fotoprüfung lehnt jetzt wie die übrigen Routen mehrdeutige doppelte Sitzungscookies ab; Suche und Neuanlage verwenden dieselbe Distanzberechnung.
 - Zeigt AED-Treffer ohne Namen oder Standortbeschreibung mit einer verständlichen neutralen Bezeichnung statt ihrer technischen OSM-ID. Meldet ungültige oder unlesbare Fotos direkt im Fotoablauf, formatiert Prüf- und Vergleichsdaten passend zur gewählten Sprache und verbessert den Kontrast kleiner Texte.
 
 ### Security

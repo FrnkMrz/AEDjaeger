@@ -1,3 +1,4 @@
+import { readCookie } from "./http/requestGuards";
 import { buildOSMAuthorizationUrl, createOAuthSecret, createPkceTransaction, importOAuthEncryptionKey, validateOSMAuthorizationCallback } from "./auth/osmOAuth";
 import { exchangeOSMCodeForIdentity, exchangeOSMDevelopmentCodeForAccess, OSMOAuthDiagnosticError } from "./auth/osmOidc";
 import type { OSMEnvironment } from "./auth/osmProvider";
@@ -286,13 +287,6 @@ async function isOSMLoginAvailable(
   }
 }
 
-function readCookie(header: string | null, name: string): string | null {
-  if (!header || header.length > 8_192) return null;
-  const values = header.split(";").map((part) => part.trim()).filter((part) => part.startsWith(`${name}=`));
-  if (values.length !== 1) return null;
-  const value = values[0].slice(name.length + 1);
-  return /^[A-Za-z0-9_-]{43}$/u.test(value) ? value : null;
-}
 
 function buildCookie(name: string, value: string, maxAge: number, secure: boolean): string {
   return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? "; Secure" : ""}`;

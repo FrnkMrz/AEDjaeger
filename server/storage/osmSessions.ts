@@ -1,3 +1,4 @@
+import { sha256Hex } from "../crypto/hash";
 import type { OSMEnvironment } from "../auth/osmProvider";
 import type { D1Database } from "./d1";
 
@@ -94,9 +95,4 @@ function isSecret(value: unknown): value is string {
 
 function isSubject(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 255;
-}
-
-async function sha256Hex(value: string, cryptoApi: Crypto): Promise<string> {
-  const digest = await cryptoApi.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }

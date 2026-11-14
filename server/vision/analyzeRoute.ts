@@ -2,6 +2,8 @@ import { findOSMSession } from "../storage/osmSessions";
 import type { D1Database } from "../storage/d1";
 import { markAnalysisProviderStarted, reserveAnalysisBudget } from "../storage/analysisBudget";
 import { analyzeAedPhoto, MAX_VISION_IMAGE_BYTES, OPENAI_VISION_MODEL, validateAedImage, VisionAnalysisError, type SupportedImageType } from "./openai";
+import { BodyTooLargeError, isCrossOrigin, jsonResponse, readCookie, readLimitedBody } from "../http/requestGuards";
+import { sha256Hex } from "../crypto/hash";
 
 const SESSION_COOKIE = "aedjaeger_osm_session";
 // JSON base64 encoding adds about one third to the original image size.
@@ -166,46 +168,6 @@ export function isPhotoCheckAvailable(
   return limits.allowedSubjects.includes(`${session.environment}:${session.subject}`);
 }
 
-class BodyTooLargeError extends Error {}
-
-async function readLimitedBody(request: Request, maximumBytes: number): Promise<Uint8Array> {
-  const declaredLength = request.headers.get("Content-Length");
-  if (declaredLength !== null && (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > maximumBytes)) {
-    throw new BodyTooLargeError();
-  }
-  if (!request.body) return new Uint8Array();
-
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      totalBytes += value.byteLength;
-      if (totalBytes > maximumBytes) {
-        try {
-          await reader.cancel();
-        } catch {
-          // A failed cancellation must not hide the size violation from the caller.
-        }
-        throw new BodyTooLargeError();
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  const body = new Uint8Array(totalBytes);
-  let offset = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return body;
-}
-
 function parseRequestBody(bytes: Uint8Array): { requestId: string; contentType: SupportedImageType; imageBytes: Uint8Array } | null {
   let decoded: unknown;
   try {
@@ -254,42 +216,11 @@ function parseAllowedSubjects(value: string | undefined): string[] | null {
 async function createBudgetUserId(environment: "production" | "development", subject: string): Promise<string> {
   // OSM subjects are unique only within an issuer. Hash both values so D1 stores
   // a fixed-size key that cannot collide across the production and test servers.
-  const source = new TextEncoder().encode(`${environment}\0${subject}`);
-  const digest = await crypto.subtle.digest("SHA-256", source);
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return sha256Hex(`${environment}\0${subject}`);
 }
 
 function parsePositiveInteger(value: string | undefined): number | null {
   if (!value || !/^\d+$/u.test(value)) return null;
   const number = Number(value);
   return Number.isSafeInteger(number) && number > 0 ? number : null;
-}
-
-function isCrossOrigin(request: Request, requestOrigin: string): boolean {
-  const origin = request.headers.get("Origin");
-  return (origin !== null && origin !== requestOrigin) || request.headers.get("Sec-Fetch-Site") === "cross-site";
-}
-
-function readCookie(cookieHeader: string | null, name: string): string | null {
-  if (!cookieHeader) return null;
-  for (const part of cookieHeader.split(";")) {
-    const separator = part.indexOf("=");
-    if (separator < 0 || part.slice(0, separator).trim() !== name) continue;
-    const value = part.slice(separator + 1).trim();
-    return /^[A-Za-z0-9_-]{43}$/u.test(value) ? value : null;
-  }
-  return null;
-}
-
-function jsonResponse(body: Record<string, unknown>, status: number, extraHeaders: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store",
-      "X-Content-Type-Options": "nosniff",
-      "Referrer-Policy": "no-referrer",
-      ...extraHeaders,
-    },
-  });
 }

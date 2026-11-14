@@ -10,6 +10,9 @@ import type { D1Database } from "../storage/d1";
 import { reserveSearchSlot } from "../storage/searchCooldown";
 import type { NearbyAedCandidate, SearchCoordinate } from "../../src/osm/candidateTypes";
 import { requestOSMDevelopmentApi } from "./developmentApi";
+import { distanceMeters } from "../../src/domain/candidateMatch";
+import { BodyTooLargeError, isCrossOrigin, isRecord, jsonResponse, readCookie, readLimitedBody } from "../http/requestGuards";
+import { sha256Hex } from "../crypto/hash";
 
 const SESSION_COOKIE = "aedjaeger_osm_session";
 const DATA_ORIGIN = "https://pipeline.openfiremap.org/";
@@ -65,7 +68,7 @@ export async function handleStaticCandidateSearch(request: Request, env: Environ
   const startedAt = Date.now();
   let response: Response;
   try { response = await runSearch(request, env, deps); }
-  catch { response = json({ error: "search_unavailable" }, 503); }
+  catch { response = jsonResponse({ error: "search_unavailable" }, 503); }
   response.headers.set("X-AEDjaeger-Diagnostic-Id", diagnosticId);
   const failure = await failureCode(response);
   if (failure) {
@@ -81,36 +84,36 @@ export async function handleStaticCandidateSearch(request: Request, env: Environ
 }
 
 async function runSearch(request: Request, env: Environment, deps: Dependencies): Promise<Response> {
-  if (request.method !== "POST") return json({ error: "method_not_allowed" }, 405, { Allow: "POST" });
+  if (request.method !== "POST") return jsonResponse({ error: "method_not_allowed" }, 405, { Allow: "POST" });
   const origin = new URL(request.url).origin;
-  if (isCrossOrigin(request, origin)) return json({ error: "invalid_origin" }, 403);
-  if (!env.DB) return json({ error: "search_unavailable" }, 503);
+  if (isCrossOrigin(request, origin)) return jsonResponse({ error: "invalid_origin" }, 403);
+  if (!env.DB) return jsonResponse({ error: "search_unavailable" }, 503);
   if (request.headers.get("Content-Type")?.split(";", 1)[0]?.trim().toLowerCase() !== "application/json") {
-    return json({ error: "unsupported_media_type" }, 415);
+    return jsonResponse({ error: "unsupported_media_type" }, 415);
   }
   const sessionToken = readCookie(request.headers.get("Cookie"), SESSION_COOKIE);
-  if (!sessionToken) return json({ error: "authentication_required" }, 401);
+  if (!sessionToken) return jsonResponse({ error: "authentication_required" }, 401);
   let session: { subject: string; environment: "production" | "development" } | null;
   try { session = await findOSMSession(env.DB, sessionToken, (deps.now ?? Date.now)()); }
-  catch { return json({ error: "session_unavailable" }, 503); }
-  if (!session) return json({ error: "authentication_required" }, 401);
+  catch { return jsonResponse({ error: "session_unavailable" }, 503); }
+  if (!session) return jsonResponse({ error: "authentication_required" }, 401);
 
   let body: Uint8Array;
   try { body = await readLimitedBody(request, MAX_REQUEST_BYTES); }
   catch (error) {
-    return json({ error: error instanceof BodyTooLargeError ? "request_too_large" : "invalid_request" }, error instanceof BodyTooLargeError ? 413 : 400);
+    return jsonResponse({ error: error instanceof BodyTooLargeError ? "request_too_large" : "invalid_request" }, error instanceof BodyTooLargeError ? 413 : 400);
   }
   const location = parseLocation(body);
-  if (!location) return json({ error: "invalid_request" }, 400);
-  if (location.accuracyMeters > MAX_ACCURACY) return json({ error: "location_too_uncertain" }, 422);
+  if (!location) return jsonResponse({ error: "invalid_request" }, 400);
+  if (location.accuracyMeters > MAX_ACCURACY) return jsonResponse({ error: "location_too_uncertain" }, 422);
 
   const now = (deps.now ?? Date.now)();
   let retryAfter = 30;
   try {
     const slot = await reserveSearchSlot(env.DB, session.environment + ":" + session.subject, now);
-    if (!slot.reserved) return json({ error: "search_rate_limited" }, 429, { "Retry-After": String(slot.retryAfterSeconds) });
+    if (!slot.reserved) return jsonResponse({ error: "search_rate_limited" }, 429, { "Retry-After": String(slot.retryAfterSeconds) });
     retryAfter = Math.max(0, Math.ceil((slot.nextAllowedAt - (deps.now ?? Date.now)()) / 1_000));
-  } catch { return json({ error: "search_unavailable" }, 503); }
+  } catch { return jsonResponse({ error: "search_unavailable" }, 503); }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -178,15 +181,15 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
       } catch { /* Ergänzung scheitert: Ergebnis aus dem Archiv bleibt gültig. */ }
     }
 
-    return json({
+    return jsonResponse({
       status: "complete", candidates: [...candidates.values()], coverage_radius_meters: radius,
       snapshot_id: await snapshotId(metadata), data_until: metadata.osm_data_until,
     }, 200, { "Retry-After": String(retryAfter) });
   } catch (error) {
-    if (error instanceof CoverageUnavailableError) return json({ error: "coverage_unavailable" }, 503, { "Retry-After": String(retryAfter) });
-    if (error instanceof InvalidFeedError) return json({ error: "invalid_response" }, 503, { "Retry-After": String(retryAfter) });
-    if (error instanceof FeedHTTPError) return json({ error: "source_unavailable" }, 502, { "Retry-After": String(retryAfter) });
-    return json({ error: controller.signal.aborted ? "source_timeout" : "source_unavailable" }, controller.signal.aborted ? 504 : 502, { "Retry-After": String(retryAfter) });
+    if (error instanceof CoverageUnavailableError) return jsonResponse({ error: "coverage_unavailable" }, 503, { "Retry-After": String(retryAfter) });
+    if (error instanceof InvalidFeedError) return jsonResponse({ error: "invalid_response" }, 503, { "Retry-After": String(retryAfter) });
+    if (error instanceof FeedHTTPError) return jsonResponse({ error: "source_unavailable" }, 502, { "Retry-After": String(retryAfter) });
+    return jsonResponse({ error: controller.signal.aborted ? "source_timeout" : "source_unavailable" }, controller.signal.aborted ? 504 : 502, { "Retry-After": String(retryAfter) });
   } finally { clearTimeout(timeout); }
 }
 
@@ -355,17 +358,9 @@ function tileFor(longitude: number, latitude: number, zoom: number): { x: number
     y: Math.max(0, Math.min(size - 1, Math.floor((1 - Math.asinh(Math.tan(radians)) / Math.PI) / 2 * size))),
   };
 }
-function distanceMeters(from: SearchCoordinate, to: SearchCoordinate): number {
-  const radians = (degrees: number) => degrees * Math.PI / 180;
-  const latDelta = radians(to.latitude - from.latitude);
-  const lonDelta = radians(to.longitude - from.longitude);
-  const value = Math.sin(latDelta / 2) ** 2 + Math.cos(radians(from.latitude)) * Math.cos(radians(to.latitude)) * Math.sin(lonDelta / 2) ** 2;
-  return 12_742_000 * Math.asin(Math.sqrt(Math.min(1, value)));
-}
 async function snapshotId(metadata: PipelineMetadata): Promise<string> {
   const identity = `${metadata.generated_at}\0${metadata.osm_data_until}\0${metadata.pmtiles.size_bytes}`;
-  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(identity)));
-  return "aed-" + Array.from(digest.slice(0, 10), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return "aed-" + (await sha256Hex(identity)).slice(0, 20);
 }
 function parseLocation(bytes: Uint8Array): Location | null {
   let value: unknown;
@@ -381,44 +376,14 @@ function validCoordinate(point: SearchCoordinate): boolean {
   return Number.isFinite(point.latitude) && point.latitude >= -90 && point.latitude <= 90
     && Number.isFinite(point.longitude) && point.longitude >= -180 && point.longitude <= 180;
 }
-function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 function timestamp(value: unknown): number | null {
   if (typeof value !== "string" || !/(?:Z|[+-]\d{2}:\d{2})$/u.test(value)) return null;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
-function isCrossOrigin(request: Request, origin: string): boolean {
-  const header = request.headers.get("Origin");
-  return (header !== null && header !== origin) || request.headers.get("Sec-Fetch-Site") === "cross-site";
-}
-function readCookie(header: string | null, name: string): string | null {
-  if (!header || header.length > 8_192) return null;
-  const values = header.split(";").map((part) => part.trim()).filter((part) => part.startsWith(name + "="));
-  if (values.length !== 1) return null;
-  const value = values[0].slice(name.length + 1);
-  return /^[A-Za-z0-9_-]{43}$/u.test(value) ? value : null;
-}
-class BodyTooLargeError extends Error {}
 class CoverageUnavailableError extends Error {}
 class InvalidFeedError extends Error {}
 class FeedHTTPError extends Error { constructor(readonly status: number) { super("feed_http_error"); } }
-async function readLimitedBody(request: Request | Response, max: number): Promise<Uint8Array> {
-  const length = request.headers.get("Content-Length");
-  if (length !== null && (!/^\d+$/u.test(length) || Number(length) > max)) throw new BodyTooLargeError();
-  if (!request.body) return new Uint8Array();
-  const reader = request.body.getReader(); const chunks: Uint8Array[] = []; let total = 0;
-  try {
-    while (true) {
-      const part = await reader.read(); if (part.done) break;
-      total += part.value.byteLength;
-      if (total > max) { await reader.cancel().catch(() => undefined); throw new BodyTooLargeError(); }
-      chunks.push(part.value);
-    }
-  } finally { reader.releaseLock(); }
-  const bytes = new Uint8Array(total); let offset = 0;
-  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-  return bytes;
-}
 async function failureCode(response: Response): Promise<string | null> {
   if (response.status < 400) return null;
   try {
@@ -430,10 +395,4 @@ async function failureCode(response: Response): Promise<string | null> {
     ]).has(payload.error)) return payload.error;
   } catch { /* Fixed fallback only. */ }
   return "http_error";
-}
-function json(value: Record<string, unknown>, status: number, extra: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(value), { status, headers: {
-    "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store",
-    "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", ...extra,
-  } });
 }

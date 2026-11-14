@@ -1,3 +1,4 @@
+import { sha256Hex } from "../crypto/hash";
 import type { D1Database } from "./d1";
 import type { OSMEnvironment } from "../auth/osmProvider";
 
@@ -186,10 +187,6 @@ async function encryptPayload(
   return toBase64Url(new Uint8Array(encrypted));
 }
 
-async function sha256Hex(value: string, cryptoApi: Crypto): Promise<string> {
-  const digest = await cryptoApi.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
 
 function toBase64Url(bytes: Uint8Array): string {
   let binary = "";

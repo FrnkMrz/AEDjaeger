@@ -1,3 +1,4 @@
+import { isRecord } from "../http/requestGuards";
 import { IMAGE_ISSUES, parseVisionObservation, VISION_MODEL, VISION_SCENES, type VisionObservation } from "../../src/contracts/visionObservation";
 import { explainObservationMismatch, normalizeProviderObservation } from "./normalizeObservation";
 
@@ -414,8 +415,4 @@ function extractOutputText(response: unknown): string | undefined {
   }
 
   return undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

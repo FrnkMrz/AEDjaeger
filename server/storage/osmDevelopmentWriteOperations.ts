@@ -1,3 +1,4 @@
+import { sha256Hex } from "../crypto/hash";
 import type { D1Database } from "./d1";
 
 export type OSMDevelopmentWriteState = "started" | "changeset-created" | "uploading" | "uncertain" | "uploaded" | "complete" | "conflict" | "failed";
@@ -201,8 +202,7 @@ export async function updateOSMDevelopmentWrite(
 }
 
 export async function hashOSMDevelopmentWriteValue(value: string, cryptoApi: Crypto = crypto): Promise<string> {
-  const digest = await cryptoApi.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return sha256Hex(value, cryptoApi);
 }
 
 function isState(value: unknown): value is OSMDevelopmentWriteState {

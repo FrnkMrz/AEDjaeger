@@ -11,8 +11,9 @@ import {
 } from "../storage/osmDevelopmentWriteOperations";
 import type { D1Database } from "../storage/d1";
 import { requestOSMDevelopmentApi } from "./developmentApi";
-import { APP_VERSION } from "../version";
-import { withoutXmlDeclaration } from "./xmlText";
+import { escapeXml, withoutXmlDeclaration } from "./xmlText";
+import { createChangeset, closeChangeset } from "./changeset";
+import { BodyTooLargeError, isCrossOrigin, isRecord, jsonResponse, readCookie, readLimitedBody, readLimitedText } from "../http/requestGuards";
 import { isAcceptableObservationDate } from "./observationDate";
 import { validateDetailTags, type DetailTags } from "../../src/contracts/aedDetails";
 
@@ -22,7 +23,6 @@ export const SESSION_COOKIE = "aedjaeger_osm_session";
 const MAX_BODY_BYTES = 8_192;
 const MAX_NODE_BYTES = 64 * 1_024;
 const MAX_WRITE_RESPONSE_BYTES = 1_024;
-const MAX_CHANGESET_STATUS_BYTES = 8_192;
 const MAX_CHANGESET_DOWNLOAD_BYTES = 512 * 1_024;
 
 export type DevelopmentWriteEnvironment = {
@@ -184,7 +184,11 @@ export async function handleDevelopmentCheckDate(
 
   let changesetId: string;
   try {
-    changesetId = await createChangeset(token, dependencies.fetch ?? fetch, hasCorrections(input) ? "corrections" : hasDetails(input) ? "details" : "none");
+    const kind = hasCorrections(input) ? "corrections" : hasDetails(input) ? "details" : "none";
+    const comment = kind === "corrections" ? "AEDjaeger: AED checked on site, details added and corrected"
+      : kind === "details" ? "AEDjaeger: AED checked on site, missing details added"
+        : "AEDjaeger: AED presence checked on site";
+    changesetId = await createChangeset(token, comment, dependencies.fetch ?? fetch);
   } catch {
     // Without a changeset ID this request cannot upload a map object. Retire it
     // as failed so the same operation ID cannot remain uncertain for a week.
@@ -412,45 +416,6 @@ export async function readDevelopmentNode(path: string, token: string, fetcher: 
     throw new Error("Invalid or unsupported OSM node response");
   }
   return { id, version: element.version, latitude: element.lat, longitude: element.lon, tags: element.tags };
-}
-
-async function createChangeset(token: string, fetcher: typeof fetch, kind: "none" | "details" | "corrections" = "none"): Promise<string> {
-  // Der Kommentar steht öffentlich im Änderungsverlauf von OSM und sagt ehrlich, was geschah.
-  const comment = kind === "corrections" ? "AEDjaeger: AED checked on site, details added and corrected"
-    : kind === "details" ? "AEDjaeger: AED checked on site, missing details added"
-      : "AEDjaeger: AED presence checked on site";
-  const body = `<osm><changeset><tag k="created_by" v="AEDjaeger ${APP_VERSION}"/><tag k="comment" v="${comment}"/></changeset></osm>`;
-  const response = await requestOSMDevelopmentApi("development", "/api/0.6/changeset/create", token, { method: "PUT", body }, fetcher);
-  if (!response.ok) throw new Error("OSM development changeset could not be opened");
-  const id = (await readLimitedText(response, 64)).trim();
-  if (!/^[1-9]\d{0,15}$/u.test(id)) throw new Error("Invalid OSM changeset ID");
-  return id;
-}
-
-async function closeChangeset(token: string, changesetId: string, fetcher: typeof fetch): Promise<boolean> {
-  try {
-    const response = await requestOSMDevelopmentApi("development", `/api/0.6/changeset/${changesetId}/close`, token, { method: "PUT" }, fetcher);
-    if (response.ok) return true;
-    // A 409 can mean either "already closed" or "not owned by this user".
-    // Confirm the server's state instead of treating every conflict as success.
-    if (response.status !== 409) return false;
-    const status = await requestOSMDevelopmentApi("development", "/api/0.6/changeset/" + changesetId, token, { method: "GET" }, fetcher);
-    if (!status.ok) return false;
-    return isChangesetClosed(await readLimitedText(status, MAX_CHANGESET_STATUS_BYTES), changesetId);
-  } catch {
-    return false;
-  }
-}
-
-function isChangesetClosed(body: string, changesetId: string): boolean {
-  try {
-    const parsed: unknown = JSON.parse(body);
-    if (!isRecord(parsed) || !isRecord(parsed.changeset)) return false;
-    return String(parsed.changeset.id) === changesetId && parsed.changeset.open === false;
-  } catch {
-    // The OSM API may return XML instead of JSON.
-  }
-  return new RegExp("<changeset\\b(?=[^>]*\\bid=\"" + changesetId + "\"(?=[\\s>]))(?=[^>]*\\bopen=\"false\"(?=[\\s>]))[^>]*\\/?\\s*>", "u").test(body);
 }
 
 type ParsedChangesetDownload = {
@@ -686,46 +651,10 @@ function parseRequest(bytes: Uint8Array, now: number): ConfirmedCheckDate {
   return value as ConfirmedCheckDate;
 }
 
-async function readLimitedBody(request: Request | Response, maxBytes: number): Promise<Uint8Array> {
-  const length = request.headers.get("Content-Length");
-  if (length !== null && (!/^\d+$/u.test(length) || Number(length) > maxBytes)) throw new BodyTooLargeError();
-  if (!request.body) return new Uint8Array();
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > maxBytes) {
-        await reader.cancel().catch(() => undefined);
-        throw new BodyTooLargeError();
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-  return bytes;
-}
-
-async function readLimitedText(response: Response, maxBytes: number): Promise<string> {
-  const body = await readLimitedBody(response, maxBytes);
-  return new TextDecoder("utf-8", { fatal: true }).decode(body);
-}
-
 function isStringRecord(value: unknown): value is Record<string, string> {
   if (!isRecord(value) || Object.keys(value).length > 512) return false;
   return Object.entries(value).every(([key, text]) => key.length > 0 && [...key].length <= 255
     && typeof text === "string" && [...text].length <= 255 && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(key + text));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isPositiveInteger(value: unknown): value is number {
@@ -736,23 +665,6 @@ function isCalendarDate(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
   const date = new Date(`${value}T00:00:00.000Z`);
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
-}
-
-function escapeXml(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
-}
-
-export function isCrossOrigin(request: Request, requestOrigin: string): boolean {
-  const origin = request.headers.get("Origin");
-  return (origin !== null && origin !== requestOrigin) || request.headers.get("Sec-Fetch-Site") === "cross-site";
-}
-
-export function readCookie(header: string | null, name: string): string | null {
-  if (!header || header.length > 8_192) return null;
-  const values = header.split(";").map((part) => part.trim()).filter((part) => part.startsWith(`${name}=`));
-  if (values.length !== 1) return null;
-  const value = values[0].slice(name.length + 1);
-  return /^[A-Za-z0-9_-]{43}$/u.test(value) ? value : null;
 }
 
 async function safelyClaimUpload(database: D1Database, sessionHash: string, operationId: string, now: number): Promise<boolean> {
@@ -767,13 +679,6 @@ function completeResponse(operation: OSMDevelopmentWriteOperation): Response {
   return jsonResponse({ status: "complete", version: operation.result_version }, 200);
 }
 
-export function jsonResponse(body: Record<string, unknown>, status: number, headers: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", ...headers },
-  });
-}
-
-class BodyTooLargeError extends Error {}
+export { isCrossOrigin, jsonResponse, readCookie };
 export class VersionConflictError extends Error {}
 export class TargetNotFoundError extends Error {}
