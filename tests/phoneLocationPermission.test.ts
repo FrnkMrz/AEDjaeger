@@ -37,13 +37,17 @@ describe("watchLocationPermission", () => {
     expect(seen).toEqual(["prompt"]);
 
     status.state = "granted";
-    status.listeners.forEach((listener) => listener());
+    status.listeners.forEach((listener) => {
+      listener();
+    });
     expect(seen).toEqual(["prompt", "granted"]);
 
     stop();
     expect(status.listeners.size).toBe(0);
     status.state = "denied";
-    status.listeners.forEach((listener) => listener());
+    status.listeners.forEach((listener) => {
+      listener();
+    });
     expect(seen).toEqual(["prompt", "granted"]);
   });
 

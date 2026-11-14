@@ -8,7 +8,11 @@ function fakeEventSource() {
     visibilityState: "visible",
     addEventListener(type: string, listener: () => void) { (listeners.get(type) ?? listeners.set(type, new Set()).get(type)!).add(listener); },
     removeEventListener(type: string, listener: () => void) { listeners.get(type)?.delete(listener); },
-    emit(type: string) { listeners.get(type)?.forEach((listener) => listener()); },
+    emit(type: string) {
+      listeners.get(type)?.forEach((listener) => {
+        listener();
+      });
+    },
     count(type: string) { return listeners.get(type)?.size ?? 0; },
   };
 }
