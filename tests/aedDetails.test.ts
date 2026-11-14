@@ -93,10 +93,10 @@ describe("buildDetailTags: alle Felder zusammen", () => {
   it("liefert die Tags in der festen Reihenfolge von DETAIL_KEYS", () => {
     const tags = tagsOf({
       ref: "A-12", description: "Schlüssel beim Hausmeister", phone: "+49 911 1234567", operator: "Stadtwerke",
-      cabinet: "vertical_door", indoor: "yes", level: 1, hoursMode: "always", access: "customers", location: "Foyer links",
+      indoor: "yes", level: 1, hoursMode: "always", access: "customers", location: "Foyer links",
     });
     expect(Object.keys(tags)).toEqual([
-      "defibrillator:location", "access", "opening_hours", "indoor", "level", "defibrillator:cabinet",
+      "defibrillator:location", "access", "opening_hours", "indoor", "level",
       "operator", "phone", "description", "ref",
     ]);
     expect(tags["defibrillator:location"]).toBe("Foyer links");
@@ -177,8 +177,9 @@ describe("validateDetailTags: Eingaben von außen", () => {
       expect(validateDetailTags({ access }), access).toEqual({ ok: false, key: "access", problem: "invalid-value" });
     }
     expect(validateDetailTags({ indoor: "maybe" }).ok).toBe(false);
-    expect(validateDetailTags({ "defibrillator:cabinet": "yes" }).ok).toBe(false);
-    expect(validateDetailTags({ "defibrillator:cabinet": "twist" }).ok).toBe(true);
+    // Das Gehäuse-Feld ist gestrichen (Entscheidung vom 14.11.2026): Der Schlüssel gilt als unbekannt, egal mit welchem Wert.
+    expect(validateDetailTags({ "defibrillator:cabinet": "twist" })).toEqual({ ok: false, key: "defibrillator:cabinet", problem: "unknown-key" });
+    expect(DETAIL_KEYS).not.toContain("defibrillator:cabinet");
     for (const level of ["01", "-0", "1.5", "abc", "100", "-10", "+1"]) {
       expect(validateDetailTags({ level }).ok, level).toBe(false);
     }
@@ -316,7 +317,7 @@ describe("formFromExistingTags: Vorbelegung im Korrekturmodus", () => {
     });
     expect(prefilled).toEqual({
       location: "Foyer links", access: "customers", hoursMode: "times", hoursText: "Mo-Fr 08:00-18:00", indoor: "yes", level: -1,
-      cabinet: null, operator: "Stadtwerke", phone: "+49 911 123456", description: "Notiz", ref: "A-1",
+      operator: "Stadtwerke", phone: "+49 911 123456", description: "Notiz", ref: "A-1",
     });
     expect(locked.size).toBe(0);
   });

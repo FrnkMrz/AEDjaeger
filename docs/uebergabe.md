@@ -16,7 +16,7 @@ Seit dem Stand unten sind weitere PRs gemergt. Der jüngste ist [#77](https://gi
 - **Sicherheitsregeln:** nur Schlüssel einer festen Liste; kein Löschen, keine Positionsänderung, nie `defibrillator:code`; Korrekturen nur mit `alt → neu`, zusätzlichem Haken und geprüftem Vorwert (sonst 409). „Weiß ich nicht“ schreibt nichts.
 - **Belegt:** Unit-, Server- und E2E-Tests mit simulierten OSM-Antworten (Stand beim Merge: 537 Unit-Tests, 147 E2E-Tests, alle grün in der CI).
 - **Nicht belegt:** Der Detailweg wurde **nie gegen den echten OSM-Testserver** und **nie auf einem echten Handy** ausprobiert. Die Schritte D1 bis D7 in der [Pilot-Abnahme](pilot-abnahme.md) sind der vorbereitete Test. Die neuen Texte sind nicht muttersprachlich geprüft.
-- **Offen** (Einzelheiten in [offene Fragen](offene-fragen.md)): Gehäuse-Feld (`defibrillator:cabinet`) ist bewusst nicht in der Oberfläche; Schnellwahl-Wörter und Zeiten-Vorlagen; Beschränkung des Korrekturschalters auf bestimmte Konten; ein stehen gebliebenes `level` nach der Korrektur von „drinnen“ auf „draußen“; Phase P6 (Handytest mit Zeitmessung).
+- **Offen** (Einzelheiten in [offene Fragen](offene-fragen.md)): Schnellwahl-Wörter und Zeiten-Vorlagen; Beschränkung des Korrekturschalters auf bestimmte Konten; ein stehen gebliebenes `level` nach der Korrektur von „drinnen“ auf „draußen“; Phase P6 (Handytest mit Zeitmessung).
 - **Hinweis zur Regel unten:** „Bei ‚noch vorhanden‘ ausschließlich `check_date` ändern“ gilt für den Schnellweg unverändert. Weitere Tags schreibt nur der Detailweg nach den Regeln in `AGENTS.md`.
 
 ## Ziel und gewünschter Ablauf
