@@ -68,9 +68,9 @@ export type FlowState =
   | { kind: "new-aed-preview"; photoUrl: string; result: ProposalResult<NewAedPreview>; returnState: CandidateResultState; detailsPosition?: Coordinate; writeStatus?: "sending" | "complete" | "uncertain" | "conflict" | "failed"; operationId?: string }
   // Angaben zu einem bestehenden AED ergänzen (Etappe P4). Erst wird der aktuelle Stand frisch aus OSM geladen (load), dann
   // zeigt das Formular, was schon eingetragen ist (gesperrt), und lässt nur Fehlendes ausfüllen.
-  | { kind: "existing-aed-details"; photoUrl: string; candidateId: string; candidateLabel: string; returnState: CandidateResultState; load: ExistingAedLoad }
+  | { kind: "existing-aed-details"; photoUrl: string; candidateId: string; candidateLabel: string; returnState: CandidateResultState; load: ExistingAedLoad; fromList?: true }
   // details/node sind nur gesetzt, wenn die Vorschau aus dem Ergänzen-Formular kommt: details sind die neuen Tags, node der frisch gelesene Stand.
-  | { kind: "osm-preview"; photoUrl: string; candidateId: string; candidateLabel: string; result: ProposalResult<ExistingCheckDatePreview>; returnState: CandidateResultState; details?: DetailTags; corrections?: DetailCorrection[]; node?: ExistingNode; writeStatus?: "sending" | "complete" | "unchanged" | "notFound" | "uncertain" | "conflict" | "failed"; operationId?: string }
+  | { kind: "osm-preview"; photoUrl: string; candidateId: string; candidateLabel: string; result: ProposalResult<ExistingCheckDatePreview>; returnState: CandidateResultState; details?: DetailTags; corrections?: DetailCorrection[]; node?: ExistingNode; fromList?: true; writeStatus?: "sending" | "complete" | "unchanged" | "notFound" | "uncertain" | "conflict" | "failed"; operationId?: string }
   | { kind: "development-write-recovery"; request: DevelopmentWriteRequest; writeStatus: "uncertain" | "sending" | "complete" | "unchanged" | "notFound" | "conflict" | "failed" }
   | { kind: "candidate-error"; photoUrl: string; reason: "location-unavailable" | "location-denied" | "location-uncertain" | "sign-in" | "rate-limited" | "service-unavailable" | "failed" | "invalid-response"; retryAvailableAt?: number }
   | { kind: "clarification"; photoUrl: string; reason: "sign-only" | "multiple" }

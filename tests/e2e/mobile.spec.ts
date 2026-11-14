@@ -2706,16 +2706,16 @@ type NodeAnswer = { status: number; body?: unknown };
 async function openExistingAedPreview(
   page: import("@playwright/test").Page,
   context: import("@playwright/test").BrowserContext,
-  options: { nodes: NodeAnswer[]; writeStatus?: number; writeBody?: unknown; corrections?: boolean },
+  options: { nodes: NodeAnswer[]; writeStatus?: number; writeBody?: unknown; corrections?: boolean; atList?: boolean; candidateSource?: "archive" | "development"; writeAvailable?: boolean },
 ) {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   // Mit `corrections` meldet der Server-Ersatz zusätzlich, dass der Betreiber Korrekturen freigegeben hat.
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true, ...(options.corrections ? { developmentCorrectionsAvailable: true } : {}) } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: options.writeAvailable ?? true, ...(options.corrections ? { developmentCorrectionsAvailable: true } : {}) } }));
   await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
     status: "complete", coverage_radius_meters: 112,
     // Das Archiv kennt nur ältere, unvollständige Tags; der frische Stand kommt über die eigene Leseroute.
-    candidates: [{ id: "node/123", osmType: "node", coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Rathaus" } }],
+    candidates: [{ id: "node/123", osmType: "node", coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Rathaus" }, ...(options.candidateSource ? { source: options.candidateSource } : {}) }],
   } }));
   const nodeRequests: string[] = [];
   let answerIndex = 0;
@@ -2734,6 +2734,11 @@ async function openExistingAedPreview(
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.locator('[data-action="confirm-sighting"]').click();
   await beginNearbySearch(page);
+  // Mit atList bleibt der Test in der Trefferliste (vor der Datumsseite).
+  if (options.atList) {
+    await expect(page.getByRole("button", { name: "Als noch vorhanden bestätigen" })).toBeVisible();
+    return { nodeRequests, writes };
+  }
   await page.getByRole("button", { name: "Als noch vorhanden bestätigen" }).click();
   await expect(page.getByRole("heading", { name: "Änderungsvorschau" })).toBeVisible();
   return { nodeRequests, writes };
@@ -3030,5 +3035,97 @@ test("the correction form fits a 320 px phone in all six languages", async ({ pa
     // Die „Vorher“-Zeile steht sichtbar und nennt den alten Wert in der gewählten Sprache.
     await expect(page.locator('[data-detail-was="access"]')).toBeVisible();
     await expect(page.locator('[data-detail-was="access"]')).not.toBeEmpty();
+  }
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// Tags direkt aus der Trefferliste ansehen und ändern, vor der Datumsbestätigung
+// ---------------------------------------------------------------------------------------------------------------
+
+const detailsFromList = (page: import("@playwright/test").Page) => page.getByRole("button", { name: /^Angaben ansehen und (ergänzen|ändern)$/u });
+
+test("the hit list offers the tags before the date: view, add, and confirm the date once at the end", async ({ page, context }) => {
+  const { nodeRequests, writes } = await openExistingAedPreview(page, context, {
+    atList: true, nodes: [freshNode({ access: "yes", "defibrillator:location": "Links neben dem Garagentor", check_date: "2025-10-20" })],
+  });
+  // Neben „Als noch vorhanden bestätigen“ steht der Weg zu den Tags. Es wurde noch nichts gelesen oder gesendet.
+  await expect(detailsFromList(page)).toBeVisible();
+  expect(nodeRequests).toEqual([]);
+  await detailsFromList(page).click();
+  // Das Formular zeigt, was schon in OSM steht, und das bisherige Prüfdatum. Die Datumsseite war nicht dran.
+  await expect(page.getByRole("heading", { name: "Angaben ergänzen" })).toBeVisible();
+  await expect(page.locator("#detail-group-access")).toContainText("Schon eingetragen: Jeder");
+  await expect(page.locator("#detail-group-location")).toContainText("Links neben dem Garagentor");
+  await expect(page.locator(".capture-content")).toContainText("Bisher: 2025-10-20");
+  expect(nodeRequests).toHaveLength(1);
+  expect(writes).toEqual([]);
+  await page.getByText("Rund um die Uhr", { exact: true }).click();
+  await page.locator("#detail-continue").click();
+  // Erst jetzt kommt die Änderungsvorschau mit Datum UND Tags. Ein Speichern für alles.
+  await expect(page.getByRole("heading", { name: "Änderungsvorschau" })).toBeVisible();
+  await expect(page.locator(".capture-content")).toContainText("Prüfdatum:");
+  await expect(page.locator(".capture-content")).toContainText("opening_hours=24/7");
+  expect(writes).toEqual([]);
+  await page.getByRole("button", { name: "Testserver: Angaben speichern" }).click();
+  await expect(page.getByRole("status")).toContainText("Prüfdatum und neue Angaben gespeichert");
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toMatchObject({ target: "node/123", expected_version: 9, details: { opening_hours: "24/7" } });
+});
+
+test("going back from the form that was opened in the list returns to the list, and the preview returns to the form", async ({ page, context }) => {
+  await openExistingAedPreview(page, context, { atList: true, nodes: [freshNode({ check_date: "2025-10-20" })] });
+  await detailsFromList(page).click();
+  await page.getByText("Jeder", { exact: true }).click();
+  await page.locator("#detail-continue").click();
+  await expect(page.locator(".capture-content")).toContainText("access=yes");
+  // Aus der Vorschau zurück zu den Angaben: Die Eingaben sind noch da.
+  await page.getByRole("button", { name: "Zurück zu den Angaben" }).click();
+  await expect(page.locator("#detail-access-yes")).toBeChecked();
+  // Aus dem Formular zurück: zur Trefferliste, nicht auf die Datumsseite.
+  await page.getByRole("button", { name: "Zurück", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Als noch vorhanden bestätigen" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Änderungsvorschau" })).toHaveCount(0);
+  // Ein zweites Öffnen startet frisch: nichts von den alten Eingaben.
+  await detailsFromList(page).click();
+  await expect(page.locator("#detail-access-yes")).not.toBeChecked();
+});
+
+test("the quick confirmation in the list still leads to the date page in one tap", async ({ page, context }) => {
+  await openExistingAedPreview(page, context, { atList: true, nodes: [freshNode({})] });
+  await page.getByRole("button", { name: "Als noch vorhanden bestätigen" }).click();
+  await expect(page.getByRole("heading", { name: "Änderungsvorschau" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Testserver: Prüfdatum speichern" })).toBeVisible();
+});
+
+test("the list offers the change wording only when corrections are allowed", async ({ page, context }) => {
+  await openExistingAedPreview(page, context, { atList: true, nodes: [freshNode({ access: "private", check_date: "2025-10-20" })], corrections: true });
+  await expect(page.getByRole("button", { name: "Angaben ansehen und ändern" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Angaben ansehen und ergänzen" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Angaben ansehen und ändern" }).click();
+  // Mit Korrekturen ist das Formular vorbelegt und änderbar.
+  await expect(page.locator("#detail-access-private")).toBeChecked();
+});
+
+test("an AED from the real-OSM archive or a session without test-server writing gets no tag button", async ({ page, context }) => {
+  await openExistingAedPreview(page, context, { atList: true, candidateSource: "archive", nodes: [freshNode({})] });
+  await expect(detailsFromList(page)).toHaveCount(0);
+});
+
+test("without test-server writing the list has no tag button", async ({ page, context }) => {
+  await openExistingAedPreview(page, context, { atList: true, writeAvailable: false, nodes: [freshNode({})] });
+  await expect(detailsFromList(page)).toHaveCount(0);
+});
+
+test("the tag button in the list fits a 320 px phone in all six languages", async ({ page, context }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await openExistingAedPreview(page, context, { atList: true, nodes: [freshNode({})] });
+  for (const language of languageCodes) {
+    await page.locator("#language").selectOption(language);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `horizontal page overflow in ${language}`).toBeLessThanOrEqual(320);
+    const buttons = page.locator('.candidate-item [data-action="open-candidate-details"]');
+    await expect(buttons).toHaveCount(1);
+    const box = await buttons.boundingBox();
+    expect(box!.x + box!.width, `button beyond the screen in ${language}`).toBeLessThanOrEqual(320);
+    expect(box!.height, `touch target in ${language}`).toBeGreaterThanOrEqual(44);
   }
 });
