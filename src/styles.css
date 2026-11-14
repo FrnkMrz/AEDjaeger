@@ -81,6 +81,7 @@ h1 { margin-bottom: 12px; font: 800 clamp(30px, 8vw, 43px)/1.14 "Noto Sans", sys
 .capture-content > .button { width: 100%; margin: 0 auto 8px; }
 .capture-content > .button:last-child { margin-bottom: 8px; }
 .simulation-note { margin: 0 auto 20px; border-radius: 12px; padding: 12px; color: #6c5b22; background: #fff8e4; font-size: 13px; line-height: 1.5; text-align: center; }
+.simulation-note.save-status-success { color: #176b4b; background: #e7f3e9; }
 .loading-row { min-height: 68px; display: flex; align-items: center; justify-content: center; gap: 12px; color: #52645a; font-size: 14px; }
 .spinner { width: 19px; height: 19px; border: 2px solid #dce9de; border-top-color: var(--green); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

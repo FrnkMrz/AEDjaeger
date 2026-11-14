@@ -438,6 +438,107 @@ test("an uncertain test-server response survives reload and retries with the sam
   expect(operationIds[1]).toBe(operationIds[0]);
 });
 
+test("an expired saved write is discarded instead of opening a stale recovery screen", async ({ page }) => {
+  await page.addInitScript(() => {
+    const now = Date.now();
+    localStorage.setItem("aedjaeger-pending-osm-development-write", JSON.stringify({
+      version: 1, savedAt: now - 8 * 24 * 60 * 60 * 1_000, expiresAt: now - 24 * 60 * 60 * 1_000,
+      request: { kind: "check-date", operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", target: "node/42", candidateLabel: "Rathaus", expectedVersion: 3, expectedCheckDate: null, observedOn: "2026-11-14" },
+    }));
+  });
+  await page.goto("/");
+  await expect(page.locator("#camera-input")).toBeAttached();
+  await expect(page.locator(".capture-content")).not.toContainText("Ergebnis unklar");
+  expect(await page.evaluate(() => localStorage.getItem("aedjaeger-pending-osm-development-write"))).toBeNull();
+});
+
+test("a pending write from the previous session-storage format is migrated", async ({ page }) => {
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
+    authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true,
+  } }));
+  await page.addInitScript(() => {
+    sessionStorage.setItem("aedjaeger-pending-osm-development-write", JSON.stringify({
+      kind: "check-date", operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", target: "node/42", candidateLabel: "Rathaus", expectedVersion: 3, expectedCheckDate: null, observedOn: "2026-11-14",
+    }));
+  });
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Testserver: Status erneut prüfen" })).toBeVisible();
+  const storage = await page.evaluate(() => ({
+    local: localStorage.getItem("aedjaeger-pending-osm-development-write"),
+    legacy: sessionStorage.getItem("aedjaeger-pending-osm-development-write"),
+  }));
+  expect(JSON.parse(storage.local ?? "{}")).toMatchObject({ version: 1, request: { operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab" } });
+  expect(storage.legacy).toBeNull();
+});
+
+test("a pending write stays visible while signed out and continue starts test-server sign-in", async ({ page }) => {
+  let testServerLoginStarted = false;
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
+    authenticated: false, loginAvailable: true, developmentLoginAvailable: true, developmentSession: false,
+  } }));
+  await page.route("**/api/auth/osm/development/start", async (route) => {
+    testServerLoginStarted = true;
+    await route.fulfill({ status: 200, contentType: "text/html", body: "<title>Testserver login</title>" });
+  });
+  await page.addInitScript(() => {
+    const now = Date.now();
+    localStorage.setItem("aedjaeger-pending-osm-development-write", JSON.stringify({
+      version: 1, savedAt: now, expiresAt: now + 7 * 24 * 60 * 60 * 1_000,
+      request: { kind: "check-date", operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", target: "node/42", candidateLabel: "Rathaus", expectedVersion: 3, expectedCheckDate: null, observedOn: "2026-11-14" },
+    }));
+  });
+  await page.goto("/");
+  await expect(page.locator(".login-status-wrap")).toContainText("Melde dich beim OSM-Testserver an");
+  await page.getByRole("button", { name: "Weiter" }).click();
+  await expect(page).toHaveURL(/\/api\/auth\/osm\/development\/start$/u);
+  expect(testServerLoginStarted).toBe(true);
+  expect(await page.evaluate(() => localStorage.getItem("aedjaeger-pending-osm-development-write"))).not.toBeNull();
+});
+
+test("a restored pending write uses its saved operation ID and ends with a clear success action", async ({ page }) => {
+  const operationIds: unknown[] = [];
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
+    authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true,
+  } }));
+  await page.route("**/api/osm/development/check-date", async (route) => {
+    operationIds.push((route.request().postDataJSON() as Record<string, unknown>).operation_id);
+    await route.fulfill({ json: { status: "complete", version: 9 } });
+  });
+  await page.addInitScript(() => {
+    const now = Date.now();
+    localStorage.setItem("aedjaeger-pending-osm-development-write", JSON.stringify({
+      version: 1, savedAt: now, expiresAt: now + 7 * 24 * 60 * 60 * 1_000,
+      request: { kind: "check-date", operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", target: "node/42", candidateLabel: "Rathaus", expectedVersion: 3, expectedCheckDate: null, observedOn: "2026-11-14" },
+    }));
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Testserver: Status erneut prüfen" }).click();
+  await expect(page.locator(".capture-content")).toContainText("Vor-Ort-Prüfung gespeichert");
+  await expect(page.locator(".capture-content .status-good")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Nächsten AED fotografieren" })).toBeVisible();
+  expect(operationIds).toEqual(["d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"]);
+  expect(await page.evaluate(() => localStorage.getItem("aedjaeger-pending-osm-development-write"))).toBeNull();
+});
+
+test("the information dialog and sound choice survive a confirmed save arriving in the background", async ({ page, context }) => {
+  await openExistingAedPreview(page, context, { nodes: [freshNode({})] });
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/osm/development/check-date", async (route) => {
+    await gate;
+    await route.fulfill({ json: { status: "complete", version: 10 } });
+  });
+  await page.getByRole("button", { name: "Testserver: Prüfdatum speichern" }).click();
+  await expect(page.locator(".capture-content")).toContainText("wird gesendet");
+  await page.locator("#open-info").click();
+  await page.locator("#success-sound-toggle").check();
+  release();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator("#success-sound-toggle")).toBeChecked();
+  await expect(page.locator(".capture-content .status-good")).toBeVisible();
+});
+
 test("a new AED preview requires confirmed GPS position and a complete empty search", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await page.route("https://tile.openstreetmap.org/**", (route) => route.fulfill({ status: 200, contentType: "image/svg+xml", body: "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"256\"><rect width=\"256\" height=\"256\" fill=\"#e5ece3\"/></svg>" }));
