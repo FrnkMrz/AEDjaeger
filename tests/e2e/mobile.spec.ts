@@ -10,7 +10,7 @@ test.beforeEach(async ({ page }) => {
   } }));
 });
 
-test("serves the app with security headers while photo preview and service worker work", async ({ page }) => {
+test("serves the app with security headers while photo preview and service worker work", async ({ page, browserName }) => {
   const response = await page.goto("/");
   expect(response).not.toBeNull();
   const headers = response!.headers();
@@ -23,7 +23,9 @@ test("serves the app with security headers while photo preview and service worke
 
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await expect(page.locator("img.photo-preview")).toHaveAttribute("src", /^blob:/u);
-  await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length)).toBeGreaterThan(0);
+  if (browserName === "chromium") {
+    await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length)).toBeGreaterThan(0);
+  }
 });
 
 async function beginNearbySearch(page: import("@playwright/test").Page): Promise<void> {
@@ -287,15 +289,28 @@ test("a user-confirmed location search shows nearby candidates without writing t
   const origin = page.locator("#candidate-overview-map .position-map-marker-origin");
   await expect(origin).toHaveCount(1);
   await expect(page.locator("#candidate-overview-map .position-map-crosshair")).toBeHidden();
-  const originBefore = await origin.boundingBox();
-  const candidateBefore = await page.locator("#candidate-overview-map .position-map-marker").last().boundingBox();
+  const readMarkerPositions = () => page.locator("#candidate-overview-map .position-map-marker").evaluateAll((markers) => markers.map((marker) => ({
+    x: Number.parseFloat((marker as HTMLElement).style.left),
+    y: Number.parseFloat((marker as HTMLElement).style.top),
+  })));
+  const [originBefore, candidateBefore] = await readMarkerPositions();
   await page.locator("#candidate-overview-map").focus();
   await page.keyboard.press("ArrowRight");
-  const originAfter = await origin.boundingBox();
-  const candidateAfter = await page.locator("#candidate-overview-map .position-map-marker").last().boundingBox();
+  const [originAfter, candidateAfter] = await readMarkerPositions();
   // Die Pfeiltaste verschiebt den Karteninhalt um 32 Pixel – der Standortmarker wandert mit.
-  expect(originAfter!.x).toBeCloseTo(originBefore!.x + 32, 0);
-  expect(candidateAfter!.x - originAfter!.x).toBeCloseTo(candidateBefore!.x - originBefore!.x, 0);
+  expect(originAfter.x).toBeCloseTo(originBefore.x + 32, 0);
+  expect(candidateAfter.x - originAfter.x).toBeCloseTo(candidateBefore.x - originBefore.x, 0);
+  const readMapZoom = async () => {
+    const source = await page.locator("#candidate-overview-map .position-map-tiles img").first().getAttribute("src");
+    expect(source).not.toBeNull();
+    return Number(new URL(source!).pathname.split("/")[1]);
+  };
+  const zoomBeforeKey = await readMapZoom();
+  await page.keyboard.press("-");
+  await expect.poll(readMapZoom).toBe(zoomBeforeKey - 1);
+  await page.keyboard.press("=");
+  await expect.poll(readMapZoom).toBe(zoomBeforeKey);
+  await expect(page.locator("#candidate-overview-map")).toHaveAttribute("aria-describedby", "overview-map-instructions");
   await expect(page.locator(".candidate-item strong")).toContainText("1. Rathaus");
   expect(searchRequests).toBe(1);
 
@@ -698,7 +713,7 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   await page.locator("#new-aed-position-confirmed").check();
   await page.locator("#new-aed-position-map").evaluate((element) => {
     const map = element as HTMLDivElement;
-    // Simulate the browser retaining a first touch while a second finger taps the map.
+    // Commit a pending one-finger pan when a second finger lands, even if it only taps.
     map.setPointerCapture = () => {};
     map.hasPointerCapture = () => false;
     const dispatch = (type: string, pointerId: number, clientX: number, clientY: number) => {
@@ -708,10 +723,50 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
       }));
     };
     dispatch("pointerdown", 1, 120, 120);
-    dispatch("pointermove", 1, 140, 120);
+    dispatch("pointermove", 1, 170, 120);
     dispatch("pointerdown", 2, 220, 120);
     dispatch("pointerup", 2, 220, 120);
-    dispatch("pointerup", 1, 140, 120);
+    dispatch("pointerup", 1, 170, 120);
+  });
+  await expect(page.locator("#new-aed-position-confirmed")).not.toBeChecked();
+  await expect(page.locator("#new-aed-position-coordinates")).not.toContainText("52.52000, 13.40500");
+  expect(await page.locator("#new-aed-position-map .position-map-tiles").evaluate((layer) => (layer as HTMLElement).style.transform)).toBe("");
+
+  await page.locator("#new-aed-position-confirmed").check();
+  await page.locator("#new-aed-position-map").evaluate((element) => {
+    const map = element as HTMLDivElement;
+    map.setPointerCapture = () => {};
+    map.hasPointerCapture = () => false;
+    const dispatch = (type: string, pointerId: number, clientX: number, clientY: number) => {
+      map.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId, pointerType: "touch",
+        isPrimary: pointerId === 3, button: 0, clientX, clientY,
+      }));
+    };
+    dispatch("pointerdown", 3, 120, 120);
+    dispatch("pointerdown", 4, 220, 120);
+    dispatch("pointermove", 4, 160, 120);
+    dispatch("pointerup", 4, 160, 120);
+    dispatch("pointerup", 3, 120, 120);
+  });
+  const zoomAfterPinch = await page.locator("#new-aed-position-map .position-map-tiles img").first().getAttribute("src");
+  expect(zoomAfterPinch).not.toBeNull();
+  expect(Number(new URL(zoomAfterPinch!).pathname.split("/")[1])).toBeLessThan(19);
+  await expect(page.locator("#new-aed-position-confirmed")).toBeChecked();
+
+  await page.locator("#new-aed-position-map").evaluate((element) => {
+    const map = element as HTMLDivElement;
+    map.setPointerCapture = () => {};
+    map.hasPointerCapture = () => false;
+    const dispatch = (type: string, pointerId: number, clientX: number, clientY: number) => {
+      map.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, cancelable: true, pointerId, pointerType: "touch",
+        isPrimary: true, button: 0, clientX, clientY,
+      }));
+    };
+    dispatch("pointerdown", 3, 120, 120);
+    dispatch("pointermove", 3, 140, 120);
+    dispatch("pointerup", 3, 140, 120);
   });
   await expect(page.locator("#new-aed-position-confirmed")).not.toBeChecked();
   await expect(page.locator("#new-aed-position-coordinates")).not.toContainText("52.52000, 13.40500");
@@ -761,12 +816,13 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   await expect(page.locator(".capture-content")).not.toContainText("Nur eine Vorschau");
   expect(createRequest).toMatchObject({
     confirmed: true,
-    latitude: 52.52,
     observed_on: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/u),
     // Ohne Angaben im Formular geht ein leeres Detail-Objekt an den Server (Etappe P2/P3).
     details: {},
   });
-  expect(createRequest?.longitude).toBeCloseTo(13.40495, 4);
+  // WebKit rundet die Mercator-Projektion minimal anders als Chromium.
+  expect(Math.abs(Number(createRequest?.latitude) - 52.52)).toBeLessThan(0.00001);
+  expect(Math.abs(Number(createRequest?.longitude) - 13.40476)).toBeLessThan(0.00001);
   expect(createRequest?.operation_id).toMatch(/^[0-9a-f-]{36}$/iu);
 });
 
@@ -1199,7 +1255,8 @@ test("a damaged image is rejected before the AED flow can start", async ({ page 
   await expect(alert).toBeFocused();
 });
 
-test("the installed app shell and hashed assets remain fetchable after going offline", async ({ page, context }) => {
+test("the installed app shell and hashed assets remain fetchable after going offline", async ({ page, context, browserName }) => {
+  test.skip(browserName !== "chromium", "Service-worker offline behavior has dedicated Chromium coverage.");
   // Insert a conflicting home page before AEDjaeger's first install to catch accidental global cache lookups.
   await page.addInitScript(async () => {
     const cache = await caches.open("aaa-other-feature-cache");
@@ -1247,7 +1304,8 @@ test("the installed app shell and hashed assets remain fetchable after going off
   expect(foreignOnlyResponse).toEqual({ status: 0, text: "" });
 });
 
-test("service worker activation removes obsolete AEDjaeger shell caches", async ({ page }) => {
+test("service worker activation removes obsolete AEDjaeger shell caches", async ({ page, browserName }) => {
+  test.skip(browserName !== "chromium", "Service-worker lifecycle is covered in Chromium.");
   await page.goto("/");
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
   const oldCacheName = "aedjaeger-shell-obsolete-test";
@@ -1284,7 +1342,7 @@ test("the muted text and version footer use the accessible contrast colors", asy
   });
   expect(styles.muted).toBe("#5c6861");
   expect(styles.versionColor).toBe("rgb(98, 109, 102)");
-  expect(styles.versionSize).toBe("11px");
+  expect(styles.versionSize).toBe("12px");
 });
 test("the ready screen introduction keeps readable contrast", async ({ page }) => {
   await page.goto("/");
@@ -1666,6 +1724,7 @@ test("a green lamp shows the connection, and it is red when signed out", async (
   await page.goto("/");
   const lamp = page.locator(".connection-lamp");
   await expect(lamp).toHaveClass(/connection-lamp-on/);
+  await expect(lamp).toHaveText("✓");
   // Farbe allein genügt nicht: Die Lampe trägt den Status auch als Text für Screenreader.
   await expect(page.locator("#connection-lamp")).toHaveAttribute("aria-label", "Mit OpenStreetMap verbunden");
   expect(await lamp.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(31, 157, 85)");
@@ -1675,6 +1734,7 @@ test("a green lamp shows the connection, and it is red when signed out", async (
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
   await page.reload();
   await expect(page.locator(".connection-lamp")).toHaveClass(/connection-lamp-off/);
+  await expect(page.locator(".connection-lamp")).toHaveText("−");
   await expect(page.locator("#connection-lamp")).toHaveAttribute("aria-label", "Nicht verbunden");
   expect(await page.locator(".connection-lamp").evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(214, 69, 69)");
 });
@@ -2091,8 +2151,8 @@ test("the lamp tap area is large enough for a finger but does not push the heade
   await page.goto("/");
   const button = await page.locator("#connection-lamp").boundingBox();
   const dot = await page.locator("header .connection-lamp").boundingBox();
-  expect(button!.width).toBeGreaterThanOrEqual(36);
-  expect(button!.height).toBeGreaterThanOrEqual(36);
+  expect(button!.width).toBeGreaterThanOrEqual(44);
+  expect(button!.height).toBeGreaterThanOrEqual(44);
   // Die Tippfläche liegt mittig um den sichtbaren Punkt.
   expect(Math.abs(button!.x + button!.width / 2 - (dot!.x + dot!.width / 2))).toBeLessThan(1);
 });
@@ -2165,8 +2225,8 @@ test("the build number sits small in the footer of every screen and matches the 
   await expect(mark).toContainText(`Version ${published.revision}`);
   // Mit Datum und Uhrzeit des Builds, damit die Nummer nicht kryptisch bleibt.
   await expect(mark).toContainText(String(new Date().getFullYear()));
-  // Klein: höchstens 11 px Schrift, damit sie nicht stört.
-  expect(await mark.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeLessThanOrEqual(11);
+  // Auch die Versionszeile bleibt bei der Mindestgröße von 12 px lesbar.
+  expect(await mark.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(12);
 
   // Auch nach der Fotoauswahl und auf der Anmeldeseite.
   await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");

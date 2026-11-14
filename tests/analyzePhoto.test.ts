@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { requestVisionObservation, VisionClientError } from "../src/vision/analyzePhoto";
+import { requestVisionObservation, stripJpegExif, VisionClientError } from "../src/vision/analyzePhoto";
 
 const image = new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: "image/jpeg" });
 const observation = {
@@ -118,5 +118,28 @@ describe("requestVisionObservation", () => {
     await expect(requestVisionObservation(new Blob(["bad"], { type: "image/png" }), fetcher)).rejects.toMatchObject({ code: "invalid_image" });
     await expect(requestVisionObservation(new Blob([new Uint8Array(8 * 1024 * 1024 + 1)], { type: "image/jpeg" }), fetcher)).rejects.toMatchObject({ code: "image_too_large" });
     expect(fetcher).not.toHaveBeenCalled();
+  });
+});
+
+describe("JPEG privacy metadata removal", () => {
+  it("removes EXIF APP1 data while keeping the compressed image stream intact", async () => {
+    const jpeg = new Uint8Array([
+      0xff, 0xd8,
+      0xff, 0xe1, 0x00, 0x08, 0x45, 0x78, 0x69, 0x66, 0x00, 0x00,
+      0xff, 0xda, 0x00, 0x02, 0x11, 0x22, 0xff, 0xd9,
+    ]);
+
+    const cleaned = new Uint8Array(await (await stripJpegExif(new Blob([jpeg], { type: "image/jpeg" }))).arrayBuffer());
+
+    expect(new TextDecoder().decode(cleaned)).not.toContain("Exif");
+    expect([...cleaned]).toEqual([0xff, 0xd8, 0xff, 0xda, 0x00, 0x02, 0x11, 0x22, 0xff, 0xd9]);
+  });
+
+  it("preserves other JPEG headers and image bytes", async () => {
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x01, 0x02, 0xff, 0xda, 0x00, 0x02, 0x03, 0xff, 0xd9]);
+
+    const cleaned = new Uint8Array(await (await stripJpegExif(new Blob([jpeg], { type: "image/jpeg" }))).arrayBuffer());
+
+    expect([...cleaned]).toEqual([...jpeg]);
   });
 });
