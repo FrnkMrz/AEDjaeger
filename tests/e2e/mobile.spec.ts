@@ -289,15 +289,17 @@ test("a user-confirmed location search shows nearby candidates without writing t
   const origin = page.locator("#candidate-overview-map .position-map-marker-origin");
   await expect(origin).toHaveCount(1);
   await expect(page.locator("#candidate-overview-map .position-map-crosshair")).toBeHidden();
-  const originBefore = await origin.boundingBox();
-  const candidateBefore = await page.locator("#candidate-overview-map .position-map-marker").last().boundingBox();
+  const readMarkerPositions = () => page.locator("#candidate-overview-map .position-map-marker").evaluateAll((markers) => markers.map((marker) => ({
+    x: Number.parseFloat((marker as HTMLElement).style.left),
+    y: Number.parseFloat((marker as HTMLElement).style.top),
+  })));
+  const [originBefore, candidateBefore] = await readMarkerPositions();
   await page.locator("#candidate-overview-map").focus();
   await page.keyboard.press("ArrowRight");
-  const originAfter = await origin.boundingBox();
-  const candidateAfter = await page.locator("#candidate-overview-map .position-map-marker").last().boundingBox();
+  const [originAfter, candidateAfter] = await readMarkerPositions();
   // Die Pfeiltaste verschiebt den Karteninhalt um 32 Pixel – der Standortmarker wandert mit.
-  expect(originAfter!.x).toBeCloseTo(originBefore!.x + 32, 0);
-  expect(candidateAfter!.x - originAfter!.x).toBeCloseTo(candidateBefore!.x - originBefore!.x, 0);
+  expect(originAfter.x).toBeCloseTo(originBefore.x + 32, 0);
+  expect(candidateAfter.x - originAfter.x).toBeCloseTo(candidateBefore.x - originBefore.x, 0);
   const readMapZoom = async () => {
     const source = await page.locator("#candidate-overview-map .position-map-tiles img").first().getAttribute("src");
     expect(source).not.toBeNull();
