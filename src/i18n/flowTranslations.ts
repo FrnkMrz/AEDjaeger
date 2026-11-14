@@ -149,6 +149,8 @@ const messages = {
     detailsChangedTitle: "Wird geändert:",
     detailsCorrectionConfirm: "Ich habe vor Ort gesehen, dass der alte Wert nicht stimmt.",
     detailNotEditable: "Dieser Wert lässt sich hier nicht ändern.",
+    candidateDetailsView: "Angaben ansehen und ergänzen",
+    candidateDetailsChange: "Angaben ansehen und ändern",
     return: "Foto verwerfen",
   },
   en: {
@@ -298,6 +300,8 @@ const messages = {
     detailsChangedTitle: "Will change:",
     detailsCorrectionConfirm: "I saw on site that the old value is wrong.",
     detailNotEditable: "This value cannot be changed here.",
+    candidateDetailsView: "View and add details",
+    candidateDetailsChange: "View and change details",
     return: "Discard photo",
   },
   pl: {
@@ -447,6 +451,8 @@ const messages = {
     detailsChangedTitle: "Zostanie zmienione:",
     detailsCorrectionConfirm: "Widziałem(-am) na miejscu, że stara wartość jest błędna.",
     detailNotEditable: "Tej wartości nie można tu zmienić.",
+    candidateDetailsView: "Zobacz i uzupełnij dane",
+    candidateDetailsChange: "Zobacz i zmień dane",
     return: "Odrzuć zdjęcie",
   },
   ja: {
@@ -596,6 +602,8 @@ const messages = {
     detailsChangedTitle: "変更される内容：",
     detailsCorrectionConfirm: "古い値が間違っていることを現地で確認しました。",
     detailNotEditable: "この値はここでは変更できません。",
+    candidateDetailsView: "情報を見て追加",
+    candidateDetailsChange: "情報を見て変更",
     return: "写真を破棄",
   },
   fr: {
@@ -745,6 +753,8 @@ const messages = {
     detailsChangedTitle: "Sera modifié :",
     detailsCorrectionConfirm: "J’ai constaté sur place que l’ancienne valeur est fausse.",
     detailNotEditable: "Cette valeur ne peut pas être modifiée ici.",
+    candidateDetailsView: "Voir et compléter les informations",
+    candidateDetailsChange: "Voir et modifier les informations",
     return: "Supprimer la photo",
   },
   es: {
@@ -894,6 +904,8 @@ const messages = {
     detailsChangedTitle: "Se cambiará:",
     detailsCorrectionConfirm: "He comprobado en el lugar que el valor antiguo es incorrecto.",
     detailNotEditable: "Este valor no se puede cambiar aquí.",
+    candidateDetailsView: "Ver y completar datos",
+    candidateDetailsChange: "Ver y cambiar datos",
     return: "Descartar foto",
   },
 } as const;

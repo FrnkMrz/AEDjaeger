@@ -42,7 +42,7 @@ describe("first-version UI languages", () => {
         expect(filled, `${language}.${key}`).not.toContain("{");
       }
       // Ergänzen bestehender AEDs (Etappe P4): Texte vorhanden, der Platzhalter für den bestehenden Wert wird ersetzt.
-      for (const key of ["detailsExistingTitle", "detailsExistingIntro", "detailLoading", "detailLoadFailed", "detailLoadChanged", "detailLoadRetry", "detailsAddAction", "detailsAddedTitle", "detailsAllPresent"] as FlowMessageKey[]) {
+      for (const key of ["detailsExistingTitle", "detailsExistingIntro", "detailLoading", "detailLoadFailed", "detailLoadChanged", "detailLoadRetry", "detailsAddAction", "detailsAddedTitle", "detailsAllPresent", "candidateDetailsView", "candidateDetailsChange"] as FlowMessageKey[]) {
         expect(translateFlow(language, key).trim(), `${language}.${key}`).not.toBe("");
       }
       const existing = translateFlow(language, "detailExistingValue", { value: "WERT" });

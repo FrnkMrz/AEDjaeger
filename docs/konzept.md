@@ -41,6 +41,8 @@ Bedienung (abgenommenes Mockup vom 13.11.2026, orientiert am Hydrantenjäger):
 - Eine feste Fußleiste zeigt einen Hauptknopf mit der Zahl der Änderungen („Weiter · 3 Angaben“). Ohne Änderung bleibt er gesperrt.
 - Die Vorschau zeigt jede Änderung. Bei bestehenden AEDs steht `alt → neu` da, unveränderte Tags erscheinen als „bleibt“. Gespeichert wird erst nach der Bestätigung für diesen Vorgang.
 
+Bei einem bestehenden AED erreichst du die Angaben auf zwei Wegen: direkt aus der Trefferliste („Angaben ansehen und ergänzen“, vor der Datumsseite) oder über die Änderungsvorschau. Beide enden in derselben Vorschau, in der das Datum einmal zusammen mit allen Angaben bestätigt wird.
+
 Die App liest Zugang, Zeiten oder Lage nie aus dem Foto. Die Tags, ihre Grenzen und die drei Schreibstufen (Neuanlage, Ergänzen, Korrigieren) stehen in [OSM-Datenmodell](osm.md#detailangaben-entscheidung-vom-13112026). Korrigieren bestehender Werte ist ein eigener Betreiber-Schalter und standardmäßig aus.
 
 ## Nur bei Unklarheit nachfragen
