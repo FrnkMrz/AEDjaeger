@@ -4,7 +4,9 @@ import { findOSMDevelopmentToken } from "../storage/osmDevelopmentTokens";
 import {
   claimOSMDevelopmentUpload,
   failEmptyUncertainOSMDevelopmentWrite,
+  hashOSMDevelopmentWriteOwner,
   hashOSMDevelopmentWriteValue,
+  migrateLegacyOSMDevelopmentWriteOwner,
   reserveOSMDevelopmentWrite,
   updateOSMDevelopmentWrite,
   type OSMDevelopmentWriteOperation,
@@ -36,6 +38,7 @@ export type DevelopmentWriteEnvironment = {
 type Dependencies = { fetch?: typeof fetch; now?: () => number; crypto?: Crypto };
 
 type ConfirmedCheckDate = {
+  recovery_identity: string;
   operation_id: string;
   confirmed: true;
   target: string;
@@ -100,11 +103,15 @@ export async function handleDevelopmentCheckDate(
   if (!session || session.environment !== "development") return jsonResponse({ error: "development_session_required" }, 403);
 
   let input: ConfirmedCheckDate;
+  let ownerHash: string;
   try {
+    ownerHash = await hashOSMDevelopmentWriteOwner(session, environment.OSM_OAUTH_ENCRYPTION_KEY, dependencies.crypto);
     input = parseRequest(await readLimitedBody(request, MAX_BODY_BYTES), now);
   } catch (error) {
     return jsonResponse({ error: error instanceof BodyTooLargeError ? "request_too_large" : "invalid_request" }, error instanceof BodyTooLargeError ? 413 : 400);
   }
+  if (input.recovery_identity && input.recovery_identity !== ownerHash) return jsonResponse({ error: "recovery_identity_mismatch" }, 403);
+  input.recovery_identity = ownerHash;
 
   // Korrekturen (bestehende Werte ersetzen) erlaubt nur der Betreiber-Schalter. Ohne ihn geschieht nichts: weder eine
   // Reservierung noch ein Lesen oder Schreiben bei OSM.
@@ -113,22 +120,24 @@ export async function handleDevelopmentCheckDate(
   }
 
   let token: string;
-  let sessionHash: string;
   let requestHash: string;
   try {
     const key = await importOAuthEncryptionKey(environment.OSM_OAUTH_ENCRYPTION_KEY);
     const storedToken = await findOSMDevelopmentToken(environment.DB, sessionToken, now, key, dependencies.crypto);
     if (!storedToken) return jsonResponse({ error: "development_token_unavailable" }, 401);
     token = storedToken;
-    sessionHash = await hashOSMDevelopmentWriteValue(sessionToken, dependencies.crypto);
-    requestHash = await hashOSMDevelopmentWriteValue(JSON.stringify(input), dependencies.crypto);
+    // The account is already the storage partition and is verified above. Keep it out of the
+    // payload hash so operations created before account-bound recovery remain replayable.
+    requestHash = await hashOSMDevelopmentWriteValue(JSON.stringify({ ...input, recovery_identity: undefined }), dependencies.crypto);
+    const legacySessionHash = await hashOSMDevelopmentWriteValue(sessionToken, dependencies.crypto);
+    await migrateLegacyOSMDevelopmentWriteOwner(environment.DB, legacySessionHash, ownerHash);
   } catch {
     return jsonResponse({ error: "development_write_unavailable" }, 503);
   }
 
   let reserved: Awaited<ReturnType<typeof reserveOSMDevelopmentWrite>>;
   try {
-    reserved = await reserveOSMDevelopmentWrite(environment.DB, sessionHash, input.operation_id, requestHash, now);
+    reserved = await reserveOSMDevelopmentWrite(environment.DB, ownerHash, input.operation_id, requestHash, now);
   } catch {
     return jsonResponse({ error: "write_status_unavailable" }, 503);
   }
@@ -139,14 +148,14 @@ export async function handleDevelopmentCheckDate(
   if (operation.state === "failed") return jsonResponse({ error: "write_failed" }, 502);
 
   if (!reserved.created) {
-    if (operation.state === "uploaded") return finishChangeset(environment.DB, sessionHash, input.operation_id, operation, token, dependencies);
+    if (operation.state === "uploaded") return finishChangeset(environment.DB, ownerHash, input.operation_id, operation, token, dependencies);
     if (operation.state === "uploading" || operation.state === "uncertain") {
-      return reconcileUncertainWrite(environment.DB, sessionHash, input, operation, token, dependencies);
+      return reconcileUncertainWrite(environment.DB, ownerHash, input, operation, token, dependencies);
     }
     if (operation.state === "changeset-created") {
-      const claimed = await safelyClaimUpload(environment.DB, sessionHash, input.operation_id, (dependencies.now ?? Date.now)());
+      const claimed = await safelyClaimUpload(environment.DB, ownerHash, input.operation_id, (dependencies.now ?? Date.now)());
       if (!claimed) return jsonResponse({ status: "pending" }, 202);
-      return uploadNodeChange(environment.DB, sessionHash, input, operation, token, dependencies);
+      return uploadNodeChange(environment.DB, ownerHash, input, operation, token, dependencies);
     }
     // A request that vanished during its initial read cannot be safely replayed
     // automatically; this prevents a late retry from opening a second changeset.
@@ -158,7 +167,7 @@ export async function handleDevelopmentCheckDate(
     currentNode = await readDevelopmentNode(input.target, token, dependencies.fetch ?? fetch);
   } catch (error) {
     const state = error instanceof VersionConflictError ? "conflict" : "failed";
-    await safelyUpdate(environment.DB, { sessionHash, operationId: input.operation_id, state, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(environment.DB, { ownerHash, operationId: input.operation_id, state, now: (dependencies.now ?? Date.now)() });
     if (error instanceof TargetNotFoundError) return jsonResponse({ error: "target_not_found" }, 404);
     return error instanceof VersionConflictError
       ? jsonResponse({ error: "version_conflict" }, 409)
@@ -169,16 +178,16 @@ export async function handleDevelopmentCheckDate(
     || (currentNode.tags.check_date ?? null) !== input.expected_check_date
     || currentNode.tags.emergency !== "defibrillator"
     || detailsConflict(currentNode, input)) {
-    await safelyUpdate(environment.DB, { sessionHash, operationId: input.operation_id, state: "conflict", now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(environment.DB, { ownerHash, operationId: input.operation_id, state: "conflict", now: (dependencies.now ?? Date.now)() });
     return jsonResponse({ error: "version_conflict" }, 409);
   }
   if (input.expected_check_date && input.expected_check_date > input.observed_on) {
-    await safelyUpdate(environment.DB, { sessionHash, operationId: input.operation_id, state: "conflict", now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(environment.DB, { ownerHash, operationId: input.operation_id, state: "conflict", now: (dependencies.now ?? Date.now)() });
     return jsonResponse({ error: "newer_check_date_exists" }, 409);
   }
   // „Schon aktuell“ gilt nur, wenn es auch keine Detailtags zu schreiben gibt.
   if (currentNode.tags.check_date === input.observed_on && !hasDetails(input)) {
-    await safelyUpdate(environment.DB, { sessionHash, operationId: input.operation_id, state: "complete", resultVersion: currentNode.version, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(environment.DB, { ownerHash, operationId: input.operation_id, state: "complete", resultVersion: currentNode.version, now: (dependencies.now ?? Date.now)() });
     return jsonResponse({ status: "complete", version: currentNode.version, already_current: true }, 200);
   }
 
@@ -192,27 +201,27 @@ export async function handleDevelopmentCheckDate(
   } catch {
     // Without a changeset ID this request cannot upload a map object. Retire it
     // as failed so the same operation ID cannot remain uncertain for a week.
-    await safelyUpdate(environment.DB, { sessionHash, operationId: input.operation_id, state: "failed", now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(environment.DB, { ownerHash, operationId: input.operation_id, state: "failed", now: (dependencies.now ?? Date.now)() });
     return jsonResponse({ error: "write_failed" }, 502);
   }
   try {
     await updateOSMDevelopmentWrite(environment.DB, {
-      sessionHash, operationId: input.operation_id, state: "changeset-created", changesetId, now: (dependencies.now ?? Date.now)(),
+      ownerHash, operationId: input.operation_id, state: "changeset-created", changesetId, now: (dependencies.now ?? Date.now)(),
     });
   } catch {
     // An empty changeset may remain open, but no map object has been sent.
     return jsonResponse({ error: "write_status_unavailable" }, 503);
   }
 
-  const claimed = await safelyClaimUpload(environment.DB, sessionHash, input.operation_id, (dependencies.now ?? Date.now)());
+  const claimed = await safelyClaimUpload(environment.DB, ownerHash, input.operation_id, (dependencies.now ?? Date.now)());
   if (!claimed) return jsonResponse({ status: "pending" }, 202);
   const changeset = { ...operation, state: "changeset-created" as const, changeset_id: changesetId };
-  return uploadNodeChange(environment.DB, sessionHash, input, changeset, token, dependencies, currentNode);
+  return uploadNodeChange(environment.DB, ownerHash, input, changeset, token, dependencies, currentNode);
 }
 
 async function uploadNodeChange(
   database: D1Database,
-  sessionHash: string,
+  ownerHash: string,
   input: ConfirmedCheckDate,
   operation: OSMDevelopmentWriteOperation,
   token: string,
@@ -225,11 +234,11 @@ async function uploadNodeChange(
     node ??= await readDevelopmentNode(input.target, token, dependencies.fetch ?? fetch);
   } catch (error) {
     const state = error instanceof VersionConflictError ? "conflict" : "failed";
-    await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state, changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state, changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
     return error instanceof VersionConflictError ? jsonResponse({ error: "version_conflict" }, 409) : jsonResponse({ error: "development_api_unavailable" }, 502);
   }
   if ((input.expected_version !== undefined && node.version !== input.expected_version) || (node.tags.check_date ?? null) !== input.expected_check_date || node.tags.emergency !== "defibrillator" || detailsConflict(node, input)) {
-    await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state: "conflict", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "conflict", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
     return jsonResponse({ error: "version_conflict" }, 409);
   }
 
@@ -244,17 +253,17 @@ async function uploadNodeChange(
       method: "POST", body: xml,
     }, dependencies.fetch ?? fetch);
   } catch {
-    await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state: "uncertain", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "uncertain", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
     return jsonResponse({ status: "uncertain" }, 202);
   }
 
   if (response.status === 409) {
-    await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state: "conflict", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "conflict", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
     await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch);
     return jsonResponse({ error: "version_conflict" }, 409);
   }
   if (!response.ok) {
-    await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state: response.status >= 500 ? "uncertain" : "failed", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: response.status >= 500 ? "uncertain" : "failed", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
     if (response.status < 500) await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch);
     return response.status >= 500 ? jsonResponse({ status: "uncertain" }, 202) : jsonResponse({ error: "write_failed" }, 502);
   }
@@ -266,19 +275,19 @@ async function uploadNodeChange(
     version = null;
   }
   if (version === null) {
-    await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state: "uncertain", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "uncertain", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
     return jsonResponse({ status: "uncertain" }, 202);
   }
 
   // Save the acknowledged object version before closing. A close failure may
   // never cause the edit upload to be repeated.
-  await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state: "uploaded", changesetId: operation.changeset_id, resultVersion: version, now: (dependencies.now ?? Date.now)() });
-  return finishChangeset(database, sessionHash, input.operation_id, { ...operation, state: "uploaded", result_version: version }, token, dependencies);
+  await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "uploaded", changesetId: operation.changeset_id, resultVersion: version, now: (dependencies.now ?? Date.now)() });
+  return finishChangeset(database, ownerHash, input.operation_id, { ...operation, state: "uploaded", result_version: version }, token, dependencies);
 }
 
 async function reconcileUncertainWrite(
   database: D1Database,
-  sessionHash: string,
+  ownerHash: string,
   input: ConfirmedCheckDate,
   operation: OSMDevelopmentWriteOperation,
   token: string,
@@ -287,7 +296,7 @@ async function reconcileUncertainWrite(
   if (!operation.changeset_id) {
     // Older deployments recorded a failed changeset-open request as uncertain.
     // No upload can have been sent without its changeset ID.
-    await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state: "failed", now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "failed", now: (dependencies.now ?? Date.now)() });
     return jsonResponse({ error: "write_failed" }, 502);
   }
   try {
@@ -307,13 +316,13 @@ async function reconcileUncertainWrite(
 
     if (changeset.updatedNode && writeAppearsApplied(changeset.updatedNode, input)) {
       const updatedNode = changeset.updatedNode;
-      await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state: "uploaded", changesetId: operation.changeset_id, resultVersion: updatedNode.version, now: (dependencies.now ?? Date.now)() });
-      return finishChangeset(database, sessionHash, input.operation_id, { ...operation, state: "uploaded", result_version: updatedNode.version }, token, dependencies);
+      await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "uploaded", changesetId: operation.changeset_id, resultVersion: updatedNode.version, now: (dependencies.now ?? Date.now)() });
+      return finishChangeset(database, ownerHash, input.operation_id, { ...operation, state: "uploaded", result_version: updatedNode.version }, token, dependencies);
     }
 
     if (changeset.empty) {
       const failed = await failEmptyUncertainOSMDevelopmentWrite(database, {
-        sessionHash,
+        ownerHash,
         operationId: input.operation_id,
         changesetId: operation.changeset_id,
         now: (dependencies.now ?? Date.now)(),
@@ -325,7 +334,7 @@ async function reconcileUncertainWrite(
 
     // The closed changeset contains a different or conflicting edit. Keep it
     // terminally blocked instead of inviting another upload with stale data.
-    await safelyUpdate(database, { sessionHash, operationId: input.operation_id, state: "conflict", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "conflict", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
     return jsonResponse({ error: "version_conflict" }, 409);
   } catch {
     // A lost connection or malformed upstream response keeps the operation blocked.
@@ -335,7 +344,7 @@ async function reconcileUncertainWrite(
 
 async function finishChangeset(
   database: D1Database,
-  sessionHash: string,
+  ownerHash: string,
   operationId: string,
   operation: OSMDevelopmentWriteOperation,
   token: string,
@@ -343,7 +352,7 @@ async function finishChangeset(
 ): Promise<Response> {
   if (!operation.changeset_id) return jsonResponse({ status: "uncertain" }, 202);
   if (await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch)) {
-    await safelyUpdate(database, { sessionHash, operationId, state: "complete", changesetId: operation.changeset_id, resultVersion: operation.result_version ?? undefined, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(database, { ownerHash, operationId, state: "complete", changesetId: operation.changeset_id, resultVersion: operation.result_version ?? undefined, now: (dependencies.now ?? Date.now)() });
     return completeResponse({ ...operation, state: "complete" });
   }
   return jsonResponse({ status: "uploaded", close_pending: true, version: operation.result_version }, 202);
@@ -617,13 +626,14 @@ function parseRequest(bytes: Uint8Array, now: number): ConfirmedCheckDate {
     throw new Error("Invalid JSON");
   }
   // `details` ist ein optionales zusätzliches Feld. Alle übrigen Felder müssen genau einer der beiden bekannten Formen entsprechen.
-  const keysWithoutDetails = isRecord(value) ? Object.keys(value).filter((key) => key !== "details" && key !== "expected_before" && key !== "confirmed_corrections").sort().join(",") : "";
+  const keysWithoutDetails = isRecord(value) ? Object.keys(value).filter((key) => key !== "details" && key !== "expected_before" && key !== "confirmed_corrections" && key !== "recovery_identity").sort().join(",") : "";
   if (!isRecord(value) || !["confirmed,expected_check_date,expected_version,observed_on,operation_id,target", "confirmed,expected_check_date,observed_on,operation_id,target"].includes(keysWithoutDetails)
     || value.confirmed !== true || typeof value.operation_id !== "string"
     || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value.operation_id)
     || typeof value.target !== "string" || !/^node\/[1-9]\d{0,15}$/u.test(value.target)
     || (value.expected_version !== undefined && !isPositiveInteger(value.expected_version))
     || !(value.expected_check_date === null || isCalendarDate(value.expected_check_date))
+    || value.recovery_identity !== undefined && (typeof value.recovery_identity !== "string" || !/^[a-f0-9]{64}$/u.test(value.recovery_identity))
     || !isAcceptableObservationDate(value.observed_on, now)) {
     throw new Error("Invalid request");
   }
@@ -667,8 +677,8 @@ function isCalendarDate(value: unknown): value is string {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
-async function safelyClaimUpload(database: D1Database, sessionHash: string, operationId: string, now: number): Promise<boolean> {
-  try { return await claimOSMDevelopmentUpload(database, sessionHash, operationId, now); } catch { return false; }
+async function safelyClaimUpload(database: D1Database, ownerHash: string, operationId: string, now: number): Promise<boolean> {
+  try { return await claimOSMDevelopmentUpload(database, ownerHash, operationId, now); } catch { return false; }
 }
 
 async function safelyUpdate(database: D1Database, input: Parameters<typeof updateOSMDevelopmentWrite>[1]): Promise<void> {

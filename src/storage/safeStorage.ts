@@ -9,14 +9,14 @@
  *   - Schreiben, das nicht geht, wird gemeldet (false), aber nie als Fehler geworfen. Die App läuft weiter, und die
  *     Wahl gilt für die offene Seite.
  *
- * Wichtig: Dieser Baustein ist NUR für Bequemlichkeiten gedacht. Der offene Speichervorgang für den Testserver
- * (sessionStorage in main.ts) hat seine eigene, bewusst strenge Regel: Lässt er sich nicht sichern, wird nicht gesendet.
+ * Wichtig: Ein offener Speichervorgang nutzt diese Helfer nur für den Zugriffsschutz. Sein Aufrufer muss ein
+ * fehlgeschlagenes Schreiben als Fehler behandeln und darf die OSM-Anfrage dann nicht absenden.
  */
 
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
 /** Holt den Speicher des Browsers oder undefined, wenn schon der Zugriff scheitert. */
-function browserStorage(): StorageLike | undefined {
+function browserStorage(): Storage | undefined {
   try {
     return globalThis.localStorage;
   } catch {
@@ -38,6 +38,17 @@ export function writeStoredValue(key: string, value: string, storage: StorageLik
   try {
     if (!storage) return false;
     storage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Entfernt einen Wert. Meldet false, wenn der Zugriff nicht möglich war. */
+export function removeStoredValue(key: string, storage: Pick<Storage, "removeItem"> | undefined = browserStorage()): boolean {
+  try {
+    if (!storage) return false;
+    storage.removeItem(key);
     return true;
   } catch {
     return false;

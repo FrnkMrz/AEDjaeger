@@ -4,17 +4,17 @@ import { createOSMSession } from "../server/storage/osmSessions";
 import { storeOSMDevelopmentToken } from "../server/storage/osmDevelopmentTokens";
 import { importOAuthEncryptionKey } from "../server/auth/osmOAuth";
 import { handleDevelopmentCreateNode } from "../server/osm/developmentCreateNodeRoute";
-import { hashOSMDevelopmentWriteValue } from "../server/storage/osmDevelopmentWriteOperations";
+import { hashOSMDevelopmentWriteOwner, hashOSMDevelopmentWriteValue } from "../server/storage/osmDevelopmentWriteOperations";
 
 const now = Date.UTC(2026, 9, 24, 12);
 const cookieToken = "s".repeat(43);
 const encryptionSecret = "k".repeat(43);
 const operationId = "f1234567-89ab-4cde-8fab-123456789abc";
-const input = { operation_id: operationId, confirmed: true, latitude: 52.52, longitude: 13.405, observed_on: "2026-10-24", location_description: "Near main entrance" };
+const input = { recovery_identity: await hashOSMDevelopmentWriteOwner({ subject: "test-subject", environment: "development" }, encryptionSecret), operation_id: operationId, confirmed: true, latitude: 52.52, longitude: 13.405, observed_on: "2026-10-24", location_description: "Near main entrance" };
 
 type SessionRow = { session_hash: string; osm_subject: string; osm_environment: string; expires_at: number };
 type TokenRow = { session_hash: string; token_iv: string; token_ciphertext: string; token_expires_at: number };
-type OperationRow = { session_hash: string; operation_id: string; request_hash: string; state: string; changeset_id: string | null; result_version: number | null; result_node_id: string | null; updated_at: number; expires_at: number };
+type OperationRow = { owner_hash: string; operation_id: string; request_hash: string; state: string; changeset_id: string | null; result_version: number | null; result_node_id: string | null; updated_at: number; expires_at: number };
 
 class MemoryD1 implements D1Database {
   sessions = new Map<string, SessionRow>();
@@ -56,6 +56,7 @@ class MemoryD1 implements D1Database {
   }
 
   execute<T>(sql: string, values: unknown[]): D1Result<T> {
+    if (sql.startsWith("UPDATE osm_development_write_operations SET owner_hash")) return { success: true, meta: { changes: 0 } };
     if (sql.startsWith("DELETE FROM osm_development_write_operations")) return { success: true, meta: { changes: 1 } };
     if (sql.startsWith("DELETE FROM osm_sessions")) return { success: true, meta: { changes: 1 } };
     if (sql.startsWith("INSERT INTO osm_sessions")) {
@@ -72,7 +73,7 @@ class MemoryD1 implements D1Database {
       const [hash, id, requestHash, _created, _updated, expires] = values as [string, string, string, number, number, number];
       const key = `${hash}:${id}`;
       if (this.operations.has(key)) return { success: true, meta: { changes: 0 } };
-      this.operations.set(key, { session_hash: hash, operation_id: id, request_hash: requestHash, state: "started", changeset_id: null, result_version: null, result_node_id: null, updated_at: _updated, expires_at: expires });
+      this.operations.set(key, { owner_hash: hash, operation_id: id, request_hash: requestHash, state: "started", changeset_id: null, result_version: null, result_node_id: null, updated_at: _updated, expires_at: expires });
       return { success: true, meta: { changes: 1 } };
     }
     if (sql.includes("SET state = 'failed', updated_at = ?")) {
@@ -401,10 +402,14 @@ describe("OSM development node creation", () => {
 
   it("reconciles an older pending create when a retry includes an empty reviewed-candidate list", async () => {
     const DB = await setupDatabase();
-    const sessionHash = await hashOSMDevelopmentWriteValue(cookieToken);
-    const legacyRequestHash = await hashOSMDevelopmentWriteValue(JSON.stringify(input));
-    DB.operations.set(`${sessionHash}:${operationId}`, {
-      session_hash: sessionHash,
+    const ownerHash = await hashOSMDevelopmentWriteOwner({ subject: "test-subject", environment: "development" }, encryptionSecret);
+    const legacyRequestHash = await hashOSMDevelopmentWriteValue(JSON.stringify({
+      operation_id: input.operation_id, confirmed: input.confirmed,
+      latitude: input.latitude, longitude: input.longitude, observed_on: input.observed_on,
+      location_description: input.location_description,
+    }));
+    DB.operations.set(`${ownerHash}:${operationId}`, {
+      owner_hash: ownerHash,
       operation_id: operationId,
       request_hash: legacyRequestHash,
       state: "uncertain",

@@ -208,6 +208,15 @@ describe("Cloudflare Worker shell", () => {
     };
     const sessionBody = async (override: Record<string, string | undefined>) => (await worker.fetch(sessionRequest(), { ...environment(), ...devLogin, DB: sessionDatabase("42", "development"), ...override })).json();
 
+    it("exposes a stable opaque write-owner hash for recovery without exposing the OSM subject", async () => {
+      const first = await sessionBody({ OSM_DEV_WRITES_ENABLED: "true" });
+      const second = await sessionBody({ OSM_DEV_WRITES_ENABLED: "true" });
+      expect(first.developmentWriteOwnerHash).toMatch(/^[a-f0-9]{64}$/u);
+      expect(second.developmentWriteOwnerHash).toBe(first.developmentWriteOwnerHash);
+      expect(first).not.toHaveProperty("subject");
+      expect(first).not.toHaveProperty("osm_subject");
+    });
+
     it("reports corrections only when the operator allowed them and test-server writing is on", async () => {
       expect(await sessionBody({ OSM_DEV_WRITES_ENABLED: "true", OSM_DETAIL_CORRECTIONS_ENABLED: "true" }))
         .toMatchObject({ authenticated: true, developmentWriteAvailable: true, developmentCorrectionsAvailable: true });
