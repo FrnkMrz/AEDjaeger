@@ -8,6 +8,7 @@ import {
   formFromExistingTags,
   planDetailChanges,
   isDetailKey,
+  levelLeftBehindByIndoorChange,
   validateDetailTags,
   type AedDetailForm,
 } from "../src/contracts/aedDetails";
@@ -345,5 +346,25 @@ describe("formFromExistingTags: Vorbelegung im Korrekturmodus", () => {
     const { form: prefilled } = formFromExistingTags(existing);
     expect(planDetailChanges({ ...prefilled, hoursMode: "times", hoursText: "Mo-Fr 08:00-18:00" }, existing, "correct"))
       .toMatchObject({ ok: true, corrections: [{ key: "opening_hours", before: "24/7", after: "Mo-Fr 08:00-18:00" }] });
+  });
+});
+
+describe("levelLeftBehindByIndoorChange", () => {
+  it("meldet die alte Ebene, wenn auf „draußen“ gestellt wird", () => {
+    expect(levelLeftBehindByIndoorChange({ indoor: "yes", level: "2" }, { indoor: "no" })).toBe("2");
+  });
+
+  it("meldet nichts, wenn der AED drinnen bleibt oder indoor nicht geschrieben wird", () => {
+    expect(levelLeftBehindByIndoorChange({ indoor: "yes", level: "2" }, { indoor: "yes" })).toBeNull();
+    expect(levelLeftBehindByIndoorChange({ indoor: "yes", level: "2" }, { access: "yes" })).toBeNull();
+  });
+
+  it("meldet nichts, wenn es gar keine Ebene in OSM gibt oder sie leer ist", () => {
+    expect(levelLeftBehindByIndoorChange({ indoor: "yes" }, { indoor: "no" })).toBeNull();
+    expect(levelLeftBehindByIndoorChange({ level: "  " }, { indoor: "no" })).toBeNull();
+  });
+
+  it("meldet nichts, wenn gleichzeitig eine neue Ebene geschrieben wird", () => {
+    expect(levelLeftBehindByIndoorChange({ level: "2" }, { indoor: "no", level: "0" })).toBeNull();
   });
 });

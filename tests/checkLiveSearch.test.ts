@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { PbfWriter } from "pbf";
 import {
@@ -12,6 +10,9 @@ import {
   validateMetadata,
   type ArchiveReader,
 } from "../scripts/check-live-search.mjs";
+// ?raw liefert den Quelltext als Zeichenkette (Vite), ohne Node-Dateizugriff im Test.
+import routeSource from "../server/osm/staticCandidateSearchRoute.ts?raw";
+import scriptSource from "../scripts/check-live-search.mjs?raw";
 
 // Diese Tests laufen komplett ohne Netz. Die Datenquelle wird durch Fakes ersetzt,
 // damit der Ablauf des Live-Checks geprüft werden kann, ohne pipeline.openfiremap.org zu berühren.
@@ -233,9 +234,6 @@ describe("readLimited (Größenbegrenzung beim Lesen)", () => {
 // und vergleicht die Werte. Ändert jemand die Route, ohne das Skript anzupassen, wird der Test rot,
 // und der Live-Check prüft nicht mehr dasselbe wie die App.
 describe("Konstanten des Live-Checks stimmen mit der Worker-Route überein", () => {
-  const routeSource = readFileSync(resolve(__dirname, "../server/osm/staticCandidateSearchRoute.ts"), "utf8");
-  const scriptSource = readFileSync(resolve(__dirname, "../scripts/check-live-search.mjs"), "utf8");
-
   /** Liest den Ausdruck rechts von `const NAME =` (bis zum Semikolon) aus einem Quelltext. */
   function constantExpression(source: string, name: string): string {
     const match = source.match(new RegExp(`^const ${name} = (.+?);\\s*$`, "m"));
