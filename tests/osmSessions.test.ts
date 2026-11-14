@@ -1,15 +1,26 @@
 import { describe, expect, it } from "vitest";
 import type { D1Database, D1Result, D1Statement } from "../server/storage/d1";
 import { createOSMSession, deleteOSMSession, findOSMSession, OSM_SESSION_LIFETIME_MS, rotateOSMSession } from "../server/storage/osmSessions";
+import { sha256Hex } from "../server/crypto/hash";
+import { hashOSMDevelopmentWriteOwner } from "../server/storage/osmDevelopmentWriteOperations";
+const recoverySecret = "k".repeat(43);
 
 function createSessionDatabase() {
   const rows = new Map<string, { osm_subject: string; osm_environment: "production" | "development"; created_at: number; expires_at: number }>();
+  const operations = new Map<string, string>();
   const database: D1Database = {
     prepare(query: string): D1Statement {
       let values: unknown[] = [];
       return {
         bind(...bound: unknown[]) { values = bound; return this; },
         async run<T>() {
+          if (query.includes("UPDATE osm_development_write_operations SET owner_hash")) {
+            const [ownerHash, legacyHash] = values as [string, string];
+            const operation = operations.get(legacyHash);
+            if (operation) { operations.delete(legacyHash); operations.set(ownerHash, operation); }
+            return { success: true, meta: { changes: operation ? 1 : 0 } } as D1Result<T>;
+          }
+          if (query.includes("UPDATE osm_development_write_operations SET owner_hash")) return { success: true, meta: { changes: 0 } } as D1Result<T>;
           if (query.includes("DELETE FROM osm_sessions WHERE expires_at")) {
             for (const [key, value] of rows) if (value.expires_at <= Number(values[0])) rows.delete(key);
             return { success: true, meta: { changes: 1 } } as D1Result<T>;
@@ -31,6 +42,7 @@ function createSessionDatabase() {
         },
         async first<T>() {
           const row = rows.get(String(values[0]));
+          if (query.includes("SELECT osm_subject, osm_environment") && !query.includes("expires_at >")) return row ? { osm_subject: row.osm_subject, osm_environment: row.osm_environment } as T : null;
           return row && row.expires_at > Number(values[1])
             ? { osm_subject: row.osm_subject, osm_environment: row.osm_environment } as T
             : null;
@@ -38,7 +50,7 @@ function createSessionDatabase() {
       };
     },
   };
-  return { database, rows };
+  return { database, rows, operations };
 }
 
 describe("OSM session storage", () => {
@@ -78,9 +90,26 @@ describe("OSM session storage", () => {
     const token = "d".repeat(43);
     await createOSMSession(database, token, "osm-user-42", 1_800_000_000_000);
 
-    await deleteOSMSession(database, token);
+    await deleteOSMSession(database, token, recoverySecret);
     expect(rows.size).toBe(0);
     await expect(findOSMSession(database, token, 1_800_000_000_001)).resolves.toBeNull();
+  });
+
+  it("rebinds pending writes to the OSM account before deleting its browser session", async () => {
+    const { database, operations } = createSessionDatabase();
+    const token = "g".repeat(43);
+    const subject = "osm-user-42";
+    const now = 1_800_000_000_000;
+    await createOSMSession(database, token, subject, now, "development");
+    const previousSessionHash = await sha256Hex(token);
+    operations.set(previousSessionHash, "pending-operation");
+
+    await deleteOSMSession(database, token, recoverySecret);
+
+    const ownerHash = await hashOSMDevelopmentWriteOwner({ subject, environment: "development" }, recoverySecret);
+    expect(operations.get(ownerHash)).toBe("pending-operation");
+    expect(operations.has(previousSessionHash)).toBe(false);
+    expect(ownerHash).not.toContain(subject);
   });
 
   it("revokes the previous browser session before storing its replacement", async () => {
@@ -90,7 +119,7 @@ describe("OSM session storage", () => {
     const now = 1_800_000_000_000;
     await createOSMSession(database, oldToken, "old-osm-user", now - 1);
 
-    await rotateOSMSession(database, oldToken, newToken, "new-osm-user", now, "development");
+    await rotateOSMSession(database, oldToken, newToken, "new-osm-user", now, "development", recoverySecret);
 
     expect(rows.size).toBe(1);
     await expect(findOSMSession(database, oldToken, now)).resolves.toBeNull();

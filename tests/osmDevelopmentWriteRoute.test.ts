@@ -3,13 +3,16 @@ import { createOSMSession } from "../server/storage/osmSessions";
 import { storeOSMDevelopmentToken } from "../server/storage/osmDevelopmentTokens";
 import type { D1Database, D1Result, D1Statement } from "../server/storage/d1";
 import { importOAuthEncryptionKey } from "../server/auth/osmOAuth";
+import { hashOSMDevelopmentWriteOwner, hashOSMDevelopmentWriteValue } from "../server/storage/osmDevelopmentWriteOperations";
 import { handleDevelopmentCheckDate } from "../server/osm/developmentWriteRoute";
 
 const now = Date.UTC(2026, 9, 24, 12);
 const sessionToken = "s".repeat(43);
+const rotatedSessionToken = "r".repeat(43);
 const operationId = "f1234567-89ab-4cde-8fab-123456789abc";
 const keySecret = "k".repeat(43);
 const requestBody = {
+  recovery_identity: await hashOSMDevelopmentWriteOwner({ subject: "test-subject", environment: "development" }, keySecret),
   operation_id: operationId,
   confirmed: true,
   target: "node/42",
@@ -21,7 +24,7 @@ const requestBody = {
 type SessionRow = { session_hash: string; osm_subject: string; osm_environment: string; expires_at: number };
 type TokenRow = { session_hash: string; token_iv: string; token_ciphertext: string; token_expires_at: number };
 type OperationRow = {
-  session_hash: string; operation_id: string; request_hash: string; state: string;
+  owner_hash: string; operation_id: string; request_hash: string; state: string;
   changeset_id: string | null; result_version: number | null; result_node_id: string | null; updated_at: number; expires_at: number;
 };
 
@@ -66,6 +69,7 @@ class MemoryD1 implements D1Database {
         throw new Error(`Unexpected query: ${sql}`);
       },
       execute: <T>(sql: string, params: unknown[]): D1Result<T> => {
+        if (sql.startsWith("UPDATE osm_development_write_operations SET owner_hash")) return { success: true, meta: { changes: 0 } };
         if (sql.startsWith("DELETE FROM osm_sessions WHERE expires_at")) return { success: true, meta: { changes: 0 } };
         if (sql.startsWith("INSERT INTO osm_sessions")) {
           const [hash, subject, env, _created, expires] = params as [string, string, string, number, number];
@@ -83,14 +87,14 @@ class MemoryD1 implements D1Database {
         }
         if (sql.startsWith("DELETE FROM osm_development_write_operations")) {
           const [hash, time] = params as [string, number];
-          for (const [id, row] of this.operations) if (row.session_hash === hash && row.expires_at <= time) this.operations.delete(id);
+          for (const [id, row] of this.operations) if (row.owner_hash === hash && row.expires_at <= time) this.operations.delete(id);
           return { success: true, meta: { changes: 1 } };
         }
         if (sql.startsWith("INSERT OR IGNORE INTO osm_development_write_operations")) {
           const [hash, id, requestHash, _created, _updated, expires] = params as [string, string, string, number, number, number];
           const key = `${hash}:${id}`;
           if (this.operations.has(key)) return { success: true, meta: { changes: 0 } };
-          this.operations.set(key, { session_hash: hash, operation_id: id, request_hash: requestHash, state: "started", changeset_id: null, result_version: null, result_node_id: null, updated_at: _updated, expires_at: expires });
+          this.operations.set(key, { owner_hash: hash, operation_id: id, request_hash: requestHash, state: "started", changeset_id: null, result_version: null, result_node_id: null, updated_at: _updated, expires_at: expires });
           return { success: true, meta: { changes: 1 } };
         }
         if (sql.includes("SET state = 'uploading'")) {
@@ -155,6 +159,7 @@ class MemoryD1 implements D1Database {
   }
 
   execute<T>(sql: string, params: unknown[]): D1Result<T> {
+    if (sql.startsWith("UPDATE osm_development_write_operations SET owner_hash")) return { success: true, meta: { changes: 0 } };
     if (sql.startsWith("DELETE FROM osm_sessions WHERE expires_at")) return { success: true, meta: { changes: 0 } };
     if (sql.startsWith("INSERT INTO osm_sessions")) {
       const [hash, subject, env, _created, expires] = params as [string, string, string, number, number];
@@ -172,14 +177,14 @@ class MemoryD1 implements D1Database {
     }
     if (sql.startsWith("DELETE FROM osm_development_write_operations")) {
       const [hash, time] = params as [string, number];
-      for (const [id, row] of this.operations) if (row.session_hash === hash && row.expires_at <= time) this.operations.delete(id);
+      for (const [id, row] of this.operations) if (row.owner_hash === hash && row.expires_at <= time) this.operations.delete(id);
       return { success: true, meta: { changes: 1 } };
     }
     if (sql.startsWith("INSERT OR IGNORE INTO osm_development_write_operations")) {
       const [hash, id, requestHash, _created, _updated, expires] = params as [string, string, string, number, number, number];
       const key = `${hash}:${id}`;
       if (this.operations.has(key)) return { success: true, meta: { changes: 0 } };
-      this.operations.set(key, { session_hash: hash, operation_id: id, request_hash: requestHash, state: "started", changeset_id: null, result_version: null, result_node_id: null, updated_at: _updated, expires_at: expires });
+      this.operations.set(key, { owner_hash: hash, operation_id: id, request_hash: requestHash, state: "started", changeset_id: null, result_version: null, result_node_id: null, updated_at: _updated, expires_at: expires });
       return { success: true, meta: { changes: 1 } };
     }
     if (sql.includes("SET state = 'uploading'")) {
@@ -221,10 +226,10 @@ async function setupDatabase(environmentName: "development" | "production" = "de
   return database;
 }
 
-function makeRequest(payload: unknown = requestBody): Request {
+function makeRequest(payload: unknown = requestBody, token = sessionToken): Request {
   return new Request("https://aedjaeger.example/api/osm/development/check-date", {
     method: "POST",
-    headers: { Cookie: `aedjaeger_osm_session=${sessionToken}`, "Content-Type": "application/json", Origin: "https://aedjaeger.example" },
+    headers: { Cookie: `aedjaeger_osm_session=${token}`, "Content-Type": "application/json", Origin: "https://aedjaeger.example" },
     body: JSON.stringify(payload),
   });
 }
@@ -368,6 +373,9 @@ describe("OSM development check-date writer", () => {
 
   it("reconciles a lost upload response without creating a duplicate edit", async () => {
     const DB = await setupDatabase();
+    await createOSMSession(DB, rotatedSessionToken, "test-subject", now, "development");
+    const key = await importOAuthEncryptionKey(keySecret);
+    await storeOSMDevelopmentToken(DB, rotatedSessionToken, "replacement-dev-bearer-token", now + 60 * 60 * 1_000, now, key);
     const { fetcher, calls } = makeFetch({ appliedAfterUploadFailure: true, changesetCloseConflict: "closed" });
     const workerEnvironment = { ...environment, DB };
     const dependencies = { now: () => now, fetch: fetcher };
@@ -375,12 +383,64 @@ describe("OSM development check-date writer", () => {
     expect(first.status).toBe(202);
     expect(await first.json()).toEqual({ status: "uncertain" });
 
-    const retry = await handleDevelopmentCheckDate(makeRequest(), workerEnvironment, dependencies);
+    const retry = await handleDevelopmentCheckDate(makeRequest(requestBody, rotatedSessionToken), workerEnvironment, dependencies);
     expect(retry.status).toBe(200);
     expect(await retry.json()).toMatchObject({ status: "complete", version: 4 });
     expect(calls.filter((call) => call.url.endsWith("/upload"))).toHaveLength(1);
     expect(calls.some((call) => call.url.endsWith("/changeset/77/download"))).toBe(true);
     expect(calls.some((call) => call.url.endsWith("/changeset/77") && call.method === "GET")).toBe(true);
+  });
+
+  it("reconciles an uncertain operation after the same OSM test account gets a new session", async () => {
+    const DB = await setupDatabase();
+    await createOSMSession(DB, rotatedSessionToken, "test-subject", now, "development");
+    const key = await importOAuthEncryptionKey(keySecret);
+    await storeOSMDevelopmentToken(DB, rotatedSessionToken, "replacement-dev-bearer-token", now + 60 * 60 * 1_000, now, key);
+    const { fetcher, calls } = makeFetch({ appliedAfterUploadFailure: true, changesetCloseConflict: "closed" });
+    const dependencies = { now: () => now, fetch: fetcher };
+    const first = await handleDevelopmentCheckDate(makeRequest(), { ...environment, DB }, dependencies);
+    expect(first.status).toBe(202);
+
+    const resumed = await handleDevelopmentCheckDate(makeRequest(requestBody, rotatedSessionToken), { ...environment, DB }, dependencies);
+    expect(resumed.status).toBe(200);
+    expect(await resumed.json()).toMatchObject({ status: "complete", version: 4 });
+    expect(calls.filter((call) => call.url.endsWith("/upload"))).toHaveLength(1);
+  });
+
+  it("replays a pre-account-binding operation hash after the same account gets a new session", async () => {
+    const DB = await setupDatabase();
+    await createOSMSession(DB, rotatedSessionToken, "test-subject", now, "development");
+    const key = await importOAuthEncryptionKey(keySecret);
+    await storeOSMDevelopmentToken(DB, rotatedSessionToken, "replacement-dev-bearer-token", now + 60 * 60 * 1_000, now, key);
+    const ownerHash = await hashOSMDevelopmentWriteOwner({ subject: "test-subject", environment: "development" }, keySecret);
+    const oldPayloadHash = await hashOSMDevelopmentWriteValue(JSON.stringify({ ...requestBody, recovery_identity: undefined }));
+    const { fetcher, calls } = makeFetch({ appliedAfterUploadFailure: true, changesetCloseConflict: "closed" });
+    const first = await handleDevelopmentCheckDate(makeRequest(), { ...environment, DB }, { now: () => now, fetch: fetcher });
+    expect(first.status).toBe(202);
+    const legacyOperation = DB.operations.get(`${ownerHash}:${operationId}`);
+    expect(legacyOperation).toBeDefined();
+    // This is the payload hash persisted by the release before recovery_identity existed.
+    legacyOperation!.request_hash = oldPayloadHash;
+
+    const retry = await handleDevelopmentCheckDate(makeRequest(requestBody, rotatedSessionToken), { ...environment, DB }, { now: () => now, fetch: fetcher });
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toMatchObject({ status: "complete", version: 4 });
+    expect(calls.filter((call) => call.url.endsWith("/upload"))).toHaveLength(1);
+  });
+
+  it("rejects a recovery identity from another OSM account before contacting OSM", async () => {
+    const DB = await setupDatabase();
+    const otherSession = "o".repeat(43);
+    await createOSMSession(DB, otherSession, "another-test-subject", now, "development");
+    const key = await importOAuthEncryptionKey(keySecret);
+    await storeOSMDevelopmentToken(DB, otherSession, "another-dev-bearer-token", now + 60 * 60 * 1_000, now, key);
+    const { fetcher, calls } = makeFetch();
+
+    const response = await handleDevelopmentCheckDate(makeRequest(requestBody, otherSession), { ...environment, DB }, { now: () => now, fetch: fetcher });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: "recovery_identity_mismatch" });
+    expect(calls).toHaveLength(0);
+    expect(DB.operations.size).toBe(0);
   });
 
   it("retires an unapplied timeout after closing and confirming an empty changeset", async () => {

@@ -39,9 +39,12 @@ const developmentWriteCopy: Record<Language, { action: string; createAction: str
 };
 const supportedLanguages = Object.keys(translations) as Language[];
 const minimumMapSearchZoom = 15;
-const PENDING_DEVELOPMENT_WRITE_KEY = "aedjaeger-pending-osm-development-write";
+const PENDING_DEVELOPMENT_WRITE_KEY_PREFIX = "aedjaeger-pending-osm-development-write:";
+const LEGACY_PENDING_DEVELOPMENT_WRITE_KEY = "aedjaeger-pending-osm-development-write";
 const PENDING_DEVELOPMENT_WRITE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1_000;
 let language = readLanguage();
+let pendingDevelopmentWriteOwnerHash: string | undefined;
+let developmentWriteOwnerHash: string | undefined;
 let pendingDevelopmentWrite = readPendingDevelopmentWrite();
 let state: FlowState = pendingDevelopmentWrite ? { kind: "development-write-recovery", request: pendingDevelopmentWrite, writeStatus: "uncertain" } : { kind: "ready" };
 type AccountState = "checking" | "not-configured" | "connection-error" | "login-error" | "signed-out" | "signed-in" | "logout-error";
@@ -110,31 +113,51 @@ function readLanguage(): Language {
   return supportedLanguages.includes(deviceLanguage) ? deviceLanguage : "de";
 }
 
-type StoredDevelopmentWrite = { version: 1; savedAt: number; expiresAt: number; request: DevelopmentWriteRequest };
+type StoredDevelopmentWrite = { version: 1; savedAt: number; expiresAt: number; ownerHash?: string; request: DevelopmentWriteRequest };
 
-function readPendingDevelopmentWrite(): DevelopmentWriteRequest | undefined {
-  const stored = readStoredValue(PENDING_DEVELOPMENT_WRITE_KEY);
-  if (stored) {
+function readPendingDevelopmentWrite(operationId?: string): DevelopmentWriteRequest | undefined {
+  const entries: Array<{ key: string; value: string }> = [];
+  try {
+    const storage = globalThis.localStorage;
+    if (operationId) {
+      const key = pendingDevelopmentWriteKey(operationId);
+      const value = storage.getItem(key);
+      if (value) entries.push({ key, value });
+    } else {
+      for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index);
+        if (key?.startsWith(PENDING_DEVELOPMENT_WRITE_KEY_PREFIX)) {
+          const value = storage.getItem(key);
+          if (value) entries.push({ key, value });
+        }
+      }
+    }
+  } catch { /* Browser storage is optional; legacy session storage remains a best-effort fallback. */ }
+  for (const entry of entries) {
     try {
-      const envelope: unknown = JSON.parse(stored);
+      const envelope: unknown = JSON.parse(entry.value);
       if (isRecord(envelope) && envelope.version === 1 && Number.isSafeInteger(envelope.savedAt)
         && Number.isSafeInteger(envelope.expiresAt) && (envelope.savedAt as number) <= Date.now() + 60_000
         && (envelope.expiresAt as number) > Date.now()
         && (envelope.expiresAt as number) - (envelope.savedAt as number) <= PENDING_DEVELOPMENT_WRITE_LIFETIME_MS) {
         const request = parseDevelopmentWriteRequest(JSON.stringify(envelope.request) ?? "");
-        if (request) return request;
+        const keyOperationId = entry.key.slice(PENDING_DEVELOPMENT_WRITE_KEY_PREFIX.length);
+        if (request && request.operationId === keyOperationId && (!operationId || request.operationId === operationId)) {
+          pendingDevelopmentWriteOwnerHash = typeof envelope.ownerHash === "string" && /^[a-f0-9]{64}$/u.test(envelope.ownerHash) ? envelope.ownerHash : undefined;
+          return request;
+        }
       }
     } catch {
       // Beschädigte und abgelaufene Entwürfe dürfen den Start nicht blockieren.
     }
-    removeStoredValue(PENDING_DEVELOPMENT_WRITE_KEY);
+    removeStoredValue(entry.key);
   }
 
   // Eine Version lang alte sessionStorage-Einträge übernehmen, damit ein offener Vorgang nach dem Update erhalten bleibt.
   let legacyRaw: string | null = null;
   let legacyCheck = false;
   try {
-    legacyRaw = sessionStorage.getItem(PENDING_DEVELOPMENT_WRITE_KEY);
+    legacyRaw = sessionStorage.getItem(LEGACY_PENDING_DEVELOPMENT_WRITE_KEY);
     if (!legacyRaw) {
       legacyRaw = sessionStorage.getItem("aedjaeger-pending-osm-development-check");
       legacyCheck = legacyRaw !== null;
@@ -206,28 +229,37 @@ function parseDevelopmentWriteRequest(raw: string, legacyCheck = false): Develop
   }
 }
 
-function persistPendingDevelopmentWrite(request: DevelopmentWriteRequest, updateRuntimeState = true): void {
+function pendingDevelopmentWriteKey(operationId: string): string { return `${PENDING_DEVELOPMENT_WRITE_KEY_PREFIX}${operationId}`; }
+
+function persistPendingDevelopmentWrite(request: DevelopmentWriteRequest, updateRuntimeState = true, ownerHash = developmentWriteOwnerHash): void {
   const savedAt = Date.now();
   const stored: StoredDevelopmentWrite = {
-    version: 1, savedAt, expiresAt: savedAt + PENDING_DEVELOPMENT_WRITE_LIFETIME_MS, request,
+    version: 1, savedAt, expiresAt: savedAt + PENDING_DEVELOPMENT_WRITE_LIFETIME_MS,
+    ...(ownerHash ? { ownerHash } : {}), request,
   };
-  if (!writeStoredValue(PENDING_DEVELOPMENT_WRITE_KEY, JSON.stringify(stored))) {
+  if (!writeStoredValue(pendingDevelopmentWriteKey(request.operationId), JSON.stringify(stored))) {
     throw new Error("Der offene Speichervorgang konnte nicht sicher gesichert werden.");
   }
-  if (updateRuntimeState) pendingDevelopmentWrite = request;
+  if (updateRuntimeState) {
+    pendingDevelopmentWrite = request;
+    pendingDevelopmentWriteOwnerHash = ownerHash;
+  }
 }
 
 function removeLegacyDevelopmentWrite(): void {
   try {
-    sessionStorage.removeItem(PENDING_DEVELOPMENT_WRITE_KEY);
+    sessionStorage.removeItem(LEGACY_PENDING_DEVELOPMENT_WRITE_KEY);
     sessionStorage.removeItem("aedjaeger-pending-osm-development-check");
   } catch { /* Die migrierte Kopie in localStorage bleibt maßgeblich. */ }
 }
 
-function clearPendingDevelopmentCheck(): void {
-  pendingDevelopmentWrite = undefined;
-  removeStoredValue(PENDING_DEVELOPMENT_WRITE_KEY);
+function clearPendingDevelopmentCheck(operationId: string): void {
+  removeStoredValue(pendingDevelopmentWriteKey(operationId));
   removeLegacyDevelopmentWrite();
+  if (pendingDevelopmentWrite?.operationId === operationId) {
+    pendingDevelopmentWriteOwnerHash = undefined;
+    pendingDevelopmentWrite = readPendingDevelopmentWrite();
+  }
 }
 
 function t(key: TranslationKey, values?: Record<string, number | string>): string {
@@ -896,7 +928,7 @@ function statusContent(): string {
           // Zweiter Weg direkt aus der Liste: Angaben ansehen und ergänzen (bzw. ändern), bevor das Datum bestätigt wird. Das
           // Datum folgt am Ende mit einem Speichern für alles. Nur für AEDs, die es auf dem Testserver gibt: Ein AED aus dem
           // Archiv des echten OSM existiert dort nicht und lässt sich nicht bearbeiten.
-          const detailsAction = developmentSession && developmentWriteAvailable && candidate.source !== "archive"
+          const detailsAction = developmentSession && developmentWriteAvailable && developmentWriteOwnerHash && candidate.source !== "archive"
             ? `<button class="button button-secondary" data-action="open-candidate-details" data-candidate-id="${escapeHtml(candidate.id)}">${tv(developmentCorrectionsAvailable ? "candidateDetailsChange" : "candidateDetailsView")}</button>`
             : "";
           const reviewAction = candidate.osmType !== "node"
@@ -955,16 +987,16 @@ function statusContent(): string {
         ? `<p>${tv("newPreviewCoordinates", { latitude, longitude })}</p><strong>${tv("newPreviewTags")}</strong><ul>${Object.entries(state.result.tags).map(([key, value]) => `<li><code>${escapeHtml(key)}=${escapeHtml(value)}</code></li>`).join("")}</ul><p>${state.result.confirmedDifferentCandidateIds.length > 0 ? tv("newPreviewReviewedCandidates") : tv("newPreviewCaution")}</p>`
         : `<p>${tv(state.result.reason === "position-not-confirmed" ? "newPositionRequired" : state.result.reason === "search-found-candidate" ? "newPreviewFoundCandidate" : "newPreviewSearchInvalid")}</p>`;
       const copy = developmentWriteCopy[language];
-      const canCreate = developmentSession && developmentWriteAvailable && state.result.kind === "ready";
+      const canCreate = developmentSession && developmentWriteAvailable && Boolean(developmentWriteOwnerHash) && state.result.kind === "ready";
       const statusCopy = state.writeStatus === "complete" ? copy.created : state.writeStatus ? copy[state.writeStatus] : "";
-      const blockedRecovery = state.writeStatus === "uncertain" && (!developmentSession || !developmentWriteAvailable)
-        ? `<p class="simulation-note" role="status">${tv(!developmentSession ? "recoveryNeedSignIn" : "recoveryWritesDisabled")}</p>` : "";
+      const blockedRecovery = state.writeStatus === "uncertain" && (isRecoveryOwnerMismatch() || !developmentSession || !developmentWriteAvailable)
+        ? `<p class="simulation-note" role="status">${tv(isRecoveryOwnerMismatch() ? "recoveryWrongAccount" : !developmentSession ? "recoveryNeedSignIn" : "recoveryWritesDisabled")}</p>` : "";
       const writeStatus = state.writeStatus ? `<p role="status" class="simulation-note ${state.writeStatus === "complete" ? "save-status-success" : ""}">${statusCopy}</p>${blockedRecovery}` : "";
       // Zweite von zwei Bestätigungen für eine Neuanlage: Ohne diesen Haken bleibt der
       // Speichern-Knopf gesperrt. Der Klick-Handler prüft den Haken zusätzlich noch einmal.
       const writeAction = canCreate && !state.writeStatus
         ? `<div class="position-confirmation"><label for="new-aed-absence-confirmed"><input id="new-aed-absence-confirmed" type="checkbox" /><span>${tv("newAbsenceConfirm")}</span></label></div><button class="button button-primary" data-action="create-development-node" disabled>${copy.createAction}</button>`
-        : state.writeStatus === "uncertain" && state.operationId
+        : state.writeStatus === "uncertain" && state.operationId && !isRecoveryOwnerMismatch()
           ? `<button class="button button-secondary" data-action="retry-development-write">${developmentSession && developmentWriteAvailable ? copy.retry : tv("recoveryContinue")}</button>`
           : "";
       // Der Hinweis „nur eine Vorschau“ steht nur, wenn es nichts zu speichern gibt. Mit Speichern-Knopf sagt dessen
@@ -989,7 +1021,7 @@ function statusContent(): string {
       const candidate = state.returnState.search.candidates.find((item) => item.id === candidateId);
       // Ein AED aus dem Archiv des echten OSM gibt es auf dem Testserver nicht. Dafür gibt es dort keinen Speichern-Knopf.
       const archiveOnly = developmentSession && developmentWriteAvailable && candidate?.source === "archive";
-      const canWrite = developmentSession && developmentWriteAvailable && candidate?.osmType === "node" && result.kind === "ready" && !archiveOnly;
+      const canWrite = developmentSession && developmentWriteAvailable && Boolean(developmentWriteOwnerHash) && candidate?.osmType === "node" && result.kind === "ready" && !archiveOnly;
       // Nur das Wesentliche: das neue Prüfdatum. Der bisherige Wert steht nur da, wenn es einen gibt.
       const content = result.kind === "ready"
         ? `<p><strong>${tv("previewNewDate", { date: formatCalendarDate(result.changes[0].after, language) })}</strong></p>${result.changes[0].before ? `<p>${tv("previewOldDate", { date: escapeHtml(formatCalendarDate(result.changes[0].before, language)) })}</p>` : ""}`
@@ -1013,8 +1045,8 @@ function statusContent(): string {
       const copy = developmentWriteCopy[language];
       const completeText = corrections.length > 0 ? copy.changesComplete : addedTags.length > 0 ? copy.detailsComplete : copy.complete;
       const statusText = state.writeStatus === "complete" ? completeText : state.writeStatus ? copy[state.writeStatus] : "";
-      const blockedRecovery = state.writeStatus === "uncertain" && (!developmentSession || !developmentWriteAvailable)
-        ? `<p class="simulation-note" role="status">${tv(!developmentSession ? "recoveryNeedSignIn" : "recoveryWritesDisabled")}</p>` : "";
+      const blockedRecovery = state.writeStatus === "uncertain" && (isRecoveryOwnerMismatch() || !developmentSession || !developmentWriteAvailable)
+        ? `<p class="simulation-note" role="status">${tv(isRecoveryOwnerMismatch() ? "recoveryWrongAccount" : !developmentSession ? "recoveryNeedSignIn" : "recoveryWritesDisabled")}</p>` : "";
       const writeStatus = state.writeStatus ? `<p role="status" class="simulation-note ${state.writeStatus === "complete" ? "save-status-success" : ""}">${statusText}</p>${blockedRecovery}` : "";
       // Der zweite Weg neben dem Ein-Tipp-Speichern: fehlende Angaben ergänzen. Nur beim einfachen Prüfdatum-Vorschlag.
       const addDetailsButton = canWrite && !state.writeStatus && !state.node
@@ -1028,7 +1060,7 @@ function statusContent(): string {
       const saveLabel = corrections.length > 0 ? copy.changesAction : addedTags.length > 0 ? copy.detailsAction : copy.action;
       const writeAction = canWrite && !state.writeStatus
         ? `${correctionConfirmation}<button class="button button-primary" data-action="save-development-check"${corrections.length > 0 ? " disabled" : ""}>${saveLabel}</button>`
-        : state.writeStatus === "uncertain" && state.operationId
+        : state.writeStatus === "uncertain" && state.operationId && !isRecoveryOwnerMismatch()
           ? `<button class="button button-secondary" data-action="retry-development-write">${developmentSession && developmentWriteAvailable ? copy.retry : tv("recoveryContinue")}</button>`
           : "";
       // Nur wenn nichts gespeichert werden kann und kein Vorgang läuft; sonst wäre „nur eine Vorschau“ nach einem Speichern falsch.
@@ -1070,12 +1102,14 @@ function statusContent(): string {
     }
     case "development-write-recovery": {
       const copy = developmentWriteCopy[language];
-      const blockedReason = state.writeStatus === "uncertain" && (!developmentSession || !developmentWriteAvailable)
-        ? tv(!developmentSession ? "recoveryNeedSignIn" : "recoveryWritesDisabled") : "";
+      const blockedReason = state.writeStatus === "uncertain" && (isRecoveryOwnerMismatch() || !developmentSession || !developmentWriteAvailable)
+        ? tv(isRecoveryOwnerMismatch() ? "recoveryWrongAccount" : !developmentSession ? "recoveryNeedSignIn" : "recoveryWritesDisabled") : "";
       // Bei einer Neuanlage steht die Position da; bei einem Prüfdatum genügt die Bezeichnung des AED.
       const targetLink = state.request.kind === "check-date" ? "" : `<p>${state.request.latitude.toFixed(5)}, ${state.request.longitude.toFixed(5)}</p>`;
       const recoveryMessage = state.request.kind === "create-node" && state.writeStatus === "complete" ? copy.created : copy[state.writeStatus];
-      const action = state.writeStatus === "uncertain" || state.writeStatus === "sending"
+      const action = state.writeStatus === "uncertain" && isRecoveryOwnerMismatch()
+        ? ""
+        : state.writeStatus === "uncertain" || state.writeStatus === "sending"
         ? `<button class="button button-primary" data-action="continue-recovery"${state.writeStatus === "sending" ? " disabled" : ""}>${state.writeStatus === "sending" ? copy.sending : developmentSession && developmentWriteAvailable ? copy.retry : tv("recoveryContinue")}</button>`
         : `<button class="button button-primary" data-action="retake">${state.writeStatus === "complete" ? tv("nextAed") : tv("recoveryContinue")}</button>`;
       const successful = state.writeStatus === "complete";
@@ -1367,8 +1401,13 @@ async function refreshAccountState(focusSelector?: string, afterLogout = false):
     developmentLoginAvailable = status.developmentLoginAvailable;
     developmentSession = status.developmentSession;
     developmentWriteAvailable = status.developmentWriteAvailable;
+    developmentWriteOwnerHash = status.developmentWriteOwnerHash;
     developmentCorrectionsAvailable = status.developmentCorrectionsAvailable;
     photoCheckAvailable = status.photoCheckAvailable;
+    if (pendingDevelopmentWrite && !pendingDevelopmentWriteOwnerHash && developmentSession && developmentWriteOwnerHash) {
+      // Upgrade a same-session pre-owner marker as soon as the Worker confirms the development account.
+      persistPendingDevelopmentWrite(pendingDevelopmentWrite, true, developmentWriteOwnerHash);
+    }
     const stillSignedInAfterLogout = afterLogout && status.authenticated;
     if (status.authenticated && !stillSignedInAfterLogout) void askForLocationOnceAfterSignIn();
     accountState = stillSignedInAfterLogout ? "logout-error" : status.authenticated ? "signed-in" : !productionLoginAvailable && !developmentLoginAvailable ? "not-configured" : failedOAuthReturn ? "login-error" : "signed-out";
@@ -1421,14 +1460,14 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       cache: "no-store",
       body: JSON.stringify(requestBody.kind === "check-date" ? {
-        operation_id: requestBody.operationId, confirmed: true, target: requestBody.target,
+        recovery_identity: developmentWriteOwnerHash, operation_id: requestBody.operationId, confirmed: true, target: requestBody.target,
         expected_version: requestBody.expectedVersion, expected_check_date: requestBody.expectedCheckDate, observed_on: requestBody.observedOn,
         // Nur mit ergänzten Angaben; ohne sie bleibt die Anfrage (und ihr Abgleichswert) wie früher.
         ...(requestBody.details && Object.keys(requestBody.details).length > 0 ? { details: requestBody.details } : {}),
         // Nur bei Korrekturen: die alten Werte und die ausdrückliche Bestätigung der Person.
         ...(requestBody.expectedBefore && requestBody.confirmedCorrections === true ? { expected_before: requestBody.expectedBefore, confirmed_corrections: true } : {}),
       } : {
-        operation_id: requestBody.operationId, confirmed: true, latitude: requestBody.latitude, longitude: requestBody.longitude,
+        recovery_identity: developmentWriteOwnerHash, operation_id: requestBody.operationId, confirmed: true, latitude: requestBody.latitude, longitude: requestBody.longitude,
         observed_on: requestBody.observedOn, details: requestBody.details,
         confirmed_different_candidate_ids: requestBody.confirmedDifferentCandidateIds,
       }),
@@ -1444,27 +1483,27 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
       // Meldung ("Schon aktuell. Es wurde nichts geändert.") und kein Ton: Ein Ton für nichts wäre eine Belohnung ohne Leistung.
       const unchanged = isCheckDate && payload.already_current === true;
       setDevelopmentWriteStatus(requestBody.operationId, unchanged ? "unchanged" : "complete");
-      clearPendingDevelopmentCheck();
+      clearPendingDevelopmentCheck(requestBody.operationId);
       // Nur bei einem vom Server bestätigten, echten Schreibvorgang erklingt der Ton. Er ändert nichts am Ablauf.
       if (!unchanged) successSound.play();
     } else if (response.status === 409) {
       setDevelopmentWriteStatus(requestBody.operationId, "conflict");
-      clearPendingDevelopmentCheck();
+      clearPendingDevelopmentCheck(requestBody.operationId);
     } else if (response.status === 404 && isRecord(payload) && payload.error === "target_not_found") {
       // Eindeutig: Den Knoten gibt es auf dem Testserver nicht (zum Beispiel ein AED aus dem Archiv des echten OSM).
       // Nichts wurde geschrieben; ein erneutes Prüfen würde dasselbe ergeben. Darum kein "unklar" und kein Prüfen-Knopf.
       setDevelopmentWriteStatus(requestBody.operationId, "notFound");
-      clearPendingDevelopmentCheck();
+      clearPendingDevelopmentCheck(requestBody.operationId);
     } else if (isRecord(payload) && payload.error === "write_failed") {
       // Der Server hat den Vorgang endgültig als gescheitert festgehalten. Wiederholen liefert dieselbe Antwort,
       // darum "fehlgeschlagen" (neuer Versuch von vorn) statt "unklar".
       setDevelopmentWriteStatus(requestBody.operationId, "failed");
-      clearPendingDevelopmentCheck();
+      clearPendingDevelopmentCheck(requestBody.operationId);
     } else if (response.status === 202 || response.status >= 500 || !response.ok && !isRecord(payload)) {
       setDevelopmentWriteStatus(requestBody.operationId, "uncertain");
     } else {
       setDevelopmentWriteStatus(requestBody.operationId, "failed");
-      clearPendingDevelopmentCheck();
+      clearPendingDevelopmentCheck(requestBody.operationId);
     }
   } catch {
     setDevelopmentWriteStatus(requestBody.operationId, "uncertain");
@@ -1491,6 +1530,11 @@ function isDevelopmentWriteResponse(value: unknown, expectedStatus: string): val
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isRecoveryOwnerMismatch(): boolean {
+  return Boolean(pendingDevelopmentWriteOwnerHash && developmentWriteOwnerHash
+    && pendingDevelopmentWriteOwnerHash !== developmentWriteOwnerHash);
 }
 
 function focusCurrentState(): void {
@@ -1613,7 +1657,9 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     if (hasUnresolvedSave(state)) return;
     clearTimers();
     releasePhoto();
-    state = { kind: "ready" };
+    state = pendingDevelopmentWrite
+      ? { kind: "development-write-recovery", request: pendingDevelopmentWrite, writeStatus: "uncertain" }
+      : { kind: "ready" };
   } else if (action === "confirm-sighting" && state.kind === "photo" && accountState === "signed-in") {
     // This is a human sighting confirmation only. It neither claims an automatic recognition
     // result nor permits an OSM edit; the separate OSM proposal and confirmation remain later.
@@ -1727,7 +1773,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     state = state.returnState;
   } else if (action === "create-development-node" && state.kind === "new-aed-preview") {
     successSound.prepare(); // Beim Tippen: Ton freischalten, er erklingt erst bei bestätigtem Erfolg.
-    if (!developmentSession || !developmentWriteAvailable || !crypto.randomUUID || state.result.kind !== "ready" || state.writeStatus) return;
+    if (!developmentSession || !developmentWriteAvailable || !developmentWriteOwnerHash || !crypto.randomUUID || state.result.kind !== "ready" || state.writeStatus) return;
     // Zweite Bestätigung: Ohne gesetzten Haken „vor Ort geprüft“ wird nichts gesendet,
     // auch wenn der Knopf (z. B. per Tastatur oder Skript) trotzdem ausgelöst wurde.
     if (app!.querySelector<HTMLInputElement>("#new-aed-absence-confirmed")?.checked !== true) return;
@@ -1758,7 +1804,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     // Zweiter Weg neben „noch vorhanden“: fehlende Angaben ergänzen. Erst wird der AED frisch aus OSM gelesen.
     const candidateId = state.candidateId;
     const candidate = state.returnState.search.candidates.find((item) => item.id === candidateId);
-    if (!developmentSession || !developmentWriteAvailable || candidate?.osmType !== "node") return;
+    if (!developmentSession || !developmentWriteAvailable || !developmentWriteOwnerHash || candidate?.osmType !== "node") return;
     resetDetailForm();
     state = { kind: "existing-aed-details", photoUrl: state.photoUrl, candidateId, candidateLabel: state.candidateLabel, returnState: state.returnState, load: { status: "loading" } };
     void loadExistingAedNode(candidateId);
@@ -1767,7 +1813,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     // Schreiben an, ein Knoten, der nicht nur im Archiv des echten OSM steht.
     const candidateId = source?.dataset.candidateId;
     const candidate = state.search.candidates.find((item) => item.id === candidateId);
-    if (!candidate || !candidateId || !developmentSession || !developmentWriteAvailable || candidate.osmType !== "node" || candidate.source === "archive") return;
+    if (!candidate || !candidateId || !developmentSession || !developmentWriteAvailable || !developmentWriteOwnerHash || candidate.osmType !== "node" || candidate.source === "archive") return;
     resetDetailForm();
     const candidateLabel = candidate.tags.name || candidate.tags["defibrillator:location"] || "";
     state = { kind: "existing-aed-details", photoUrl: state.photoUrl, candidateId, candidateLabel, returnState: state, load: { status: "loading" }, fromList: true };
@@ -1818,7 +1864,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     state = state.returnState;
   } else if (action === "save-development-check" && state.kind === "osm-preview") {
     successSound.prepare(); // Beim Tippen: Ton freischalten, er erklingt erst bei bestätigtem Erfolg.
-    if (!developmentSession || !developmentWriteAvailable || !crypto.randomUUID || state.writeStatus === "sending" || state.writeStatus === "complete" || state.writeStatus === "unchanged") return;
+    if (!developmentSession || !developmentWriteAvailable || !developmentWriteOwnerHash || !crypto.randomUUID || state.writeStatus === "sending" || state.writeStatus === "complete" || state.writeStatus === "unchanged") return;
     const preview = state;
     const candidateId = preview.candidateId;
     const candidate = preview.returnState.search.candidates.find((item) => item.id === candidateId);
@@ -1855,6 +1901,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
   } else if ((action === "continue-recovery" || action === "retry-development-write")
     && (state.kind === "development-write-recovery" || state.kind === "new-aed-preview" || state.kind === "osm-preview")) {
     if (state.writeStatus !== "uncertain") return;
+    if (isRecoveryOwnerMismatch()) return;
     if (!developmentSession) {
       if (accountState === "signed-in") {
         // The pending request belongs to the test-server session; a production login cannot reconcile it.
@@ -1866,13 +1913,13 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
       }
       return;
     }
-    if (!developmentWriteAvailable) {
+    if (!developmentWriteAvailable || !developmentWriteOwnerHash) {
       // Recheck the server switch so the same button works after an operator enables writes.
       await refreshAccountState();
       return;
     }
     successSound.prepare();
-    const request = state.kind === "development-write-recovery" ? state.request : readPendingDevelopmentWrite();
+    const request = state.kind === "development-write-recovery" ? state.request : readPendingDevelopmentWrite(state.operationId);
     if (!request) return;
     state = { ...state, writeStatus: "sending" };
     render(true);

@@ -5,6 +5,8 @@ export type OSMSessionStatus = {
   developmentLoginAvailable: boolean;
   developmentSession: boolean;
   developmentWriteAvailable: boolean;
+  /** HMAC-gebundene, nicht zurückrechenbare Kennung zum Fortsetzen von Testserver-Vorgängen nach OAuth-Rotation. */
+  developmentWriteOwnerHash?: string;
   /** true nur, wenn der Betreiber Korrekturen bestehender Detailwerte freigegeben hat (und das Schreiben auf dem Testserver an ist). */
   developmentCorrectionsAvailable: boolean;
   /** true nur, wenn die Fotoprüfung für dieses Konto aktiv ist (Betreiber-Konfiguration). */
@@ -47,6 +49,7 @@ function isSessionStatus(value: unknown): value is OSMSessionStatus {
   return typeof status.authenticated === "boolean" && typeof status.loginAvailable === "boolean" && typeof status.developmentLoginAvailable === "boolean"
     && typeof status.developmentSession === "boolean"
     && (status.developmentWriteAvailable === undefined || typeof status.developmentWriteAvailable === "boolean")
+    && (status.developmentWriteOwnerHash === undefined || typeof status.developmentWriteOwnerHash === "string" && /^[a-f0-9]{64}$/u.test(status.developmentWriteOwnerHash))
     && (status.developmentCorrectionsAvailable === undefined || typeof status.developmentCorrectionsAvailable === "boolean")
     && (status.photoCheckAvailable === undefined || typeof status.photoCheckAvailable === "boolean");
 }

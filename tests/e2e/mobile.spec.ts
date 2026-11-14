@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const languageCodes = ["de", "en", "pl", "ja", "fr", "es"];
+const testDevelopmentOwnerHash = "a".repeat(64);
 
 // Most workflow tests exercise the signed-in app; individual access-control tests override this.
 test.beforeEach(async ({ page }) => {
@@ -364,7 +365,7 @@ test("the development-session preview sends one explicitly confirmed, versioned 
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
     authenticated: true, loginAvailable: true, developmentLoginAvailable: true,
-    developmentSession: true, developmentWriteAvailable: true,
+    developmentSession: true, developmentWriteAvailable: true, developmentWriteOwnerHash: testDevelopmentOwnerHash,
   } }));
   await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
     status: "complete", coverage_radius_meters: 112,
@@ -407,7 +408,7 @@ test("an uncertain test-server response survives reload and retries with the sam
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
     authenticated: true, loginAvailable: true, developmentLoginAvailable: true,
-    developmentSession: true, developmentWriteAvailable: true,
+    developmentSession: true, developmentWriteAvailable: true, developmentWriteOwnerHash: testDevelopmentOwnerHash,
   } }));
   await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
     status: "complete", coverage_radius_meters: 112,
@@ -441,7 +442,7 @@ test("an uncertain test-server response survives reload and retries with the sam
 test("an expired saved write is discarded instead of opening a stale recovery screen", async ({ page }) => {
   await page.addInitScript(() => {
     const now = Date.now();
-    localStorage.setItem("aedjaeger-pending-osm-development-write", JSON.stringify({
+    localStorage.setItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", JSON.stringify({
       version: 1, savedAt: now - 8 * 24 * 60 * 60 * 1_000, expiresAt: now - 24 * 60 * 60 * 1_000,
       request: { kind: "check-date", operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", target: "node/42", candidateLabel: "Rathaus", expectedVersion: 3, expectedCheckDate: null, observedOn: "2026-11-14" },
     }));
@@ -449,12 +450,12 @@ test("an expired saved write is discarded instead of opening a stale recovery sc
   await page.goto("/");
   await expect(page.locator("#camera-input")).toBeAttached();
   await expect(page.locator(".capture-content")).not.toContainText("Ergebnis unklar");
-  expect(await page.evaluate(() => localStorage.getItem("aedjaeger-pending-osm-development-write"))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"))).toBeNull();
 });
 
 test("a pending write from the previous session-storage format is migrated", async ({ page }) => {
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
-    authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true,
+    authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true, developmentWriteOwnerHash: testDevelopmentOwnerHash,
   } }));
   await page.addInitScript(() => {
     sessionStorage.setItem("aedjaeger-pending-osm-development-write", JSON.stringify({
@@ -464,7 +465,7 @@ test("a pending write from the previous session-storage format is migrated", asy
   await page.goto("/");
   await expect(page.getByRole("button", { name: "Testserver: Status erneut prüfen" })).toBeVisible();
   const storage = await page.evaluate(() => ({
-    local: localStorage.getItem("aedjaeger-pending-osm-development-write"),
+    local: localStorage.getItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"),
     legacy: sessionStorage.getItem("aedjaeger-pending-osm-development-write"),
   }));
   expect(JSON.parse(storage.local ?? "{}")).toMatchObject({ version: 1, request: { operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab" } });
@@ -482,7 +483,7 @@ test("a pending write stays visible while signed out and continue starts test-se
   });
   await page.addInitScript(() => {
     const now = Date.now();
-    localStorage.setItem("aedjaeger-pending-osm-development-write", JSON.stringify({
+    localStorage.setItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", JSON.stringify({
       version: 1, savedAt: now, expiresAt: now + 7 * 24 * 60 * 60 * 1_000,
       request: { kind: "check-date", operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", target: "node/42", candidateLabel: "Rathaus", expectedVersion: 3, expectedCheckDate: null, observedOn: "2026-11-14" },
     }));
@@ -492,13 +493,13 @@ test("a pending write stays visible while signed out and continue starts test-se
   await page.getByRole("button", { name: "Weiter" }).click();
   await expect(page).toHaveURL(/\/api\/auth\/osm\/development\/start$/u);
   expect(testServerLoginStarted).toBe(true);
-  expect(await page.evaluate(() => localStorage.getItem("aedjaeger-pending-osm-development-write"))).not.toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"))).not.toBeNull();
 });
 
 test("a restored pending write uses its saved operation ID and ends with a clear success action", async ({ page }) => {
   const operationIds: unknown[] = [];
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
-    authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true,
+    authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true, developmentWriteOwnerHash: testDevelopmentOwnerHash,
   } }));
   await page.route("**/api/osm/development/check-date", async (route) => {
     operationIds.push((route.request().postDataJSON() as Record<string, unknown>).operation_id);
@@ -506,8 +507,8 @@ test("a restored pending write uses its saved operation ID and ends with a clear
   });
   await page.addInitScript(() => {
     const now = Date.now();
-    localStorage.setItem("aedjaeger-pending-osm-development-write", JSON.stringify({
-      version: 1, savedAt: now, expiresAt: now + 7 * 24 * 60 * 60 * 1_000,
+    localStorage.setItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", JSON.stringify({
+      version: 1, savedAt: now, expiresAt: now + 7 * 24 * 60 * 60 * 1_000, ownerHash: "a".repeat(64),
       request: { kind: "check-date", operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", target: "node/42", candidateLabel: "Rathaus", expectedVersion: 3, expectedCheckDate: null, observedOn: "2026-11-14" },
     }));
   });
@@ -517,7 +518,47 @@ test("a restored pending write uses its saved operation ID and ends with a clear
   await expect(page.locator(".capture-content .status-good")).toBeVisible();
   await expect(page.getByRole("button", { name: "Nächsten AED fotografieren" })).toBeVisible();
   expect(operationIds).toEqual(["d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"]);
-  expect(await page.evaluate(() => localStorage.getItem("aedjaeger-pending-osm-development-write"))).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"))).toBeNull();
+});
+
+test("a restored write is not submitted under a different OSM test-server account", async ({ page }) => {
+  let writes = 0;
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
+    authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true,
+    developmentWriteAvailable: true, developmentWriteOwnerHash: "b".repeat(64),
+  } }));
+  await page.route("**/api/osm/development/check-date", async (route) => {
+    writes += 1;
+    await route.fulfill({ json: { status: "complete", version: 10 } });
+  });
+  await page.addInitScript(() => {
+    const now = Date.now();
+    localStorage.setItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", JSON.stringify({
+      version: 1, savedAt: now, expiresAt: now + 7 * 24 * 60 * 60 * 1_000, ownerHash: "a".repeat(64),
+      request: { kind: "check-date", operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", target: "node/42", candidateLabel: "Rathaus", expectedVersion: 3, expectedCheckDate: null, observedOn: "2026-11-14" },
+    }));
+  });
+  await page.goto("/");
+  await expect(page.locator(".capture-content")).toContainText("anderen OSM-Testserver-Konto");
+  await expect(page.locator('[data-action="continue-recovery"]')).toHaveCount(0);
+  expect(writes).toBe(0);
+  expect(await page.evaluate(() => localStorage.getItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"))).not.toBeNull();
+});
+
+test("separate tabs keep their own pending write when one tab completes", async ({ page, context }) => {
+  const otherTab = await context.newPage();
+  const first = await openExistingAedPreview(page, context, { nodes: [freshNode({})] });
+  const second = await openExistingAedPreview(otherTab, context, { nodes: [freshNode({})], writeStatus: 202, writeBody: { status: "uncertain" } });
+
+  await otherTab.getByRole("button", { name: "Testserver: Prüfdatum speichern" }).click();
+  await expect(otherTab.getByRole("status")).toContainText("Ergebnis unklar");
+  const secondOperationId = second.writes[0].operation_id as string;
+  await page.getByRole("button", { name: "Testserver: Prüfdatum speichern" }).click();
+  await expect(page.getByRole("status")).toContainText("Vor-Ort-Prüfung gespeichert");
+
+  expect(first.writes[0].operation_id).not.toBe(secondOperationId);
+  expect(await page.evaluate((operationId) => localStorage.getItem(`aedjaeger-pending-osm-development-write:${operationId}`), secondOperationId)).not.toBeNull();
+  expect(await page.evaluate((operationId) => localStorage.getItem(`aedjaeger-pending-osm-development-write:${operationId}`), first.writes[0].operation_id)).toBeNull();
 });
 
 test("the information dialog and sound choice survive a confirmed save arriving in the background", async ({ page, context }) => {
@@ -543,7 +584,7 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   await context.grantPermissions(["geolocation"]);
   await page.route("https://tile.openstreetmap.org/**", (route) => route.fulfill({ status: 200, contentType: "image/svg+xml", body: "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"256\"><rect width=\"256\" height=\"256\" fill=\"#e5ece3\"/></svg>" }));
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true, developmentWriteOwnerHash: testDevelopmentOwnerHash } }));
   let searchRequests = 0;
   const nonSearchOsmRequests: string[] = [];
   page.on("request", (request) => {
@@ -663,7 +704,7 @@ test("a reviewed nearby AED can be rejected before preparing a separate new entr
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   await page.route("https://tile.openstreetmap.org/**", (route) => route.fulfill({ status: 200, contentType: "image/svg+xml", body: "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"256\"><rect width=\"256\" height=\"256\" fill=\"#e5ece3\"/></svg>" }));
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true, developmentWriteOwnerHash: testDevelopmentOwnerHash } }));
   await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
     status: "complete", coverage_radius_meters: 112,
     candidates: [{ id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Rathaus" } }],
@@ -2095,7 +2136,7 @@ async function openCheckDateSaveButton(page: import("@playwright/test").Page, co
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
-    authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true,
+    authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true, developmentWriteOwnerHash: testDevelopmentOwnerHash,
   } }));
   await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
     status: "complete", coverage_radius_meters: 112,
@@ -2378,7 +2419,8 @@ async function openCandidateList(page: import("@playwright/test").Page, context:
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: options.accuracy ?? 12 });
   await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
-    authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: options.development ?? false, developmentWriteAvailable: options.development ?? false,
+    authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: options.development ?? false,
+    developmentWriteAvailable: options.development ?? false, ...(options.development ? { developmentWriteOwnerHash: testDevelopmentOwnerHash } : {}),
   } }));
   let searches = 0;
   await page.route("**/api/osm/candidates/search", (route) => { searches += 1; return route.fulfill({ json: {
@@ -2508,7 +2550,7 @@ async function openNewAedDetailForm(page: import("@playwright/test").Page, conte
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   await page.route("https://tile.openstreetmap.org/**", (route) => route.fulfill({ status: 200, contentType: "image/svg+xml", body: "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"256\"><rect width=\"256\" height=\"256\" fill=\"#e5ece3\"/></svg>" }));
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true, developmentWriteOwnerHash: testDevelopmentOwnerHash } }));
   await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: { status: "complete", coverage_radius_meters: 112, candidates: [] } }));
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
@@ -2673,7 +2715,7 @@ async function openExistingAedPreview(
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   // Mit `corrections` meldet der Server-Ersatz zusätzlich, dass der Betreiber Korrekturen freigegeben hat.
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: options.writeAvailable ?? true, ...(options.corrections ? { developmentCorrectionsAvailable: true } : {}) } }));
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: options.writeAvailable ?? true, developmentWriteOwnerHash: testDevelopmentOwnerHash, ...(options.corrections ? { developmentCorrectionsAvailable: true } : {}) } }));
   await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
     status: "complete", coverage_radius_meters: 112,
     // Das Archiv kennt nur ältere, unvollständige Tags; der frische Stand kommt über die eigene Leseroute.

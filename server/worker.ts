@@ -6,6 +6,7 @@ import type { D1Database } from "./storage/d1";
 import { consumeOSMOAuthTransaction, storeOSMOAuthTransaction } from "./storage/osmOAuthTransactions";
 import { deleteOSMSession, findOSMSession, rotateOSMSession, OSM_SESSION_LIFETIME_MS } from "./storage/osmSessions";
 import { storeOSMDevelopmentToken } from "./storage/osmDevelopmentTokens";
+import { hashOSMDevelopmentWriteOwner } from "./storage/osmDevelopmentWriteOperations";
 import { handleStaticCandidateSearch } from "./osm/staticCandidateSearchRoute";
 import { handleDevelopmentCheckDate } from "./osm/developmentWriteRoute";
 import { handleDevelopmentCreateNode } from "./osm/developmentCreateNodeRoute";
@@ -173,6 +174,7 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment, 
       exchanged.identity.subject,
       now,
       exchanged.environment,
+      configuration.encryptionKey,
     );
     if (exchanged.environment === "development") {
       stage = "store_development_token";
@@ -180,7 +182,7 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment, 
         const tokenExpiry = Math.min(exchanged.identity.expiresAt, now + OSM_SESSION_LIFETIME_MS);
         await storeOSMDevelopmentToken(environment.DB, sessionToken, exchanged.identity.accessToken, tokenExpiry, now, key);
       } catch (error) {
-        await deleteOSMSession(environment.DB, sessionToken);
+        await deleteOSMSession(environment.DB, sessionToken, environment.OSM_OAUTH_ENCRYPTION_KEY);
         throw error;
       }
     }
@@ -218,7 +220,10 @@ async function getSession(request: Request, environment: WorkerEnvironment): Pro
     // „photoCheckAvailable“ erscheint nur, wenn die Fotoprüfung für dieses Konto aktiv ist.
     // Fehlt das Feld, gilt für die App „aus“ – so ändert sich für alle anderen nichts.
     const photoCheckAvailable = session !== null && isPhotoCheckAvailable(environment, session);
-    return jsonResponse({ authenticated: session !== null, loginAvailable, developmentLoginAvailable, developmentSession: session?.environment === "development", developmentWriteAvailable, ...(correctionsAvailable ? { developmentCorrectionsAvailable: true } : {}), ...(photoCheckAvailable ? { photoCheckAvailable: true } : {}) }, 200);
+    const developmentWriteOwnerHash = session?.environment === "development" && environment.OSM_OAUTH_ENCRYPTION_KEY
+      ? await hashOSMDevelopmentWriteOwner(session, environment.OSM_OAUTH_ENCRYPTION_KEY)
+      : undefined;
+    return jsonResponse({ authenticated: session !== null, loginAvailable, developmentLoginAvailable, developmentSession: session?.environment === "development", developmentWriteAvailable, ...(developmentWriteOwnerHash ? { developmentWriteOwnerHash } : {}), ...(correctionsAvailable ? { developmentCorrectionsAvailable: true } : {}), ...(photoCheckAvailable ? { photoCheckAvailable: true } : {}) }, 200);
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
@@ -233,7 +238,7 @@ async function logout(request: Request, environment: WorkerEnvironment): Promise
   if (token && !environment.DB) return jsonResponse({ error: "logout_unavailable" }, 503);
   if (token && environment.DB) {
     try {
-      await deleteOSMSession(environment.DB, token);
+      await deleteOSMSession(environment.DB, token, environment.OSM_OAUTH_ENCRYPTION_KEY);
     } catch {
       return jsonResponse({ error: "logout_unavailable" }, 503);
     }
