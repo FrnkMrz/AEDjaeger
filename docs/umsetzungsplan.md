@@ -12,6 +12,8 @@ Die GitHub-Actions-Workflowdatei `.github/workflows/ci.yml` prüft PRs und Pushe
 
 Der Merge von PR #49 löste den automatischen Deploy aus; GitHub-Actions-Lauf [#234](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42672639423) war erfolgreich. Der jüngste Deploy stammt vom Merge von PR #54 (CI [#248](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42853298091), 10.11.2026) und war ebenfalls erfolgreich. Die Umgebung benötigt das Secret `CLOUDFLARE_API_TOKEN` und die Variable `CLOUDFLARE_ACCOUNT_ID`. Sie sollen ausschließlich in den GitHub-Environment-Einstellungen gespeichert werden. Eine zusätzliche Deploy-Freigabe hängt von den aktuellen Repository-Environment-Regeln ab; der Merge-Deploy #234 ist bereits erfolgreich durchgelaufen.
 
+Vor dem Worker-Deploy liest CI den D1-Migrationsstand per `SELECT` und stoppt bei Abweichungen. Migrationen werden nach Prüfung manuell angewendet; sie laufen nicht automatisch beim Deploy. Das Token im GitHub-Environment `production` benötigt dafür D1-Lesezugriff. Der Live-Check der AED-Datenquelle kann manuell und täglich um 06:17 UTC laufen; er ist lesend und verwendet keine Secrets.
+
 ## Reihenfolge und aktueller Stand
 
 | Schritt | Ergebnis | Status |
