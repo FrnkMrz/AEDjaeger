@@ -814,11 +814,12 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   await expect(page.locator(".capture-content")).not.toContainText("Nur eine Vorschau");
   expect(createRequest).toMatchObject({
     confirmed: true,
-    latitude: 52.52,
     observed_on: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/u),
     // Ohne Angaben im Formular geht ein leeres Detail-Objekt an den Server (Etappe P2/P3).
     details: {},
   });
+  // WebKit rundet die Mercator-Projektion minimal anders als Chromium.
+  expect(Math.abs(Number(createRequest?.latitude) - 52.52)).toBeLessThan(0.00001);
   expect(Math.abs(Number(createRequest?.longitude) - 13.40476)).toBeLessThan(0.00001);
   expect(createRequest?.operation_id).toMatch(/^[0-9a-f-]{36}$/iu);
 });
