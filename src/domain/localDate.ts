@@ -13,6 +13,17 @@ export function isCalendarDate(value: unknown): value is string {
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
+/** Format a date-only OSM value without shifting its day through the device timezone. */
+export function formatCalendarDate(value: string, language: string): string {
+  if (!isCalendarDate(value)) return value;
+  try {
+    return new Intl.DateTimeFormat(language, { dateStyle: "long", timeZone: "UTC" }).format(new Date(`${value}T00:00:00.000Z`));
+  } catch {
+    // Keep the source value visible if a browser does not support this locale.
+    return value;
+  }
+}
+
 /** Observation dates may be earlier than today, but cannot be in the device's local future. */
 export function isValidObservedDate(value: string, now: Date = new Date()): boolean {
   return isCalendarDate(value) && value <= localCalendarDate(now);
