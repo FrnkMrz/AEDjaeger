@@ -16,7 +16,7 @@ import { assessCandidateSearch } from "./domain/assessCandidateSearch";
 import { createPositionPicker, zoomToFitMarkers, type Coordinate, type MapMarker } from "./map/positionPicker";
 import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
 import {
-  ACCESS_VALUES, DETAIL_LIMITS, EMPTY_DETAIL_FORM, INDOOR_VALUES, buildDetailTags, formFromExistingTags, isDetailKey, planDetailChanges, validateDetailTags,
+  ACCESS_VALUES, DETAIL_LIMITS, EMPTY_DETAIL_FORM, INDOOR_VALUES, buildDetailTags, formFromExistingTags, isDetailKey, levelLeftBehindByIndoorChange, planDetailChanges, validateDetailTags,
   type AedDetailForm, type DetailCorrection, type DetailKey, type DetailPlanResult, type DetailTags,
 } from "./contracts/aedDetails";
 import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } from "./osm/candidateSearch";
@@ -624,7 +624,17 @@ function updateDetailFooter(): void {
   }
   const moreCount = app!.querySelector<HTMLElement>("#detail-more-count");
   if (moreCount) moreCount.textContent = detailMoreCountText();
-  showDetailChanges(built.ok ? built.corrections : []);
+  showDetailChanges(built.ok ? built.corrections : [], built.ok ? staleLevelNote(built.tags) : "");
+}
+
+/**
+ * Hinweis, wenn eine Korrektur auf „draußen“ eine alte Ebene in OSM zurücklässt (siehe levelLeftBehindByIndoorChange).
+ * Leer, wenn es nichts zu sagen gibt oder kein bestehender AED bearbeitet wird.
+ */
+function staleLevelNote(tags: DetailTags): string {
+  if (detailExistingTags === undefined) return "";
+  const level = levelLeftBehindByIndoorChange(detailExistingTags, tags);
+  return level === null ? "" : tv("detailLevelStays", { level });
 }
 
 /** Welche Frage dazugehört, wenn ein Abschnitt mehrere Schlüssel enthält (damit „Vorher: …“ eindeutig bleibt). */
@@ -636,8 +646,10 @@ const DETAIL_KEY_LABEL: Partial<Record<DetailKey, FlowMessageKey>> = {
  * Zeigt bei jedem Abschnitt mit einer Korrektur den alten Wert („Vorher: …“) und hebt den Abschnitt hervor.
  * So sieht die Person schon im Formular, was sie ändert, nicht erst in der Vorschau.
  */
-function showDetailChanges(corrections: readonly DetailCorrection[]): void {
+function showDetailChanges(corrections: readonly DetailCorrection[], levelNote = ""): void {
   const linesByGroup = new Map<string, string[]>();
+  // Der Hinweis zur stehenbleibenden Ebene gehört zur Gruppe „drinnen/draußen“.
+  if (levelNote !== "") linesByGroup.set("indoor", [levelNote]);
   for (const correction of corrections) {
     const group = DETAIL_GROUP_OF_KEY[correction.key];
     const label = group === "indoor" || group === "more" ? DETAIL_KEY_LABEL[correction.key] : undefined;
@@ -936,6 +948,9 @@ function statusContent(): string {
       const changedList = corrections.length > 0
         ? `<p><strong>${tv("detailsChangedTitle")}</strong></p><ul>${corrections.map((correction) => `<li><code>${escapeHtml(correction.key)}=<span class="detail-old">${escapeHtml(correction.before)}</span> → ${escapeHtml(correction.after)}</code></li>`).join("")}</ul>`
         : "";
+      // Bleibt nach „draußen“ eine alte Ebene stehen, sagt die Vorschau es offen (AEDjaeger löscht nie etwas).
+      const levelLeft = state.details && state.node ? levelLeftBehindByIndoorChange(state.node.tags, state.details) : null;
+      const levelLeftNote = levelLeft === null ? "" : `<p class="detail-hint">${escapeHtml(tv("detailLevelStays", { level: levelLeft }))}</p>`;
       const copy = developmentWriteCopy[language];
       const completeText = corrections.length > 0 ? copy.changesComplete : addedTags.length > 0 ? copy.detailsComplete : copy.complete;
       const statusText = state.writeStatus === "complete" ? completeText : state.writeStatus ? copy[state.writeStatus] : "";
@@ -969,7 +984,7 @@ function statusContent(): string {
         ? `<button class="button button-quiet" data-action="back-to-existing-details">${tv("detailsBackToForm")}</button>`
         : hasOtherCandidates ? `<button class="button button-quiet" data-action="back-to-candidates">${tv("previewBack")}</button>` : "";
       const navigation = recoverableWrite ? "" : `${backButton}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.candidateLabel))}</strong></p>${content}${changedList}${addedList}${noWriteNotice}${writeStatus}</div></div>${writeAction}${addDetailsButton}${navigation}`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.candidateLabel))}</strong></p>${content}${changedList}${addedList}${levelLeftNote}${noWriteNotice}${writeStatus}</div></div>${writeAction}${addDetailsButton}${navigation}`;
     }
     case "existing-aed-details": {
       const label = escapeHtml(displayCandidateLabel(state.candidateLabel));

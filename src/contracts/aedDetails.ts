@@ -437,3 +437,23 @@ export function formFromExistingTags(existing: Readonly<Record<string, string>>)
   }
   return { form, locked };
 }
+
+/**
+ * Erkennt den Fall „Die Person stellt `indoor` auf „draußen“, aber in OSM steht noch eine Ebene (`level`)“.
+ *
+ * Warum ein eigener Hinweis: AEDjaeger löscht nie ein Tag. Nach so einer Korrektur bliebe `level` also
+ * stehen und passte nicht mehr zu „draußen“. Die App sagt das ehrlich vor dem Speichern, statt es still zu lassen.
+ *
+ * @param existing  Die frisch gelesenen OSM-Tags des Objekts.
+ * @param tags      Die Tags, die geschrieben würden (Ergänzungen und Korrekturen zusammen).
+ * @returns         Der alte Ebenenwert, der stehen bleibt, sonst `null`.
+ */
+export function levelLeftBehindByIndoorChange(
+  existing: Readonly<Record<string, string>>,
+  tags: Readonly<DetailTags>,
+): string | null {
+  if (tags.indoor !== "no") return null; // nur wenn jetzt „draußen“ geschrieben wird
+  if (tags.level !== undefined) return null; // eine neue Ebene würde ohnehin gezeigt
+  const old = Object.prototype.hasOwnProperty.call(existing, "level") ? existing.level.trim() : "";
+  return old === "" ? null : old;
+}

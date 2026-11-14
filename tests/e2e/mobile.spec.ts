@@ -2804,6 +2804,27 @@ test("with corrections allowed the form is prefilled, shows the old value of eve
   });
 });
 
+test("changing indoor to outdoor says openly that the old level stays in OSM", async ({ page, context }) => {
+  const { writes } = await openExistingAedPreview(page, context, { nodes: [freshNode(knownNode)], corrections: true });
+  await correctButton(page).click();
+  // Vorher kein Hinweis: Der AED bleibt drinnen.
+  await expect(page.locator("#detail-group-indoor")).not.toContainText("bleibt in OSM stehen");
+  await page.getByText("Draußen", { exact: true }).click();
+  // Im Formular: Die Ebene verschwindet aus der Eingabe, der Hinweis steht bei der Gruppe.
+  await expect(page.locator("#detail-group-indoor")).toContainText("Die Ebene „1“ bleibt in OSM stehen");
+  await expect(page.locator("#detail-group-indoor")).toContainText("löscht nichts");
+  await page.locator("#detail-continue").click();
+  // In der Vorschau steht derselbe Hinweis, und geschrieben wird nur indoor, nie ein Löschen.
+  const preview = page.locator(".capture-content");
+  await expect(preview).toContainText("indoor=yes → no");
+  await expect(preview).toContainText("Die Ebene „1“ bleibt in OSM stehen");
+  await page.locator("#correction-confirmed").check();
+  await page.getByRole("button", { name: "Testserver: Änderungen speichern" }).click();
+  await expect(page.getByRole("status")).toContainText("Prüfdatum und Änderungen gespeichert");
+  expect(writes[0]).toMatchObject({ details: { indoor: "no" }, expected_before: { indoor: "yes" } });
+  expect((writes[0] as { details: Record<string, string> }).details).not.toHaveProperty("level");
+});
+
 test("an untouched prefilled form changes nothing and sends no details", async ({ page, context }) => {
   const { writes } = await openExistingAedPreview(page, context, { nodes: [freshNode(knownNode)], corrections: true });
   await correctButton(page).click();

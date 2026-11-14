@@ -1,6 +1,6 @@
 # Entscheidungen und nächste Schritte
 
-Stand: **10.11.2026**. Der aktuelle nächste Schritt ist ein echter, lesender Handytest des nach PR #49 deployten AED-Abgleichs. Diese Liste ersetzt ältere Statusangaben in diesem Dokument; frühere Einträge bleiben nur als historische Begründung erhalten.
+Stand: **14.11.2026**. Gemergt sind der Detailweg (P0 bis P5, PR #77), die Detail-Angaben aus der Trefferliste (PR #80) und die Entfernung der Demo „Vorschau testen“ (PR #81). **Nächste Schritte beim Projektinhaber:** (1) Schreibtest auf dem OSM-Testserver nach Abschnitt D der [Pilot-Abnahme](pilot-abnahme.md) (Schalter `OSM_DEV_WRITES_ENABLED`, für Korrekturen zusätzlich `OSM_DETAIL_CORRECTIONS_ENABLED`), (2) Handytest des Formulars (P6), (3) die unten markierten Entscheidungen. Diese Liste ersetzt ältere Statusangaben in diesem Dokument; frühere Einträge bleiben nur als historische Begründung erhalten.
 
 ## Rückmeldungen vom 13.11.2026 (iPhone)
 
@@ -20,7 +20,7 @@ Bestätigt vom Projektinhaber: Die Versionsnummer im Info-Dialog stimmt mit `/ve
 - **Ergänzen bestehender AEDs (P4):** Nur mit simulierten OSM-Antworten und im Browser mit Playwright geprüft. Ein echter Test gegen den OSM-Testserver mit `OSM_DEV_WRITES_ENABLED=true` steht aus (gesonderte Freigabe nötig, siehe [Abnahme](pilot-abnahme.md)). Offen ist außerdem: Soll ein bestehender AED ohne jede ergänzbare Lücke den Knopf „Fehlende Angaben ergänzen“ trotzdem zeigen (heute ja, mit dem Hinweis „schon alles eingetragen“)?
 - **Zeiten-Eingabe:** Zwei feste Vorlagen („Mo-Fr 08:00-18:00“, „Mo-Sa 07:00-20:00“). Offen ist, ob mehr oder gar keine Vorlagen sinnvoll sind.
 - **Schnellwahl beim Standort:** Fünf Wörter (Eingang, Foyer, Außenwand, Empfang, Treppenhaus). Offen ist, ob das die richtigen sind.
-- **Korrekturen (P5):** Umgesetzt hinter dem Betreiber-Schalter `OSM_DETAIL_CORRECTIONS_ENABLED` (Standard aus). Der Schalter gilt für alle angemeldeten Testserver-Konten; eine Beschränkung auf zugelassene Konten gibt es nicht. Offen: Ob eine solche Beschränkung nötig ist, und die Frage, ob nach einer Änderung von „drinnen“ auf „draußen“ das stehen gebliebene `level` im Formular wenigstens gemeldet werden soll. Ein echter Test gegen den OSM-Testserver steht aus (siehe [Abnahme](pilot-abnahme.md), Abschnitt D).
+- **Korrekturen (P5):** Umgesetzt hinter dem Betreiber-Schalter `OSM_DETAIL_CORRECTIONS_ENABLED` (Standard aus). Der Schalter gilt für alle angemeldeten Testserver-Konten; eine Beschränkung auf zugelassene Konten gibt es nicht. Offen: Ob eine solche Beschränkung nötig ist. Das nach „draußen“ stehen gebliebene `level` meldet die App seit dem 14.11.2026 im Formular und in der Vorschau. Ein echter Test gegen den OSM-Testserver steht aus (siehe [Abnahme](pilot-abnahme.md), Abschnitt D).
 - **`opening_hours`:** Version 1 prüft nur Länge und Zeichen. Ob später eine Syntaxprüfung (eigene Bibliothek) lohnt, braucht eine eigene Entscheidung.
 - **Telefon und Betreiber:** Es gilt „nur von Gerät oder Schild“. Offen ist, ob die App Nummern zusätzlich automatisch auf Privatnummern prüfen soll (eher nein).
 - **Texte:** Die Mockup-Texte sind nur Deutsch. Die fünf weiteren Sprachen entstehen in P2 und sind nicht muttersprachlich geprüft.
