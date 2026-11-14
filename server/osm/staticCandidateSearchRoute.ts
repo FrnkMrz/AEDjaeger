@@ -5,16 +5,15 @@ import { PMTiles, type RangeResponse, type Source } from "pmtiles";
 import { fetchWithoutRedirects } from "../http/fetchWithoutRedirects";
 import { importOAuthEncryptionKey } from "../auth/osmOAuth";
 import { findOSMSession } from "../storage/osmSessions";
-import { findOSMDevelopmentToken } from "../storage/osmDevelopmentTokens";
+import { findOSMOAuthToken } from "../storage/osmOAuthTokens";
 import type { D1Database } from "../storage/d1";
 import { reserveSearchSlot } from "../storage/searchCooldown";
 import type { NearbyAedCandidate, SearchCoordinate } from "../../src/osm/candidateTypes";
 import { requestOSMDevelopmentApi } from "./developmentApi";
 import { distanceMeters } from "../../src/domain/candidateMatch";
-import { BodyTooLargeError, isCrossOrigin, isRecord, jsonResponse, readCookie, readLimitedBody } from "../http/requestGuards";
+import { BodyTooLargeError, isCrossOrigin, isRecord, jsonResponse, readOSMSessionCookie, readLimitedBody } from "../http/requestGuards";
 import { sha256Hex } from "../crypto/hash";
 
-const SESSION_COOKIE = "aedjaeger_osm_session";
 const DATA_ORIGIN = "https://pipeline.openfiremap.org/";
 const PMTILES_PATH = "openfiremap.pmtiles";
 const AED_LAYER = "defibrillators";
@@ -91,7 +90,7 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
   if (request.headers.get("Content-Type")?.split(";", 1)[0]?.trim().toLowerCase() !== "application/json") {
     return jsonResponse({ error: "unsupported_media_type" }, 415);
   }
-  const sessionToken = readCookie(request.headers.get("Cookie"), SESSION_COOKIE);
+  const sessionToken = readOSMSessionCookie(request.headers.get("Cookie"));
   if (!sessionToken) return jsonResponse({ error: "authentication_required" }, 401);
   let session: { subject: string; environment: "production" | "development" } | null;
   try { session = await findOSMSession(env.DB, sessionToken, (deps.now ?? Date.now)()); }
@@ -166,7 +165,7 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
     if (candidates.size === 0) {
       if (session.environment !== "development" || !env.OSM_OAUTH_ENCRYPTION_KEY) throw new CoverageUnavailableError();
       const encryptionKey = await importOAuthEncryptionKey(env.OSM_OAUTH_ENCRYPTION_KEY);
-      const accessToken = await findOSMDevelopmentToken(env.DB, sessionToken, now, encryptionKey);
+      const accessToken = await findOSMOAuthToken(env.DB, sessionToken, now, encryptionKey);
       if (!accessToken) throw new CoverageUnavailableError();
       const mapCandidates = await fetchDevelopmentCandidates(accessToken, bounds, location, fetcher, controller.signal);
       for (const candidate of mapCandidates) candidates.set(candidate.id, candidate);
@@ -178,7 +177,7 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
       // der Treffer vom Testserver, weil nur er sich dort ändern lässt.
       try {
         const encryptionKey = await importOAuthEncryptionKey(env.OSM_OAUTH_ENCRYPTION_KEY);
-        const accessToken = await findOSMDevelopmentToken(env.DB, sessionToken, now, encryptionKey);
+        const accessToken = await findOSMOAuthToken(env.DB, sessionToken, now, encryptionKey);
         if (accessToken) {
           for (const candidate of await fetchDevelopmentCandidates(accessToken, bounds, location, fetcher, controller.signal)) candidates.set(candidate.id, candidate);
         }

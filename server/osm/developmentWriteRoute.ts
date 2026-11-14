@@ -1,6 +1,6 @@
 import { importOAuthEncryptionKey } from "../auth/osmOAuth";
 import { findOSMSession } from "../storage/osmSessions";
-import { findOSMDevelopmentToken } from "../storage/osmDevelopmentTokens";
+import { findOSMOAuthToken } from "../storage/osmOAuthTokens";
 import {
   claimOSMDevelopmentUpload,
   failEmptyUncertainOSMDevelopmentWrite,
@@ -15,11 +15,11 @@ import type { D1Database } from "../storage/d1";
 import { requestOSMDevelopmentApi } from "./developmentApi";
 import { escapeXml, withoutXmlDeclaration } from "./xmlText";
 import { createChangeset, closeChangeset } from "./changeset";
-import { BodyTooLargeError, isCrossOrigin, isRecord, jsonResponse, readCookie, readLimitedBody, readLimitedText } from "../http/requestGuards";
+import { BodyTooLargeError, isCrossOrigin, isRecord, jsonResponse, readCookie, readOSMSessionCookie, readLimitedBody, readLimitedText } from "../http/requestGuards";
 import { isAcceptableObservationDate } from "./observationDate";
 import { validateDetailTags, type DetailTags } from "../../src/contracts/aedDetails";
 
-export const SESSION_COOKIE = "aedjaeger_osm_session";
+export const SESSION_COOKIE = "__Host-aedjaeger_osm_session";
 // Genug Platz für Detailtags auch mit Mehrbyte-Zeichen (Japanisch: 3 Byte je Zeichen); die Längengrenzen des Vertrags
 // halten die Anfrage trotzdem klein.
 const MAX_BODY_BYTES = 8_192;
@@ -91,7 +91,7 @@ export async function handleDevelopmentCheckDate(
     return jsonResponse({ error: "unsupported_media_type" }, 415);
   }
 
-  const sessionToken = readCookie(request.headers.get("Cookie"), SESSION_COOKIE);
+  const sessionToken = readOSMSessionCookie(request.headers.get("Cookie"));
   if (!sessionToken) return jsonResponse({ error: "authentication_required" }, 401);
   const now = (dependencies.now ?? Date.now)();
   let session: { subject: string; environment: "production" | "development" } | null;
@@ -123,7 +123,7 @@ export async function handleDevelopmentCheckDate(
   let requestHash: string;
   try {
     const key = await importOAuthEncryptionKey(environment.OSM_OAUTH_ENCRYPTION_KEY);
-    const storedToken = await findOSMDevelopmentToken(environment.DB, sessionToken, now, key, dependencies.crypto);
+    const storedToken = await findOSMOAuthToken(environment.DB, sessionToken, now, key, dependencies.crypto);
     if (!storedToken) return jsonResponse({ error: "development_token_unavailable" }, 401);
     token = storedToken;
     // The account is already the storage partition and is verified above. Keep it out of the

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { D1Database, D1Result, D1Statement } from "../server/storage/d1";
 import {
-  deleteOSMDevelopmentToken,
-  findOSMDevelopmentToken,
-  storeOSMDevelopmentToken,
-} from "../server/storage/osmDevelopmentTokens";
+  deleteOSMOAuthToken,
+  findOSMOAuthToken,
+  storeOSMOAuthToken,
+} from "../server/storage/osmOAuthTokens";
 
 const now = 1_800_000_000_000;
 const sessionToken = "a".repeat(43);
@@ -26,7 +26,7 @@ function createDatabase() {
         bind(...boundValues) { values = boundValues; return statement; },
         async run<T>() {
           calls.push({ query, values });
-          if (query.includes("INSERT INTO osm_development_tokens")) {
+          if (query.includes("INSERT INTO osm_oauth_tokens")) {
             const [hash, token_iv, token_ciphertext, token_expires_at, created_at] = values;
             tokens.set(String(hash), {
               token_iv: String(token_iv),
@@ -36,7 +36,7 @@ function createDatabase() {
             });
             return { success: true, meta: { changes: 1 } } as D1Result<T>;
           }
-          if (query.includes("DELETE FROM osm_development_tokens")) {
+          if (query.includes("DELETE FROM osm_oauth_tokens")) {
             return { success: true, meta: { changes: Number(tokens.delete(String(values[0]))) } } as D1Result<T>;
           }
           throw new Error(`Unexpected D1 query: ${query}`);
@@ -44,7 +44,7 @@ function createDatabase() {
         async first<T>() {
           calls.push({ query, values });
           const hash = String(values[0]);
-          if (query.includes("FROM osm_development_tokens")) {
+          if (query.includes("FROM osm_oauth_tokens")) {
             const token = tokens.get(hash);
             const sessionExpiresAt = sessions.get(hash);
             if (
@@ -83,14 +83,14 @@ describe("OSM development token vault", () => {
     sessions.set(hash, now + 60_000);
     const key = await encryptionKey();
 
-    await storeOSMDevelopmentToken(database, sessionToken, accessToken, now + 30_000, now, key);
+    await storeOSMOAuthToken(database, sessionToken, accessToken, now + 30_000, now, key);
 
     const row = tokens.get(hash);
     expect(row).toBeDefined();
     expect(row?.token_ciphertext).not.toContain(accessToken);
     expect(calls.some((call) => call.values.includes(accessToken))).toBe(false);
-    await expect(findOSMDevelopmentToken(database, sessionToken, now + 1, key)).resolves.toBe(accessToken);
-    await expect(findOSMDevelopmentToken(database, "b".repeat(43), now + 1, key)).resolves.toBeNull();
+    await expect(findOSMOAuthToken(database, sessionToken, now + 1, key)).resolves.toBe(accessToken);
+    await expect(findOSMOAuthToken(database, "b".repeat(43), now + 1, key)).resolves.toBeNull();
   });
 
   it("replaces a stored token and does not return it after its expiry", async () => {
@@ -98,10 +98,10 @@ describe("OSM development token vault", () => {
     const hash = await sha(sessionToken);
     sessions.set(hash, now + 60_000);
     const key = await encryptionKey();
-    await storeOSMDevelopmentToken(database, sessionToken, accessToken, now + 30_000, now, key);
-    await storeOSMDevelopmentToken(database, sessionToken, "replacement-token", now + 20_000, now + 1, key);
+    await storeOSMOAuthToken(database, sessionToken, accessToken, now + 30_000, now, key);
+    await storeOSMOAuthToken(database, sessionToken, "replacement-token", now + 20_000, now + 1, key);
 
-    await expect(findOSMDevelopmentToken(database, sessionToken, now + 20_000, key)).resolves.toBeNull();
+    await expect(findOSMOAuthToken(database, sessionToken, now + 20_000, key)).resolves.toBeNull();
     expect(tokens.has(hash)).toBe(false);
   });
 
@@ -110,10 +110,10 @@ describe("OSM development token vault", () => {
     const hash = await sha(sessionToken);
     sessions.set(hash, now + 60_000);
     const key = await encryptionKey();
-    await storeOSMDevelopmentToken(database, sessionToken, accessToken, now + 30_000, now, key);
+    await storeOSMOAuthToken(database, sessionToken, accessToken, now + 30_000, now, key);
 
-    await expect(findOSMDevelopmentToken(database, sessionToken, now + 1, await encryptionKey())).rejects.toThrow("nicht sicher gelesen");
-    await deleteOSMDevelopmentToken(database, sessionToken);
+    await expect(findOSMOAuthToken(database, sessionToken, now + 1, await encryptionKey())).rejects.toThrow("nicht sicher gelesen");
+    await deleteOSMOAuthToken(database, sessionToken);
     expect(tokens.has(hash)).toBe(false);
   });
 
@@ -121,9 +121,9 @@ describe("OSM development token vault", () => {
     const database: D1Database = { prepare: () => { throw new Error("database should not be used"); } };
     const key = await encryptionKey();
 
-    await expect(storeOSMDevelopmentToken(database, "short", accessToken, now + 1, now, key)).rejects.toThrow("Ungültiger");
-    await expect(storeOSMDevelopmentToken(database, sessionToken, "bad\nvalue", now + 1, now, key)).rejects.toThrow("Ungültiger");
-    await expect(findOSMDevelopmentToken(database, "short", now, key)).resolves.toBeNull();
+    await expect(storeOSMOAuthToken(database, "short", accessToken, now + 1, now, key)).rejects.toThrow("Ungültiger");
+    await expect(storeOSMOAuthToken(database, sessionToken, "bad\nvalue", now + 1, now, key)).rejects.toThrow("Ungültiger");
+    await expect(findOSMOAuthToken(database, "short", now, key)).resolves.toBeNull();
   });
 });
 

@@ -90,7 +90,7 @@ describe("OSM OpenID Connect verification", () => {
       redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
       now,
       fetcher,
-    })).resolves.toEqual({ subject: "987654321" });
+    })).resolves.toEqual({ subject: "987654321", accessToken: "A".repeat(60), expiresAt: now + 12 * 60 * 60 * 1_000 });
   });
 
   it.each([

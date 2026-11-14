@@ -10,6 +10,22 @@ test.beforeEach(async ({ page }) => {
   } }));
 });
 
+test("serves the app with security headers while photo preview and service worker work", async ({ page }) => {
+  const response = await page.goto("/");
+  expect(response).not.toBeNull();
+  const headers = response!.headers();
+  expect(headers["content-security-policy"]).toContain("default-src 'self'");
+  expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
+  expect(headers["strict-transport-security"]).toContain("max-age=31536000");
+  expect(headers["x-content-type-options"]).toBe("nosniff");
+  expect(headers["referrer-policy"]).toBe("no-referrer");
+  expect(headers["permissions-policy"]).toContain("camera=(self)");
+
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await expect(page.locator("img.photo-preview")).toHaveAttribute("src", /^blob:/u);
+  await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length)).toBeGreaterThan(0);
+});
+
 async function beginNearbySearch(page: import("@playwright/test").Page): Promise<void> {
   const sighting = page.locator('[data-action="confirm-sighting"]');
   if (await sighting.isVisible()) await sighting.click();
@@ -789,7 +805,7 @@ test("a reviewed nearby AED can be rejected before preparing a separate new entr
   await page.locator("#new-aed-absence-confirmed").check();
   await page.getByRole("button", { name: "Testserver: AED eintragen" }).click();
   await expect.poll(() => createRequest).toBeDefined();
-  expect(createRequest).toMatchObject({ confirmed: true, confirmed_different_candidate_ids: ["node/123"] });
+  expect(createRequest).toMatchObject({ confirmed: true, absence_confirmed: true, confirmed_different_candidate_ids: ["node/123"] });
 });
 
 test("a partial nearby search never offers a new AED preview", async ({ page, context }) => {

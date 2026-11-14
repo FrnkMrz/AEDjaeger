@@ -8,6 +8,7 @@ type OSMProviderEndpoints = {
   discovery: string;
   token: string;
   jwks: string;
+  revocation: string;
 };
 
 /** The dev login is pinned to OSM's official test server; no URL comes from the browser. */
@@ -20,6 +21,7 @@ export function getOSMProviderEndpoints(environment: OSMEnvironment): OSMProvide
       discovery: `${origin}/.well-known/openid-configuration`,
       token: `${origin}/oauth2/token`,
       jwks: `${origin}/oauth2/discovery/keys`,
+      revocation: `${origin}/oauth2/revoke`,
     };
   }
   if (environment === "development") {
@@ -30,6 +32,7 @@ export function getOSMProviderEndpoints(environment: OSMEnvironment): OSMProvide
       discovery: `${origin}/.well-known/openid-configuration`,
       token: `${origin}/oauth2/token`,
       jwks: `${origin}/oauth2/discovery/keys`,
+      revocation: `${origin}/oauth2/revoke`,
     };
   }
   throw new Error("Ungültige OSM-Umgebung.");
