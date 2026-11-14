@@ -568,6 +568,37 @@ test("a restored write is not submitted under a different OSM test-server accoun
   expect(await page.evaluate(() => localStorage.getItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"))).not.toBeNull();
 });
 
+test("a recovery identity mismatch keeps the write when another tab changed the shared session", async ({ page }) => {
+  let sessionChecks = 0;
+  let writes = 0;
+  await page.route("**/api/auth/session", (route) => {
+    sessionChecks += 1;
+    return route.fulfill({ json: {
+      authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true,
+      developmentWriteAvailable: true, developmentWriteOwnerHash: sessionChecks === 1 ? "a".repeat(64) : "b".repeat(64),
+    } });
+  });
+  await page.route("**/api/osm/development/check-date", async (route) => {
+    writes += 1;
+    await route.fulfill({ status: 403, json: { error: "recovery_identity_mismatch" } });
+  });
+  await page.addInitScript(() => {
+    const now = Date.now();
+    localStorage.setItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", JSON.stringify({
+      version: 1, savedAt: now, expiresAt: now + 7 * 24 * 60 * 60 * 1_000, ownerHash: "a".repeat(64),
+      request: { kind: "check-date", operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", target: "node/42", candidateLabel: "Rathaus", expectedVersion: 3, expectedCheckDate: null, observedOn: "2026-11-14" },
+    }));
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Testserver: Status erneut prüfen" }).click();
+
+  await expect(page.locator(".capture-content")).toContainText("anderen OSM-Testserver-Konto");
+  await expect(page.locator('[data-action="continue-recovery"]')).toHaveCount(0);
+  expect(writes).toBe(1);
+  expect(await page.evaluate(() => localStorage.getItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"))).not.toBeNull();
+});
+
 test("separate tabs keep their own pending write when one tab completes", async ({ page, context }) => {
   const otherTab = await context.newPage();
   const first = await openExistingAedPreview(page, context, { nodes: [freshNode({})] });

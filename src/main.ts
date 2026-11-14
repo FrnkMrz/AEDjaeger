@@ -1504,6 +1504,12 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
       // darum "fehlgeschlagen" (neuer Versuch von vorn) statt "unklar".
       setDevelopmentWriteStatus(requestBody.operationId, "failed");
       clearPendingDevelopmentCheck(requestBody.operationId);
+    } else if (response.status === 403 && isRecord(payload) && payload.error === "recovery_identity_mismatch") {
+      // Ein anderer Tab kann das gemeinsame Sitzungscookie inzwischen auf ein anderes Konto umgestellt haben.
+      // Der Server hat deshalb nichts geschrieben; den Marker aber behalten, bis das richtige Konto zurück ist.
+      setDevelopmentWriteStatus(requestBody.operationId, "uncertain");
+      await refreshAccountState();
+      return;
     } else if (response.status === 202 || response.status >= 500 || !response.ok && !isRecord(payload)) {
       setDevelopmentWriteStatus(requestBody.operationId, "uncertain");
     } else {
