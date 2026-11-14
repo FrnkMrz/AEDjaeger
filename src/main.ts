@@ -866,11 +866,17 @@ function statusContent(): string {
           // 50 m steht nur ein Hinweis mit der Entfernung; der AED muss vor einer Neuanlage geprüft werden, lässt sich
           // aber nicht als "noch vorhanden" bestätigen.
           const tooFarToConfirm = distanceMeters !== undefined && distanceMeters > CONFIRM_RADIUS_METERS;
+          // Zweiter Weg direkt aus der Liste: Angaben ansehen und ergänzen (bzw. ändern), bevor das Datum bestätigt wird. Das
+          // Datum folgt am Ende mit einem Speichern für alles. Nur für AEDs, die es auf dem Testserver gibt: Ein AED aus dem
+          // Archiv des echten OSM existiert dort nicht und lässt sich nicht bearbeiten.
+          const detailsAction = developmentSession && developmentWriteAvailable && candidate.source !== "archive"
+            ? `<button class="button button-secondary" data-action="open-candidate-details" data-candidate-id="${escapeHtml(candidate.id)}">${tv(developmentCorrectionsAvailable ? "candidateDetailsChange" : "candidateDetailsView")}</button>`
+            : "";
           const reviewAction = candidate.osmType !== "node"
             ? `<span class="supporting-copy">${tv("previewUnsupportedShort")}</span>`
             : tooFarToConfirm
               ? `<span class="supporting-copy">${tv("candidateTooFar", { meters: CONFIRM_RADIUS_METERS })}</span>`
-              : `<button class="button button-secondary" data-action="preview-candidate" data-candidate-id="${escapeHtml(candidate.id)}">${tv("selectCandidate")}</button>`;
+              : `<button class="button button-secondary" data-action="preview-candidate" data-candidate-id="${escapeHtml(candidate.id)}">${tv("selectCandidate")}</button>${detailsAction}`;
           return `<li class="candidate-item"><strong>${escapeHtml(label)}</strong>${distance}${reviewAction}</li>`;
         }).join("");
       let outcome: string;
@@ -1018,7 +1024,9 @@ function statusContent(): string {
       }
       const thumbnail = photoMarkup.replace('class="photo-preview"', 'class="photo-preview photo-thumb"');
       const allPresent = detailEverythingPresent() ? `<p class="simulation-note">${tv("detailsAllPresent")}</p>` : "";
-      return `<div class="detail-form-root">${thumbnail}${header}${allPresent}<div id="detail-form">${detailFormMarkup()}</div>${detailFooterMarkup()}</div>`;
+      // Das bisherige Prüfdatum aus OSM, damit die Person sieht, wie aktuell der Eintrag ist, bevor sie etwas ändert.
+      const lastCheck = state.load.node.tags.check_date ? `<p class="supporting-copy">${tv("previewOldDate", { date: escapeHtml(state.load.node.tags.check_date) })}</p>` : "";
+      return `<div class="detail-form-root">${thumbnail}${header}${lastCheck}${allPresent}<div id="detail-form">${detailFormMarkup()}</div>${detailFooterMarkup()}</div>`;
     }
     case "development-write-recovery": {
       const copy = developmentWriteCopy[language];
@@ -1754,6 +1762,16 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     resetDetailForm();
     state = { kind: "existing-aed-details", photoUrl: state.photoUrl, candidateId, candidateLabel: state.candidateLabel, returnState: state.returnState, load: { status: "loading" } };
     void loadExistingAedNode(candidateId);
+  } else if (action === "open-candidate-details" && state.kind === "candidate-result") {
+    // Direkt aus der Trefferliste zu den Tags (vor der Datumsseite). Gleiche Voraussetzungen wie beim Ergänzen: Testserver-Sitzung,
+    // Schreiben an, ein Knoten, der nicht nur im Archiv des echten OSM steht.
+    const candidateId = source?.dataset.candidateId;
+    const candidate = state.search.candidates.find((item) => item.id === candidateId);
+    if (!candidate || !candidateId || !developmentSession || !developmentWriteAvailable || candidate.osmType !== "node" || candidate.source === "archive") return;
+    resetDetailForm();
+    const candidateLabel = candidate.tags.name || candidate.tags["defibrillator:location"] || "";
+    state = { kind: "existing-aed-details", photoUrl: state.photoUrl, candidateId, candidateLabel, returnState: state, load: { status: "loading" }, fromList: true };
+    void loadExistingAedNode(candidateId);
   } else if (action === "existing-details-retry" && state.kind === "existing-aed-details" && state.load.status === "error") {
     const candidateId = state.candidateId;
     state = { ...state, load: { status: "loading" } };
@@ -1771,6 +1789,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     state = {
       kind: "osm-preview", photoUrl: state.photoUrl, candidateId: state.candidateId, candidateLabel: state.candidateLabel,
       result, returnState: state.returnState, node,
+      ...(state.fromList ? { fromList: true as const } : {}),
       ...(Object.keys(built.tags).length > 0 ? { details: built.tags } : {}),
       ...(built.corrections.length > 0 ? { corrections: built.corrections } : {}),
     };
@@ -1778,8 +1797,10 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     // Zurück zur einfachen Bestätigung. Die Eingaben werden verworfen, denn der Stand in OSM kann sich inzwischen ändern.
     const { candidateId, candidateLabel, returnState, photoUrl } = state;
     const candidate = returnState.search.candidates.find((item) => item.id === candidateId);
+    const cameFromList = state.fromList === true;
     resetDetailForm();
-    if (!candidate) {
+    if (!candidate || cameFromList) {
+      // Aus der Trefferliste gekommen: zurück zur Liste (die Datumsseite war nie dran).
       state = returnState;
     } else {
       state = { kind: "osm-preview", photoUrl, candidateId, candidateLabel, result: previewExistingAedCheck(candidate, true, observedOn), returnState };
@@ -1788,7 +1809,10 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
     // Der gelesene Stand und die Eingaben bleiben erhalten (detailForm liegt im Speicher).
     detailExistingTags = state.node.tags;
-    state = { kind: "existing-aed-details", photoUrl: state.photoUrl, candidateId: state.candidateId, candidateLabel: state.candidateLabel, returnState: state.returnState, load: { status: "ready", node: state.node } };
+    state = {
+      kind: "existing-aed-details", photoUrl: state.photoUrl, candidateId: state.candidateId, candidateLabel: state.candidateLabel,
+      returnState: state.returnState, load: { status: "ready", node: state.node }, ...(state.fromList ? { fromList: true as const } : {}),
+    };
   } else if (action === "back-to-candidates" && state.kind === "osm-preview") {
     if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
     state = state.returnState;
