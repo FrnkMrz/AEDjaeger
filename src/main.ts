@@ -29,15 +29,12 @@ if (!app) throw new Error("App root element was not found.");
 const languageNames: Record<Language, string> = { de: "Deutsch", en: "English", pl: "Polski", ja: "日本語", fr: "Français", es: "Español" };
 // Exact Maki defibrillator path (CC0 1.0); the Info dialog and SVG assets keep its source visible.
 const defibrillatorPath = "m1.54995 7.33811c-2.386799-4.5965 3.63-7.660899 5.952-3.0644 2.3215-4.596499 8.33875-1.5322 5.95235 3.0644-.0869.1671-.2028.3456-.3114.5212h-1.8079l-1.81455-2.7216c-.06321-.09473-.1511-.1704-.25417-.21884-.10308-.04843-.21743-.06779-.3307-.05599-.11327.01181-.22117.05433-.31205.12298-.09087.06865-.16126.16082-.20358.26655l-1.6484 4.12-1.33-1.33c-.11716-.11707-.27597-.18288-.4416-.183h-3.1389c-.1086-.1757-.2245-.3542-.3111-.5213zm9.45005 1.7713c-.103-.00003-.2044-.02545-.2951-.07399-.0908-.04854-.1682-.11871-.2254-.20431l-1.34085-2.0111-1.5587 3.89679c-.03839.096-.10002.181-.17936.2474-.07935.0663-.17393.1119-.27524.1326-.04125.0086-.08327.0128-.1254.0126-.16568.0001-.32462-.0656-.4419-.1826l-1.8169-1.81739h-2.0054c1.36645 1.66819 2.85739 3.23039 4.46 4.67319.08531.077.19616.1197.3111.1197s.22579-.0427.3111-.1197c1.59778-1.4447 3.08545-3.0068 4.45055-4.67319z";
-const developmentWriteCopy: Record<Language, { action: string; createAction: string; detailsAction: string; detailsComplete: string; changesAction: string; changesComplete: string; retry: string; sending: string; complete: string; unchanged: string; notFound: string; created: string; uncertain: string; conflict: string; failed: string; }> = {
-  de: { action: "Testserver: Prüfdatum speichern", createAction: "Testserver: AED eintragen", detailsAction: "Testserver: Angaben speichern", detailsComplete: "Testserver: Prüfdatum und neue Angaben gespeichert.", changesAction: "Testserver: Änderungen speichern", changesComplete: "Testserver: Prüfdatum und Änderungen gespeichert.", retry: "Testserver: Status erneut prüfen", sending: "Testserver: Änderung wird gesendet…", complete: "Testserver: Vor-Ort-Prüfung gespeichert.", unchanged: "Testserver: Schon aktuell. Es wurde nichts geändert.", notFound: "Testserver: Dieser AED stammt aus dem echten OSM und existiert auf dem Testserver nicht. Es wurde nichts geändert.", created: "Testserver: Neuer AED wurde eingetragen.", uncertain: "Testserver: Ergebnis unklar. Mit derselben Anfrage erneut prüfen; keine neue Änderung wird blind gesendet.", conflict: "Testserver: Nichts wurde geändert. In der Nähe gibt es einen AED, den du noch nicht geprüft hast, oder der Eintrag hat sich geändert. Bitte suche erneut.", failed: "Testserver: Änderung fehlgeschlagen. Bitte Eintrag erneut prüfen." },
-  en: { action: "Test server: Save visit date", createAction: "Test server: Add AED", detailsAction: "Test server: Save details", detailsComplete: "Test server: Visit date and new details saved.", changesAction: "Test server: Save changes", changesComplete: "Test server: Visit date and changes saved.", retry: "Test server: Check status again", sending: "Test server: Sending update…", complete: "Test server: Visit confirmation saved.", unchanged: "Test server: Already up to date. Nothing was changed.", notFound: "Test server: This AED comes from the real OSM and does not exist on the test server. Nothing was changed.", created: "Test server: New AED added.", uncertain: "Test server: Result is unclear. Check again using the same request; no new edit will be sent blindly.", conflict: "Test server: Nothing was changed. There is an AED nearby that you have not reviewed yet, or the entry has changed. Please search again.", failed: "Test server: Update failed. Please check the entry again." },
-  pl: { action: "Serwer testowy: zapisz datę kontroli", createAction: "Serwer testowy: dodaj AED", detailsAction: "Serwer testowy: zapisz dane", detailsComplete: "Serwer testowy: zapisano datę kontroli i nowe dane.", changesAction: "Serwer testowy: zapisz zmiany", changesComplete: "Serwer testowy: zapisano datę kontroli i zmiany.", retry: "Serwer testowy: sprawdź ponownie stan", sending: "Serwer testowy: wysyłanie zmiany…", complete: "Serwer testowy: zapisano potwierdzenie kontroli.", unchanged: "Serwer testowy: Już aktualne. Nic nie zmieniono.", notFound: "Serwer testowy: Ten AED pochodzi z prawdziwego OSM i nie istnieje na serwerze testowym. Nic nie zmieniono.", created: "Serwer testowy: dodano nowy AED.", uncertain: "Serwer testowy: wynik jest niepewny. Sprawdź ponownie to samo żądanie; nie wyślemy w ciemno nowej zmiany.", conflict: "Serwer testowy: Nic nie zmieniono. W pobliżu jest AED, którego jeszcze nie sprawdzono, albo wpis się zmienił. Wyszukaj ponownie.", failed: "Serwer testowy: nie udało się zapisać zmiany. Sprawdź ponownie wpis." },
-  ja: { action: "テストサーバー：確認日を保存", createAction: "テストサーバー：AEDを登録", detailsAction: "テストサーバー：情報を保存", detailsComplete: "テストサーバー：確認日と新しい情報を保存しました。", changesAction: "テストサーバー：変更を保存", changesComplete: "テストサーバー：確認日と変更を保存しました。", retry: "テストサーバー：状態を再確認", sending: "テストサーバー：変更を送信中…", complete: "テストサーバー：現地確認を保存しました。", unchanged: "テストサーバー：すでに最新です。変更はありません。", notFound: "テストサーバー：このAEDは本番のOSMのもので、テストサーバーには存在しません。変更はありません。", created: "テストサーバー：新しいAEDを登録しました。", uncertain: "テストサーバー：結果を確認できません。同じリクエストで再確認してください。新しい変更を無確認で送信しません。", conflict: "テストサーバー：変更はありません。近くに未確認のAEDがあるか、登録内容が変わりました。もう一度検索してください。", failed: "テストサーバー：変更に失敗しました。項目を再確認してください。" },
-  fr: { action: "Serveur de test : enregistrer la date", createAction: "Serveur de test : ajouter un DAE", detailsAction: "Serveur de test : enregistrer les informations", detailsComplete: "Serveur de test : date de visite et nouvelles informations enregistrées.", changesAction: "Serveur de test : enregistrer les modifications", changesComplete: "Serveur de test : date de visite et modifications enregistrées.", retry: "Serveur de test : vérifier à nouveau", sending: "Serveur de test : envoi de la modification…", complete: "Serveur de test : visite confirmée.", unchanged: "Serveur de test : déjà à jour. Rien n'a été modifié.", notFound: "Serveur de test : ce DAE provient du vrai OSM et n'existe pas sur le serveur de test. Rien n'a été modifié.", created: "Serveur de test : nouveau DAE ajouté.", uncertain: "Serveur de test : résultat incertain. Vérifiez à nouveau avec la même requête ; aucune nouvelle modification ne sera envoyée à l’aveugle.", conflict: "Serveur de test : rien n'a été modifié. Un DAE à proximité n'a pas encore été vérifié, ou l'entrée a changé. Veuillez relancer la recherche.", failed: "Serveur de test : échec de la modification. Vérifiez à nouveau la fiche." },
-  es: { action: "Servidor de pruebas: guardar fecha", createAction: "Servidor de pruebas: añadir DEA", detailsAction: "Servidor de pruebas: guardar datos", detailsComplete: "Servidor de pruebas: fecha de visita y nuevos datos guardados.", changesAction: "Servidor de pruebas: guardar cambios", changesComplete: "Servidor de pruebas: fecha de visita y cambios guardados.", retry: "Servidor de pruebas: comprobar estado", sending: "Servidor de pruebas: enviando cambio…", complete: "Servidor de pruebas: visita confirmada.", unchanged: "Servidor de pruebas: ya está actualizado. No se cambió nada.", notFound: "Servidor de pruebas: este DEA procede del OSM real y no existe en el servidor de pruebas. No se cambió nada.", created: "Servidor de pruebas: se añadió un DEA.", uncertain: "Servidor de pruebas: resultado incierto. Comprueba de nuevo con la misma solicitud; no enviaremos otro cambio a ciegas.", conflict: "Servidor de pruebas: no se cambió nada. Hay un DEA cercano que aún no se ha revisado, o la entrada cambió. Busca de nuevo.", failed: "Servidor de pruebas: no se pudo guardar. Comprueba de nuevo la ficha." },
-};
 const supportedLanguages = Object.keys(translations) as Language[];
+type DevelopmentWriteStatus = Extract<FlowState, { kind: "development-write-recovery" }>["writeStatus"];
+const developmentWriteStatusKeys: Record<DevelopmentWriteStatus, FlowMessageKey> = {
+  sending: "developmentSending", complete: "developmentComplete", unchanged: "developmentUnchanged", notFound: "developmentNotFound",
+  uncertain: "developmentUncertain", conflict: "developmentConflict", failed: "developmentFailed",
+};
 const minimumMapSearchZoom = 15;
 const PENDING_DEVELOPMENT_WRITE_KEY_PREFIX = "aedjaeger-pending-osm-development-write:";
 const LEGACY_PENDING_DEVELOPMENT_WRITE_KEY = "aedjaeger-pending-osm-development-write";
@@ -985,18 +982,17 @@ function statusContent(): string {
       const content = state.result.kind === "ready"
         ? `<p>${tv("newPreviewCoordinates", { latitude, longitude })}</p><strong>${tv("newPreviewTags")}</strong><ul>${Object.entries(state.result.tags).map(([key, value]) => `<li><code>${escapeHtml(key)}=${escapeHtml(value)}</code></li>`).join("")}</ul><p>${state.result.confirmedDifferentCandidateIds.length > 0 ? tv("newPreviewReviewedCandidates") : tv("newPreviewCaution")}</p>`
         : `<p>${tv(state.result.reason === "position-not-confirmed" ? "newPositionRequired" : state.result.reason === "search-found-candidate" ? "newPreviewFoundCandidate" : "newPreviewSearchInvalid")}</p>`;
-      const copy = developmentWriteCopy[language];
       const canCreate = developmentSession && developmentWriteAvailable && Boolean(developmentWriteOwnerHash) && state.result.kind === "ready";
-      const statusCopy = state.writeStatus === "complete" ? copy.created : state.writeStatus ? copy[state.writeStatus] : "";
+      const statusCopy = state.writeStatus === "complete" ? tv("developmentCreated") : state.writeStatus ? tv(developmentWriteStatusKeys[state.writeStatus]) : "";
       const blockedRecovery = state.writeStatus === "uncertain" && (isRecoveryOwnerMismatch() || !developmentSession || !developmentWriteAvailable)
         ? `<p class="simulation-note" role="status">${tv(isRecoveryOwnerMismatch() ? "recoveryWrongAccount" : !developmentSession ? "recoveryNeedSignIn" : "recoveryWritesDisabled")}</p>` : "";
       const writeStatus = state.writeStatus ? `<p role="status" class="simulation-note ${state.writeStatus === "complete" ? "save-status-success" : ""}">${statusCopy}</p>${blockedRecovery}` : "";
       // Zweite von zwei Bestätigungen für eine Neuanlage: Ohne diesen Haken bleibt der
       // Speichern-Knopf gesperrt. Der Klick-Handler prüft den Haken zusätzlich noch einmal.
       const writeAction = canCreate && !state.writeStatus
-        ? `<div class="position-confirmation"><label for="new-aed-absence-confirmed"><input id="new-aed-absence-confirmed" type="checkbox" /><span>${tv("newAbsenceConfirm")}</span></label></div><button class="button button-primary" data-action="create-development-node" disabled>${copy.createAction}</button>`
+        ? `<div class="position-confirmation"><label for="new-aed-absence-confirmed"><input id="new-aed-absence-confirmed" type="checkbox" /><span>${tv("newAbsenceConfirm")}</span></label></div><button class="button button-primary" data-action="create-development-node" disabled>${tv("developmentCreateAction")}</button>`
         : state.writeStatus === "uncertain" && state.operationId && !isRecoveryOwnerMismatch()
-          ? `<button class="button button-secondary" data-action="retry-development-write">${developmentSession && developmentWriteAvailable ? copy.retry : tv("recoveryContinue")}</button>`
+          ? `<button class="button button-secondary" data-action="retry-development-write">${developmentSession && developmentWriteAvailable ? tv("developmentRetry") : tv("recoveryContinue")}</button>`
           : "";
       // Der Hinweis „nur eine Vorschau“ steht nur, wenn es nichts zu speichern gibt. Mit Speichern-Knopf sagt dessen
       // Beschriftung („Testserver: AED eintragen“) schon, wohin die Änderung geht.
@@ -1041,9 +1037,8 @@ function statusContent(): string {
       // Bleibt nach „draußen“ eine alte Ebene stehen, sagt die Vorschau es offen (AEDjaeger löscht nie etwas).
       const levelLeft = state.details && state.node ? levelLeftBehindByIndoorChange(state.node.tags, state.details) : null;
       const levelLeftNote = levelLeft === null ? "" : `<p class="detail-hint">${escapeHtml(tv("detailLevelStays", { level: levelLeft }))}</p>`;
-      const copy = developmentWriteCopy[language];
-      const completeText = corrections.length > 0 ? copy.changesComplete : addedTags.length > 0 ? copy.detailsComplete : copy.complete;
-      const statusText = state.writeStatus === "complete" ? completeText : state.writeStatus ? copy[state.writeStatus] : "";
+      const completeText = corrections.length > 0 ? tv("developmentChangesComplete") : addedTags.length > 0 ? tv("developmentDetailsComplete") : tv("developmentComplete");
+      const statusText = state.writeStatus === "complete" ? completeText : state.writeStatus ? tv(developmentWriteStatusKeys[state.writeStatus]) : "";
       const blockedRecovery = state.writeStatus === "uncertain" && (isRecoveryOwnerMismatch() || !developmentSession || !developmentWriteAvailable)
         ? `<p class="simulation-note" role="status">${tv(isRecoveryOwnerMismatch() ? "recoveryWrongAccount" : !developmentSession ? "recoveryNeedSignIn" : "recoveryWritesDisabled")}</p>` : "";
       const writeStatus = state.writeStatus ? `<p role="status" class="simulation-note ${state.writeStatus === "complete" ? "save-status-success" : ""}">${statusText}</p>${blockedRecovery}` : "";
@@ -1056,11 +1051,11 @@ function statusContent(): string {
       const correctionConfirmation = canWrite && !state.writeStatus && corrections.length > 0
         ? `<div class="position-confirmation"><label for="correction-confirmed"><input id="correction-confirmed" type="checkbox" /><span>${tv("detailsCorrectionConfirm")}</span></label></div>`
         : "";
-      const saveLabel = corrections.length > 0 ? copy.changesAction : addedTags.length > 0 ? copy.detailsAction : copy.action;
+      const saveLabel = corrections.length > 0 ? tv("developmentChangesAction") : addedTags.length > 0 ? tv("developmentDetailsAction") : tv("developmentWriteAction");
       const writeAction = canWrite && !state.writeStatus
         ? `${correctionConfirmation}<button class="button button-primary" data-action="save-development-check"${corrections.length > 0 ? " disabled" : ""}>${saveLabel}</button>`
         : state.writeStatus === "uncertain" && state.operationId && !isRecoveryOwnerMismatch()
-          ? `<button class="button button-secondary" data-action="retry-development-write">${developmentSession && developmentWriteAvailable ? copy.retry : tv("recoveryContinue")}</button>`
+          ? `<button class="button button-secondary" data-action="retry-development-write">${developmentSession && developmentWriteAvailable ? tv("developmentRetry") : tv("recoveryContinue")}</button>`
           : "";
       // Nur wenn nichts gespeichert werden kann und kein Vorgang läuft; sonst wäre „nur eine Vorschau“ nach einem Speichern falsch.
       // Bei einem neueren Datum in OSM sagt die Meldung selbst, dass nichts geändert wird; „nur eine Vorschau“ wäre doppelt.
@@ -1100,16 +1095,15 @@ function statusContent(): string {
       return `<div class="detail-form-root">${thumbnail}${header}${lastCheck}${allPresent}<div id="detail-form">${detailFormMarkup()}</div>${detailFooterMarkup()}</div>`;
     }
     case "development-write-recovery": {
-      const copy = developmentWriteCopy[language];
       const blockedReason = state.writeStatus === "uncertain" && (isRecoveryOwnerMismatch() || !developmentSession || !developmentWriteAvailable)
         ? tv(isRecoveryOwnerMismatch() ? "recoveryWrongAccount" : !developmentSession ? "recoveryNeedSignIn" : "recoveryWritesDisabled") : "";
       // Bei einer Neuanlage steht die Position da; bei einem Prüfdatum genügt die Bezeichnung des AED.
       const targetLink = state.request.kind === "check-date" ? "" : `<p>${state.request.latitude.toFixed(5)}, ${state.request.longitude.toFixed(5)}</p>`;
-      const recoveryMessage = state.request.kind === "create-node" && state.writeStatus === "complete" ? copy.created : copy[state.writeStatus];
+      const recoveryMessage = state.request.kind === "create-node" && state.writeStatus === "complete" ? tv("developmentCreated") : tv(developmentWriteStatusKeys[state.writeStatus]);
       const action = state.writeStatus === "uncertain" && isRecoveryOwnerMismatch()
         ? ""
         : state.writeStatus === "uncertain" || state.writeStatus === "sending"
-        ? `<button class="button button-primary" data-action="continue-recovery"${state.writeStatus === "sending" ? " disabled" : ""}>${state.writeStatus === "sending" ? copy.sending : developmentSession && developmentWriteAvailable ? copy.retry : tv("recoveryContinue")}</button>`
+        ? `<button class="button button-primary" data-action="continue-recovery"${state.writeStatus === "sending" ? " disabled" : ""}>${state.writeStatus === "sending" ? tv("developmentSending") : developmentSession && developmentWriteAvailable ? tv("developmentRetry") : tv("recoveryContinue")}</button>`
         : `<button class="button button-primary" data-action="retake">${state.writeStatus === "complete" ? tv("nextAed") : tv("recoveryContinue")}</button>`;
       const successful = state.writeStatus === "complete";
       return `<div class="result-message"><span class="status-icon ${successful ? "status-good" : "status-warn"}" aria-hidden="true">${successful ? "✓" : "!"}</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.request.candidateLabel))}</strong></p>${targetLink}<p class="simulation-note ${successful ? "save-status-success" : ""}" role="status">${recoveryMessage}</p>${blockedReason ? `<p class="simulation-note" role="status">${blockedReason}</p>` : ""}</div></div>${action}`;
@@ -1117,10 +1111,10 @@ function statusContent(): string {
     case "candidate-error": {
       const errorKey: Record<typeof state.reason, FlowMessageKey> = {
         "location-unavailable": "locationUnavailable", "location-denied": "locationDenied", "location-uncertain": "locationUncertain",
-        "sign-in": "errorSignIn", "rate-limited": "searchRateLimited", "service-unavailable": "searchUnavailable", failed: "searchFailed", "invalid-response": "errorInvalidResponse",
+        "sign-in": "errorSignIn", "rate-limited": "searchRateLimited", "service-unavailable": "searchUnavailable", "outside-coverage": "outsideCoverage", failed: "searchFailed", "invalid-response": "errorInvalidResponse",
       };
       const retryWaitSeconds = state.retryAvailableAt === undefined ? 0 : Math.max(0, Math.ceil((state.retryAvailableAt - Date.now()) / 1000));
-      const retry = state.reason === "sign-in"
+      const retry = state.reason === "sign-in" || state.reason === "outside-coverage"
         ? ""
         : retryWaitSeconds > 0
           ? `<p class="simulation-note search-wait" aria-live="off">${tv("searchWait", { seconds: retryWaitSeconds })}</p>`
@@ -1981,6 +1975,7 @@ async function runNearbySearch(photoUrl: string, providedLocation?: SearchLocati
       source_unavailable: "service-unavailable",
       source_timeout: "service-unavailable",
       coverage_unavailable: "service-unavailable",
+      outside_coverage: "outside-coverage",
       search_unavailable: "service-unavailable",
       session_unavailable: "service-unavailable",
       network_error: "service-unavailable",

@@ -122,6 +122,14 @@ describe("PMTiles AED candidate search", () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it("reports locations outside the supported region separately from feed outages", async () => {
+    const fetcher = fetchArchive();
+    const response = await handleStaticCandidateSearch(request({ latitude: 51.5, longitude: -0.12, accuracy_meters: 20 }), { DB: database() }, { fetch: fetcher, now: () => now });
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ error: "outside_coverage" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it("reads only bounded ranges from the fixed archive and returns nearby AED nodes", async () => {
     const fetcher = fetchArchive();
     const response = await handleStaticCandidateSearch(request(), { DB: database() }, { fetch: fetcher, now: () => now });

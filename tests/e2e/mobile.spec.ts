@@ -845,6 +845,20 @@ test("an unavailable regional snapshot cannot offer a new AED", async ({ page, c
   await expect(page.getByRole("button", { name: "Neuen AED vorbereiten" })).toHaveCount(0);
 });
 
+test("a location outside the supported region gets a clear coverage message without a retry", async ({ page, context }) => {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
+  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ status: 422, json: { error: "outside_coverage" } }));
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
+  await beginNearbySearch(page);
+  await expect(page.locator(".capture-content")).toContainText("Dieser Standort liegt außerhalb der AED-Datenabdeckung");
+  await expect(page.getByRole("button", { name: "Standort und AEDs erneut suchen" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Neuen AED vorbereiten" })).toHaveCount(0);
+});
+
 test("denied location access does not send a nearby search request", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "geolocation", { value: {
