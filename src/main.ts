@@ -417,7 +417,6 @@ const DETAIL_GROUP_OF_KEY: Record<DetailKey, string> = {
   opening_hours: "hours",
   indoor: "indoor",
   level: "indoor",
-  "defibrillator:cabinet": "more",
   operator: "more",
   phone: "more",
   description: "more",

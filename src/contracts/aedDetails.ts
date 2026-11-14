@@ -19,6 +19,7 @@
  * Die einzigen OSM-Schlüssel, die der Detailweg schreiben darf. Alles andere lehnt der Vertrag ab.
  * Bewusst NICHT enthalten:
  *  - `defibrillator:code` (ein Zugangscode könnte ein Schloss aushebeln),
+ *  - `defibrillator:cabinet` (Entscheidung vom 14.11.2026: Das Gehäuse-Feld entfällt),
  *  - `name`, `manufacturer`, `model` (noch nicht freigegeben) und alle übrigen Schlüssel.
  * Die Reihenfolge hier ist auch die Reihenfolge in Vorschau und Änderungsliste.
  */
@@ -28,7 +29,6 @@ export const DETAIL_KEYS = [
   "opening_hours",
   "indoor",
   "level",
-  "defibrillator:cabinet",
   "operator",
   "phone",
   "description",
@@ -65,14 +65,6 @@ export const INDOOR_VALUES = ["yes", "no"] as const;
 export type IndoorValue = (typeof INDOOR_VALUES)[number];
 
 /**
- * Werte, die das OSM-Wiki für `defibrillator:cabinet` nennt (Stand der Websuche vom 13.11.2026;
- * die Wiki-Seite selbst war aus der Entwicklungsumgebung nicht lesbar). Der Wert beschreibt die Art
- * des Gehäuses, nicht nur „ja/nein“. Welche davon die Oberfläche anbietet, entscheidet Etappe P2.
- */
-export const CABINET_VALUES = ["vertical_door", "horizontal_door", "twist", "mechanical", "no"] as const;
-export type CabinetValue = (typeof CABINET_VALUES)[number];
-
-/**
  * Der Zustand des Formulars, so wie die Person ihn eingibt. `null` oder ein leerer Text heißt
  * immer „Weiß ich nicht“ und erzeugt NIE ein Tag.
  */
@@ -86,7 +78,6 @@ export interface AedDetailForm {
   indoor: IndoorValue | null;
   /** Ebene, nur sinnvoll bei indoor = "yes". 0 = Erdgeschoss, −1 = Keller. */
   level: number | null;
-  cabinet: CabinetValue | null;
   operator: string;
   phone: string;
   description: string;
@@ -101,7 +92,6 @@ export const EMPTY_DETAIL_FORM: Readonly<AedDetailForm> = Object.freeze({
   hoursText: "",
   indoor: null,
   level: null,
-  cabinet: null,
   operator: "",
   phone: "",
   description: "",
@@ -162,7 +152,6 @@ function checkValue(key: DetailKey, value: string): DetailProblem | null {
   // Auswahlfelder: nur genau die vorgesehenen Werte.
   if (key === "access") return (ACCESS_VALUES as readonly string[]).includes(value) ? null : "invalid-value";
   if (key === "indoor") return (INDOOR_VALUES as readonly string[]).includes(value) ? null : "invalid-value";
-  if (key === "defibrillator:cabinet") return (CABINET_VALUES as readonly string[]).includes(value) ? null : "invalid-value";
   if (key === "level") {
     if (!LEVEL_PATTERN.test(value)) return "invalid-value";
     const number = Number(value);
@@ -279,7 +268,6 @@ function collectFormTags(form: Readonly<AedDetailForm>, existing?: Readonly<Reco
   const effectiveIndoor = form.indoor ?? existing?.indoor ?? null;
   if (effectiveIndoor === "yes" && form.level !== null) candidate.level = String(form.level);
 
-  if (form.cabinet !== null) candidate["defibrillator:cabinet"] = form.cabinet;
   addText("operator", form.operator);
   addText("phone", form.phone);
   addText("description", form.description);
@@ -421,10 +409,6 @@ export function formFromExistingTags(existing: Readonly<Record<string, string>>)
         break;
       case "level":
         if (valid(key, value)) { form.level = Number(value); representable = true; }
-        break;
-      case "defibrillator:cabinet":
-        // Das Gehäuse hat noch kein Feld in der Oberfläche: nichts vorbelegen, nichts sperren.
-        representable = true;
         break;
       case "operator":
       case "phone":
