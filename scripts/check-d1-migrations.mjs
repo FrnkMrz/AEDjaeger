@@ -18,13 +18,20 @@ export function readAppliedMigrationNames(response) {
     throw new Error("Die D1-Abfrage war nicht erfolgreich oder hatte ein unerwartetes Format.");
   }
   const names = query.results.map((row) => row?.name);
-  if (names.some((name) => typeof name !== "string" || !/^\d+_[a-z0-9_-]+\.sql$/u.test(name))) {
+  if (names.some((name) => typeof name !== "string" || name.length === 0 || !name.endsWith(".sql") || name.includes("/") || name.includes("\\"))) {
     throw new Error("Die D1-Migrationstabelle enthält einen ungültigen oder unbekannten Eintrag.");
   }
   if (new Set(names).size !== names.length) {
     throw new Error("Die D1-Migrationstabelle enthält doppelte Einträge.");
   }
   return names;
+}
+
+export function migrationFilesFromDirectory(entries) {
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".sql"))
+    .map((entry) => entry.name)
+    .sort();
 }
 
 export function compareMigrationNames(localNames, appliedNames) {
@@ -61,9 +68,7 @@ function checkRemoteMigrations() {
     throw new Error("Die D1-Abfrage lieferte kein gültiges JSON; der Deploy wird gestoppt.");
   }
   const applied = readAppliedMigrationNames(response);
-  const local = readdirSync(fileURLToPath(new URL("../migrations/", import.meta.url)))
-    .filter((name) => /^\d+_[a-z0-9_-]+\.sql$/u.test(name))
-    .sort();
+  const local = migrationFilesFromDirectory(readdirSync(fileURLToPath(new URL("../migrations/", import.meta.url)), { withFileTypes: true }));
   const difference = compareMigrationNames(local, applied);
 
   if (difference.pending.length > 0 || difference.unknown.length > 0) {
