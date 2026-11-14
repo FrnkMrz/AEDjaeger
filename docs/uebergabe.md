@@ -6,6 +6,19 @@ App: [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev)
 
 Dieses Dokument ist die kompakte, aktuelle Übergabe für einen neuen Chat oder einen anderen Coding-Agenten. Es fasst die in diesem Projekt getroffenen Produktentscheidungen, den tatsächlichen technischen Stand und den nächsten sinnvollen Schritt zusammen. Bei Widersprüchen haben die neueren Produktentscheidungen und die Dateien unter „Weiterlesen“ Vorrang vor älteren historischen Abschnitten.
 
+## Nachtrag vom 14. November 2026: Detailweg (PR #77)
+
+Seit dem Stand unten sind weitere PRs gemergt. Der jüngste ist [#77](https://github.com/FrnkMrz/AEDjaeger/pull/77) (13.11.2026, CI-Lauf [43513683666](https://github.com/FrnkMrz/AEDjaeger/actions/runs/43513683666) und Deploy waren grün). Er bringt den **Detailweg** für AED-Angaben. Die Einzelheiten stehen im [Umsetzungsplan](umsetzungsplan.md#detailweg-für-aed-angaben), im [OSM-Datenmodell](osm.md#detailangaben-entscheidung-vom-13112026) und in `AGENTS.md`.
+
+- **Was er kann:** Neben „Noch da – bestätigen“ (schreibt weiter nur `check_date`) erfasst die App freiwillig Standort-Text, Zugang, Zeiten, drinnen/draußen, Ebene sowie unter „Mehr Angaben“ Betreiber, Telefon, Notiz und Nummer. Drei Stufen, jeweils nur auf dem OSM-Testserver: Neuanlage mit Angaben, Fehlendes bei einem bestehenden AED ergänzen, bestehende Werte korrigieren.
+- **Wo der Code liegt:** gemeinsamer Datenvertrag `src/contracts/aedDetails.ts` (Browser und Worker nutzen dieselben Regeln); Formular und Zustände `new-aed-details` und `existing-aed-details` in `src/main.ts`; Schreibrouten `server/osm/developmentCreateNodeRoute.ts` und `server/osm/developmentWriteRoute.ts`; neue lesende Route `server/osm/developmentNodeRoute.ts`.
+- **Schalter (setzt nur der Projektinhaber):** `OSM_DEV_WRITES_ENABLED` für jedes Schreiben, zusätzlich `OSM_DETAIL_CORRECTIONS_ENABLED` (Wert `true`, Standard aus) für Korrekturen. Ohne den zweiten Schalter erscheint „Angaben ergänzen oder korrigieren“ nicht, und der Server antwortet auf Korrekturen mit 403.
+- **Sicherheitsregeln:** nur Schlüssel einer festen Liste; kein Löschen, keine Positionsänderung, nie `defibrillator:code`; Korrekturen nur mit `alt → neu`, zusätzlichem Haken und geprüftem Vorwert (sonst 409). „Weiß ich nicht“ schreibt nichts.
+- **Belegt:** Unit-, Server- und E2E-Tests mit simulierten OSM-Antworten (Stand beim Merge: 537 Unit-Tests, 147 E2E-Tests, alle grün in der CI).
+- **Nicht belegt:** Der Detailweg wurde **nie gegen den echten OSM-Testserver** und **nie auf einem echten Handy** ausprobiert. Die Schritte D1 bis D7 in der [Pilot-Abnahme](pilot-abnahme.md) sind der vorbereitete Test. Die neuen Texte sind nicht muttersprachlich geprüft.
+- **Offen** (Einzelheiten in [offene Fragen](offene-fragen.md)): Gehäuse-Feld (`defibrillator:cabinet`) ist bewusst nicht in der Oberfläche; Schnellwahl-Wörter und Zeiten-Vorlagen; Beschränkung des Korrekturschalters auf bestimmte Konten; ein stehen gebliebenes `level` nach der Korrektur von „drinnen“ auf „draußen“; Phase P6 (Handytest mit Zeitmessung).
+- **Hinweis zur Regel unten:** „Bei ‚noch vorhanden‘ ausschließlich `check_date` ändern“ gilt für den Schnellweg unverändert. Weitere Tags schreibt nur der Detailweg nach den Regeln in `AGENTS.md`.
+
 ## Ziel und gewünschter Ablauf
 
 AEDjaeger soll vor Ort mit möglichst wenigen Schritten helfen, einen AED in OpenStreetMap zu erfassen oder einen bestehenden Eintrag zu bestätigen:
@@ -30,7 +43,7 @@ Die Karte ist Hilfsmittel für die Standortkorrektur, nicht der Startbildschirm.
 - OSM-Login ist erforderlich. Der aktuelle Login ist für die OSM-Entwicklungsumgebung (Dev) gedacht. Geheimnisse und OAuth-Tokens dürfen ausschließlich in serverseitigen Secrets bzw. verschlüsselter Sitzung liegen.
 - `OSM_DEV_WRITES_ENABLED` bleibt **aus**. Es dürfen keine echten OSM-Schreibvorgänge ohne gesonderte Freigabe stattfinden. Normale Tests verwenden Mocks oder OSM Dev, niemals produktives OSM.
 - Die Umgebungssuche ist fehlertolerant, aber fail-closed: Ein Timeout, eine veraltete Quelle oder eine unvollständige Abdeckung bedeutet „Suche fehlgeschlagen“, niemals „hier gibt es keinen AED“.
-- Bei „noch vorhanden“ ausschließlich `check_date` ändern. Bei Neuanlage vor dem Schreiben die Gegend erneut prüfen und keine vorhandenen/fremden Tags überschreiben.
+- Beim Schnellweg „noch vorhanden“ ausschließlich `check_date` ändern (weitere Tags nur über den Detailweg, siehe Nachtrag oben und `AGENTS.md`). Bei Neuanlage vor dem Schreiben die Gegend erneut prüfen und keine vorhandenen/fremden Tags überschreiben.
 
 ## Was aktuell tatsächlich läuft
 
