@@ -15,6 +15,7 @@ import {
 } from "../storage/osmDevelopmentWriteOperations";
 import type { D1Database } from "../storage/d1";
 import { requestOSMDevelopmentApi } from "./developmentApi";
+import { APP_VERSION } from "../version";
 import { withoutXmlDeclaration } from "./xmlText";
 import { NEARBY_RADIUS_METERS } from "../../src/domain/matchPolicy";
 import { isAcceptableObservationDate } from "./observationDate";
@@ -296,7 +297,7 @@ async function finishChangeset(database: D1Database, sessionHash: string, operat
 }
 
 async function createChangeset(token: string, fetcher: typeof fetch): Promise<string> {
-  const body = '<osm><changeset><tag k="created_by" v="AEDjaeger 0.1.0"/><tag k="comment" v="AEDjaeger: AED mapped on site"/></changeset></osm>';
+  const body = `<osm><changeset><tag k="created_by" v="AEDjaeger ${APP_VERSION}"/><tag k="comment" v="AEDjaeger: AED mapped on site"/></changeset></osm>`;
   const response = await requestOSMDevelopmentApi("development", "/api/0.6/changeset/create", token, { method: "PUT", body }, fetcher);
   if (!response.ok) throw new Error("OSM changeset could not be opened");
   const id = (await readLimitedText(response, 64)).trim();

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { isFreshCapture, isValidObservedDate, localCalendarDate, photoDateNeedsConfirmation } from "../src/domain/localDate";
+import { formatCalendarDate, isFreshCapture, isValidObservedDate, localCalendarDate, photoDateNeedsConfirmation } from "../src/domain/localDate";
 
 describe("local calendar dates", () => {
   afterEach(() => vi.unstubAllEnvs());
@@ -20,6 +20,14 @@ describe("local calendar dates", () => {
 
     expect(isValidObservedDate("2026-02-30", now)).toBe(false);
     expect(isValidObservedDate("2026-11-07", now)).toBe(true);
+  });
+
+  it("formats OSM date-only values by locale without shifting the calendar day", () => {
+    vi.stubEnv("TZ", "America/Los_Angeles");
+
+    expect(formatCalendarDate("2026-11-13", "de")).toBe("13. November 2026");
+    expect(formatCalendarDate("2026-11-13", "en")).toBe("November 13, 2026");
+    expect(formatCalendarDate("2026-02-30", "de")).toBe("2026-02-30");
   });
 });
 

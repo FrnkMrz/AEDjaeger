@@ -9,7 +9,7 @@
   --green-dark: #10543a;
   --mint: #e5f0e9;
   --ink: #1d2c27;
-  --muted: #6b7771;
+  --muted: #5c6861;
   --line: #e5e9e3;
 }
 
@@ -86,7 +86,8 @@ h1 { margin-bottom: 12px; font: 800 clamp(30px, 8vw, 43px)/1.14 "Noto Sans", sys
 @keyframes spin { to { transform: rotate(360deg); } }
 footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; padding: 28px 0 max(22px, env(safe-area-inset-bottom)); color: #626d66; font-size: 12px; }
 /* Versionsnummer ganz klein auf eigener Zeile unter der Fußzeile: So sieht man auf jedem Bildschirm, welche Version läuft. */
-.build-mark { flex-basis: 100%; text-align: center; color: #8a948d; font-size: 10px; letter-spacing: .02em; user-select: all; }
+.build-mark { flex-basis: 100%; text-align: center; color: #626d66; font-size: 11px; letter-spacing: .02em; user-select: all; }
+.photo-selection-error { margin: 0 0 18px; border: 1px solid #c8a95e; border-radius: 12px; padding: 12px; color: #5c4b20; background: #fff8e4; font-size: 14px; line-height: 1.5; text-align: center; }
 .account-panel { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 14px; margin: 0 0 18px; border: 1px solid #e5e9e3; border-radius: 14px; padding: 11px 14px; color: #57645d; background: #fff; font-size: 12px; text-align: center; }
 .account-panel > div { flex: 1 1 180px; }
 .account-panel strong { color: #27523d; }
