@@ -1,6 +1,6 @@
 # Entscheidungen und nächste Schritte
 
-Stand: **10.11.2026**. Der aktuelle nächste Schritt ist ein echter, lesender Handytest des nach PR #49 deployten AED-Abgleichs. Diese Liste ersetzt ältere Statusangaben in diesem Dokument; frühere Einträge bleiben nur als historische Begründung erhalten.
+Stand: **14.11.2026**. Gemergt sind der Detailweg (P0 bis P5, PR #77), die Detail-Angaben aus der Trefferliste (PR #80) und die Entfernung der Demo „Vorschau testen“ (PR #81). **Nächste Schritte beim Projektinhaber:** (1) Schreibtest auf dem OSM-Testserver nach Abschnitt D der [Pilot-Abnahme](pilot-abnahme.md) (Schalter `OSM_DEV_WRITES_ENABLED`, für Korrekturen zusätzlich `OSM_DETAIL_CORRECTIONS_ENABLED`), (2) Handytest des Formulars (P6), (3) die unten markierten Entscheidungen. Diese Liste ersetzt ältere Statusangaben in diesem Dokument; frühere Einträge bleiben nur als historische Begründung erhalten.
 
 ## Rückmeldungen vom 13.11.2026 (iPhone)
 
