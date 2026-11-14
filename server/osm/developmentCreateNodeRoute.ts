@@ -15,8 +15,10 @@ import {
 } from "../storage/osmDevelopmentWriteOperations";
 import type { D1Database } from "../storage/d1";
 import { requestOSMDevelopmentApi } from "./developmentApi";
-import { APP_VERSION } from "../version";
-import { withoutXmlDeclaration } from "./xmlText";
+import { escapeXml, withoutXmlDeclaration } from "./xmlText";
+import { createChangeset, closeChangeset } from "./changeset";
+import { distanceMeters } from "../../src/domain/candidateMatch";
+import { BodyTooLargeError, isCrossOrigin, isRecord, jsonResponse, readCookie, readLimitedBody, readLimitedText } from "../http/requestGuards";
 import { NEARBY_RADIUS_METERS } from "../../src/domain/matchPolicy";
 import { isAcceptableObservationDate } from "./observationDate";
 import { validateDetailTags, type DetailTags } from "../../src/contracts/aedDetails";
@@ -28,7 +30,6 @@ const MAX_BODY_BYTES = 8_192;
 const MAX_MAP_BYTES = 512 * 1_024;
 const MAX_RESPONSE_BYTES = 1_024;
 // Die Statusantwort eines Änderungssatzes (JSON oder XML) kann mit Tags und Ausdehnung länger als 1 KiB sein.
-const MAX_CHANGESET_STATUS_BYTES = 8_192;
 
 type Environment = { DB?: D1Database; OSM_DEV_WRITES_ENABLED?: string; OSM_OAUTH_ENCRYPTION_KEY?: string };
 type Dependencies = { fetch?: typeof fetch; now?: () => number; crypto?: Crypto };
@@ -146,7 +147,7 @@ export async function handleDevelopmentCreateNode(
 
   let changesetId: string;
   try {
-    changesetId = await createChangeset(token, dependencies.fetch ?? fetch);
+    changesetId = await createChangeset(token, "AEDjaeger: AED mapped on site", dependencies.fetch ?? fetch);
   } catch {
     // No node upload has started yet, so an empty changeset cannot create a duplicate AED.
     await safelyFinishStarted(environment.DB, sessionHash, input.operation_id, "failed", (dependencies.now ?? Date.now)());
@@ -203,7 +204,7 @@ async function findNearbyAed(input: CreateRequest, token: string, fetcher: typeo
       // Ein Knoten außerhalb des Nahbereichs (über 50 m) zählt nicht. Wege und Relationen haben im Kartenabruf keinen
       // sicheren Punkt; sie blockieren wie bisher, solange sie im Kasten liegen.
       if (element.type === "node" && typeof element.lat === "number" && typeof element.lon === "number"
-        && metersBetween(input.latitude, input.longitude, element.lat, element.lon) > NEARBY_RADIUS_METERS) continue;
+        && distanceMeters({ latitude: input.latitude, longitude: input.longitude }, { latitude: element.lat, longitude: element.lon }) > NEARBY_RADIUS_METERS) continue;
       const candidateId = `${element.type}/${element.id}`;
       // Only nearby AEDs the person explicitly reviewed as different are exempt.
       // Any newly appeared or unreviewed AED still blocks creation.
@@ -294,48 +295,6 @@ async function finishChangeset(database: D1Database, sessionHash: string, operat
   if (!await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch)) return jsonResponse({ status: "uploaded", node_id: operation.result_node_id, version: operation.result_version, close_pending: true }, 202);
   await safelyUpdate(database, { sessionHash, operationId, state: "complete", changesetId: operation.changeset_id, resultNodeId: operation.result_node_id, resultVersion: operation.result_version, now: (dependencies.now ?? Date.now)() });
   return completeResponse(operation);
-}
-
-async function createChangeset(token: string, fetcher: typeof fetch): Promise<string> {
-  const body = `<osm><changeset><tag k="created_by" v="AEDjaeger ${APP_VERSION}"/><tag k="comment" v="AEDjaeger: AED mapped on site"/></changeset></osm>`;
-  const response = await requestOSMDevelopmentApi("development", "/api/0.6/changeset/create", token, { method: "PUT", body }, fetcher);
-  if (!response.ok) throw new Error("OSM changeset could not be opened");
-  const id = (await readLimitedText(response, 64)).trim();
-  if (!/^[1-9]\d{0,15}$/u.test(id)) throw new Error("Invalid OSM changeset ID");
-  return id;
-}
-
-async function closeChangeset(token: string, changesetId: string, fetcher: typeof fetch): Promise<boolean> {
-  try {
-    const response = await requestOSMDevelopmentApi("development", `/api/0.6/changeset/${changesetId}/close`, token, { method: "PUT" }, fetcher);
-    if (response.ok) return true;
-    // A 409 can mean either "already closed" or "not owned by this user".
-    // Confirm the server's state instead of treating every conflict as success.
-    if (response.status !== 409) return false;
-    const status = await requestOSMDevelopmentApi("development", `/api/0.6/changeset/${changesetId}`, token, { method: "GET" }, fetcher);
-    if (!status.ok) return false;
-    return isChangesetClosed(await readLimitedText(status, MAX_CHANGESET_STATUS_BYTES), changesetId);
-  } catch { return false; }
-}
-
-/**
- * Sagt, ob die Statusantwort des Servers diesen Änderungssatz als geschlossen beschreibt.
- *
- * Warum zwei Formate? Die Anfrage nennt "Accept: application/json, application/xml, text/plain". Der OSM-Testserver
- * antwortet auf /api/0.6/changeset/<id> dann mit JSON ({"changeset":{"id":...,"open":false}}), andere Wege liefern XML
- * (<changeset id="..." open="false">). Früher lasen wir nur XML: Der Knoten war angelegt und der Änderungssatz
- * geschlossen, die App hielt ihn trotzdem für "nicht sicher geschlossen" und meldete für immer "Ergebnis unklar".
- * Im Zweifel (anderes Format, andere Nummer, noch offen) gilt der Änderungssatz als NICHT geschlossen.
- */
-function isChangesetClosed(body: string, changesetId: string): boolean {
-  try {
-    const parsed: unknown = JSON.parse(body);
-    if (!isRecord(parsed) || !isRecord(parsed.changeset)) return false;
-    return String(parsed.changeset.id) === changesetId && parsed.changeset.open === false;
-  } catch {
-    // Kein JSON: als XML lesen.
-  }
-  return new RegExp(`<changeset\\b(?=[^>]*\\bid="${changesetId}"(?=[\\s>]))(?=[^>]*\\bopen="false"(?=[\\s>]))[^>]*\\/?\\s*>`, "u").test(body);
 }
 
 /** Distinguish a valid, empty OSM Changeset from malformed or unknown data. */
@@ -476,24 +435,8 @@ function serializeCreateRequestForHash(input: CreateRequest): string {
 
 function isStringRecord(value: unknown): value is Record<string, string> { return isRecord(value) && Object.keys(value).length <= 512 && Object.entries(value).every(([key, text]) => key.length > 0 && key.length <= 255 && typeof text === "string" && text.length <= 255); }
 /** Entfernung zweier Punkte in Metern (Haversine-Formel, Erdradius 6.371 km). */
-function metersBetween(latitudeA: number, longitudeA: number, latitudeB: number, longitudeB: number): number {
-  const toRadians = (degrees: number) => degrees * Math.PI / 180;
-  const deltaLatitude = toRadians(latitudeB - latitudeA);
-  const deltaLongitude = toRadians(longitudeB - longitudeA);
-  const a = Math.sin(deltaLatitude / 2) ** 2 + Math.cos(toRadians(latitudeA)) * Math.cos(toRadians(latitudeB)) * Math.sin(deltaLongitude / 2) ** 2;
-  return 2 * 6_371_000 * Math.asin(Math.min(1, Math.sqrt(a)));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
-function escapeXml(value: string): string { return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;"); }
-function isCrossOrigin(request: Request, origin: string): boolean { const requestOrigin = request.headers.get("Origin"); return (requestOrigin !== null && requestOrigin !== origin) || request.headers.get("Sec-Fetch-Site") === "cross-site"; }
-function readCookie(header: string | null, name: string): string | null { if (!header || header.length > 8_192) return null; const values = header.split(";").map((part) => part.trim()).filter((part) => part.startsWith(`${name}=`)); if (values.length !== 1) return null; const value = values[0].slice(name.length + 1); return /^[A-Za-z0-9_-]{43}$/u.test(value) ? value : null; }
-async function readLimitedBody(request: Request | Response, maximum: number): Promise<Uint8Array> { const length = request.headers.get("Content-Length"); if (length !== null && (!/^\d+$/u.test(length) || Number(length) > maximum)) throw new BodyTooLargeError(); if (!request.body) return new Uint8Array(); const reader = request.body.getReader(); const chunks: Uint8Array[] = []; let size = 0; try { while (true) { const { done, value } = await reader.read(); if (done) break; size += value.byteLength; if (size > maximum) { await reader.cancel().catch(() => undefined); throw new BodyTooLargeError(); } chunks.push(value); } } finally { reader.releaseLock(); } const body = new Uint8Array(size); let offset = 0; for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; } return body; }
-async function readLimitedText(response: Response, maximum: number): Promise<string> { return new TextDecoder("utf-8", { fatal: true }).decode(await readLimitedBody(response, maximum)); }
 async function safelyClaimUpload(database: D1Database, sessionHash: string, operationId: string, now: number): Promise<boolean> { try { return await claimOSMDevelopmentUpload(database, sessionHash, operationId, now); } catch { return false; } }
 async function safelyTouchStarted(database: D1Database, sessionHash: string, operationId: string, now: number): Promise<boolean> { try { return await touchStartedOSMDevelopmentWrite(database, sessionHash, operationId, now); } catch { return false; } }
 async function safelyFinishStarted(database: D1Database, sessionHash: string, operationId: string, state: "conflict" | "failed", now: number): Promise<boolean> { try { return await finishStartedOSMDevelopmentWrite(database, { sessionHash, operationId, state, now }); } catch { return false; } }
 async function safelyUpdate(database: D1Database, input: Parameters<typeof updateOSMDevelopmentWrite>[1]): Promise<void> { try { await updateOSMDevelopmentWrite(database, input); } catch { /* Keep database internals out of user-facing errors. */ } }
 function completeResponse(operation: OSMDevelopmentWriteOperation): Response { return jsonResponse({ status: "complete", node_id: operation.result_node_id, version: operation.result_version }, 200); }
-function jsonResponse(body: Record<string, unknown>, status: number, headers: Record<string, string> = {}): Response { return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer", ...headers } }); }
-class BodyTooLargeError extends Error {}

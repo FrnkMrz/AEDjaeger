@@ -1,3 +1,4 @@
+import { isRecord } from "../http/requestGuards";
 import { IMAGE_ISSUES, OBSERVATION_KEYS, OBSERVATION_LIMITS, VISION_SCENES } from "../../src/contracts/visionObservation";
 
 /**
@@ -98,8 +99,4 @@ export function explainObservationMismatch(input: unknown): string {
   if (!Array.isArray(input.location_clues)) return "schema_invalid_clues";
   if (!Array.isArray(input.image_issues)) return "schema_invalid_issues";
   return "schema_mismatch";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

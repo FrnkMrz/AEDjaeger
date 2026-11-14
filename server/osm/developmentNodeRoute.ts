@@ -3,8 +3,9 @@ import { findOSMSession } from "../storage/osmSessions";
 import { findOSMDevelopmentToken } from "../storage/osmDevelopmentTokens";
 import type { D1Database } from "../storage/d1";
 import { DETAIL_KEYS } from "../../src/contracts/aedDetails";
+import { isCrossOrigin, jsonResponse, readCookie } from "../http/requestGuards";
 import {
-  SESSION_COOKIE, TargetNotFoundError, VersionConflictError, isCrossOrigin, jsonResponse, readCookie, readDevelopmentNode,
+  SESSION_COOKIE, TargetNotFoundError, VersionConflictError, readDevelopmentNode,
 } from "./developmentWriteRoute";
 
 type Environment = { DB?: D1Database; OSM_DEV_WRITES_ENABLED?: string; OSM_OAUTH_ENCRYPTION_KEY?: string };

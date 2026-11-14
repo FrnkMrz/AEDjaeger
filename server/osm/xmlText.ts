@@ -11,3 +11,7 @@
 export function withoutXmlDeclaration(value: string): string {
   return value.replace(/^\s*<\?xml\b[^?]*\?>\s*/u, "");
 }
+
+export function escapeXml(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
+}
