@@ -25,7 +25,7 @@ import {
   type LocationPermission,
 } from "./location/phoneLocationPermission";
 import { assessCandidateSearch } from "./domain/assessCandidateSearch";
-import { createPositionPicker, zoomToFitMarkers, type Coordinate, type MapMarker } from "./map/positionPicker";
+import type { Coordinate } from "./map/positionPicker";
 import { previewNewAed } from "./domain/osmChangeProposal";
 import {
   EMPTY_DETAIL_FORM,
@@ -66,6 +66,7 @@ import {
   type DetailFormViewContext,
 } from "./ui/views/detailForm";
 import { bindDetailForm as bindDetailFormInput } from "./ui/controllers/detailFormBinding";
+import { bindWorkflowMap } from "./ui/controllers/mapBindings";
 import {
   isCalendarDate,
   isFreshCapture,
@@ -499,16 +500,6 @@ function newEntryPanelOpen(current: FlowState): boolean {
  * Die Nummer (1, 2, 3 …) ist dieselbe wie in der Trefferliste, damit man Karte und Liste
  * leicht zuordnen kann. Es werden nur die tatsächlich angezeigten Treffer markiert.
  */
-function reviewedCandidateMarkers(current: FlowState): MapMarker[] {
-  if (current.kind !== "candidate-result" || current.assessment.kind !== "candidate-review") return [];
-  const markers: MapMarker[] = [];
-  current.assessment.candidates.forEach((ranked, index) => {
-    const candidate = current.search.candidates.find((item) => item.id === ranked.id);
-    if (candidate) markers.push({ position: candidate.position, label: String(index + 1) });
-  });
-  return markers;
-}
-
 /**
  * Baut die Vorschau einer Neuanlage aus dem Suchergebnis, der bestätigten Position und den Detailangaben.
  *
@@ -825,94 +816,18 @@ function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void 
 
   if (infoDialogWasOpen) document.querySelector<HTMLDialogElement>("#info-dialog")?.showModal();
 
-  if (state.kind === "location-map") {
-    const mapContainer = app.querySelector<HTMLDivElement>("#search-location-map");
-    if (mapContainer) {
-      activePositionPicker = createPositionPicker(mapContainer, photoSession.mapLocationOverride ?? state.center, {
-        mapLabel: tv("chooseMapLocation"),
-        zoomInLabel: tv("newPositionMapZoomIn"),
-        zoomOutLabel: tv("newPositionMapZoomOut"),
-        tileErrorLabel: tv("newPositionMapTileError"),
-        initialZoom: state.initialZoom,
-        onPositionChange(position) {
-          photoSession.mapLocationOverride = position;
-          const coordinates = app.querySelector<HTMLParagraphElement>("#search-location-coordinates");
-          if (coordinates)
-            coordinates.textContent = tv("mapLocationCoordinates", {
-              latitude: position.latitude.toFixed(5),
-              longitude: position.longitude.toFixed(5),
-            });
-          updateMapSearchButton();
-        },
-        onZoomChange(zoom) {
-          if (state.kind === "location-map") state.initialZoom = zoom;
-          updateMapSearchButton();
-        },
-      });
-
-      function updateMapSearchButton(): void {
-        const confirmButton = app.querySelector<HTMLButtonElement>('[data-action="confirm-map-location"]');
-        if (confirmButton)
-          confirmButton.disabled =
-            photoSession.mapLocationOverride === undefined ||
-            (state.kind === "location-map" && (state.initialZoom ?? 19) < minimumMapSearchZoom);
-      }
-    }
-  }
-
-  if (state.kind === "candidate-result" && !newEntryPanelOpen(state)) {
-    // Übersichtskarte bei Treffern: nur zum Ansehen. Verschieben ändert keine Auswahl,
-    // deshalb macht onPositionChange hier bewusst nichts.
-    const overviewContainer = app.querySelector<HTMLDivElement>("#candidate-overview-map");
-    if (overviewContainer) {
-      const markers = reviewedCandidateMarkers(state);
-      const bounds = overviewContainer.getBoundingClientRect();
-      activePositionPicker = createPositionPicker(overviewContainer, state.location, {
-        mapLabel: tv("overviewMapLabel"),
-        zoomInLabel: tv("newPositionMapZoomIn"),
-        zoomOutLabel: tv("newPositionMapZoomOut"),
-        tileErrorLabel: tv("newPositionMapTileError"),
-        // So weit herauszoomen, dass Standort und alle Treffer gleichzeitig sichtbar sind.
-        initialZoom: zoomToFitMarkers(state.location, markers, bounds.width || 300, bounds.height || 225),
-        // Der gesuchte Standort ist hier ein fest verankerter roter Marker und NICHT der
-        // Bildmittelpunkt. So bleibt er beim Verschieben oder Zoomen an der richtigen Stelle.
-        markers: [{ position: state.location, label: "", kind: "origin" }, ...markers],
-        hideCrosshair: true,
-        onPositionChange() {},
-      });
-    }
-  }
-
-  if (newEntryPanelOpen(state) && state.kind === "candidate-result") {
-    const mapContainer = app.querySelector<HTMLDivElement>("#new-aed-position-map");
-    if (mapContainer) {
-      activePositionPicker = createPositionPicker(mapContainer, newAedPositionOverride ?? state.location, {
-        // Bereits eingetragene AEDs bleiben beim Setzen des neuen Punkts sichtbar.
-        markers: reviewedCandidateMarkers(state),
-        mapLabel: tv("newPositionMapLabel"),
-        zoomInLabel: tv("newPositionMapZoomIn"),
-        zoomOutLabel: tv("newPositionMapZoomOut"),
-        tileErrorLabel: tv("newPositionMapTileError"),
-        onPositionChange(position) {
-          newAedPositionOverride = position;
-          const confirmation = app.querySelector<HTMLInputElement>("#new-aed-position-confirmed");
-          if (confirmation) confirmation.checked = false;
-          const coordinates = app.querySelector<HTMLParagraphElement>("#new-aed-position-coordinates");
-          if (coordinates)
-            coordinates.textContent = tv("newPreviewCoordinates", {
-              latitude: position.latitude.toFixed(5),
-              longitude: position.longitude.toFixed(5),
-            });
-          const label = app.querySelector<HTMLSpanElement>("#new-aed-position-label");
-          if (label)
-            label.textContent = tv("newPositionConfirm", {
-              latitude: position.latitude.toFixed(5),
-              longitude: position.longitude.toFixed(5),
-            });
-        },
-      });
-    }
-  }
+  activePositionPicker = bindWorkflowMap({
+    app,
+    state,
+    photoSession,
+    minimumMapSearchZoom,
+    newEntryPanelOpen,
+    newAedPositionOverride,
+    setNewAedPositionOverride: (position) => {
+      newAedPositionOverride = position;
+    },
+    tv,
+  });
 
   // Detailformular: Eingaben mit dem gemerkten Formularzustand verbinden.
   if (state.kind === "new-aed-details" || (state.kind === "existing-aed-details" && state.load.status === "ready"))
