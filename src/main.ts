@@ -68,6 +68,7 @@ import {
 import { bindDetailForm as bindDetailFormInput } from "./ui/controllers/detailFormBinding";
 import { bindWorkflowMap } from "./ui/controllers/mapBindings";
 import { bindRenderedControls } from "./ui/controllers/renderBindings";
+import { createUpdateBannerRenderer } from "./ui/controllers/updateBanner";
 import {
   isCalendarDate,
   isFreshCapture,
@@ -886,35 +887,14 @@ function reloadBlocked(): boolean {
  * Neu geladen wird nie automatisch: Ein Neuladen verwirft das aktuelle Foto und den Entwurf. Die Person
  * entscheidet, und das Banner sagt ihr, was dabei verloren geht.
  */
-let renderedUpdateBanner = "";
-function renderUpdateBanner(): void {
-  let banner = document.querySelector<HTMLElement>("#update-banner");
-  if (!updateAvailable) {
-    banner?.remove();
-    renderedUpdateBanner = "";
-    return;
-  }
-  if (!banner) {
-    banner = document.createElement("div");
-    banner.id = "update-banner";
-    banner.className = "update-banner";
-    banner.setAttribute("role", "status");
-    banner.addEventListener("click", (event) => {
-      // Der Zustand wird beim Klick erneut geprüft: Er kann sich seit dem Zeichnen geändert haben.
-      if ((event.target as HTMLElement).closest(".update-banner-button") && !reloadBlocked()) window.location.reload();
-    });
-    app.before(banner);
-    renderedUpdateBanner = "";
-  }
-  const blocked = reloadBlocked();
-  const note = blocked ? tv("updateWaitSave") : hasActivePhotoDraft(state) ? tv("updateLosesPhoto") : "";
-  const markup = `<span>${tv("updateAvailable")}${note ? ` ${note}` : ""}</span><button class="update-banner-button" type="button" ${blocked ? "disabled" : ""}>${tv("updateReload")}</button>`;
-  // Nur schreiben, wenn sich etwas geändert hat, damit der Fokus auf dem Knopf erhalten bleibt.
-  if (markup !== renderedUpdateBanner) {
-    banner.innerHTML = markup;
-    renderedUpdateBanner = markup;
-  }
-}
+const renderUpdateBanner = createUpdateBannerRenderer({
+  app,
+  isUpdateAvailable: () => updateAvailable,
+  reloadBlocked,
+  hasActivePhotoDraft: () => hasActivePhotoDraft(state),
+  translate: tv,
+  reload: () => window.location.reload(),
+});
 
 function bindAccountPanel(): void {
   app.querySelector<HTMLButtonElement>("#osm-sign-out")?.addEventListener("click", () => {
