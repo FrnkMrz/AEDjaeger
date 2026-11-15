@@ -51,6 +51,11 @@ import {
 import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } from "./osm/candidateSearch";
 import { ExistingNodeError, requestExistingNode } from "./osm/existingNode";
 import {
+  accountPanel as renderAccountPanel,
+  loginEntry as renderLoginEntry,
+  type AccountState,
+} from "./ui/views/accountViews";
+import {
   formatCalendarDate,
   isCalendarDate,
   isFreshCapture,
@@ -95,14 +100,6 @@ let pendingDevelopmentWrite = readPendingDevelopmentWrite();
 let state: FlowState = pendingDevelopmentWrite
   ? { kind: "development-write-recovery", request: pendingDevelopmentWrite, writeStatus: "uncertain" }
   : { kind: "ready" };
-type AccountState =
-  | "checking"
-  | "not-configured"
-  | "connection-error"
-  | "login-error"
-  | "signed-out"
-  | "signed-in"
-  | "logout-error";
 let accountState: AccountState = "checking";
 let productionLoginAvailable = false;
 let developmentLoginAvailable = false;
@@ -391,75 +388,26 @@ function t(key: TranslationKey, values?: Record<string, number | string>): strin
 function tv(key: FlowMessageKey, values?: Record<string, number | string>): string {
   return translateFlow(language, key, values);
 }
-function signInLinks(): string {
-  const productionLink = productionLoginAvailable
-    ? `<a class="button button-primary account-sign-in" id="osm-sign-in" href="/api/auth/osm/start">${t("accountSignIn")}</a>`
-    : "";
-  const developmentLink = developmentLoginAvailable
-    ? `<a class="button button-secondary account-sign-in" id="osm-dev-sign-in" href="/api/auth/osm/development/start">${t("accountDevSignIn")}</a><p class="simulation-note">${t("accountDevNotice")}</p>`
-    : "";
-  return `${productionLink}${developmentLink}`;
+function accountViewContext() {
+  return {
+    t,
+    tv,
+    accountState,
+    productionLoginAvailable,
+    developmentLoginAvailable,
+    photoSelectionPending,
+    activePhotoDraft: hasActivePhotoDraft(state),
+    pendingDevelopmentWrite: Boolean(pendingDevelopmentWrite),
+    illustrationMarkup: defibrillatorMark(),
+  };
 }
 
-/** Die OSM-Anmeldung ist Voraussetzung für alle Arbeitsfunktionen der App. */
 function loginEntry(): string {
-  const registerLink = `<a class="account-create-link" href="https://www.openstreetmap.org/user/new" target="_blank" rel="noopener noreferrer">${t("accountCreate")}</a>`;
-  const createHelp = `<p class="account-create-help">${t("accountCreateHelp")}</p>`;
-  let status = "";
-  let actions = "";
-  const pendingRecovery = pendingDevelopmentWrite
-    ? `<div class="login-status-wrap"><p class="login-status" role="status">${tv("recoveryNeedSignIn")}</p><button class="button button-secondary" data-action="continue-recovery">${tv("recoveryContinue")}</button></div>`
-    : "";
-
-  if (accountState === "checking") {
-    status = `<p class="login-status" role="status" aria-live="polite">${t("accountChecking")}</p>`;
-  } else if (accountState === "connection-error") {
-    status = `<p class="login-status" role="alert">${t("accountConnectionError")}</p>`;
-    actions = `<button class="button button-secondary account-sign-in" id="osm-session-retry" type="button">${t("accountRetry")}</button>`;
-  } else if (accountState === "not-configured") {
-    status = `<p class="login-status" role="status">${t("accountUnavailable")}</p>`;
-  } else {
-    if (accountState === "login-error") status = `<p class="login-status" role="alert">${t("accountLoginError")}</p>`;
-    if (accountState === "logout-error") {
-      status = `<p class="login-status" role="alert">${t("accountSignOutError")}</p>`;
-      // Keep logout retryable if the server may still hold the user's session.
-      actions = `<button class="button button-secondary account-sign-in" id="osm-sign-out" type="button">${t("accountSignOut")}</button>`;
-    } else {
-      actions = signInLinks();
-    }
-  }
-
-  return `<section class="login-card" aria-labelledby="login-title">
-    <div class="empty-illustration" aria-hidden="true"><span class="device-card">${defibrillatorMark()}</span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>
-    <p class="hero-kicker"><span></span>${t("eyebrow")}</p>
-    <h1 id="login-title" tabindex="-1">${t("accountGateTitle")}</h1>
-    <p class="login-intro">${t("accountGateIntro")}</p>
-    <p class="login-requirement">${t("accountRequired")}</p>
-    ${status ? `<div class="login-status-wrap">${status}</div>` : ""}
-    ${actions ? `<div class="login-actions">${actions}</div>` : ""}
-    ${pendingRecovery}
-    <div class="account-create">${registerLink}${createHelp}</div>
-    <p class="login-credentials-note">${t("accountCredentialsNote")}</p>
-  </section>`;
+  return renderLoginEntry(accountViewContext());
 }
 
 function accountPanel(): string {
-  if (accountState === "checking")
-    return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountChecking")}</section>`;
-  if (accountState === "not-configured")
-    return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountUnavailable")}</section>`;
-  if (accountState === "connection-error")
-    return `<section class="account-panel" aria-live="polite" tabindex="-1"><span>${t("accountConnectionError")}</span><button class="account-button" id="osm-session-retry" type="button">${t("accountRetry")}</button></section>`;
-  if ((photoSelectionPending || hasActivePhotoDraft(state)) && accountState !== "signed-in")
-    return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountLoginBlocked")}</section>`;
-  if (accountState === "login-error")
-    return `<section class="account-panel" aria-live="polite"><p role="alert">${t("accountLoginError")}</p>${signInLinks()}</section>`;
-  // Angemeldet: Kein Block auf dem Hauptbildschirm. Der Status steht als Lampe in der Fußzeile, „Abmelden“ im Info-Dialog.
-  if (accountState === "signed-in") return "";
-  if (accountState === "logout-error") {
-    return `<section class="account-panel" aria-live="polite"><span>${t("accountSignOutError")}</span><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>`;
-  }
-  return `<section class="account-panel">${signInLinks()}<p>${t("accountIdentityOnly")}</p></section>`;
+  return renderAccountPanel(accountViewContext());
 }
 /**
  * Die Lampe neben dem Namen in der Kopfzeile zeigt, ob die App mit OpenStreetMap verbunden ist: grün = verbunden,
