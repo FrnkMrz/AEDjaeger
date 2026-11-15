@@ -48,6 +48,7 @@ import { ExistingNodeError, requestExistingNode } from "./osm/existingNode";
 import { sendDevelopmentWrite } from "./net/developmentWrite";
 import { createPhotoSessionState } from "./state/photoSession";
 import { handleCandidateAction } from "./ui/actions/candidateActions";
+import { handleNewEntryAction } from "./ui/actions/newEntryActions";
 import { dispatchPhotoLocationAction } from "./ui/actions/photoLocationActions";
 import { renderPhotoState } from "./ui/views/photoStates";
 import {
@@ -1850,6 +1851,29 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     return;
   }
 
+  const newEntryActionResult = handleNewEntryAction(action, {
+    state,
+    setState: (nextState) => {
+      state = nextState;
+    },
+    newEntryPanelOpen,
+    readPositionConfirmed: () =>
+      app!.querySelector<HTMLInputElement>("#new-aed-position-confirmed")?.checked === true,
+    clearExistingDetailTags: () => {
+      detailExistingTags = undefined;
+    },
+    newAedPositionOverride,
+    computePreview: computeNewAedPreview,
+    buildDetails: buildDetailTags,
+    getDetailForm: () => detailForm,
+    updateDetailFooter,
+  });
+  if (newEntryActionResult === "stop") return;
+  if (newEntryActionResult === "handled") {
+    render(true);
+    return;
+  }
+
   if (action === "continue-recovery" && pendingDevelopmentWrite && accountState !== "signed-in") {
     // A pending write can only be reconciled under the same test-server session that created it.
     // Continue starts that OAuth flow directly, even if session status has not finished loading yet.
@@ -1863,55 +1887,6 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     state = pendingDevelopmentWrite
       ? { kind: "development-write-recovery", request: pendingDevelopmentWrite, writeStatus: "uncertain" }
       : { kind: "ready" };
-  } else if (action === "preview-new-aed" && state.kind === "candidate-result") {
-    if (!newEntryPanelOpen(state)) return;
-    const positionConfirmed = app!.querySelector<HTMLInputElement>("#new-aed-position-confirmed")?.checked === true;
-    if (positionConfirmed) {
-      // Ein eventuell übrig gebliebener Stand eines bestehenden AED darf das Neuanlage-Formular nie sperren.
-      detailExistingTags = undefined;
-      // Erste Bestätigung (Position) ist da: weiter zu den freiwilligen Angaben. Die Vorschau folgt erst danach.
-      const confirmedPosition = newAedPositionOverride ?? state.location;
-      state = {
-        kind: "new-aed-details",
-        photoUrl: state.photoUrl,
-        returnState: state,
-        position: { latitude: confirmedPosition.latitude, longitude: confirmedPosition.longitude },
-      };
-    } else {
-      // Position nicht bestätigt: Die gesperrte Vorschau erklärt, was fehlt. Das Formular erscheint noch nicht.
-      const result = computeNewAedPreview(state, false);
-      state = { kind: "new-aed-preview", photoUrl: state.photoUrl, result, returnState: state };
-    }
-  } else if (action === "details-continue" && state.kind === "new-aed-details") {
-    // Die Angaben laufen durch denselben Vertrag wie später beim Server. Ist etwas ungültig, bleibt die Person
-    // im Formular (der Knopf ist dann ohnehin gesperrt; das hier ist die zweite Sicherung gegen erzwungene Klicks).
-    const built = buildDetailTags(detailForm);
-    if (!built.ok) {
-      updateDetailFooter();
-      return;
-    }
-    const result = computeNewAedPreview(state.returnState, true, built.tags);
-    state = {
-      kind: "new-aed-preview",
-      photoUrl: state.photoUrl,
-      result,
-      returnState: state.returnState,
-      detailsPosition: state.position,
-    };
-  } else if (action === "back-from-details" && state.kind === "new-aed-details") {
-    // Zurück zur Positionsbestätigung. Die Angaben bleiben im Speicher, falls die Person gleich wieder weitergeht.
-    state = state.returnState;
-  } else if (action === "back-to-details" && state.kind === "new-aed-preview" && state.detailsPosition) {
-    if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
-    state = {
-      kind: "new-aed-details",
-      photoUrl: state.photoUrl,
-      returnState: state.returnState,
-      position: state.detailsPosition,
-    };
-  } else if (action === "back-to-search" && state.kind === "new-aed-preview") {
-    if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
-    state = state.returnState;
   } else if (action === "create-development-node" && state.kind === "new-aed-preview") {
     successSound.prepare(); // Beim Tippen: Ton freischalten, er erklingt erst bei bestätigtem Erfolg.
     if (
