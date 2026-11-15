@@ -1,4 +1,5 @@
 import { parseVisionObservation, VISION_MODEL, type VisionObservation } from "../contracts/visionObservation";
+import { isRecord } from "../../shared/typeGuards.js";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_SOURCE_BYTES = 40 * 1024 * 1024;
@@ -228,8 +229,4 @@ function canvasToJpeg(canvas: HTMLCanvasElement, quality: number): Promise<Blob>
       quality,
     );
   });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

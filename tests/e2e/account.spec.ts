@@ -143,7 +143,7 @@ test("an authenticated user can end the OSM session without exposing profile dat
   await page.locator("#open-info").click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Mit OpenStreetMap verbunden");
-  await expect(dialog).toContainText("Änderungen an OpenStreetMap sind noch deaktiviert");
+  await expect(dialog).toContainText("Änderungen am echten OpenStreetMap sind nicht freigegeben");
   await dialog.getByRole("button", { name: "Abmelden" }).click();
   const signIn = page.getByRole("link", { name: "Mit OpenStreetMap anmelden" });
   await expect(signIn).toBeFocused();
