@@ -1,10 +1,11 @@
 # AEDjaeger – Übergabe an den nächsten Agenten
 
-Stand: **10. November 2026, abends** (nach PR #54)  
-Repository: [FrnkMrz/AEDjaeger](https://github.com/FrnkMrz/AEDjaeger)  
+Stand: **15. November 2026** (main nach PR #108)
+
+Repository: [FrnkMrz/AEDjaeger](https://github.com/FrnkMrz/AEDjaeger)
 App: [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev)
 
-Dieses Dokument ist die kompakte, aktuelle Übergabe für einen neuen Chat oder einen anderen Coding-Agenten. Es fasst die in diesem Projekt getroffenen Produktentscheidungen, den tatsächlichen technischen Stand und den nächsten sinnvollen Schritt zusammen. Bei Widersprüchen haben die neueren Produktentscheidungen und die Dateien unter „Weiterlesen“ Vorrang vor älteren historischen Abschnitten.
+Der maßgebliche Projekt- und Abnahmestatus, einschließlich der offenen Punkte und ihrer Reihenfolge, steht in [Entscheidungen und nächste Schritte](offene-fragen.md). Dieses Dokument ergänzt ihn um Produktentscheidungen und technischen Kontext; Abschnitte mit älteren Datumsangaben sind historischer Verlauf und dürfen nicht als aktueller Status gelesen werden. Bei Widersprüchen gelten die neueren Produktentscheidungen und die aktuellen Regeln in `AGENTS.md`.
 
 ## Nachtrag vom 14. November 2026: Detailweg (PR #77)
 

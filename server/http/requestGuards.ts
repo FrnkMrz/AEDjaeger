@@ -1,3 +1,7 @@
+import { isRecord } from "../../shared/typeGuards.js";
+
+export { isRecord };
+
 /** A bounded request or provider response exceeded its declared byte budget. */
 export class BodyTooLargeError extends Error {}
 
@@ -85,8 +89,4 @@ export async function readLimitedBody(source: Request | Response, maximumBytes: 
 export async function readLimitedText(response: Response, maximumBytes: number): Promise<string> {
   const body = await readLimitedBody(response, maximumBytes);
   return new TextDecoder("utf-8", { fatal: true }).decode(body);
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

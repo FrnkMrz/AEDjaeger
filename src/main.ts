@@ -1,4 +1,5 @@
 import "./styles.css";
+import { isRecord } from "../shared/typeGuards.js";
 import { endOSMSession, loadOSMSession } from "./auth/osmSession";
 import type { CandidateResultState, DevelopmentWriteRequest, FlowState } from "./domain/workflow";
 import { translate, translations, type Language, type TranslationKey } from "./i18n/translations";
@@ -1219,10 +1220,6 @@ function isDevelopmentWriteResponse(
     Number.isSafeInteger(value.version) &&
     (value.version as number) > 0
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isRecoveryOwnerMismatch(): boolean {
