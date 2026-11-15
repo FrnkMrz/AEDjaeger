@@ -25,6 +25,7 @@ import {
   type LocationPermission,
 } from "./location/phoneLocationPermission";
 import { assessCandidateSearch } from "./domain/assessCandidateSearch";
+import { getPhotoUrl, hasActivePhotoDraft, hasUnresolvedSave, isNewEntryPanelOpen } from "./domain/workflowSelectors";
 import type { Coordinate } from "./map/positionPicker";
 import { previewNewAed } from "./domain/osmChangeProposal";
 import {
@@ -465,39 +466,6 @@ function buildVersionText(): string {
   return time ? `${text} · ${time}` : text;
 }
 
-function getPhotoUrl(current: FlowState): string | undefined {
-  return "photoUrl" in current ? current.photoUrl : undefined;
-}
-
-function hasUnresolvedSave(current: FlowState): boolean {
-  return (
-    current.kind === "candidate-searching" ||
-    (current.kind === "new-aed-preview" &&
-      (current.writeStatus === "sending" || current.writeStatus === "uncertain")) ||
-    (current.kind === "osm-preview" && (current.writeStatus === "sending" || current.writeStatus === "uncertain"))
-  );
-}
-
-function hasActivePhotoDraft(current: FlowState): boolean {
-  return current.kind !== "ready";
-}
-
-/**
- * Sagt, ob der Bereich „neuen AED eintragen“ (Karte + Positionsbestätigung) geöffnet ist.
- *
- * Sicherheitsregel: Eine Neuanlage braucht immer ZWEI getrennte, ausdrückliche Bestätigungen.
- * Diese Funktion prüft die ERSTE davon:
- *  - Suche ohne Treffer: Die Person hat „Hier fehlt ein AED – neu eintragen“ gedrückt.
- *  - Suche mit Treffern: Die Person hat „Keiner davon – neuen AED eintragen“ gedrückt.
- * Die ZWEITE Bestätigung folgt in der Vorschau direkt vor dem Speichern (Haken „vor Ort geprüft“).
- * Eine unvollständige oder fehlgeschlagene Suche öffnet den Bereich nie.
- */
-function newEntryPanelOpen(current: FlowState): boolean {
-  if (current.kind !== "candidate-result" || current.search.status !== "complete") return false;
-  if (current.assessment.kind === "new-entry-eligible") return current.newEntryRequested === true;
-  return current.assessment.kind === "candidate-review" && current.noneOfTheseConfirmed === true;
-}
-
 /**
  * Baut die nummerierten Kartenmarker für die angezeigten Suchtreffer.
  * Die Nummer (1, 2, 3 …) ist dieselbe wie in der Trefferliste, damit man Karte und Liste
@@ -774,7 +742,7 @@ function statusContent(): string {
     searchLocationSource: photoSession.searchLocationSource,
     language,
     developmentWriteStatusKeys,
-    newEntryPanelOpen,
+    newEntryPanelOpen: isNewEntryPanelOpen,
     isRecoveryOwnerMismatch,
     detailEverythingPresent,
     detailFormMarkup,
@@ -824,7 +792,7 @@ function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void 
     state,
     photoSession,
     minimumMapSearchZoom,
-    newEntryPanelOpen,
+    newEntryPanelOpen: isNewEntryPanelOpen,
     newAedPositionOverride,
     setNewAedPositionOverride: (position) => {
       newAedPositionOverride = position;
@@ -1262,7 +1230,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
         setState: (nextState) => {
           state = nextState;
         },
-        newEntryPanelOpen,
+        newEntryPanelOpen: isNewEntryPanelOpen,
         readPositionConfirmed: () =>
           app.querySelector<HTMLInputElement>("#new-aed-position-confirmed")?.checked === true,
         clearExistingDetailTags: () => {
