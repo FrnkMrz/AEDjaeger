@@ -26,7 +26,7 @@ import {
 } from "./location/phoneLocationPermission";
 import { assessCandidateSearch } from "./domain/assessCandidateSearch";
 import { createPositionPicker, zoomToFitMarkers, type Coordinate, type MapMarker } from "./map/positionPicker";
-import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
+import { previewNewAed } from "./domain/osmChangeProposal";
 import {
   EMPTY_DETAIL_FORM,
   buildDetailTags,
@@ -45,6 +45,10 @@ import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } fr
 import { ExistingNodeError, requestExistingNode } from "./osm/existingNode";
 import { sendDevelopmentWrite } from "./net/developmentWrite";
 import { createPhotoSessionState } from "./state/photoSession";
+import { handleCandidateAction } from "./ui/actions/candidateActions";
+import { handleDevelopmentWriteAction } from "./ui/actions/developmentWriteActions";
+import { handleExistingDetailsAction } from "./ui/actions/existingDetailsActions";
+import { handleNewEntryAction } from "./ui/actions/newEntryActions";
 import { dispatchPhotoLocationAction } from "./ui/actions/photoLocationActions";
 import { renderStatusContent } from "./ui/views/statusContent";
 import {
@@ -1382,349 +1386,106 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     return;
   }
 
-  if (action === "continue-recovery" && pendingDevelopmentWrite && accountState !== "signed-in") {
-    // A pending write can only be reconciled under the same test-server session that created it.
-    // Continue starts that OAuth flow directly, even if session status has not finished loading yet.
-    window.location.assign("/api/auth/osm/development/start");
+  const candidateActionResult = handleCandidateAction(action, {
+    state,
+    source,
+    observedOn: photoSession.observedOn,
+    setState: (nextState) => {
+      state = nextState;
+    },
+    setNewAedPositionOverride: (position) => {
+      newAedPositionOverride = position;
+    },
+  });
+  if (candidateActionResult === "stop") return;
+  if (candidateActionResult === "handled") {
+    render(true);
     return;
   }
-  if (action === "retake") {
-    if (hasUnresolvedSave(state)) return;
-    clearTimers();
-    releasePhoto();
-    state = pendingDevelopmentWrite
-      ? { kind: "development-write-recovery", request: pendingDevelopmentWrite, writeStatus: "uncertain" }
-      : { kind: "ready" };
-  } else if (action === "preview-candidate" && state.kind === "candidate-result") {
-    const candidateId = source?.dataset.candidateId;
-    const candidate = state.search.candidates.find((item) => item.id === candidateId);
-    if (!candidate || !candidateId) return;
-    const result = previewExistingAedCheck(candidate, true, photoSession.observedOn);
-    // Ohne Name und Ortsangabe bleibt die Bezeichnung leer. Beim Anzeigen steht dann "AED (ohne Namen)" da (siehe
-    // displayCandidateLabel), in der gerade gewählten Sprache und nie die technische Kennung (node/123…).
-    const candidateLabel = candidate.tags.name || candidate.tags["defibrillator:location"] || "";
-    state = { kind: "osm-preview", photoUrl: state.photoUrl, candidateId, candidateLabel, result, returnState: state };
-  } else if (
-    action === "none-of-these" &&
-    state.kind === "candidate-result" &&
-    state.search.status === "complete" &&
-    state.assessment.kind === "candidate-review"
-  ) {
-    // The person explicitly rejects each displayed nearby AED as the photographed device.
-    // A corrected map point and a fresh server-side OSM check are still required before upload.
-    newAedPositionOverride = undefined;
-    state = { ...state, noneOfTheseConfirmed: true };
-  } else if (
-    action === "start-new-entry" &&
-    state.kind === "candidate-result" &&
-    state.search.status === "complete" &&
-    state.assessment.kind === "new-entry-eligible"
-  ) {
-    // Erste Bestätigung bei einer Suche ohne Treffer: Die Person sagt ausdrücklich,
-    // dass hier ein AED fehlt. Erst danach erscheinen Karte und Positionsbestätigung.
-    newAedPositionOverride = undefined;
-    state = { ...state, newEntryRequested: true };
-  } else if (action === "preview-new-aed" && state.kind === "candidate-result") {
-    if (!newEntryPanelOpen(state)) return;
-    const positionConfirmed = app.querySelector<HTMLInputElement>("#new-aed-position-confirmed")?.checked === true;
-    if (positionConfirmed) {
-      // Ein eventuell übrig gebliebener Stand eines bestehenden AED darf das Neuanlage-Formular nie sperren.
+  const newEntryActionResult = handleNewEntryAction(action, {
+    state,
+    setState: (nextState) => {
+      state = nextState;
+    },
+    newEntryPanelOpen,
+    readPositionConfirmed: () =>
+      app.querySelector<HTMLInputElement>("#new-aed-position-confirmed")?.checked === true,
+    clearExistingDetailTags: () => {
       detailExistingTags = undefined;
-      // Erste Bestätigung (Position) ist da: weiter zu den freiwilligen Angaben. Die Vorschau folgt erst danach.
-      const confirmedPosition = newAedPositionOverride ?? state.location;
-      state = {
-        kind: "new-aed-details",
-        photoUrl: state.photoUrl,
-        returnState: state,
-        position: { latitude: confirmedPosition.latitude, longitude: confirmedPosition.longitude },
-      };
-    } else {
-      // Position nicht bestätigt: Die gesperrte Vorschau erklärt, was fehlt. Das Formular erscheint noch nicht.
-      const result = computeNewAedPreview(state, false);
-      state = { kind: "new-aed-preview", photoUrl: state.photoUrl, result, returnState: state };
-    }
-  } else if (action === "details-continue" && state.kind === "new-aed-details") {
-    // Die Angaben laufen durch denselben Vertrag wie später beim Server. Ist etwas ungültig, bleibt die Person
-    // im Formular (der Knopf ist dann ohnehin gesperrt; das hier ist die zweite Sicherung gegen erzwungene Klicks).
-    const built = buildDetailTags(detailForm);
-    if (!built.ok) {
-      updateDetailFooter();
-      return;
-    }
-    const result = computeNewAedPreview(state.returnState, true, built.tags);
-    state = {
-      kind: "new-aed-preview",
-      photoUrl: state.photoUrl,
-      result,
-      returnState: state.returnState,
-      detailsPosition: state.position,
-    };
-  } else if (action === "back-from-details" && state.kind === "new-aed-details") {
-    // Zurück zur Positionsbestätigung. Die Angaben bleiben im Speicher, falls die Person gleich wieder weitergeht.
-    state = state.returnState;
-  } else if (action === "back-to-details" && state.kind === "new-aed-preview" && state.detailsPosition) {
-    if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
-    state = {
-      kind: "new-aed-details",
-      photoUrl: state.photoUrl,
-      returnState: state.returnState,
-      position: state.detailsPosition,
-    };
-  } else if (action === "back-to-search" && state.kind === "new-aed-preview") {
-    if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
-    state = state.returnState;
-  } else if (action === "create-development-node" && state.kind === "new-aed-preview") {
-    successSound.prepare(); // Beim Tippen: Ton freischalten, er erklingt erst bei bestätigtem Erfolg.
-    if (
-      !developmentSession ||
-      !developmentWriteAvailable ||
-      !developmentWriteOwnerHash ||
-      !crypto.randomUUID ||
-      state.result.kind !== "ready" ||
-      state.writeStatus
-    )
-      return;
-    // Zweite Bestätigung: Ohne gesetzten Haken „vor Ort geprüft“ wird nichts gesendet,
-    // auch wenn der Knopf (z. B. per Tastatur oder Skript) trotzdem ausgelöst wurde.
-    if (app.querySelector<HTMLInputElement>("#new-aed-absence-confirmed")?.checked !== true) return;
-    const preview = state;
-    if (preview.result.kind !== "ready") return;
-    const operationId = crypto.randomUUID();
-    const request: DevelopmentWriteRequest = {
-      kind: "create-node",
-      operationId,
-      candidateLabel: `${preview.result.position.latitude.toFixed(5)}, ${preview.result.position.longitude.toFixed(5)}`,
-      latitude: preview.result.position.latitude,
-      longitude: preview.result.position.longitude,
-      observedOn: preview.result.tags.check_date,
-      // Nur die Detailtags gehen als `details` an den Server. `emergency` und `check_date` setzt der Server selbst.
-      details: Object.fromEntries(
-        Object.entries(preview.result.tags).filter(([key]) => isDetailKey(key)),
-      ) as DetailTags,
-      confirmedDifferentCandidateIds: preview.result.confirmedDifferentCandidateIds,
-    };
-    try {
-      // Persist the exact confirmed proposal before network I/O so an interrupted request can be reconciled.
-      persistPendingDevelopmentWrite(request);
-    } catch {
-      state = { ...preview, operationId, writeStatus: "failed" };
-      render(true);
-      return;
-    }
-    state = { ...preview, operationId, writeStatus: "sending" };
+    },
+    newAedPositionOverride,
+    computePreview: computeNewAedPreview,
+    buildDetails: buildDetailTags,
+    getDetailForm: () => detailForm,
+    updateDetailFooter,
+  });
+  if (newEntryActionResult === "stop") return;
+  if (newEntryActionResult === "handled") {
     render(true);
-    void submitDevelopmentWrite(request);
-  } else if (action === "open-existing-details" && state.kind === "osm-preview" && !state.node) {
-    // Zweiter Weg neben „noch vorhanden“: fehlende Angaben ergänzen. Erst wird der AED frisch aus OSM gelesen.
-    const candidateId = state.candidateId;
-    const candidate = state.returnState.search.candidates.find((item) => item.id === candidateId);
-    if (
-      !developmentSession ||
-      !developmentWriteAvailable ||
-      !developmentWriteOwnerHash ||
-      candidate?.osmType !== "node"
-    )
-      return;
-    resetDetailForm();
-    state = {
-      kind: "existing-aed-details",
-      photoUrl: state.photoUrl,
-      candidateId,
-      candidateLabel: state.candidateLabel,
-      returnState: state.returnState,
-      load: { status: "loading" },
-    };
-    void loadExistingAedNode(candidateId);
-  } else if (action === "open-candidate-details" && state.kind === "candidate-result") {
-    // Direkt aus der Trefferliste zu den Tags (vor der Datumsseite). Gleiche Voraussetzungen wie beim Ergänzen: Testserver-Sitzung,
-    // Schreiben an, ein Knoten, der nicht nur im Archiv des echten OSM steht.
-    const candidateId = source?.dataset.candidateId;
-    const candidate = state.search.candidates.find((item) => item.id === candidateId);
-    if (
-      !candidate ||
-      !candidateId ||
-      !developmentSession ||
-      !developmentWriteAvailable ||
-      !developmentWriteOwnerHash ||
-      candidate.osmType !== "node" ||
-      candidate.source === "archive"
-    )
-      return;
-    resetDetailForm();
-    const candidateLabel = candidate.tags.name || candidate.tags["defibrillator:location"] || "";
-    state = {
-      kind: "existing-aed-details",
-      photoUrl: state.photoUrl,
-      candidateId,
-      candidateLabel,
-      returnState: state,
-      load: { status: "loading" },
-      fromList: true,
-    };
-    void loadExistingAedNode(candidateId);
-  } else if (
-    action === "existing-details-retry" &&
-    state.kind === "existing-aed-details" &&
-    state.load.status === "error"
-  ) {
-    const candidateId = state.candidateId;
-    state = { ...state, load: { status: "loading" } };
-    void loadExistingAedNode(candidateId);
-  } else if (
-    action === "existing-details-continue" &&
-    state.kind === "existing-aed-details" &&
-    state.load.status === "ready"
-  ) {
-    // Die Eingaben laufen durch denselben Vertrag wie später beim Server. Bestehende Werte bleiben (gesperrt), nur Fehlendes geht mit.
-    const built = currentDetailPlan();
-    if (!built.ok) {
-      updateDetailFooter();
-      return;
-    }
-    const node = state.load.node;
-    // Das Prüfdatum wird gegen den FRISCH gelesenen Stand vorbereitet, nicht gegen den alten Treffer aus dem Archiv.
-    const result = previewExistingAedCheck(
-      { id: state.candidateId, osmType: "node", tags: node.tags },
-      true,
-      photoSession.observedOn,
-    );
-    state = {
-      kind: "osm-preview",
-      photoUrl: state.photoUrl,
-      candidateId: state.candidateId,
-      candidateLabel: state.candidateLabel,
-      result,
-      returnState: state.returnState,
-      node,
-      ...(state.fromList ? { fromList: true as const } : {}),
-      ...(Object.keys(built.tags).length > 0 ? { details: built.tags } : {}),
-      ...(built.corrections.length > 0 ? { corrections: built.corrections } : {}),
-    };
-  } else if (action === "back-from-existing-details" && state.kind === "existing-aed-details") {
-    // Zurück zur einfachen Bestätigung. Die Eingaben werden verworfen, denn der Stand in OSM kann sich inzwischen ändern.
-    const { candidateId, candidateLabel, returnState, photoUrl } = state;
-    const candidate = returnState.search.candidates.find((item) => item.id === candidateId);
-    const cameFromList = state.fromList === true;
-    resetDetailForm();
-    if (!candidate || cameFromList) {
-      // Aus der Trefferliste gekommen: zurück zur Liste (die Datumsseite war nie dran).
-      state = returnState;
-    } else {
-      state = {
-        kind: "osm-preview",
-        photoUrl,
-        candidateId,
-        candidateLabel,
-        result: previewExistingAedCheck(candidate, true, photoSession.observedOn),
-        returnState,
-      };
-    }
-  } else if (action === "back-to-existing-details" && state.kind === "osm-preview" && state.node) {
-    if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
-    // Der gelesene Stand und die Eingaben bleiben erhalten (detailForm liegt im Speicher).
-    detailExistingTags = state.node.tags;
-    state = {
-      kind: "existing-aed-details",
-      photoUrl: state.photoUrl,
-      candidateId: state.candidateId,
-      candidateLabel: state.candidateLabel,
-      returnState: state.returnState,
-      load: { status: "ready", node: state.node },
-      ...(state.fromList ? { fromList: true as const } : {}),
-    };
-  } else if (action === "back-to-candidates" && state.kind === "osm-preview") {
-    if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
-    state = state.returnState;
-  } else if (action === "save-development-check" && state.kind === "osm-preview") {
-    successSound.prepare(); // Beim Tippen: Ton freischalten, er erklingt erst bei bestätigtem Erfolg.
-    if (
-      !developmentSession ||
-      !developmentWriteAvailable ||
-      !developmentWriteOwnerHash ||
-      !crypto.randomUUID ||
-      state.writeStatus === "sending" ||
-      state.writeStatus === "complete" ||
-      state.writeStatus === "unchanged"
-    )
-      return;
-    const preview = state;
-    const candidateId = preview.candidateId;
-    const candidate = preview.returnState.search.candidates.find((item) => item.id === candidateId);
-    if (
-      candidate?.osmType !== "node" ||
-      candidate.source === "archive" ||
-      preview.result.kind !== "ready"
-    )
-      return;
-    // Korrekturen brauchen die zweite, ausdrückliche Bestätigung. Ohne Haken wird nichts gesendet, auch wenn der Knopf
-    // (zum Beispiel per Tastatur oder Skript) trotzdem ausgelöst wurde.
-    const corrections = preview.corrections ?? [];
-    if (corrections.length > 0 && app.querySelector<HTMLInputElement>("#correction-confirmed")?.checked !== true)
-      return;
-    const operationId = preview.operationId ?? crypto.randomUUID();
-    const change = preview.result.changes[0];
-    const request: DevelopmentWriteRequest = {
-      kind: "check-date",
-      operationId,
-      target: candidate.id,
-      candidateLabel: preview.candidateLabel,
-      // Kommt die Vorschau aus dem Ergänzen-Formular, zählt die Version, die die Person frisch gesehen hat.
-      ...(preview.node
-        ? { expectedVersion: preview.node.version }
-        : candidate.version === undefined
-          ? {}
-          : { expectedVersion: candidate.version }),
-      expectedCheckDate: change.before,
-      observedOn: change.after,
-      ...(preview.details && Object.keys(preview.details).length > 0 ? { details: preview.details } : {}),
-      // Korrekturen: die alten Werte, genau wie die Person sie gesehen hat. Der Server schreibt nur, wenn sie noch so dastehen.
-      ...(corrections.length > 0
-        ? {
-            expectedBefore: Object.fromEntries(corrections.map((correction) => [correction.key, correction.before])),
-            confirmedCorrections: true as const,
-          }
-        : {}),
-    };
-    try {
-      // Save the exact confirmed proposal before sending so a reload can safely check the same operation.
-      persistPendingDevelopmentWrite(request);
-    } catch {
-      state = { ...preview, operationId, writeStatus: "failed" };
-      render(true);
-      return;
-    }
-    state = { ...preview, operationId, writeStatus: "sending" };
+    return;
+  }
+
+  const existingDetailsActionResult = handleExistingDetailsAction(action, {
+    state,
+    source,
+    observedOn: photoSession.observedOn,
+    developmentWriteEnabled: developmentSession && developmentWriteAvailable && Boolean(developmentWriteOwnerHash),
+    setState: (nextState) => {
+      state = nextState;
+    },
+    resetDetailForm,
+    setExistingTags: (tags) => {
+      detailExistingTags = tags;
+    },
+    loadExistingAedNode: (candidateId) => {
+      void loadExistingAedNode(candidateId);
+    },
+    currentDetailPlan,
+    updateDetailFooter,
+  });
+  if (existingDetailsActionResult === "stop") return;
+  if (existingDetailsActionResult === "handled") {
     render(true);
-    void submitDevelopmentWrite(request);
-  } else if (
-    (action === "continue-recovery" || action === "retry-development-write") &&
-    (state.kind === "development-write-recovery" || state.kind === "new-aed-preview" || state.kind === "osm-preview")
-  ) {
-    if (state.writeStatus !== "uncertain") return;
-    if (isRecoveryOwnerMismatch()) return;
-    if (!developmentSession) {
-      if (accountState === "signed-in") {
-        // The pending request belongs to the test-server session; a production login cannot reconcile it.
-        openAccountFromLamp();
-      } else {
-        const target = app.querySelector<HTMLElement>("#osm-dev-sign-in, #osm-session-retry, #login-title");
-        // Defer until the click's default focus handling has finished.
-        window.requestAnimationFrame(() => target?.focus());
-      }
-      return;
-    }
-    if (!developmentWriteAvailable || !developmentWriteOwnerHash) {
-      // Recheck the server switch so the same button works after an operator enables writes.
-      await refreshAccountState();
-      return;
-    }
-    successSound.prepare();
-    const request =
-      state.kind === "development-write-recovery" ? state.request : readPendingDevelopmentWrite(state.operationId);
-    if (!request) return;
-    state = { ...state, writeStatus: "sending" };
+    return;
+  }
+
+  const developmentWriteActionResult = await handleDevelopmentWriteAction(action, {
+    state,
+    setState: (nextState) => {
+      state = nextState;
+    },
+    developmentSession,
+    developmentWriteAvailable,
+    developmentWriteOwnerHash,
+    accountSignedIn: accountState === "signed-in",
+    pendingDevelopmentWrite,
+    ...(crypto.randomUUID ? { createOperationId: () => crypto.randomUUID() } : {}),
+    prepareSuccessSound: () => successSound.prepare(),
+    hasUnresolvedSave,
+    clearTimers,
+    releasePhoto,
+    redirectToDevelopmentLogin: () => window.location.assign("/api/auth/osm/development/start"),
+    confirmNewNode: () => app.querySelector<HTMLInputElement>("#new-aed-absence-confirmed")?.checked === true,
+    confirmCorrections: () => app.querySelector<HTMLInputElement>("#correction-confirmed")?.checked === true,
+    persistPendingWrite: (request) => persistPendingDevelopmentWrite(request),
+    render,
+    submit: (request) => {
+      void submitDevelopmentWrite(request);
+    },
+    isRecoveryOwnerMismatch,
+    openAccount: openAccountFromLamp,
+    focusRecoveryLogin: () => {
+      const target = app.querySelector<HTMLElement>("#osm-dev-sign-in, #osm-session-retry, #login-title");
+      // Defer until the click's default focus handling has finished.
+      window.requestAnimationFrame(() => target?.focus());
+    },
+    refreshAccountState: () => refreshAccountState(),
+    readPendingWrite: readPendingDevelopmentWrite,
+  });
+  if (developmentWriteActionResult === "stop") return;
+  if (developmentWriteActionResult === "handled") {
     render(true);
-    void submitDevelopmentWrite(request);
+    return;
   }
   render(true);
 }
