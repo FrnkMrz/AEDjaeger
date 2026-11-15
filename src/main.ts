@@ -45,6 +45,7 @@ import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } fr
 import { ExistingNodeError, requestExistingNode } from "./osm/existingNode";
 import { sendDevelopmentWrite } from "./net/developmentWrite";
 import { createPhotoSessionState } from "./state/photoSession";
+import { dispatchUiAction } from "./ui/actions/actionRouter";
 import { handleCandidateAction } from "./ui/actions/candidateActions";
 import { handleDevelopmentWriteAction } from "./ui/actions/developmentWriteActions";
 import { handleExistingDetailsAction } from "./ui/actions/existingDetailsActions";
@@ -1353,140 +1354,120 @@ function showPhotoSelectionError(): void {
 }
 
 async function handleAction(action: string | undefined, source?: HTMLElement): Promise<void> {
-  const photoActionResult = dispatchPhotoLocationAction(action, {
-    getState: () => state,
-    setState: (nextState) => {
-      state = nextState;
-    },
-    photoSession,
-    accountSignedIn: accountState === "signed-in",
-    photoCheckAvailable,
-    phoneLocationPermission,
-    phoneLocationFitsPhoto: () =>
-      phoneLocationFitsPhoto({ fromCamera: photoSession.fromCamera, capturedAtMs: photoSession.capturedAtMs }),
-    readObservedDate: () => app.querySelector<HTMLInputElement>("#photo-observed-on")?.value,
-    isValidObservedDate,
-    runPhotoCheck: (photoUrl) => {
-      void runPhotoCheck(photoUrl);
-    },
-    proceedAfterSighting,
-    continueAfterSighting,
-    runNearbySearch: (photoUrl, location) => {
-      void runNearbySearch(photoUrl, location);
-    },
-    clearSearchRetryTimer: () => {
-      if (searchRetryTimer) window.clearTimeout(searchRetryTimer);
-      searchRetryTimer = undefined;
-    },
-    render,
+  const result = await dispatchUiAction(action, {
+    photoLocation: () =>
+      dispatchPhotoLocationAction(action, {
+        getState: () => state,
+        setState: (nextState) => {
+          state = nextState;
+        },
+        photoSession,
+        accountSignedIn: accountState === "signed-in",
+        photoCheckAvailable,
+        phoneLocationPermission,
+        phoneLocationFitsPhoto: () =>
+          phoneLocationFitsPhoto({ fromCamera: photoSession.fromCamera, capturedAtMs: photoSession.capturedAtMs }),
+        readObservedDate: () => app.querySelector<HTMLInputElement>("#photo-observed-on")?.value,
+        isValidObservedDate,
+        runPhotoCheck: (photoUrl) => {
+          void runPhotoCheck(photoUrl);
+        },
+        proceedAfterSighting,
+        continueAfterSighting,
+        runNearbySearch: (photoUrl, location) => {
+          void runNearbySearch(photoUrl, location);
+        },
+        clearSearchRetryTimer: () => {
+          if (searchRetryTimer) window.clearTimeout(searchRetryTimer);
+          searchRetryTimer = undefined;
+        },
+        render,
+      }),
+    candidate: () =>
+      handleCandidateAction(action, {
+        state,
+        source,
+        observedOn: photoSession.observedOn,
+        setState: (nextState) => {
+          state = nextState;
+        },
+        setNewAedPositionOverride: (position) => {
+          newAedPositionOverride = position;
+        },
+      }),
+    newEntry: () =>
+      handleNewEntryAction(action, {
+        state,
+        setState: (nextState) => {
+          state = nextState;
+        },
+        newEntryPanelOpen,
+        readPositionConfirmed: () =>
+          app.querySelector<HTMLInputElement>("#new-aed-position-confirmed")?.checked === true,
+        clearExistingDetailTags: () => {
+          detailExistingTags = undefined;
+        },
+        newAedPositionOverride,
+        computePreview: computeNewAedPreview,
+        buildDetails: buildDetailTags,
+        getDetailForm: () => detailForm,
+        updateDetailFooter,
+      }),
+    existingDetails: () =>
+      handleExistingDetailsAction(action, {
+        state,
+        source,
+        observedOn: photoSession.observedOn,
+        developmentWriteEnabled: developmentSession && developmentWriteAvailable && Boolean(developmentWriteOwnerHash),
+        setState: (nextState) => {
+          state = nextState;
+        },
+        resetDetailForm,
+        setExistingTags: (tags) => {
+          detailExistingTags = tags;
+        },
+        loadExistingAedNode: (candidateId) => {
+          void loadExistingAedNode(candidateId);
+        },
+        currentDetailPlan,
+        updateDetailFooter,
+      }),
+    developmentWrite: () =>
+      handleDevelopmentWriteAction(action, {
+        state,
+        setState: (nextState) => {
+          state = nextState;
+        },
+        developmentSession,
+        developmentWriteAvailable,
+        developmentWriteOwnerHash,
+        accountSignedIn: accountState === "signed-in",
+        pendingDevelopmentWrite,
+        ...(crypto.randomUUID ? { createOperationId: () => crypto.randomUUID() } : {}),
+        prepareSuccessSound: () => successSound.prepare(),
+        hasUnresolvedSave,
+        clearTimers,
+        releasePhoto,
+        redirectToDevelopmentLogin: () => window.location.assign("/api/auth/osm/development/start"),
+        confirmNewNode: () => app.querySelector<HTMLInputElement>("#new-aed-absence-confirmed")?.checked === true,
+        confirmCorrections: () => app.querySelector<HTMLInputElement>("#correction-confirmed")?.checked === true,
+        persistPendingWrite: (request) => persistPendingDevelopmentWrite(request),
+        render,
+        submit: (request) => {
+          void submitDevelopmentWrite(request);
+        },
+        isRecoveryOwnerMismatch,
+        openAccount: openAccountFromLamp,
+        focusRecoveryLogin: () => {
+          const target = app.querySelector<HTMLElement>("#osm-dev-sign-in, #osm-session-retry, #login-title");
+          // Defer until the click's default focus handling has finished.
+          window.requestAnimationFrame(() => target?.focus());
+        },
+        refreshAccountState: () => refreshAccountState(),
+        readPendingWrite: readPendingDevelopmentWrite,
+      }),
   });
-  if (photoActionResult === "stop") return;
-  if (photoActionResult === "handled") {
-    render(true);
-    return;
-  }
-
-  const candidateActionResult = handleCandidateAction(action, {
-    state,
-    source,
-    observedOn: photoSession.observedOn,
-    setState: (nextState) => {
-      state = nextState;
-    },
-    setNewAedPositionOverride: (position) => {
-      newAedPositionOverride = position;
-    },
-  });
-  if (candidateActionResult === "stop") return;
-  if (candidateActionResult === "handled") {
-    render(true);
-    return;
-  }
-  const newEntryActionResult = handleNewEntryAction(action, {
-    state,
-    setState: (nextState) => {
-      state = nextState;
-    },
-    newEntryPanelOpen,
-    readPositionConfirmed: () =>
-      app.querySelector<HTMLInputElement>("#new-aed-position-confirmed")?.checked === true,
-    clearExistingDetailTags: () => {
-      detailExistingTags = undefined;
-    },
-    newAedPositionOverride,
-    computePreview: computeNewAedPreview,
-    buildDetails: buildDetailTags,
-    getDetailForm: () => detailForm,
-    updateDetailFooter,
-  });
-  if (newEntryActionResult === "stop") return;
-  if (newEntryActionResult === "handled") {
-    render(true);
-    return;
-  }
-
-  const existingDetailsActionResult = handleExistingDetailsAction(action, {
-    state,
-    source,
-    observedOn: photoSession.observedOn,
-    developmentWriteEnabled: developmentSession && developmentWriteAvailable && Boolean(developmentWriteOwnerHash),
-    setState: (nextState) => {
-      state = nextState;
-    },
-    resetDetailForm,
-    setExistingTags: (tags) => {
-      detailExistingTags = tags;
-    },
-    loadExistingAedNode: (candidateId) => {
-      void loadExistingAedNode(candidateId);
-    },
-    currentDetailPlan,
-    updateDetailFooter,
-  });
-  if (existingDetailsActionResult === "stop") return;
-  if (existingDetailsActionResult === "handled") {
-    render(true);
-    return;
-  }
-
-  const developmentWriteActionResult = await handleDevelopmentWriteAction(action, {
-    state,
-    setState: (nextState) => {
-      state = nextState;
-    },
-    developmentSession,
-    developmentWriteAvailable,
-    developmentWriteOwnerHash,
-    accountSignedIn: accountState === "signed-in",
-    pendingDevelopmentWrite,
-    ...(crypto.randomUUID ? { createOperationId: () => crypto.randomUUID() } : {}),
-    prepareSuccessSound: () => successSound.prepare(),
-    hasUnresolvedSave,
-    clearTimers,
-    releasePhoto,
-    redirectToDevelopmentLogin: () => window.location.assign("/api/auth/osm/development/start"),
-    confirmNewNode: () => app.querySelector<HTMLInputElement>("#new-aed-absence-confirmed")?.checked === true,
-    confirmCorrections: () => app.querySelector<HTMLInputElement>("#correction-confirmed")?.checked === true,
-    persistPendingWrite: (request) => persistPendingDevelopmentWrite(request),
-    render,
-    submit: (request) => {
-      void submitDevelopmentWrite(request);
-    },
-    isRecoveryOwnerMismatch,
-    openAccount: openAccountFromLamp,
-    focusRecoveryLogin: () => {
-      const target = app.querySelector<HTMLElement>("#osm-dev-sign-in, #osm-session-retry, #login-title");
-      // Defer until the click's default focus handling has finished.
-      window.requestAnimationFrame(() => target?.focus());
-    },
-    refreshAccountState: () => refreshAccountState(),
-    readPendingWrite: readPendingDevelopmentWrite,
-  });
-  if (developmentWriteActionResult === "stop") return;
-  if (developmentWriteActionResult === "handled") {
-    render(true);
-    return;
-  }
+  if (result === "stop") return;
   render(true);
 }
 
