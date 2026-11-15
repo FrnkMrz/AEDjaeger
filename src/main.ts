@@ -25,7 +25,7 @@ import {
 } from "./location/phoneLocationPermission";
 import { assessCandidateSearch } from "./domain/assessCandidateSearch";
 import { createPositionPicker, zoomToFitMarkers, type Coordinate, type MapMarker } from "./map/positionPicker";
-import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
+import { previewNewAed } from "./domain/osmChangeProposal";
 import {
   ACCESS_VALUES,
   DETAIL_LIMITS,
@@ -48,6 +48,7 @@ import { ExistingNodeError, requestExistingNode } from "./osm/existingNode";
 import { sendDevelopmentWrite } from "./net/developmentWrite";
 import { createPhotoSessionState } from "./state/photoSession";
 import { handleCandidateAction } from "./ui/actions/candidateActions";
+import { handleExistingDetailsAction } from "./ui/actions/existingDetailsActions";
 import { handleNewEntryAction } from "./ui/actions/newEntryActions";
 import { dispatchPhotoLocationAction } from "./ui/actions/photoLocationActions";
 import { renderPhotoState } from "./ui/views/photoStates";
@@ -1874,6 +1875,30 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     return;
   }
 
+  const existingDetailsActionResult = handleExistingDetailsAction(action, {
+    state,
+    source,
+    observedOn: photoSession.observedOn,
+    developmentWriteEnabled: developmentSession && developmentWriteAvailable && Boolean(developmentWriteOwnerHash),
+    setState: (nextState) => {
+      state = nextState;
+    },
+    resetDetailForm,
+    setExistingTags: (tags) => {
+      detailExistingTags = tags;
+    },
+    loadExistingAedNode: (candidateId) => {
+      void loadExistingAedNode(candidateId);
+    },
+    currentDetailPlan,
+    updateDetailFooter,
+  });
+  if (existingDetailsActionResult === "stop") return;
+  if (existingDetailsActionResult === "handled") {
+    render(true);
+    return;
+  }
+
   if (action === "continue-recovery" && pendingDevelopmentWrite && accountState !== "signed-in") {
     // A pending write can only be reconciled under the same test-server session that created it.
     // Continue starts that OAuth flow directly, even if session status has not finished loading yet.
@@ -1928,124 +1953,6 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     state = { ...preview, operationId, writeStatus: "sending" };
     render(true);
     void submitDevelopmentWrite(request);
-  } else if (action === "open-existing-details" && state.kind === "osm-preview" && !state.node) {
-    // Zweiter Weg neben „noch vorhanden“: fehlende Angaben ergänzen. Erst wird der AED frisch aus OSM gelesen.
-    const candidateId = state.candidateId;
-    const candidate = state.returnState.search.candidates.find((item) => item.id === candidateId);
-    if (
-      !developmentSession ||
-      !developmentWriteAvailable ||
-      !developmentWriteOwnerHash ||
-      candidate?.osmType !== "node"
-    )
-      return;
-    resetDetailForm();
-    state = {
-      kind: "existing-aed-details",
-      photoUrl: state.photoUrl,
-      candidateId,
-      candidateLabel: state.candidateLabel,
-      returnState: state.returnState,
-      load: { status: "loading" },
-    };
-    void loadExistingAedNode(candidateId);
-  } else if (action === "open-candidate-details" && state.kind === "candidate-result") {
-    // Direkt aus der Trefferliste zu den Tags (vor der Datumsseite). Gleiche Voraussetzungen wie beim Ergänzen: Testserver-Sitzung,
-    // Schreiben an, ein Knoten, der nicht nur im Archiv des echten OSM steht.
-    const candidateId = source?.dataset.candidateId;
-    const candidate = state.search.candidates.find((item) => item.id === candidateId);
-    if (
-      !candidate ||
-      !candidateId ||
-      !developmentSession ||
-      !developmentWriteAvailable ||
-      !developmentWriteOwnerHash ||
-      candidate.osmType !== "node" ||
-      candidate.source === "archive"
-    )
-      return;
-    resetDetailForm();
-    const candidateLabel = candidate.tags.name || candidate.tags["defibrillator:location"] || "";
-    state = {
-      kind: "existing-aed-details",
-      photoUrl: state.photoUrl,
-      candidateId,
-      candidateLabel,
-      returnState: state,
-      load: { status: "loading" },
-      fromList: true,
-    };
-    void loadExistingAedNode(candidateId);
-  } else if (
-    action === "existing-details-retry" &&
-    state.kind === "existing-aed-details" &&
-    state.load.status === "error"
-  ) {
-    const candidateId = state.candidateId;
-    state = { ...state, load: { status: "loading" } };
-    void loadExistingAedNode(candidateId);
-  } else if (
-    action === "existing-details-continue" &&
-    state.kind === "existing-aed-details" &&
-    state.load.status === "ready"
-  ) {
-    // Die Eingaben laufen durch denselben Vertrag wie später beim Server. Bestehende Werte bleiben (gesperrt), nur Fehlendes geht mit.
-    const built = currentDetailPlan();
-    if (!built.ok) {
-      updateDetailFooter();
-      return;
-    }
-    const node = state.load.node;
-    // Das Prüfdatum wird gegen den FRISCH gelesenen Stand vorbereitet, nicht gegen den alten Treffer aus dem Archiv.
-    const result = previewExistingAedCheck(
-      { id: state.candidateId, osmType: "node", tags: node.tags },
-      true,
-      photoSession.observedOn,
-    );
-    state = {
-      kind: "osm-preview",
-      photoUrl: state.photoUrl,
-      candidateId: state.candidateId,
-      candidateLabel: state.candidateLabel,
-      result,
-      returnState: state.returnState,
-      node,
-      ...(state.fromList ? { fromList: true as const } : {}),
-      ...(Object.keys(built.tags).length > 0 ? { details: built.tags } : {}),
-      ...(built.corrections.length > 0 ? { corrections: built.corrections } : {}),
-    };
-  } else if (action === "back-from-existing-details" && state.kind === "existing-aed-details") {
-    // Zurück zur einfachen Bestätigung. Die Eingaben werden verworfen, denn der Stand in OSM kann sich inzwischen ändern.
-    const { candidateId, candidateLabel, returnState, photoUrl } = state;
-    const candidate = returnState.search.candidates.find((item) => item.id === candidateId);
-    const cameFromList = state.fromList === true;
-    resetDetailForm();
-    if (!candidate || cameFromList) {
-      // Aus der Trefferliste gekommen: zurück zur Liste (die Datumsseite war nie dran).
-      state = returnState;
-    } else {
-      state = {
-        kind: "osm-preview",
-        photoUrl,
-        candidateId,
-        candidateLabel,
-        result: previewExistingAedCheck(candidate, true, photoSession.observedOn),
-        returnState,
-      };
-    }
-  } else if (action === "back-to-existing-details" && state.kind === "osm-preview" && state.node) {
-    if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
-    // Der gelesene Stand und die Eingaben bleiben erhalten (detailForm liegt im Speicher).
-    detailExistingTags = state.node.tags;
-    state = {
-      kind: "existing-aed-details",
-      photoUrl: state.photoUrl,
-      candidateId: state.candidateId,
-      candidateLabel: state.candidateLabel,
-      returnState: state.returnState,
-      load: { status: "ready", node: state.node },
-      ...(state.fromList ? { fromList: true as const } : {}),
-    };
   } else if (action === "back-to-candidates" && state.kind === "osm-preview") {
     if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
     state = state.returnState;
