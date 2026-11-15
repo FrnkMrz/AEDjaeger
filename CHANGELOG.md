@@ -13,7 +13,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Automatisierte axe-Prüfungen für Start-, Foto-, Karten-, Such-, Vorschau- und Fehlerzustände sowie ein WebKit/iPhone-14-Projekt in der E2E-Suite. Die manuelle VoiceOver-/TalkBack-Abnahme ist dokumentiert und bleibt offen.
 
 ### Changed
-- PWA-Homescreen-Symbole für iOS und Android zeigen jetzt das weiße medizinische Plus zusätzlich zum Fadenkreuz; das Grün folgt digital angenähert RAL 6032 Signalgrün (`#008E5E`).
+- PWA-Homescreen-Symbole für iOS und Android zeigen das weiße medizinische Plus mit Abstand zum Herz. Fadenkreuz und Ringe liegen hinter den weißen Zeichen; ein entfernter Leuchteffekt sorgt für gleichmäßiges Signalgrün (digitale Annäherung an RAL 6032, `#008E5E`).
 - Kartenbedienung per Zwei-Finger-Zoom sowie Plus-/Minus-Tasten ergänzt; Kartenrollen nennen jetzt zugängliche Kurzhinweise. Kleine Texte nutzen skalierbare `rem`-Größen mit mindestens 12 px.
 - Verbindungsstatus zeigt Haken oder Strich zusätzlich zur Farbe. Info-, Schließen-, Konto- und Kartenzoom-Schaltflächen bieten mindestens 44 px Tippfläche.
 

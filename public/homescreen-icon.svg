@@ -2,20 +2,14 @@
   <title id="title">AEDjaeger Homescreen-Symbol</title>
   <!-- Maki defibrillator by Mapbox, CC0 1.0: https://github.com/mapbox/maki/blob/main/icons/defibrillator.svg; Fadenkreuz-Ergänzung für AEDjaeger. -->
   <rect width="512" height="512" rx="112" fill="#008E5E"/>
-  <defs>
-    <filter id="reticleGlow" x="-35%" y="-35%" width="170%" height="170%">
-      <feGaussianBlur stdDeviation="5" result="softGlow"/>
-      <feMerge><feMergeNode in="softGlow"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-  </defs>
   <!-- Layered sight rings and axes echo the Hydrantenjaeger search reticle. -->
-  <g fill="none" stroke="#f0df78" stroke-linecap="round" filter="url(#reticleGlow)">
-    <path d="M44 256h424 M256 44v424" stroke-width="5" opacity=".78"/>
-    <circle cx="256" cy="256" r="204" stroke-width="7" opacity=".95"/>
-    <circle cx="256" cy="256" r="166" stroke-width="5" opacity=".76"/>
-    <circle cx="256" cy="256" r="128" stroke-width="4" opacity=".58"/>
+  <g fill="none" stroke="#f0df78" stroke-linecap="round">
+    <path d="M44 256h424 M256 44v424" stroke-width="5"/>
+    <circle cx="256" cy="256" r="204" stroke-width="7"/>
+    <circle cx="256" cy="256" r="166" stroke-width="5"/>
+    <circle cx="256" cy="256" r="128" stroke-width="4"/>
   </g>
-  <g fill="#f0df78" opacity=".95">
+  <g fill="#f0df78">
     <circle cx="256" cy="52" r="5"/><circle cx="460" cy="256" r="5"/>
     <circle cx="256" cy="460" r="5"/><circle cx="52" cy="256" r="5"/>
     <circle cx="112" cy="112" r="3.5"/><circle cx="400" cy="112" r="3.5"/>
