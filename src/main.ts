@@ -50,6 +50,7 @@ import {
 } from "./contracts/aedDetails";
 import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } from "./osm/candidateSearch";
 import { ExistingNodeError, requestExistingNode } from "./osm/existingNode";
+import { sendDevelopmentWrite } from "./net/developmentWrite";
 import {
   formatCalendarDate,
   isCalendarDate,
@@ -1869,50 +1870,13 @@ async function retryOSMSessionStatus(): Promise<void> {
 async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Promise<void> {
   try {
     const isCheckDate = requestBody.kind === "check-date";
-    const response = await fetch(isCheckDate ? "/api/osm/development/check-date" : "/api/osm/development/create-node", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      cache: "no-store",
-      body: JSON.stringify(
-        requestBody.kind === "check-date"
-          ? {
-              recovery_identity: developmentWriteOwnerHash,
-              operation_id: requestBody.operationId,
-              confirmed: true,
-              target: requestBody.target,
-              expected_version: requestBody.expectedVersion,
-              expected_check_date: requestBody.expectedCheckDate,
-              observed_on: requestBody.observedOn,
-              // Nur mit ergänzten Angaben; ohne sie bleibt die Anfrage (und ihr Abgleichswert) wie früher.
-              ...(requestBody.details && Object.keys(requestBody.details).length > 0
-                ? { details: requestBody.details }
-                : {}),
-              // Nur bei Korrekturen: die alten Werte und die ausdrückliche Bestätigung der Person.
-              ...(requestBody.expectedBefore && requestBody.confirmedCorrections === true
-                ? { expected_before: requestBody.expectedBefore, confirmed_corrections: true }
-                : {}),
-            }
-          : {
-              recovery_identity: developmentWriteOwnerHash,
-              operation_id: requestBody.operationId,
-              confirmed: true,
-              absence_confirmed: true,
-              latitude: requestBody.latitude,
-              longitude: requestBody.longitude,
-              observed_on: requestBody.observedOn,
-              details: requestBody.details,
-              confirmed_different_candidate_ids: requestBody.confirmedDifferentCandidateIds,
-            },
-      ),
-    });
-    const payload: unknown = await response.json();
+    const { ok, status, payload } = await sendDevelopmentWrite(requestBody, developmentWriteOwnerHash);
     const matchesCurrentRequest =
       (state.kind === "new-aed-preview" && state.operationId === requestBody.operationId) ||
       (state.kind === "osm-preview" && state.operationId === requestBody.operationId) ||
       (state.kind === "development-write-recovery" && state.request.operationId === requestBody.operationId);
     if (!matchesCurrentRequest) return;
-    if (response.ok && isDevelopmentWriteResponse(payload, "complete")) {
+    if (ok && isDevelopmentWriteResponse(payload, "complete")) {
       // "already_current": Das Datum stand schon so auf dem Knoten. Der Server hat bewusst nichts geschrieben (kein neuer
       // Änderungssatz). Das ist ein Erfolg im Sinne von "der Stand stimmt", aber kein Speichern. Darum eine eigene
       // Meldung ("Schon aktuell. Es wurde nichts geändert.") und kein Ton: Ein Ton für nichts wäre eine Belohnung ohne Leistung.
@@ -1921,10 +1885,10 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
       clearPendingDevelopmentCheck(requestBody.operationId);
       // Nur bei einem vom Server bestätigten, echten Schreibvorgang erklingt der Ton. Er ändert nichts am Ablauf.
       if (!unchanged) successSound.play();
-    } else if (response.status === 409) {
+    } else if (status === 409) {
       setDevelopmentWriteStatus(requestBody.operationId, "conflict");
       clearPendingDevelopmentCheck(requestBody.operationId);
-    } else if (response.status === 404 && isRecord(payload) && payload.error === "target_not_found") {
+    } else if (status === 404 && isRecord(payload) && payload.error === "target_not_found") {
       // Eindeutig: Den Knoten gibt es auf dem Testserver nicht (zum Beispiel ein AED aus dem Archiv des echten OSM).
       // Nichts wurde geschrieben; ein erneutes Prüfen würde dasselbe ergeben. Darum kein "unklar" und kein Prüfen-Knopf.
       setDevelopmentWriteStatus(requestBody.operationId, "notFound");
@@ -1934,13 +1898,13 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
       // darum "fehlgeschlagen" (neuer Versuch von vorn) statt "unklar".
       setDevelopmentWriteStatus(requestBody.operationId, "failed");
       clearPendingDevelopmentCheck(requestBody.operationId);
-    } else if (response.status === 403 && isRecord(payload) && payload.error === "recovery_identity_mismatch") {
+    } else if (status === 403 && isRecord(payload) && payload.error === "recovery_identity_mismatch") {
       // Ein anderer Tab kann das gemeinsame Sitzungscookie inzwischen auf ein anderes Konto umgestellt haben.
       // Der Server hat deshalb nichts geschrieben; den Marker aber behalten, bis das richtige Konto zurück ist.
       setDevelopmentWriteStatus(requestBody.operationId, "uncertain");
       await refreshAccountState();
       return;
-    } else if (response.status === 202 || response.status >= 500 || (!response.ok && !isRecord(payload))) {
+    } else if (status === 202 || status >= 500 || (!ok && !isRecord(payload))) {
       setDevelopmentWriteStatus(requestBody.operationId, "uncertain");
     } else {
       setDevelopmentWriteStatus(requestBody.operationId, "failed");
