@@ -1,7 +1,7 @@
 import "./styles.css";
 import { isRecord } from "../shared/typeGuards.js";
 import { endOSMSession, loadOSMSession } from "./auth/osmSession";
-import type { DevelopmentWriteRequest, FlowState } from "./domain/workflow";
+import type { CandidateResultState, DevelopmentWriteRequest, FlowState } from "./domain/workflow";
 import { translate, translations, type Language, type TranslationKey } from "./i18n/translations";
 import { translateFlow, type FlowMessageKey } from "./i18n/flowTranslations";
 import { readPhotoCapture, readPhotoLocation } from "./vision/photoLocation";
