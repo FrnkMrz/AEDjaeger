@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { CandidateSearchError, requestNearbyCandidates } from "../src/osm/candidateSearch";
+import { type CandidateSearchError, requestNearbyCandidates } from "../src/osm/candidateSearch";
 
 const location = { latitude: 52.52, longitude: 13.405, accuracyMeters: 12 };
 const candidate = {
