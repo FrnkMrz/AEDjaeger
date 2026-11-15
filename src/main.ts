@@ -12,12 +12,7 @@ import {
 } from "./vision/analyzePhoto";
 import { isAedRecognized } from "./contracts/visionObservation";
 import { formatBuildTime } from "./pwa/buildInfo";
-import {
-  CONFIRM_RADIUS_METERS,
-  MAP_PIN_ACCURACY_METERS,
-  MAX_LOCATION_ACCURACY_METERS,
-  NEARBY_RADIUS_METERS,
-} from "./domain/matchPolicy";
+import { CONFIRM_RADIUS_METERS, MAX_LOCATION_ACCURACY_METERS, NEARBY_RADIUS_METERS } from "./domain/matchPolicy";
 import { successSound } from "./sound/successSound";
 import { readStoredValue, removeStoredValue, writeStoredValue } from "./storage/safeStorage";
 import { startUpdateWatcher } from "./pwa/updateCheck";
@@ -51,6 +46,8 @@ import {
 import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } from "./osm/candidateSearch";
 import { ExistingNodeError, requestExistingNode } from "./osm/existingNode";
 import { sendDevelopmentWrite } from "./net/developmentWrite";
+import { createPhotoSessionState } from "./state/photoSession";
+import { dispatchPhotoLocationAction } from "./ui/actions/photoLocationActions";
 import { renderPhotoState } from "./ui/views/photoStates";
 import {
   accountPanel as renderAccountPanel,
@@ -104,6 +101,7 @@ const minimumMapSearchZoom = 15;
 const PENDING_DEVELOPMENT_WRITE_KEY_PREFIX = "aedjaeger-pending-osm-development-write:";
 const LEGACY_PENDING_DEVELOPMENT_WRITE_KEY = "aedjaeger-pending-osm-development-write";
 const PENDING_DEVELOPMENT_WRITE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1_000;
+const photoSession = createPhotoSessionState(localCalendarDate());
 let language = readLanguage();
 let pendingDevelopmentWriteOwnerHash: string | undefined;
 let developmentWriteOwnerHash: string | undefined;
@@ -118,40 +116,19 @@ let developmentSession = false;
 let developmentWriteAvailable = false;
 // Fotoprüfung: Nur wenn der Server sie für dieses Konto freigibt, bietet die App den Foto-Upload an.
 let photoCheckAvailable = false;
-// Die gewählte Foto-Datei bleibt nur im Arbeitsspeicher, solange das Foto aktiv ist. Sie wird
-// ausschließlich für die Fotoprüfung gebraucht und in releasePhoto() wieder verworfen.
-let selectedPhotoFile: File | undefined;
-// Eine Kennung pro Foto: Ein zweiter Tipp auf dieselbe Prüfung erzeugt so keine zweite Abrechnung.
-let photoCheckRequestId: string | undefined;
 // Update-Hinweis: wird true, sobald der Wächter eine neuere veröffentlichte Version erkennt.
 let updateAvailable = false;
 // Standort-Erlaubnis des Handys (nur lesen, nie anfragen). Nur bei „granted“ nutzt die App den Handy-Standort
 // ohne Zwischenfrage, und das nur für ein frisch aufgenommenes Kamerafoto ohne Foto-GPS.
 let phoneLocationPermission: LocationPermission = "unknown";
-// Herkunft und Aufnahmezeit des aktuellen Fotos. Daraus entscheidet phoneLocationFitsPhoto bei jeder Fortsetzung
-// neu, ob der Handy-Standort noch zum Foto passt: nur bei einem Kamerafoto, das höchstens fünf Minuten alt ist.
-let selectedPhotoFromCamera = false;
-let selectedPhotoCapturedAtMs: number | undefined;
+// `photoSession` merkt Herkunft und Aufnahmezeit gemeinsam mit Foto-/Datums-/Suchstandortdaten.
 // Die einmalige Standortanfrage wird pro Seitenaufruf höchstens einmal versucht (und pro Gerät nur einmal gestellt).
 let locationAskAttempted = false;
 let oauthReturnFailed = new URLSearchParams(window.location.search).get("login") === "error";
 let searchRetryTimer: number | undefined;
-let selectedPhotoLocation: SearchLocation | undefined;
-let observedOn = localCalendarDate();
-let photoDateRequiresConfirmation = false;
-let activeSearchLocation: SearchLocation | undefined;
-// „phone“: Die Person hat den Handy-Standort ausdrücklich gewählt. „phone-auto“: Die App hat ihn bei einem frischen
-// Kamerafoto ohne GPS selbst eingesetzt. Beide heißen in der Anzeige „Handy-Standort verwendet“. Der Unterschied zählt
-// beim Wiederholen: Einen ausdrücklich gewählten Standort darf die App neu holen, einen selbst eingesetzten nur,
-// solange das Foto noch frisch ist.
-let activeSearchLocationSource: "photo" | "phone" | "phone-auto" | "map" | undefined;
 // Keep a stable ID while this photo is active; the server uses it to avoid double reservations after retries.
-let photoSelectionVersion = 0;
-let photoSelectionPending = false;
-let photoSelectionError = false;
 let activePositionPicker: { destroy(): void } | undefined;
 let newAedPositionOverride: Coordinate | undefined;
-let mapLocationOverride: Coordinate | undefined;
 // Eingaben im Detailformular für eine Neuanlage. Sie liegen bewusst außerhalb von `state`: render() baut die
 // Seite bei jedem Zustandswechsel neu auf, die Eingaben sollen dabei (und beim Zurückgehen aus der Vorschau)
 // erhalten bleiben. Sie bleiben nur im Arbeitsspeicher und werden mit dem Foto verworfen (resetDetailForm).
@@ -406,7 +383,7 @@ function accountViewContext() {
     accountState,
     productionLoginAvailable,
     developmentLoginAvailable,
-    photoSelectionPending,
+    photoSelectionPending: photoSession.selectionPending,
     activePhotoDraft: hasActivePhotoDraft(state),
     pendingDevelopmentWrite: Boolean(pendingDevelopmentWrite),
     illustrationMarkup: defibrillatorMark(defibrillatorPath),
@@ -553,7 +530,7 @@ function computeNewAedPreview(current: CandidateResultState, positionConfirmed: 
         ? current.assessment.candidates.map((candidate) => candidate.id)
         : [],
     positionConfirmed,
-    observedOn,
+    observedOn: photoSession.observedOn,
     ...(details === undefined ? {} : { details }),
   });
 }
@@ -882,8 +859,8 @@ function statusContent(): string {
       escapeHtml,
       photoMarkup,
       photoCheckAvailable,
-      selectedPhotoFileAvailable: selectedPhotoFile !== undefined,
-      mapLocationOverride,
+      selectedPhotoFileAvailable: photoSession.file !== undefined,
+      mapLocationOverride: photoSession.mapLocationOverride,
       minimumMapSearchZoom,
     });
 
@@ -975,9 +952,9 @@ function statusContent(): string {
             : `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`
           : "";
       const locationSource =
-        activeSearchLocationSource === "photo"
+        photoSession.searchLocationSource === "photo"
           ? "locationSourcePhoto"
-          : activeSearchLocationSource === "map"
+          : photoSession.searchLocationSource === "map"
             ? "locationSourceMap"
             : "locationSourcePhone";
       // Bewusst keine technische Zeile mehr zu Datenstand und Snapshot-Kennung: Sie half bei der
@@ -1241,9 +1218,9 @@ function statusContent(): string {
             ? `<p class="simulation-note search-wait" aria-live="off">${tv("searchWait", { seconds: retryWaitSeconds })}</p>`
             : `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`;
       const locationSource =
-        activeSearchLocationSource === "photo"
+        photoSession.searchLocationSource === "photo"
           ? "locationSourcePhoto"
-          : activeSearchLocationSource === "map"
+          : photoSession.searchLocationSource === "map"
             ? "locationSourceMap"
             : "locationSourcePhone";
       return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("searchTitle")}</h2><p>${tv(errorKey[state.reason])}</p><p class="supporting-copy">${tv(locationSource)}</p></div></div>${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
@@ -1268,7 +1245,7 @@ function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void 
           ? `<main>
         <section class="hero ${isReady ? "" : "hero-compact"}"><div class="hero-kicker"><span></span>${t("eyebrow")}</div><h1>${isReady ? t("title") : state.kind === "photo-checking" || state.kind === "candidate-searching" ? t("checking") : t("tagline")}</h1>${isReady ? `<p>${t("intro")}</p>` : ""}</section>
         <section class="capture-card" aria-live="polite" aria-atomic="false">
-          <div class="capture-content">${isReady ? `${photoSelectionError ? `<p class="photo-selection-error" role="alert" tabindex="-1">${t("cameraError")}</p>` : ""}<div class="empty-illustration" aria-hidden="true"><span class="device-card">${defibrillatorMark(defibrillatorPath)}</span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>` : statusContent()}</div>
+          <div class="capture-content">${isReady ? `${photoSession.selectionError ? `<p class="photo-selection-error" role="alert" tabindex="-1">${t("cameraError")}</p>` : ""}<div class="empty-illustration" aria-hidden="true"><span class="device-card">${defibrillatorMark(defibrillatorPath)}</span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>` : statusContent()}</div>
           ${isReady ? `<div class="capture-actions"><label class="button button-primary camera-label">${icon("camera")}<span>${t("camera")}</span><input id="camera-input" type="file" accept="image/*" capture="environment" /></label><label class="button button-secondary camera-label">${t("choosePhoto")}<input id="file-input" type="file" accept="image/*" /></label><p class="supporting-copy">${photoCheckAvailable ? tv("photoCheckNotice") : t("privacy")}</p></div>` : ""}
         </section>
       </main>${accountPanel()}`
@@ -1293,14 +1270,14 @@ function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void 
   if (state.kind === "location-map") {
     const mapContainer = app!.querySelector<HTMLDivElement>("#search-location-map");
     if (mapContainer) {
-      activePositionPicker = createPositionPicker(mapContainer, mapLocationOverride ?? state.center, {
+      activePositionPicker = createPositionPicker(mapContainer, photoSession.mapLocationOverride ?? state.center, {
         mapLabel: tv("chooseMapLocation"),
         zoomInLabel: tv("newPositionMapZoomIn"),
         zoomOutLabel: tv("newPositionMapZoomOut"),
         tileErrorLabel: tv("newPositionMapTileError"),
         initialZoom: state.initialZoom,
         onPositionChange(position) {
-          mapLocationOverride = position;
+          photoSession.mapLocationOverride = position;
           const coordinates = app!.querySelector<HTMLParagraphElement>("#search-location-coordinates");
           if (coordinates)
             coordinates.textContent = tv("mapLocationCoordinates", {
@@ -1319,7 +1296,7 @@ function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void 
         const confirmButton = app!.querySelector<HTMLButtonElement>('[data-action="confirm-map-location"]');
         if (confirmButton)
           confirmButton.disabled =
-            mapLocationOverride === undefined ||
+            photoSession.mapLocationOverride === undefined ||
             (state.kind === "location-map" && (state.initialZoom ?? 19) < minimumMapSearchZoom);
       }
     }
@@ -1744,12 +1721,12 @@ async function onPhotoSelected(event: Event): Promise<void> {
   const input = event.currentTarget as HTMLInputElement;
   const file = input.files?.[0];
   if (!file) return;
-  const selectionVersion = ++photoSelectionVersion;
+  const selectionVersion = ++photoSession.selectionVersion;
   // Block OAuth as soon as the chooser returns a file; decoding can take long enough to lose it.
-  photoSelectionPending = true;
+  photoSession.selectionPending = true;
   updateAccountPanel();
   if (!file.type.startsWith("image/")) {
-    photoSelectionPending = false;
+    photoSession.selectionPending = false;
     showPhotoSelectionError();
     return;
   }
@@ -1775,49 +1752,86 @@ async function onPhotoSelected(event: Event): Promise<void> {
     photoCapturedAtMs = capture?.timeMs ?? (input.id === "camera-input" ? file.lastModified : undefined);
   } catch {
     URL.revokeObjectURL(photoUrl);
-    if (selectionVersion === photoSelectionVersion) {
-      photoSelectionPending = false;
+    if (selectionVersion === photoSession.selectionVersion) {
+      photoSession.selectionPending = false;
       showPhotoSelectionError();
     }
     return;
   }
-  if (selectionVersion !== photoSelectionVersion) {
+  if (selectionVersion !== photoSession.selectionVersion) {
     URL.revokeObjectURL(photoUrl);
     return;
   }
 
-  photoSelectionPending = false;
-  photoSelectionError = false;
+  photoSession.selectionPending = false;
+  photoSession.selectionError = false;
   clearTimers();
   releasePhoto();
-  selectedPhotoLocation = photoLocation;
+  photoSession.locationFromPhoto = photoLocation;
   // Merken, ob und wann das Foto mit der Kamera der App entstand. Ob der Handy-Standort fehlendes Foto-GPS ersetzen
   // darf, wird erst bei der Fortsetzung geprüft (die Person kann zwischendurch lange warten oder weggehen).
-  selectedPhotoFromCamera = input.id === "camera-input";
-  selectedPhotoCapturedAtMs = photoCapturedAtMs;
+  photoSession.fromCamera = input.id === "camera-input";
+  photoSession.capturedAtMs = photoCapturedAtMs;
   // Für die optionale Fotoprüfung merken: die Datei und eine neue Anfragekennung pro Foto.
-  selectedPhotoFile = file;
-  photoCheckRequestId = createVisionRequestId();
+  photoSession.file = file;
+  photoSession.checkRequestId = createVisionRequestId();
   const today = localCalendarDate();
-  observedOn = photoDate ?? today;
+  photoSession.observedOn = photoDate ?? today;
   // Ob nach dem Beobachtungsdatum gefragt wird, entscheidet photoDateNeedsConfirmation:
   // Ein gerade eben aufgenommenes Foto ohne eigenes Datum gilt als heutige Beobachtung. Nennt das
   // Foto dagegen selbst einen anderen Tag als heute, bleibt die ausdrückliche Bestätigung bestehen.
-  photoDateRequiresConfirmation = photoDateNeedsConfirmation(photoDate, today, isFreshCapture(photoCapturedAtMs));
-  activeSearchLocation = undefined;
-  activeSearchLocationSource = undefined;
-  mapLocationOverride = undefined;
+  photoSession.dateRequiresConfirmation = photoDateNeedsConfirmation(
+    photoDate,
+    today,
+    isFreshCapture(photoCapturedAtMs),
+  );
+  photoSession.searchLocation = undefined;
+  photoSession.searchLocationSource = undefined;
+  photoSession.mapLocationOverride = undefined;
   state = { kind: "photo", photoUrl };
   render(true);
 }
 
 function showPhotoSelectionError(): void {
-  photoSelectionError = true;
+  photoSession.selectionError = true;
   render();
   app?.querySelector<HTMLElement>(".photo-selection-error")?.focus();
 }
 
 async function handleAction(action: string | undefined, source?: HTMLElement): Promise<void> {
+  const photoActionResult = dispatchPhotoLocationAction(action, {
+    getState: () => state,
+    setState: (nextState) => {
+      state = nextState;
+    },
+    photoSession,
+    accountSignedIn: accountState === "signed-in",
+    photoCheckAvailable,
+    phoneLocationPermission,
+    phoneLocationFitsPhoto: () =>
+      phoneLocationFitsPhoto({ fromCamera: photoSession.fromCamera, capturedAtMs: photoSession.capturedAtMs }),
+    readObservedDate: () => app!.querySelector<HTMLInputElement>("#photo-observed-on")?.value,
+    isValidObservedDate,
+    runPhotoCheck: (photoUrl) => {
+      void runPhotoCheck(photoUrl);
+    },
+    proceedAfterSighting,
+    continueAfterSighting,
+    runNearbySearch: (photoUrl, location) => {
+      void runNearbySearch(photoUrl, location);
+    },
+    clearSearchRetryTimer: () => {
+      if (searchRetryTimer) window.clearTimeout(searchRetryTimer);
+      searchRetryTimer = undefined;
+    },
+    render,
+  });
+  if (photoActionResult === "stop") return;
+  if (photoActionResult === "handled") {
+    render(true);
+    return;
+  }
+
   if (action === "continue-recovery" && pendingDevelopmentWrite && accountState !== "signed-in") {
     // A pending write can only be reconciled under the same test-server session that created it.
     // Continue starts that OAuth flow directly, even if session status has not finished loading yet.
@@ -1831,95 +1845,11 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     state = pendingDevelopmentWrite
       ? { kind: "development-write-recovery", request: pendingDevelopmentWrite, writeStatus: "uncertain" }
       : { kind: "ready" };
-  } else if (action === "confirm-sighting" && state.kind === "photo" && accountState === "signed-in") {
-    // This is a human sighting confirmation only. It neither claims an automatic recognition
-    // result nor permits an OSM edit; the separate OSM proposal and confirmation remain later.
-    proceedAfterSighting(state.photoUrl);
-  } else if (
-    action === "check-photo" &&
-    state.kind === "photo" &&
-    accountState === "signed-in" &&
-    photoCheckAvailable
-  ) {
-    void runPhotoCheck(state.photoUrl);
-  } else if (
-    action === "start-photo-override" &&
-    state.kind === "photo-rejected" &&
-    state.overrideStep === undefined &&
-    accountState === "signed-in"
-  ) {
-    // Erste Bestätigung der Ausnahme: Es folgt noch eine Rückfrage, nichts geht schon weiter.
-    state = { ...state, overrideStep: "confirm" };
-    render(true);
-  } else if (
-    action === "confirm-photo-override" &&
-    state.kind === "photo-rejected" &&
-    state.overrideStep === "confirm" &&
-    accountState === "signed-in"
-  ) {
-    // Zweite Bestätigung: Die Person versichert, dass AED oder Gehäuse zu sehen ist, obwohl die Prüfung keinen erkannt hat.
-    proceedAfterSighting(state.photoUrl);
-  } else if (action === "confirm-photo-date" && state.kind === "photo-date" && accountState === "signed-in") {
-    const dateInput = app!.querySelector<HTMLInputElement>("#photo-observed-on");
-    if (!dateInput || !isValidObservedDate(dateInput.value)) return;
-    observedOn = dateInput.value;
-    photoDateRequiresConfirmation = false;
-    continueAfterSighting(state.photoUrl);
-  } else if (action === "use-phone-location" && state.kind === "location-choice") {
-    activeSearchLocation = undefined;
-    activeSearchLocationSource = "phone";
-    void runNearbySearch(state.photoUrl);
-  } else if (action === "choose-map-location" && state.kind === "location-choice") {
-    // Manual map selection must work even when the person denied phone location.
-    // Start at a neutral, clearly disclosed map view instead of inferring the device location.
-    mapLocationOverride = undefined;
-    activeSearchLocationSource = "map";
-    state = {
-      kind: "location-map",
-      photoUrl: state.photoUrl,
-      center: { latitude: 50, longitude: 10, accuracyMeters: 1_000 },
-      initialZoom: 6,
-    };
-  } else if (action === "confirm-map-location" && state.kind === "location-map") {
-    const position = mapLocationOverride ?? state.center;
-    activeSearchLocationSource = "map";
-    void runNearbySearch(state.photoUrl, { ...position, accuracyMeters: MAP_PIN_ACCURACY_METERS });
-  } else if (
-    action === "retry-search" &&
-    (state.kind === "candidate-error" ||
-      (state.kind === "candidate-result" &&
-        (state.search.status === "partial" || state.assessment.kind === "search-incomplete")))
-  ) {
-    // A photo's embedded point is fixed, but a phone GPS fix can improve after the user moves.
-    // A chosen photo/map point is stable across retries. Phone GPS is deliberately reacquired
-    // because the user may have moved since the previous attempt.
-    // Ausnahme: Hat die App den Handy-Standort selbst eingesetzt („phone-auto“), gilt er nur, solange das Foto frisch ist.
-    // Wer die App nach einem Fehlschlag liegen lässt und woanders erneut versucht, bekommt die ausdrückliche Standortwahl.
-    const autoLocationExpired =
-      activeSearchLocationSource === "phone-auto" &&
-      !(
-        phoneLocationPermission === "granted" &&
-        phoneLocationFitsPhoto({ fromCamera: selectedPhotoFromCamera, capturedAtMs: selectedPhotoCapturedAtMs })
-      );
-    if (autoLocationExpired) {
-      if (searchRetryTimer) window.clearTimeout(searchRetryTimer);
-      searchRetryTimer = undefined;
-      activeSearchLocation = undefined;
-      activeSearchLocationSource = undefined;
-      state = { kind: "location-choice", photoUrl: state.photoUrl };
-      render(true);
-    } else {
-      const retryLocation =
-        activeSearchLocationSource === "photo" || activeSearchLocationSource === "map"
-          ? activeSearchLocation
-          : undefined;
-      void runNearbySearch(state.photoUrl, retryLocation);
-    }
   } else if (action === "preview-candidate" && state.kind === "candidate-result") {
     const candidateId = source?.dataset.candidateId;
     const candidate = state.search.candidates.find((item) => item.id === candidateId);
     if (!candidate || !candidateId) return;
-    const result = previewExistingAedCheck(candidate, true, observedOn);
+    const result = previewExistingAedCheck(candidate, true, photoSession.observedOn);
     // Ohne Name und Ortsangabe bleibt die Bezeichnung leer. Beim Anzeigen steht dann "AED (ohne Namen)" da (siehe
     // displayCandidateLabel), in der gerade gewählten Sprache und nie die technische Kennung (node/123…).
     const candidateLabel = candidate.tags.name || candidate.tags["defibrillator:location"] || "";
@@ -2106,7 +2036,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     const result = previewExistingAedCheck(
       { id: state.candidateId, osmType: "node", tags: node.tags },
       true,
-      observedOn,
+      photoSession.observedOn,
     );
     state = {
       kind: "osm-preview",
@@ -2135,7 +2065,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
         photoUrl,
         candidateId,
         candidateLabel,
-        result: previewExistingAedCheck(candidate, true, observedOn),
+        result: previewExistingAedCheck(candidate, true, photoSession.observedOn),
         returnState,
       };
     }
@@ -2266,7 +2196,7 @@ async function runNearbySearch(photoUrl: string, providedLocation?: SearchLocati
   render(true);
   try {
     const location = providedLocation ?? (await getPhoneLocation());
-    activeSearchLocation = location;
+    photoSession.searchLocation = location;
     const search = await requestNearbyCandidates(location);
     const { assessment } = assessCandidateSearch(location, search, {
       nearbyRadiusMeters: NEARBY_RADIUS_METERS,
@@ -2387,8 +2317,8 @@ async function loadExistingAedNode(candidateId: string): Promise<void> {
  * die Datums- und Standortregeln überall gleich gelten.
  */
 function proceedAfterSighting(photoUrl: string): void {
-  if (photoDateRequiresConfirmation) {
-    state = { kind: "photo-date", photoUrl, suggestedDate: observedOn };
+  if (photoSession.dateRequiresConfirmation) {
+    state = { kind: "photo-date", photoUrl, suggestedDate: photoSession.observedOn };
     render(true);
   } else continueAfterSighting(photoUrl);
 }
@@ -2406,8 +2336,8 @@ function proceedAfterSighting(photoUrl: string): void {
  * Standort und Konto verlassen das Gerät dabei nie: Das Bild enthält nach dem Neukodieren keine Metadaten.
  */
 async function runPhotoCheck(photoUrl: string): Promise<void> {
-  const file = selectedPhotoFile;
-  const requestId = photoCheckRequestId;
+  const file = photoSession.file;
+  const requestId = photoSession.checkRequestId;
   if (!file || !requestId) return;
   state = { kind: "photo-checking", photoUrl };
   render(true);
@@ -2423,7 +2353,7 @@ async function runPhotoCheck(photoUrl: string): Promise<void> {
     failureCode = describePhotoCheckFailure(error);
   }
   // Wurde das Foto inzwischen verworfen oder ersetzt, darf das späte Ergebnis nichts mehr ändern.
-  if (state.kind !== "photo-checking" || state.photoUrl !== photoUrl || selectedPhotoFile !== file) return;
+  if (state.kind !== "photo-checking" || state.photoUrl !== photoUrl || photoSession.file !== file) return;
   if (outcome === "recognized") {
     proceedAfterSighting(photoUrl);
   } else if (outcome === "unavailable") {
@@ -2454,21 +2384,21 @@ function describePhotoCheckFailure(error: unknown): string {
 }
 
 function continueAfterSighting(photoUrl: string): void {
-  if (selectedPhotoLocation) {
-    activeSearchLocation = selectedPhotoLocation;
-    activeSearchLocationSource = "photo";
-    void runNearbySearch(photoUrl, selectedPhotoLocation);
+  if (photoSession.locationFromPhoto) {
+    photoSession.searchLocation = photoSession.locationFromPhoto;
+    photoSession.searchLocationSource = "photo";
+    void runNearbySearch(photoUrl, photoSession.locationFromPhoto);
   } else if (
     phoneLocationPermission === "granted" &&
-    phoneLocationFitsPhoto({ fromCamera: selectedPhotoFromCamera, capturedAtMs: selectedPhotoCapturedAtMs })
+    phoneLocationFitsPhoto({ fromCamera: photoSession.fromCamera, capturedAtMs: photoSession.capturedAtMs })
   ) {
     // Das iPhone liefert Kamerafotos aus dem Browser oft ohne Ortsangabe. Die Person steht gerade am AED und
     // hat dem Handy den Standort einmal erlaubt: Der Handy-Standort ersetzt das fehlende Foto-GPS, ohne
     // Zwischenfrage. Die Anzeige nennt „Handy-Standort verwendet“. Bei Galerie-Fotos und älteren Aufnahmen
     // bleibt die ausdrückliche Wahl (siehe else), weil das Handy dort woanders sein kann.
     // „phone-auto“ merkt, dass die App den Standort selbst eingesetzt hat: Beim Wiederholen wird die Frische neu geprüft.
-    activeSearchLocation = undefined;
-    activeSearchLocationSource = "phone-auto";
+    photoSession.searchLocation = undefined;
+    photoSession.searchLocationSource = "phone-auto";
     void runNearbySearch(photoUrl);
   } else {
     state = { kind: "location-choice", photoUrl };
@@ -2505,19 +2435,19 @@ async function askForLocationOnceAfterSignIn(): Promise<void> {
 function releasePhoto(): void {
   newAedPositionOverride = undefined;
   resetDetailForm();
-  photoSelectionError = false;
+  photoSession.selectionError = false;
   const photoUrl = getPhotoUrl(state);
   if (photoUrl?.startsWith("blob:")) URL.revokeObjectURL(photoUrl);
-  selectedPhotoLocation = undefined;
-  selectedPhotoFromCamera = false;
-  selectedPhotoCapturedAtMs = undefined;
-  selectedPhotoFile = undefined;
-  photoCheckRequestId = undefined;
-  photoDateRequiresConfirmation = false;
-  observedOn = localCalendarDate();
-  activeSearchLocation = undefined;
-  activeSearchLocationSource = undefined;
-  mapLocationOverride = undefined;
+  photoSession.locationFromPhoto = undefined;
+  photoSession.fromCamera = false;
+  photoSession.capturedAtMs = undefined;
+  photoSession.file = undefined;
+  photoSession.checkRequestId = undefined;
+  photoSession.dateRequiresConfirmation = false;
+  photoSession.observedOn = localCalendarDate();
+  photoSession.searchLocation = undefined;
+  photoSession.searchLocationSource = undefined;
+  photoSession.mapLocationOverride = undefined;
 }
 
 render();
