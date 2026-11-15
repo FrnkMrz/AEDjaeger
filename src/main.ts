@@ -67,6 +67,7 @@ import {
 } from "./ui/views/detailForm";
 import { bindDetailForm as bindDetailFormInput } from "./ui/controllers/detailFormBinding";
 import { bindWorkflowMap } from "./ui/controllers/mapBindings";
+import { bindRenderedControls } from "./ui/controllers/renderBindings";
 import {
   isCalendarDate,
   isFreshCapture,
@@ -833,58 +834,32 @@ function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void 
   if (state.kind === "new-aed-details" || (state.kind === "existing-aed-details" && state.load.status === "ready"))
     bindDetailForm();
 
-  // Zweite Bestätigung bei Korrekturen: Der Speichern-Knopf wird erst aktiv, wenn „alter Wert stimmt nicht“ angehakt ist.
-  const correctionConfirmation = app.querySelector<HTMLInputElement>("#correction-confirmed");
-  correctionConfirmation?.addEventListener("change", () => {
-    const saveButton = app.querySelector<HTMLButtonElement>('[data-action="save-development-check"]');
-    if (saveButton) saveButton.disabled = !correctionConfirmation.checked;
+  bindRenderedControls(app, {
+    hasUnresolvedSave: () => hasUnresolvedSave(state),
+    focusCurrentState,
+    openAccountFromLamp,
+    onSoundToggle: (enabled) => {
+      successSound.setEnabled(enabled);
+      // Beim Einschalten einmal vorspielen: So hört die Person sofort, wie es klingt, und der Ton ist freigeschaltet.
+      if (enabled) {
+        successSound.prepare();
+        successSound.play();
+      }
+    },
+    onLanguageChange: (nextLanguage) => {
+      language = nextLanguage;
+      // Scheitert das Merken, gilt die Sprache trotzdem für die offene Seite.
+      writeStoredValue("aedjaeger-language", language);
+      render();
+    },
+    onPhotoSelected,
+    onAction: (action, source) => {
+      void handleAction(action, source);
+    },
+    bindAccountPanel,
+    renderUpdateBanner,
+    restoreFlowFocus,
   });
-
-  // Zweite Bestätigung in der Neuanlage-Vorschau: Der Speichern-Knopf wird erst aktiv,
-  // wenn der Haken „vor Ort geprüft“ gesetzt ist, und wieder gesperrt, wenn er entfernt wird.
-  const absenceConfirmation = app.querySelector<HTMLInputElement>("#new-aed-absence-confirmed");
-  absenceConfirmation?.addEventListener("change", () => {
-    const createButton = app.querySelector<HTMLButtonElement>('[data-action="create-development-node"]');
-    if (createButton) createButton.disabled = !absenceConfirmation.checked;
-  });
-
-  document.querySelector<HTMLButtonElement>("#open-info")?.addEventListener("click", () => {
-    document.querySelector<HTMLDialogElement>("#info-dialog")?.showModal();
-  });
-  document.querySelector<HTMLButtonElement>("#connection-lamp")?.addEventListener("click", openAccountFromLamp);
-  document.querySelector<HTMLInputElement>("#success-sound-toggle")?.addEventListener("change", (event) => {
-    const enabled = (event.target as HTMLInputElement).checked;
-    successSound.setEnabled(enabled);
-    // Beim Einschalten einmal vorspielen: So hört die Person sofort, wie es klingt, und der Ton ist freigeschaltet.
-    if (enabled) {
-      successSound.prepare();
-      successSound.play();
-    }
-  });
-  document.querySelector<HTMLAnchorElement>(".brand")?.addEventListener("click", (event) => {
-    if (!hasUnresolvedSave(state)) return;
-
-    // A reload here would erase the only copy of an unresolved draft in this in-memory prototype.
-    event.preventDefault();
-    focusCurrentState();
-  });
-  document.querySelector<HTMLSelectElement>("#language")?.addEventListener("change", (event) => {
-    language = (event.currentTarget as HTMLSelectElement).value as Language;
-    // Scheitert das Merken, gilt die Sprache trotzdem für die offene Seite.
-    writeStoredValue("aedjaeger-language", language);
-    render();
-    // Rendering replaces the select node, so return keyboard focus to its translated replacement.
-    app.querySelector<HTMLSelectElement>("#language")?.focus();
-  });
-  document.querySelector<HTMLInputElement>("#camera-input")?.addEventListener("change", onPhotoSelected);
-  document.querySelector<HTMLInputElement>("#file-input")?.addEventListener("change", onPhotoSelected);
-  document.querySelectorAll<HTMLElement>("[data-action]").forEach((button) => {
-    button.addEventListener("click", () => handleAction(button.dataset.action, button));
-  });
-  bindAccountPanel();
-  renderUpdateBanner();
-
-  if (restoreFlowFocus) focusCurrentState();
 }
 
 /**
