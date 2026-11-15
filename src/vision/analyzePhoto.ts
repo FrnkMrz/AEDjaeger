@@ -1,4 +1,5 @@
 import { parseVisionObservation, VISION_MODEL, type VisionObservation } from "../contracts/visionObservation";
+import { isRecord } from "../../shared/typeGuards.js";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_SOURCE_BYTES = 40 * 1024 * 1024;
@@ -241,8 +242,4 @@ async function blobToBase64(blob: Blob): Promise<string> {
   } catch {
     throw new VisionClientError("image_processing_failed");
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
