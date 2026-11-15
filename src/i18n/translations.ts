@@ -46,7 +46,7 @@ export const translations = {
     accountSignedIn: "Mit OpenStreetMap verbunden",
     accountSignOut: "Abmelden",
     accountIdentityOnly:
-      "Die Anmeldung bestätigt nur deine Identität. Änderungen an OpenStreetMap sind noch deaktiviert.",
+      "Im Pilot sind Schreibvorgänge nur für freigegebene Tests mit dem OSM-Testserver möglich. Änderungen am echten OpenStreetMap sind nicht freigegeben.",
     accountDevSignIn: "Mit OSM-Testserver anmelden",
     accountDevNotice: "Nur für Tests: Änderungen betreffen ausschließlich die OSM-Entwicklungsumgebung.",
     accountDevSignedIn: "Mit OSM-Testserver verbunden",
@@ -97,7 +97,8 @@ export const translations = {
     accountSignIn: "Sign in with OpenStreetMap",
     accountSignedIn: "Connected to OpenStreetMap",
     accountSignOut: "Sign out",
-    accountIdentityOnly: "Sign-in only confirms your identity. OpenStreetMap edits are still disabled.",
+    accountIdentityOnly:
+      "During the pilot, edits are only available for approved tests on the OSM test server. Edits to real OpenStreetMap are not approved.",
     accountDevSignIn: "Sign in to OSM test server",
     accountDevNotice: "For testing only: changes affect the OSM development environment.",
     accountDevSignedIn: "Connected to OSM test server",
@@ -148,7 +149,8 @@ export const translations = {
     accountSignIn: "Zaloguj się przez OpenStreetMap",
     accountSignedIn: "Połączono z OpenStreetMap",
     accountSignOut: "Wyloguj się",
-    accountIdentityOnly: "Logowanie potwierdza tylko tożsamość. Edycje w OpenStreetMap są nadal wyłączone.",
+    accountIdentityOnly:
+      "W pilotażu zmiany są możliwe tylko w zatwierdzonych testach na serwerze testowym OSM. Zmiany w prawdziwym OpenStreetMap nie są zatwierdzone.",
     accountDevSignIn: "Zaloguj się do serwera testowego OSM",
     accountDevNotice: "Tylko do testów: zmiany dotyczą wyłącznie środowiska deweloperskiego OSM.",
     accountDevSignedIn: "Połączono z serwerem testowym OSM",
@@ -199,7 +201,8 @@ export const translations = {
     accountSignIn: "OpenStreetMapでログイン",
     accountSignedIn: "OpenStreetMapに接続済み",
     accountSignOut: "ログアウト",
-    accountIdentityOnly: "ログインは本人確認のみです。OpenStreetMapへの編集はまだ無効です。",
+    accountIdentityOnly:
+      "試験運用中の編集は、承認されたOSMテストサーバーでのテストに限られます。実際のOpenStreetMapへの編集は承認されていません。",
     accountDevSignIn: "OSMテストサーバーにログイン",
     accountDevNotice: "テスト専用です。変更はOSM開発環境にのみ反映されます。",
     accountDevSignedIn: "OSMテストサーバーに接続済み",
@@ -253,7 +256,8 @@ export const translations = {
     accountSignIn: "Se connecter avec OpenStreetMap",
     accountSignedIn: "Connecté à OpenStreetMap",
     accountSignOut: "Se déconnecter",
-    accountIdentityOnly: "La connexion confirme uniquement votre identité. Les modifications OSM restent désactivées.",
+    accountIdentityOnly:
+      "Pendant le pilote, les modifications sont possibles uniquement pour des tests approuvés sur le serveur de test OSM. Les modifications sur OpenStreetMap réel ne sont pas autorisées.",
     accountDevSignIn: "Se connecter au serveur de test OSM",
     accountDevNotice: "Tests uniquement : les changements concernent seulement l’environnement de développement OSM.",
     accountDevSignedIn: "Connecté au serveur de test OSM",
@@ -305,7 +309,7 @@ export const translations = {
     accountSignedIn: "Conectado a OpenStreetMap",
     accountSignOut: "Cerrar sesión",
     accountIdentityOnly:
-      "El inicio de sesión solo confirma tu identidad. Las ediciones en OpenStreetMap siguen desactivadas.",
+      "Durante el piloto, solo se permiten cambios en pruebas autorizadas en el servidor de pruebas de OSM. Los cambios en OpenStreetMap real no están autorizados.",
     accountDevSignIn: "Iniciar sesión en el servidor de pruebas de OSM",
     accountDevNotice: "Solo para pruebas: los cambios afectan únicamente al entorno de desarrollo de OSM.",
     accountDevSignedIn: "Conectado al servidor de pruebas de OSM",
