@@ -69,6 +69,7 @@ import { bindDetailForm as bindDetailFormInput } from "./ui/controllers/detailFo
 import { bindWorkflowMap } from "./ui/controllers/mapBindings";
 import { bindRenderedControls } from "./ui/controllers/renderBindings";
 import { createUpdateBannerRenderer } from "./ui/controllers/updateBanner";
+import { createAccountPanelBindings } from "./ui/controllers/accountPanelBindings";
 import {
   isCalendarDate,
   isFreshCapture,
@@ -896,32 +897,23 @@ const renderUpdateBanner = createUpdateBannerRenderer({
   reload: () => window.location.reload(),
 });
 
-function bindAccountPanel(): void {
-  app.querySelector<HTMLButtonElement>("#osm-sign-out")?.addEventListener("click", () => {
+const accountPanelBindings = createAccountPanelBindings({
+  app,
+  renderPanel: accountPanel,
+  onSignOut: () => {
     void signOutFromOSM();
-  });
-  app.querySelector<HTMLButtonElement>("#osm-session-retry")?.addEventListener("click", () => {
+  },
+  onRetrySession: () => {
     void retryOSMSessionStatus();
-  });
+  },
+});
+
+function bindAccountPanel(): void {
+  accountPanelBindings.bind();
 }
 
 function updateAccountPanel(focusSelector?: string): void {
-  const currentPanel = app.querySelector(".account-panel");
-  if (!currentPanel) return;
-  const replacement = document.createElement("div");
-  replacement.innerHTML = accountPanel();
-  const nextPanel = replacement.firstElementChild;
-  if (!nextPanel) return;
-  currentPanel.replaceWith(nextPanel);
-  bindAccountPanel();
-  if (focusSelector) {
-    const focusTarget =
-      nextPanel instanceof HTMLElement && nextPanel.matches(focusSelector)
-        ? nextPanel
-        : nextPanel.querySelector<HTMLElement>(focusSelector);
-    if (focusTarget) focusTarget.focus();
-    else if (nextPanel instanceof HTMLElement) nextPanel.focus();
-  }
+  accountPanelBindings.update(focusSelector);
 }
 
 /**
