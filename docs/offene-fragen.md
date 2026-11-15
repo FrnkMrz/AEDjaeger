@@ -1,6 +1,6 @@
 # Entscheidungen und nächste Schritte
 
-Stand: **15.11.2026**. Gemergt sind der Detailweg (P0 bis P5, PR #77), die Detail-Angaben aus der Trefferliste (PR #80), die Entfernung der Demo „Vorschau testen“ (PR #81), die Code-Härtung P6 (PR #95), Barrierefreiheit/WebKit P7 (PR #96), die Betriebsergänzungen P8 (PR #97) und die Migration-/Deploy-Prüfung (PR #99). Die Migrationsprüfung ist im Deploy integriert; die Migrationen `0010` und `0011` wurden auf der Produktions-D1 geprüft und angewendet, anschließend lief der Deploy erfolgreich. **Nächste technische Schritte:** P9 – Entwurf Produktions-Schreibweg ([Dokument](produktion-osm.md)); danach P10 – verhaltensneutrale Aufteilung von `src/main.ts` in mehrere kleine PRs. Die produktiven OSM-Schreibzugriffe bleiben aus. **Nächste manuelle Abnahmen:** (1) kontrollierter Schreibtest auf dem OSM-Testserver nach Abschnitt D der [Pilot-Abnahme](pilot-abnahme.md), (2) Handytest des Detailformulars, (3) Rate-Limiting-Regel gemäß [Anleitung](cloudflare-rate-limit.md) im Dashboard prüfen und aktivieren, (4) manueller VoiceOver-/TalkBack-Test nach [Screenreader-Abnahme](screenreader-abnahme.md), (5) unten markierte Produktentscheidungen. Ältere Statusangaben bleiben nur als historische Begründung erhalten.
+Stand: **15.11.2026**. Gemergt sind der Detailweg (P0 bis P5, PR #77), die Detail-Angaben aus der Trefferliste (PR #80), die Entfernung der Demo „Vorschau testen“ (PR #81), die Code-Härtung P6 (PR #95), Barrierefreiheit/WebKit P7 (PR #96), die Betriebsergänzungen P8 (PR #97), die Migration-/Deploy-Prüfung (PR #99) und der Entwurf des Produktions-Schreibwegs (P9, PR #100). Die Migrationsprüfung ist im Deploy integriert; die Migrationen `0010` und `0011` wurden auf der Produktions-D1 geprüft und angewendet, anschließend lief der Deploy erfolgreich. P10 – die verhaltensneutrale Aufteilung von `src/main.ts` – wird in kleinen, unabhängig prüfbaren PRs vorbereitet. **Produktive OSM-Schreibzugriffe bleiben aus.** **Nächste manuelle Abnahmen:** (1) kontrollierter Schreibtest auf dem OSM-Testserver nach Abschnitt D der [Pilot-Abnahme](pilot-abnahme.md), (2) Handytest des Detailformulars, (3) Rate-Limiting-Regel gemäß [Anleitung](cloudflare-rate-limit.md) im Dashboard prüfen und aktivieren, (4) manueller VoiceOver-/TalkBack-Test nach [Screenreader-Abnahme](screenreader-abnahme.md), (5) unten markierte Produktentscheidungen. Ältere Statusangaben bleiben nur als historische Begründung erhalten.
 
 ## Produktions-Schreibweg (P9)
 
@@ -8,7 +8,20 @@ Der ausführliche Entwurf steht in [Produktion-OSM](produktion-osm.md). Er ist n
 
 ## Aufteilung von `main.ts` (P10)
 
-Der Review empfiehlt vier bis fünf PRs mit klaren Bereichen und ohne Verhaltensänderung. Die aktuelle Datei ist auf 2.836 Zeilen angewachsen; vor dem ersten Extraktions-PR werden die tatsächlichen Modulgrenzen im aktuellen Stand festgehalten. Vorgesehene Trennlinie: (1) unveränderliche Beschriftungs-/SVG- und Formatierungshilfen, (2) Rendering je Ansicht, (3) Detailformulardarstellung, (4) Konten-/OSM-Schreibclient, (5) Aktionstabelle und Foto-/Standortzustand. Jede Etappe soll nur Verschiebungen, Importe und nötige Sichtbarkeitsanpassungen enthalten; keine Testinhalte oder Ablauflogik ändern. Die PRs müssen nacheinander auf einem gemergten Basisstand aufbauen, damit Änderungen an gemeinsamem App-Zustand nicht parallel kollidieren.
+Der Review empfiehlt vier bis fünf PRs mit klaren Bereichen und ohne Verhaltensänderung. Um besonders die großen Ansichts- und Zustandsblöcke kleiner zu halten, wurde die Arbeit in sechs PRs geteilt:
+
+| PR | abgegrenzter Bereich | Status |
+| --- | --- | --- |
+| [#101](https://github.com/FrnkMrz/AEDjaeger/pull/101) | Gemeinsame Markup-Helfer | offen; Code Review ohne Findings |
+| [#102](https://github.com/FrnkMrz/AEDjaeger/pull/102) | Konto- und Anmeldeansichten | offen; Code Review ohne Findings |
+| [#103](https://github.com/FrnkMrz/AEDjaeger/pull/103) | Foto-, Standort- und Suchstatusansichten | offen; Code Review ohne Findings |
+| [#104](https://github.com/FrnkMrz/AEDjaeger/pull/104) | AED-Detailformularansicht | offen; Code Review ohne Findings |
+| [#105](https://github.com/FrnkMrz/AEDjaeger/pull/105) | HTTP-Transport für bestätigte OSM-Entwicklungs-Schreibvorschläge | offen; Code Review ohne Findings, CI läuft |
+| [#106](https://github.com/FrnkMrz/AEDjaeger/pull/106) | Flüchtiger Foto-/Standortzustand und dessen Aktionen | in Vorbereitung |
+
+Die Ansichten und der reine Schreibtransport erhalten ihre Eingaben über explizite Parameter. Foto, Herkunft, Datum, lokale Foto-Ortsangabe, Suchposition und Kartenauswahl werden als eine flüchtige Sitzung zusammengefasst; die Foto-/Standortaktionen arbeiten mit einem injizierten Zustands- und Effektkontext. Daten, Fotos, Koordinaten und Entwürfe werden dadurch nicht zusätzlich gespeichert. Die übrigen Kandidaten-, Vorschau- und Schreibbestätigungsaktionen bleiben zunächst in `main.ts`, weil sie mehrere Sicherheitsprüfungen und Wiederherstellungszustände koordinieren. Sie werden nicht in einer pauschalen Aktionstabelle umgeschrieben; falls `main.ts` nach diesen PRs weiter verkleinert werden soll, ist das ein separater, ebenso verhaltensneutraler Schritt.
+
+Alle PRs zielen auf `main`; sie sind nicht als zusammenhängende Merge-Kette gestapelt. Vor jedem Merge müssen aktueller Zielstand, Merge-Konflikte und der grüne Status-Check geprüft werden. Nach einem Merge ist der nächste PR auf den dann aktuellen Stand zu aktualisieren und erneut zu prüfen. Keine Testinhalte oder Ablaufregeln wurden für P10 geändert. Es gibt keine Produktions-OSM-Aufrufe.
 
 **Barrierefreiheit (P7):** axe- und WebKit-Prüfungen laufen automatisiert. Der echte VoiceOver-/TalkBack-Durchlauf und die anschließende Entscheidung zwischen Fokusführung und Live-Ansage bleiben offen; siehe [Screenreader-Abnahme](screenreader-abnahme.md).
 
