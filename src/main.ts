@@ -27,10 +27,7 @@ import { assessCandidateSearch } from "./domain/assessCandidateSearch";
 import { createPositionPicker, zoomToFitMarkers, type Coordinate, type MapMarker } from "./map/positionPicker";
 import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
 import {
-  ACCESS_VALUES,
-  DETAIL_LIMITS,
   EMPTY_DETAIL_FORM,
-  INDOOR_VALUES,
   buildDetailTags,
   formFromExistingTags,
   isDetailKey,
@@ -62,6 +59,7 @@ import {
   renderDetailForm,
   type DetailFormViewContext,
 } from "./ui/views/detailForm";
+import { bindDetailForm as bindDetailFormInput } from "./ui/controllers/detailFormBinding";
 import {
   isCalendarDate,
   isFreshCapture,
@@ -547,22 +545,6 @@ function computeNewAedPreview(current: CandidateResultState, positionConfirmed: 
 // weitere Felder ein- oder ausblenden, wird der Formularteil (#detail-form) neu gezeichnet.
 // ---------------------------------------------------------------------------------------------------------------
 
-/** Die Textfelder des Formulars. Sie entsprechen den gleichnamigen Feldern von AedDetailForm. */
-type DetailTextField = "location" | "hoursText" | "operator" | "phone" | "description" | "ref";
-const DETAIL_TEXT_FIELDS: readonly DetailTextField[] = [
-  "location",
-  "hoursText",
-  "operator",
-  "phone",
-  "description",
-  "ref",
-];
-
-/** Prüft, ob ein Text aus dem DOM der Name eines Textfelds ist (statt einem Attribut blind zu vertrauen). */
-function isDetailTextField(value: string | undefined): value is DetailTextField {
-  return value !== undefined && (DETAIL_TEXT_FIELDS as readonly string[]).includes(value);
-}
-
 /**
  * Abschnitt des Formulars, in dem ein Schlüssel steht. Damit erscheint eine Fehlermeldung direkt beim
  * betroffenen Feld und nicht irgendwo.
@@ -586,11 +568,6 @@ function resetDetailForm(): void {
   detailExistingTags = undefined;
   detailCorrectMode = false;
   detailLockedKeys = new Set();
-}
-
-/** Wählt aus einer festen Werteliste den passenden Wert oder `null` („Weiß ich nicht“). */
-function pickAllowed<T extends string>(allowed: readonly T[], raw: string): T | null {
-  return (allowed as readonly string[]).includes(raw) ? (raw as T) : null;
 }
 
 function detailFormViewContext(): DetailFormViewContext {
@@ -758,84 +735,15 @@ function showDetailLevel(): void {
  * Wird von render() aufgerufen, nachdem die Seite neu geschrieben wurde.
  */
 function bindDetailForm(): void {
-  const host = app!.querySelector<HTMLElement>("#detail-form");
-  if (!host) return;
-
-  // Auswahlfelder (Radio): Wert speichern, bei Bedarf Folgefelder ein- oder ausblenden.
-  host.addEventListener("change", (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement) || target.type !== "radio") return;
-    const field = target.dataset.detailRadio;
-    if (field === "access") {
-      detailForm.access = pickAllowed(ACCESS_VALUES, target.value);
-    } else if (field === "indoor") {
-      detailForm.indoor = pickAllowed(INDOOR_VALUES, target.value);
-      // Die Ebene gehört nur zu einem Gerät im Gebäude.
-      if (detailForm.indoor !== "yes") detailForm.level = null;
-    } else if (field === "hoursMode") {
-      detailForm.hoursMode = pickAllowed(["always", "times"] as const, target.value);
-    } else {
-      return;
-    }
-    refreshDetailForm(target.id);
-  });
-
-  // Textfelder: nur das Modell und die Fußleiste aktualisieren, das Feld selbst bleibt unangetastet.
-  host.addEventListener("input", (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement)) return;
-    const field = target.dataset.detailText;
-    if (!isDetailTextField(field)) return;
-    detailForm[field] = target.value;
-    updateDetailFooter();
-  });
-
-  // Knöpfe im Formular: Schnellwahl für den Standort, Zeiten-Vorlagen, Ebenen-Zähler.
-  host.addEventListener("click", (event) => {
-    const button = (event.target as HTMLElement).closest<HTMLElement>("button");
-    if (!button) return;
-    if (button.dataset.detailAddloc !== undefined) {
-      const base = detailForm.location.trim();
-      const next = base === "" ? button.dataset.detailAddloc : `${base}, ${button.dataset.detailAddloc}`;
-      if (next.length > DETAIL_LIMITS.location) return;
-      detailForm.location = next;
-      const input = host.querySelector<HTMLInputElement>("#detail-location");
-      if (input) input.value = next;
-      updateDetailFooter();
-    } else if (button.dataset.detailHoursPreset !== undefined) {
-      detailForm.hoursText = button.dataset.detailHoursPreset;
-      const input = host.querySelector<HTMLInputElement>("#detail-hours-text");
-      if (input) input.value = detailForm.hoursText;
-      updateDetailFooter();
-    } else if (button.dataset.detailStep !== undefined) {
-      const step = Number(button.dataset.detailStep) < 0 ? -1 : 1;
-      // Der erste Tipp landet auf 0 (Erdgeschoss), egal in welche Richtung: Das ist der häufigste Fall.
-      detailForm.level =
-        detailForm.level === null
-          ? 0
-          : Math.max(DETAIL_LIMITS.levelMin, Math.min(DETAIL_LIMITS.levelMax, detailForm.level + step));
-      showDetailLevel();
-      updateDetailFooter();
-    } else if (button.dataset.detailLevelClear !== undefined) {
-      detailForm.level = null;
-      showDetailLevel();
-      updateDetailFooter();
-    }
-  });
-
-  // Aufklappen merken, damit „Mehr Angaben“ beim Neuzeichnen offen bleibt. Das Ereignis „toggle“ bubbelt nicht,
-  // deshalb wird es in der Aufnahmephase am Behälter abgefangen.
-  host.addEventListener(
-    "toggle",
-    (event) => {
-      if (event.target instanceof HTMLDetailsElement && event.target.id === "detail-more")
-        detailMoreOpen = event.target.open;
+  bindDetailFormInput(app!, {
+    getForm: () => detailForm,
+    refreshDetailForm,
+    showDetailLevel,
+    updateDetailFooter,
+    setMoreOpen: (open) => {
+      detailMoreOpen = open;
     },
-    true,
-  );
-
-  // Stand von Knopf, Fehlermeldungen und „Vorher“-Zeilen sofort herstellen (wichtig beim Zurückkehren aus der Vorschau).
-  updateDetailFooter();
+  });
 }
 
 function statusContent(): string {
