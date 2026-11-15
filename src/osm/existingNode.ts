@@ -13,7 +13,11 @@ export interface ExistingNode {
   tags: Readonly<Record<string, string>>;
 }
 
-export type ExistingNodeErrorCode = "authentication_required" | "node_unavailable" | "service_unavailable" | "invalid_response";
+export type ExistingNodeErrorCode =
+  | "authentication_required"
+  | "node_unavailable"
+  | "service_unavailable"
+  | "invalid_response";
 
 /** Fehler beim Laden. Der feste Code genügt der Oberfläche für eine verständliche Meldung. */
 export class ExistingNodeError extends Error {
@@ -36,7 +40,10 @@ export async function requestExistingNode(id: string, fetcher: typeof fetch = fe
   let response: Response;
   try {
     response = await fetcher(`/api/osm/development/node?id=${encodeURIComponent(id)}`, {
-      method: "GET", credentials: "same-origin", headers: { Accept: "application/json" }, cache: "no-store",
+      method: "GET",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
     });
   } catch {
     throw new ExistingNodeError("service_unavailable");
@@ -51,15 +58,25 @@ export async function requestExistingNode(id: string, fetcher: typeof fetch = fe
   } catch {
     throw new ExistingNodeError("invalid_response");
   }
-  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) throw new ExistingNodeError("invalid_response");
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload))
+    throw new ExistingNodeError("invalid_response");
   const body = payload as Record<string, unknown>;
-  if (body.status !== "ok" || body.id !== id || typeof body.version !== "number" || !Number.isSafeInteger(body.version) || body.version <= 0
-    || typeof body.tags !== "object" || body.tags === null || Array.isArray(body.tags)) {
+  if (
+    body.status !== "ok" ||
+    body.id !== id ||
+    typeof body.version !== "number" ||
+    !Number.isSafeInteger(body.version) ||
+    body.version <= 0 ||
+    typeof body.tags !== "object" ||
+    body.tags === null ||
+    Array.isArray(body.tags)
+  ) {
     throw new ExistingNodeError("invalid_response");
   }
   const tags: Record<string, string> = {};
   for (const [key, value] of Object.entries(body.tags as Record<string, unknown>)) {
-    if ((!isDetailKey(key) && key !== "check_date") || typeof value !== "string" || value.length > 255) throw new ExistingNodeError("invalid_response");
+    if ((!isDetailKey(key) && key !== "check_date") || typeof value !== "string" || value.length > 255)
+      throw new ExistingNodeError("invalid_response");
     tags[key] = value;
   }
   return { id, version: body.version, tags };

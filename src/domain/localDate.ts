@@ -17,7 +17,9 @@ export function isCalendarDate(value: unknown): value is string {
 export function formatCalendarDate(value: string, language: string): string {
   if (!isCalendarDate(value)) return value;
   try {
-    return new Intl.DateTimeFormat(language, { dateStyle: "long", timeZone: "UTC" }).format(new Date(`${value}T00:00:00.000Z`));
+    return new Intl.DateTimeFormat(language, { dateStyle: "long", timeZone: "UTC" }).format(
+      new Date(`${value}T00:00:00.000Z`),
+    );
   } catch {
     // Keep the source value visible if a browser does not support this locale.
     return value;
@@ -68,7 +70,11 @@ export function isFreshCapture(capturedAtMs: number | undefined, nowMs: number =
  * @param today           Heutiger Kalendertag des Geräts (JJJJ-MM-TT).
  * @param capturedJustNow Ergebnis von isFreshCapture für dieses Foto.
  */
-export function photoDateNeedsConfirmation(photoDate: string | undefined, today: string, capturedJustNow: boolean): boolean {
+export function photoDateNeedsConfirmation(
+  photoDate: string | undefined,
+  today: string,
+  capturedJustNow: boolean,
+): boolean {
   if (photoDate !== undefined) return photoDate !== today;
   return !capturedJustNow;
 }

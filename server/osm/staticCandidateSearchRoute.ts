@@ -11,7 +11,14 @@ import { reserveSearchSlot } from "../storage/searchCooldown";
 import type { NearbyAedCandidate, SearchCoordinate } from "../../src/osm/candidateTypes";
 import { requestOSMDevelopmentApi } from "./developmentApi";
 import { distanceMeters } from "../../src/domain/candidateMatch";
-import { BodyTooLargeError, isCrossOrigin, isRecord, jsonResponse, readOSMSessionCookie, readLimitedBody } from "../http/requestGuards";
+import {
+  BodyTooLargeError,
+  isCrossOrigin,
+  isRecord,
+  jsonResponse,
+  readOSMSessionCookie,
+  readLimitedBody,
+} from "../http/requestGuards";
 import { sha256Hex } from "../crypto/hash";
 
 const DATA_ORIGIN = "https://pipeline.openfiremap.org/";
@@ -39,8 +46,19 @@ const TIMEOUT_MS = 15_000;
 const EXTRACT_STATUSES = new Set(["fresh_download", "downloaded_dated", "cached_head_ok", "downloaded"]);
 const REQUIRED_EXTRACTS = ["germany", "austria", "switzerland", "luxembourg", "liechtenstein"];
 const ALLOWED_TAGS = new Set([
-  "access", "check_date", "defibrillator:location", "fee", "indoor", "level", "location", "name", "opening_hours",
-  "operator", "ref", "start_date", "wheelchair",
+  "access",
+  "check_date",
+  "defibrillator:location",
+  "fee",
+  "indoor",
+  "level",
+  "location",
+  "name",
+  "opening_hours",
+  "operator",
+  "ref",
+  "start_date",
+  "wheelchair",
 ]);
 
 type Environment = { DB?: D1Database; OSM_OAUTH_ENCRYPTION_KEY?: string };
@@ -62,22 +80,33 @@ type PipelineMetadata = {
 };
 
 /** Authenticated lookup in the AED layer of the fixed, read-only PMTiles archive. */
-export async function handleStaticCandidateSearch(request: Request, env: Environment, deps: Dependencies = {}): Promise<Response> {
+export async function handleStaticCandidateSearch(
+  request: Request,
+  env: Environment,
+  deps: Dependencies = {},
+): Promise<Response> {
   const diagnosticId = (deps.createDiagnosticId ?? (() => crypto.randomUUID()))();
   const startedAt = Date.now();
   let response: Response;
-  try { response = await runSearch(request, env, deps); }
-  catch { response = jsonResponse({ error: "search_unavailable" }, 503); }
+  try {
+    response = await runSearch(request, env, deps);
+  } catch {
+    response = jsonResponse({ error: "search_unavailable" }, 503);
+  }
   response.headers.set("X-AEDjaeger-Diagnostic-Id", diagnosticId);
   const failure = await failureCode(response);
   if (failure) {
     try {
       (deps.logDiagnostic ?? ((event) => console.error(event)))({
-        event: "static_aed_search_failure", diagnostic_id: diagnosticId,
-        http_status: response.status, failure_code: failure,
+        event: "static_aed_search_failure",
+        diagnostic_id: diagnosticId,
+        http_status: response.status,
+        failure_code: failure,
         duration_ms: Math.max(0, Date.now() - startedAt),
       });
-    } catch { /* Diagnostics cannot change the result. */ }
+    } catch {
+      /* Diagnostics cannot change the result. */
+    }
   }
   return response;
 }
@@ -93,14 +122,21 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
   const sessionToken = readOSMSessionCookie(request.headers.get("Cookie"));
   if (!sessionToken) return jsonResponse({ error: "authentication_required" }, 401);
   let session: { subject: string; environment: "production" | "development" } | null;
-  try { session = await findOSMSession(env.DB, sessionToken, (deps.now ?? Date.now)()); }
-  catch { return jsonResponse({ error: "session_unavailable" }, 503); }
+  try {
+    session = await findOSMSession(env.DB, sessionToken, (deps.now ?? Date.now)());
+  } catch {
+    return jsonResponse({ error: "session_unavailable" }, 503);
+  }
   if (!session) return jsonResponse({ error: "authentication_required" }, 401);
 
   let body: Uint8Array;
-  try { body = await readLimitedBody(request, MAX_REQUEST_BYTES); }
-  catch (error) {
-    return jsonResponse({ error: error instanceof BodyTooLargeError ? "request_too_large" : "invalid_request" }, error instanceof BodyTooLargeError ? 413 : 400);
+  try {
+    body = await readLimitedBody(request, MAX_REQUEST_BYTES);
+  } catch (error) {
+    return jsonResponse(
+      { error: error instanceof BodyTooLargeError ? "request_too_large" : "invalid_request" },
+      error instanceof BodyTooLargeError ? 413 : 400,
+    );
   }
   const location = parseLocation(body);
   if (!location) return jsonResponse({ error: "invalid_request" }, 400);
@@ -116,9 +152,12 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
   let retryAfter = 30;
   try {
     const slot = await reserveSearchSlot(env.DB, session.environment + ":" + session.subject, now);
-    if (!slot.reserved) return jsonResponse({ error: "search_rate_limited" }, 429, { "Retry-After": String(slot.retryAfterSeconds) });
+    if (!slot.reserved)
+      return jsonResponse({ error: "search_rate_limited" }, 429, { "Retry-After": String(slot.retryAfterSeconds) });
     retryAfter = Math.max(0, Math.ceil((slot.nextAllowedAt - (deps.now ?? Date.now)()) / 1_000));
-  } catch { return jsonResponse({ error: "search_unavailable" }, 503); }
+  } catch {
+    return jsonResponse({ error: "search_unavailable" }, 503);
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -133,7 +172,8 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
     archiveUrl.searchParams.set("v", metadata.generated_at);
     const archive = new PMTiles(new FixedRangeSource(archiveUrl, fetcher, controller.signal));
     const header = await archive.getHeader();
-    if (header.tileType !== 1 || header.minZoom > AED_ZOOM || header.maxZoom < AED_ZOOM) throw new CoverageUnavailableError();
+    if (header.tileType !== 1 || header.minZoom > AED_ZOOM || header.maxZoom < AED_ZOOM)
+      throw new CoverageUnavailableError();
     if (!boundsFitHeader(bounds, header)) throw new OutsideCoverageError();
 
     const tiles = tilesForBounds(bounds, AED_ZOOM);
@@ -179,67 +219,148 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
         const encryptionKey = await importOAuthEncryptionKey(env.OSM_OAUTH_ENCRYPTION_KEY);
         const accessToken = await findOSMOAuthToken(env.DB, sessionToken, now, encryptionKey);
         if (accessToken) {
-          for (const candidate of await fetchDevelopmentCandidates(accessToken, bounds, location, fetcher, controller.signal)) candidates.set(candidate.id, candidate);
+          for (const candidate of await fetchDevelopmentCandidates(
+            accessToken,
+            bounds,
+            location,
+            fetcher,
+            controller.signal,
+          ))
+            candidates.set(candidate.id, candidate);
         }
-      } catch { /* Ergänzung scheitert: Ergebnis aus dem Archiv bleibt gültig. */ }
+      } catch {
+        /* Ergänzung scheitert: Ergebnis aus dem Archiv bleibt gültig. */
+      }
     }
 
-    return jsonResponse({
-      status: "complete", candidates: [...candidates.values()], coverage_radius_meters: radius,
-      snapshot_id: await snapshotId(metadata), data_until: metadata.osm_data_until,
-    }, 200, { "Retry-After": String(retryAfter) });
+    return jsonResponse(
+      {
+        status: "complete",
+        candidates: [...candidates.values()],
+        coverage_radius_meters: radius,
+        snapshot_id: await snapshotId(metadata),
+        data_until: metadata.osm_data_until,
+      },
+      200,
+      { "Retry-After": String(retryAfter) },
+    );
   } catch (error) {
     if (error instanceof OutsideCoverageError) return jsonResponse({ error: "outside_coverage" }, 422);
-    if (error instanceof CoverageUnavailableError) return jsonResponse({ error: "coverage_unavailable" }, 503, { "Retry-After": String(retryAfter) });
-    if (error instanceof InvalidFeedError) return jsonResponse({ error: "invalid_response" }, 503, { "Retry-After": String(retryAfter) });
-    if (error instanceof FeedHTTPError) return jsonResponse({ error: "source_unavailable" }, 502, { "Retry-After": String(retryAfter) });
-    return jsonResponse({ error: controller.signal.aborted ? "source_timeout" : "source_unavailable" }, controller.signal.aborted ? 504 : 502, { "Retry-After": String(retryAfter) });
-  } finally { clearTimeout(timeout); }
+    if (error instanceof CoverageUnavailableError)
+      return jsonResponse({ error: "coverage_unavailable" }, 503, { "Retry-After": String(retryAfter) });
+    if (error instanceof InvalidFeedError)
+      return jsonResponse({ error: "invalid_response" }, 503, { "Retry-After": String(retryAfter) });
+    if (error instanceof FeedHTTPError)
+      return jsonResponse({ error: "source_unavailable" }, 502, { "Retry-After": String(retryAfter) });
+    return jsonResponse(
+      { error: controller.signal.aborted ? "source_timeout" : "source_unavailable" },
+      controller.signal.aborted ? 504 : 502,
+      { "Retry-After": String(retryAfter) },
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /** Fetch current build metadata and reject partial/stale source coverage before searching tiles. */
 async function fetchMetadata(fetcher: typeof fetch, signal: AbortSignal, now: number): Promise<PipelineMetadata> {
-  const response = await fetchWithoutRedirects(new URL("metadata.json", DATA_ORIGIN), {
-    method: "GET", headers: { Accept: "application/json" }, cache: "no-store", signal,
-  }, fetcher);
+  const response = await fetchWithoutRedirects(
+    new URL("metadata.json", DATA_ORIGIN),
+    {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      signal,
+    },
+    fetcher,
+  );
   if (!response.ok) throw new FeedHTTPError(response.status);
-  const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(await readLimitedBody(response, MAX_METADATA_BYTES)));
-  if (!isRecord(value) || value.status !== "ok" || value.region !== "dachlilu"
-    || typeof value.generated_at !== "string" || typeof value.osm_data_until !== "string"
-    || !isRecord(value.pmtiles) || value.pmtiles.file !== PMTILES_PATH
-    || !Number.isSafeInteger(value.pmtiles.size_bytes) || (value.pmtiles.size_bytes as number) < 127
-    || !isRecord(value.features) || !isRecord(value.features.defibrillators)
-    || !Number.isSafeInteger(value.features.defibrillators.count) || (value.features.defibrillators.count as number) < 0
-    || !isRecord(value.extracts)) throw new CoverageUnavailableError();
+  const value: unknown = JSON.parse(
+    new TextDecoder("utf-8", { fatal: true }).decode(await readLimitedBody(response, MAX_METADATA_BYTES)),
+  );
+  if (
+    !isRecord(value) ||
+    value.status !== "ok" ||
+    value.region !== "dachlilu" ||
+    typeof value.generated_at !== "string" ||
+    typeof value.osm_data_until !== "string" ||
+    !isRecord(value.pmtiles) ||
+    value.pmtiles.file !== PMTILES_PATH ||
+    !Number.isSafeInteger(value.pmtiles.size_bytes) ||
+    (value.pmtiles.size_bytes as number) < 127 ||
+    !isRecord(value.features) ||
+    !isRecord(value.features.defibrillators) ||
+    !Number.isSafeInteger(value.features.defibrillators.count) ||
+    (value.features.defibrillators.count as number) < 0 ||
+    !isRecord(value.extracts)
+  )
+    throw new CoverageUnavailableError();
   const generatedAt = timestamp(value.generated_at);
   const dataUntil = timestamp(value.osm_data_until);
-  if (generatedAt === null || dataUntil === null || generatedAt > now + 60_000
-    || dataUntil > now + 60_000 || now - dataUntil > MAX_SOURCE_AGE_HOURS * 3_600_000) throw new CoverageUnavailableError();
+  if (
+    generatedAt === null ||
+    dataUntil === null ||
+    generatedAt > now + 60_000 ||
+    dataUntil > now + 60_000 ||
+    now - dataUntil > MAX_SOURCE_AGE_HOURS * 3_600_000
+  )
+    throw new CoverageUnavailableError();
   for (const country of REQUIRED_EXTRACTS) {
     const extract = value.extracts[country];
     const sourceDate = isRecord(extract) ? timestamp(extract.osm_data_timestamp) : null;
-    if (!isRecord(extract) || !EXTRACT_STATUSES.has(String(extract.status)) || sourceDate === null
-      || sourceDate > now + 60_000 || now - sourceDate > MAX_SOURCE_AGE_HOURS * 3_600_000) throw new CoverageUnavailableError();
+    if (
+      !isRecord(extract) ||
+      !EXTRACT_STATUSES.has(String(extract.status)) ||
+      sourceDate === null ||
+      sourceDate > now + 60_000 ||
+      now - sourceDate > MAX_SOURCE_AGE_HOURS * 3_600_000
+    )
+      throw new CoverageUnavailableError();
   }
   return value as unknown as PipelineMetadata;
 }
 
 /** Restrict PMTiles byte reads to one fixed origin and bounded HTTP Range responses. */
 class FixedRangeSource implements Source {
-  constructor(private readonly archiveUrl: URL, private readonly fetcher: typeof fetch, private readonly signal: AbortSignal) {}
-  getKey(): string { return this.archiveUrl.href; }
+  constructor(
+    private readonly archiveUrl: URL,
+    private readonly fetcher: typeof fetch,
+    private readonly signal: AbortSignal,
+  ) {}
+  getKey(): string {
+    return this.archiveUrl.href;
+  }
   async getBytes(offset: number, length: number, signal?: AbortSignal): Promise<RangeResponse> {
-    if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(length) || length <= 0 || length > MAX_RANGE_BYTES) {
+    if (
+      !Number.isSafeInteger(offset) ||
+      offset < 0 ||
+      !Number.isSafeInteger(length) ||
+      length <= 0 ||
+      length > MAX_RANGE_BYTES
+    ) {
       throw new InvalidFeedError();
     }
     const end = offset + length - 1;
-    const response = await fetchWithoutRedirects(this.archiveUrl, {
-      method: "GET", headers: { Accept: "application/octet-stream", Range: `bytes=${offset}-${end}` },
-      cache: "no-store", signal: signal ?? this.signal,
-    }, this.fetcher);
+    const response = await fetchWithoutRedirects(
+      this.archiveUrl,
+      {
+        method: "GET",
+        headers: { Accept: "application/octet-stream", Range: `bytes=${offset}-${end}` },
+        cache: "no-store",
+        signal: signal ?? this.signal,
+      },
+      this.fetcher,
+    );
     // Never allow a server/CDN that ignores Range to make the Worker download the full archive.
-    if (response.status !== 206 || response.headers.get("Content-Range")?.startsWith(`bytes ${offset}-${end}/`) !== true) {
-      try { await response.body?.cancel(); } catch { /* Keep the fixed source error. */ }
+    if (
+      response.status !== 206 ||
+      response.headers.get("Content-Range")?.startsWith(`bytes ${offset}-${end}/`) !== true
+    ) {
+      try {
+        await response.body?.cancel();
+      } catch {
+        /* Keep the fixed source error. */
+      }
       throw new FeedHTTPError(response.status);
     }
     const bytes = await readLimitedBody(response, length);
@@ -257,12 +378,21 @@ function candidateFromFeature(feature: GeoJSON.Feature, source: "archive" | "dev
   const osmType = props["@type"] ?? props.type;
   if (osmType !== "node") return null;
   const rawId = props["@id"] ?? props.id;
-  const id = typeof rawId === "string" && /^node\/[1-9]\d{0,15}$/u.test(rawId)
-    ? rawId
-    : typeof rawId === "number" && Number.isSafeInteger(rawId) && rawId > 0 ? `node/${rawId}` : null;
+  const id =
+    typeof rawId === "string" && /^node\/[1-9]\d{0,15}$/u.test(rawId)
+      ? rawId
+      : typeof rawId === "number" && Number.isSafeInteger(rawId) && rawId > 0
+        ? `node/${rawId}`
+        : null;
   const coordinates = feature.geometry.coordinates;
-  if (!id || !Array.isArray(coordinates) || coordinates.length < 2
-    || typeof coordinates[0] !== "number" || typeof coordinates[1] !== "number") return null;
+  if (
+    !id ||
+    !Array.isArray(coordinates) ||
+    coordinates.length < 2 ||
+    typeof coordinates[0] !== "number" ||
+    typeof coordinates[1] !== "number"
+  )
+    return null;
   const position = { longitude: coordinates[0], latitude: coordinates[1] };
   if (!validCoordinate(position)) throw new InvalidFeedError();
   const tags: Record<string, string> = {};
@@ -287,33 +417,52 @@ async function fetchDevelopmentCandidates(
   fetcher: typeof fetch,
   signal: AbortSignal,
 ): Promise<NearbyAedCandidate[]> {
-  const response = await requestOSMDevelopmentApi("development", "/api/0.6/map.json", accessToken, {
-    method: "GET",
-    bbox: { west: bounds.minLon, south: bounds.minLat, east: bounds.maxLon, north: bounds.maxLat },
-    signal,
-  }, fetcher);
+  const response = await requestOSMDevelopmentApi(
+    "development",
+    "/api/0.6/map.json",
+    accessToken,
+    {
+      method: "GET",
+      bbox: { west: bounds.minLon, south: bounds.minLat, east: bounds.maxLon, north: bounds.maxLat },
+      signal,
+    },
+    fetcher,
+  );
   if (!response.ok) throw new FeedHTTPError(response.status);
 
   let payload: unknown;
-  try { payload = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(await readLimitedBody(response, MAX_MAP_BYTES))); }
-  catch { throw new InvalidFeedError(); }
-  if (!isRecord(payload) || !Array.isArray(payload.elements) || payload.elements.length > 5_000) throw new InvalidFeedError();
+  try {
+    payload = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(await readLimitedBody(response, MAX_MAP_BYTES)),
+    );
+  } catch {
+    throw new InvalidFeedError();
+  }
+  if (!isRecord(payload) || !Array.isArray(payload.elements) || payload.elements.length > 5_000)
+    throw new InvalidFeedError();
 
   const candidates = new Map<string, NearbyAedCandidate>();
   for (const element of payload.elements) {
-    if (!isRecord(element) || !["node", "way", "relation"].includes(String(element.type))
-      || (element.tags !== undefined && !isStringRecord(element.tags))) throw new InvalidFeedError();
+    if (
+      !isRecord(element) ||
+      !["node", "way", "relation"].includes(String(element.type)) ||
+      (element.tags !== undefined && !isStringRecord(element.tags))
+    )
+      throw new InvalidFeedError();
     if (!isStringRecord(element.tags) || element.tags.emergency !== "defibrillator") continue;
     if (element.type !== "node" || typeof element.lon !== "number" || typeof element.lat !== "number") {
       // Returning an empty result here could hide a mapped AED from the user and
       // incorrectly allow a duplicate node to be proposed.
       throw new CoverageUnavailableError();
     }
-    const candidate = candidateFromFeature({
-      type: "Feature",
-      properties: { ...element.tags, "@type": "node", "@id": `node/${element.id}` },
-      geometry: { type: "Point", coordinates: [element.lon, element.lat] },
-    }, "development");
+    const candidate = candidateFromFeature(
+      {
+        type: "Feature",
+        properties: { ...element.tags, "@type": "node", "@id": `node/${element.id}` },
+        geometry: { type: "Point", coordinates: [element.lon, element.lat] },
+      },
+      "development",
+    );
     if (!candidate) throw new InvalidFeedError();
     if (distanceMeters(location, candidate.position) <= Math.ceil(location.accuracyMeters + SEARCH_RADIUS)) {
       candidates.set(candidate.id, candidate);
@@ -327,26 +476,40 @@ function isStringRecord(value: unknown): value is Record<string, string> {
   return isRecord(value) && Object.values(value).every((item) => typeof item === "string");
 }
 
-function searchBounds(location: Location, radius: number): { minLat: number; minLon: number; maxLat: number; maxLon: number } {
+function searchBounds(
+  location: Location,
+  radius: number,
+): { minLat: number; minLon: number; maxLat: number; maxLon: number } {
   const latitudeDelta = radius / 111_000;
-  const cosine = Math.cos(location.latitude * Math.PI / 180);
+  const cosine = Math.cos((location.latitude * Math.PI) / 180);
   if (Math.abs(cosine) < 0.01) throw new CoverageUnavailableError();
   const longitudeDelta = radius / (111_000 * Math.abs(cosine));
   return {
-    minLat: Math.max(-90, location.latitude - latitudeDelta), maxLat: Math.min(90, location.latitude + latitudeDelta),
-    minLon: Math.max(-180, location.longitude - longitudeDelta), maxLon: Math.min(180, location.longitude + longitudeDelta),
+    minLat: Math.max(-90, location.latitude - latitudeDelta),
+    maxLat: Math.min(90, location.latitude + latitudeDelta),
+    minLon: Math.max(-180, location.longitude - longitudeDelta),
+    maxLon: Math.min(180, location.longitude + longitudeDelta),
   };
 }
 function boundsFitArchive(bounds: ReturnType<typeof searchBounds>): boolean {
   // Reject an unsupported location separately from a temporarily unavailable or stale data feed.
-  return bounds.minLat >= 45 && bounds.maxLat <= 56
-    && bounds.minLon >= 5 && bounds.maxLon <= 18;
+  return bounds.minLat >= 45 && bounds.maxLat <= 56 && bounds.minLon >= 5 && bounds.maxLon <= 18;
 }
-function boundsFitHeader(bounds: ReturnType<typeof searchBounds>, header: Awaited<ReturnType<PMTiles["getHeader"]>>): boolean {
-  return bounds.minLon >= header.minLon && bounds.maxLon <= header.maxLon
-    && bounds.minLat >= header.minLat && bounds.maxLat <= header.maxLat;
+function boundsFitHeader(
+  bounds: ReturnType<typeof searchBounds>,
+  header: Awaited<ReturnType<PMTiles["getHeader"]>>,
+): boolean {
+  return (
+    bounds.minLon >= header.minLon &&
+    bounds.maxLon <= header.maxLon &&
+    bounds.minLat >= header.minLat &&
+    bounds.maxLat <= header.maxLat
+  );
 }
-function tilesForBounds(bounds: ReturnType<typeof searchBounds>, zoom: number): Array<{ z: number; x: number; y: number }> {
+function tilesForBounds(
+  bounds: ReturnType<typeof searchBounds>,
+  zoom: number,
+): Array<{ z: number; x: number; y: number }> {
   const nw = tileFor(bounds.minLon, bounds.maxLat, zoom);
   const se = tileFor(bounds.maxLon, bounds.minLat, zoom);
   const tiles: Array<{ z: number; x: number; y: number }> = [];
@@ -356,10 +519,10 @@ function tilesForBounds(bounds: ReturnType<typeof searchBounds>, zoom: number): 
 function tileFor(longitude: number, latitude: number, zoom: number): { x: number; y: number } {
   const size = 2 ** zoom;
   const lat = Math.max(-85.05112878, Math.min(85.05112878, latitude));
-  const radians = lat * Math.PI / 180;
+  const radians = (lat * Math.PI) / 180;
   return {
-    x: Math.max(0, Math.min(size - 1, Math.floor((longitude + 180) / 360 * size))),
-    y: Math.max(0, Math.min(size - 1, Math.floor((1 - Math.asinh(Math.tan(radians)) / Math.PI) / 2 * size))),
+    x: Math.max(0, Math.min(size - 1, Math.floor(((longitude + 180) / 360) * size))),
+    y: Math.max(0, Math.min(size - 1, Math.floor(((1 - Math.asinh(Math.tan(radians)) / Math.PI) / 2) * size))),
   };
 }
 async function snapshotId(metadata: PipelineMetadata): Promise<string> {
@@ -368,7 +531,11 @@ async function snapshotId(metadata: PipelineMetadata): Promise<string> {
 }
 function parseLocation(bytes: Uint8Array): Location | null {
   let value: unknown;
-  try { value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); } catch { return null; }
+  try {
+    value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    return null;
+  }
   if (!isRecord(value) || Object.keys(value).length !== 3) return null;
   const { latitude, longitude, accuracy_meters: accuracy } = value;
   if (typeof latitude !== "number" || !Number.isFinite(latitude) || latitude < -90 || latitude > 90) return null;
@@ -377,8 +544,14 @@ function parseLocation(bytes: Uint8Array): Location | null {
   return { latitude, longitude, accuracyMeters: accuracy };
 }
 function validCoordinate(point: SearchCoordinate): boolean {
-  return Number.isFinite(point.latitude) && point.latitude >= -90 && point.latitude <= 90
-    && Number.isFinite(point.longitude) && point.longitude >= -180 && point.longitude <= 180;
+  return (
+    Number.isFinite(point.latitude) &&
+    point.latitude >= -90 &&
+    point.latitude <= 90 &&
+    Number.isFinite(point.longitude) &&
+    point.longitude >= -180 &&
+    point.longitude <= 180
+  );
 }
 function timestamp(value: unknown): number | null {
   if (typeof value !== "string" || !/(?:Z|[+-]\d{2}:\d{2})$/u.test(value)) return null;
@@ -388,16 +561,39 @@ function timestamp(value: unknown): number | null {
 class CoverageUnavailableError extends Error {}
 class OutsideCoverageError extends Error {}
 class InvalidFeedError extends Error {}
-class FeedHTTPError extends Error { constructor(readonly status: number) { super("feed_http_error"); } }
+class FeedHTTPError extends Error {
+  constructor(readonly status: number) {
+    super("feed_http_error");
+  }
+}
 async function failureCode(response: Response): Promise<string | null> {
   if (response.status < 400) return null;
   try {
     const payload: unknown = await response.clone().json();
-    if (isRecord(payload) && typeof payload.error === "string" && new Set([
-      "method_not_allowed", "invalid_origin", "search_unavailable", "unsupported_media_type", "authentication_required",
-      "session_unavailable", "request_too_large", "invalid_request", "location_too_uncertain", "search_rate_limited",
-      "source_unavailable", "source_timeout", "coverage_unavailable", "outside_coverage", "invalid_response",
-    ]).has(payload.error)) return payload.error;
-  } catch { /* Fixed fallback only. */ }
+    if (
+      isRecord(payload) &&
+      typeof payload.error === "string" &&
+      new Set([
+        "method_not_allowed",
+        "invalid_origin",
+        "search_unavailable",
+        "unsupported_media_type",
+        "authentication_required",
+        "session_unavailable",
+        "request_too_large",
+        "invalid_request",
+        "location_too_uncertain",
+        "search_rate_limited",
+        "source_unavailable",
+        "source_timeout",
+        "coverage_unavailable",
+        "outside_coverage",
+        "invalid_response",
+      ]).has(payload.error)
+    )
+      return payload.error;
+  } catch {
+    /* Fixed fallback only. */
+  }
   return "http_error";
 }

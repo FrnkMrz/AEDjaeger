@@ -20,7 +20,15 @@ import { requestOSMDevelopmentApi } from "./developmentApi";
 import { escapeXml, withoutXmlDeclaration } from "./xmlText";
 import { createChangeset, closeChangeset } from "./changeset";
 import { distanceMeters } from "../../src/domain/candidateMatch";
-import { BodyTooLargeError, isCrossOrigin, isRecord, jsonResponse, readOSMSessionCookie, readLimitedBody, readLimitedText } from "../http/requestGuards";
+import {
+  BodyTooLargeError,
+  isCrossOrigin,
+  isRecord,
+  jsonResponse,
+  readOSMSessionCookie,
+  readLimitedBody,
+  readLimitedText,
+} from "../http/requestGuards";
 import { NEARBY_RADIUS_METERS } from "../../src/domain/matchPolicy";
 import { isAcceptableObservationDate } from "./observationDate";
 import { validateDetailTags, type DetailTags } from "../../src/contracts/aedDetails";
@@ -72,13 +80,17 @@ export async function handleDevelopmentCreateNode(
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
-  if (!session || session.environment !== "development") return jsonResponse({ error: "development_session_required" }, 403);
+  if (!session || session.environment !== "development")
+    return jsonResponse({ error: "development_session_required" }, 403);
 
   let input: CreateRequest;
   try {
     input = parseRequest(await readLimitedBody(request, MAX_BODY_BYTES), now);
   } catch (error) {
-    return jsonResponse({ error: error instanceof BodyTooLargeError ? "request_too_large" : "invalid_request" }, error instanceof BodyTooLargeError ? 413 : 400);
+    return jsonResponse(
+      { error: error instanceof BodyTooLargeError ? "request_too_large" : "invalid_request" },
+      error instanceof BodyTooLargeError ? 413 : 400,
+    );
   }
 
   let token: string;
@@ -90,7 +102,8 @@ export async function handleDevelopmentCreateNode(
     if (!storedToken) return jsonResponse({ error: "development_token_unavailable" }, 401);
     token = storedToken;
     ownerHash = await hashOSMDevelopmentWriteOwner(session, environment.OSM_OAUTH_ENCRYPTION_KEY, dependencies.crypto);
-    if (input.recovery_identity && input.recovery_identity !== ownerHash) return jsonResponse({ error: "recovery_identity_mismatch" }, 403);
+    if (input.recovery_identity && input.recovery_identity !== ownerHash)
+      return jsonResponse({ error: "recovery_identity_mismatch" }, 403);
     input.recovery_identity = ownerHash;
     requestHash = await hashOSMDevelopmentWriteValue(serializeCreateRequestForHash(input), dependencies.crypto);
     const legacySessionHash = await hashOSMDevelopmentWriteValue(sessionToken, dependencies.crypto);
@@ -112,12 +125,18 @@ export async function handleDevelopmentCreateNode(
   if (operation.state === "failed") return jsonResponse({ error: "write_failed" }, 422);
 
   if (!reserved.created) {
-    if (operation.state === "uploaded") return finishChangeset(environment.DB, ownerHash, input.operation_id, operation, token, dependencies);
+    if (operation.state === "uploaded")
+      return finishChangeset(environment.DB, ownerHash, input.operation_id, operation, token, dependencies);
     if (operation.state === "uploading" || operation.state === "uncertain") {
       return reconcileUncertainCreate(environment.DB, ownerHash, input, operation, token, dependencies);
     }
     if (operation.state === "changeset-created") {
-      const claimed = await safelyClaimUpload(environment.DB, ownerHash, input.operation_id, (dependencies.now ?? Date.now)());
+      const claimed = await safelyClaimUpload(
+        environment.DB,
+        ownerHash,
+        input.operation_id,
+        (dependencies.now ?? Date.now)(),
+      );
       if (!claimed) return jsonResponse({ status: "pending" }, 202);
       return uploadCreatedNode(environment.DB, ownerHash, input, operation, token, dependencies);
     }
@@ -138,16 +157,28 @@ export async function handleDevelopmentCreateNode(
   try {
     possibleDuplicate = await findNearbyAed(input, token, dependencies.fetch ?? fetch);
   } catch {
-    await safelyFinishStarted(environment.DB, ownerHash, input.operation_id, "failed", (dependencies.now ?? Date.now)());
+    await safelyFinishStarted(
+      environment.DB,
+      ownerHash,
+      input.operation_id,
+      "failed",
+      (dependencies.now ?? Date.now)(),
+    );
     return jsonResponse({ error: "development_api_unavailable" }, 502);
   }
   // If a second request retired this operation while the map lookup was slow,
   // this compare-and-set prevents it from opening a changeset afterwards.
-  if (!await safelyTouchStarted(environment.DB, ownerHash, input.operation_id, (dependencies.now ?? Date.now)())) {
+  if (!(await safelyTouchStarted(environment.DB, ownerHash, input.operation_id, (dependencies.now ?? Date.now)()))) {
     return jsonResponse({ error: "write_failed" }, 422);
   }
   if (possibleDuplicate) {
-    const marked = await safelyFinishStarted(environment.DB, ownerHash, input.operation_id, "conflict", (dependencies.now ?? Date.now)());
+    const marked = await safelyFinishStarted(
+      environment.DB,
+      ownerHash,
+      input.operation_id,
+      "conflict",
+      (dependencies.now ?? Date.now)(),
+    );
     return marked ? jsonResponse({ error: "nearby_aed_found" }, 409) : jsonResponse({ error: "write_failed" }, 422);
   }
 
@@ -156,13 +187,22 @@ export async function handleDevelopmentCreateNode(
     changesetId = await createChangeset(token, "AEDjaeger: AED mapped on site", dependencies.fetch ?? fetch);
   } catch {
     // No node upload has started yet, so an empty changeset cannot create a duplicate AED.
-    await safelyFinishStarted(environment.DB, ownerHash, input.operation_id, "failed", (dependencies.now ?? Date.now)());
+    await safelyFinishStarted(
+      environment.DB,
+      ownerHash,
+      input.operation_id,
+      "failed",
+      (dependencies.now ?? Date.now)(),
+    );
     return jsonResponse({ error: "development_api_unavailable" }, 502);
   }
   let changesetRecorded: boolean;
   try {
     changesetRecorded = await recordOSMDevelopmentChangeset(environment.DB, {
-      ownerHash, operationId: input.operation_id, changesetId, now: (dependencies.now ?? Date.now)(),
+      ownerHash,
+      operationId: input.operation_id,
+      changesetId,
+      now: (dependencies.now ?? Date.now)(),
     });
   } catch {
     // A database error can happen after the update committed. Leave the changeset
@@ -174,9 +214,21 @@ export async function handleDevelopmentCreateNode(
     await closeChangeset(token, changesetId, dependencies.fetch ?? fetch);
     return jsonResponse({ error: "write_failed" }, 422);
   }
-  const claimed = await safelyClaimUpload(environment.DB, ownerHash, input.operation_id, (dependencies.now ?? Date.now)());
+  const claimed = await safelyClaimUpload(
+    environment.DB,
+    ownerHash,
+    input.operation_id,
+    (dependencies.now ?? Date.now)(),
+  );
   if (!claimed) return jsonResponse({ status: "pending" }, 202);
-  return uploadCreatedNode(environment.DB, ownerHash, input, { ...operation, state: "changeset-created", changeset_id: changesetId }, token, dependencies);
+  return uploadCreatedNode(
+    environment.DB,
+    ownerHash,
+    input,
+    { ...operation, state: "changeset-created", changeset_id: changesetId },
+    token,
+    dependencies,
+  );
 }
 
 async function findNearbyAed(input: CreateRequest, token: string, fetcher: typeof fetch): Promise<boolean> {
@@ -186,31 +238,53 @@ async function findNearbyAed(input: CreateRequest, token: string, fetcher: typeo
   // 50 m, die Entfernung der einzelnen Knoten wird unten genau geprüft. Ein AED, den die Suche nie gezeigt hat,
   // soll das Anlegen nicht blockieren.
   const latitudePadding = (NEARBY_RADIUS_METERS * 1.2) / 111_320;
-  const longitudePadding = Math.min(0.01, latitudePadding / Math.max(0.1, Math.cos(input.latitude * Math.PI / 180)));
-  const response = await requestOSMDevelopmentApi("development", "/api/0.6/map.json", token, {
-    method: "GET",
-    bbox: {
-      west: Math.max(-180, input.longitude - longitudePadding),
-      south: Math.max(-90, input.latitude - latitudePadding),
-      east: Math.min(180, input.longitude + longitudePadding),
-      north: Math.min(90, input.latitude + latitudePadding),
+  const longitudePadding = Math.min(0.01, latitudePadding / Math.max(0.1, Math.cos((input.latitude * Math.PI) / 180)));
+  const response = await requestOSMDevelopmentApi(
+    "development",
+    "/api/0.6/map.json",
+    token,
+    {
+      method: "GET",
+      bbox: {
+        west: Math.max(-180, input.longitude - longitudePadding),
+        south: Math.max(-90, input.latitude - latitudePadding),
+        east: Math.min(180, input.longitude + longitudePadding),
+        north: Math.min(90, input.latitude + latitudePadding),
+      },
     },
-  }, fetcher);
+    fetcher,
+  );
   if (!response.ok) throw new Error("OSM development map check failed");
   let payload: unknown;
-  try { payload = JSON.parse(await readLimitedText(response, MAX_MAP_BYTES)); } catch { throw new Error("Invalid OSM map response"); }
-  if (!isRecord(payload) || !Array.isArray(payload.elements) || payload.elements.length > 5_000) throw new Error("Incomplete OSM map response");
+  try {
+    payload = JSON.parse(await readLimitedText(response, MAX_MAP_BYTES));
+  } catch {
+    throw new Error("Invalid OSM map response");
+  }
+  if (!isRecord(payload) || !Array.isArray(payload.elements) || payload.elements.length > 5_000)
+    throw new Error("Incomplete OSM map response");
   for (const element of payload.elements) {
-    if (!isRecord(element) || !["node", "way", "relation"].includes(String(element.type))
-      || (element.tags !== undefined && !isStringRecord(element.tags))) {
+    if (
+      !isRecord(element) ||
+      !["node", "way", "relation"].includes(String(element.type)) ||
+      (element.tags !== undefined && !isStringRecord(element.tags))
+    ) {
       throw new Error("Invalid OSM map element");
     }
     if (isStringRecord(element.tags) && element.tags.emergency === "defibrillator") {
       if (!isNumericId(typeof element.id === "number" ? String(element.id) : undefined)) return true;
       // Ein Knoten außerhalb des Nahbereichs (über 50 m) zählt nicht. Wege und Relationen haben im Kartenabruf keinen
       // sicheren Punkt; sie blockieren wie bisher, solange sie im Kasten liegen.
-      if (element.type === "node" && typeof element.lat === "number" && typeof element.lon === "number"
-        && distanceMeters({ latitude: input.latitude, longitude: input.longitude }, { latitude: element.lat, longitude: element.lon }) > NEARBY_RADIUS_METERS) continue;
+      if (
+        element.type === "node" &&
+        typeof element.lat === "number" &&
+        typeof element.lon === "number" &&
+        distanceMeters(
+          { latitude: input.latitude, longitude: input.longitude },
+          { latitude: element.lat, longitude: element.lon },
+        ) > NEARBY_RADIUS_METERS
+      )
+        continue;
       const candidateId = `${element.type}/${element.id}`;
       // Only nearby AEDs the person explicitly reviewed as different are exempt.
       // Any newly appeared or unreviewed AED still blocks creation.
@@ -232,29 +306,80 @@ async function uploadCreatedNode(
   const xml = buildCreateNodeChange(input, createdNodeTags(input), operation.changeset_id);
   let response: Response;
   try {
-    response = await requestOSMDevelopmentApi("development", `/api/0.6/changeset/${operation.changeset_id}/upload`, token, { method: "POST", body: xml }, dependencies.fetch ?? fetch);
+    response = await requestOSMDevelopmentApi(
+      "development",
+      `/api/0.6/changeset/${operation.changeset_id}/upload`,
+      token,
+      { method: "POST", body: xml },
+      dependencies.fetch ?? fetch,
+    );
   } catch {
-    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "uncertain", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(database, {
+      ownerHash,
+      operationId: input.operation_id,
+      state: "uncertain",
+      changesetId: operation.changeset_id,
+      now: (dependencies.now ?? Date.now)(),
+    });
     return jsonResponse({ status: "uncertain" }, 202);
   }
   if (response.status === 409) {
-    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "conflict", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(database, {
+      ownerHash,
+      operationId: input.operation_id,
+      state: "conflict",
+      changesetId: operation.changeset_id,
+      now: (dependencies.now ?? Date.now)(),
+    });
     await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch);
     return jsonResponse({ error: "version_conflict" }, 409);
   }
   if (!response.ok) {
-    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: response.status >= 500 ? "uncertain" : "failed", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(database, {
+      ownerHash,
+      operationId: input.operation_id,
+      state: response.status >= 500 ? "uncertain" : "failed",
+      changesetId: operation.changeset_id,
+      now: (dependencies.now ?? Date.now)(),
+    });
     if (response.status < 500) await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch);
-    return response.status >= 500 ? jsonResponse({ status: "uncertain" }, 202) : jsonResponse({ error: "write_failed" }, 502);
+    return response.status >= 500
+      ? jsonResponse({ status: "uncertain" }, 202)
+      : jsonResponse({ error: "write_failed" }, 502);
   }
   let result: { id: number; version: number } | null;
-  try { result = parseCreatedDiff(await readLimitedText(response, MAX_RESPONSE_BYTES)); } catch { result = null; }
+  try {
+    result = parseCreatedDiff(await readLimitedText(response, MAX_RESPONSE_BYTES));
+  } catch {
+    result = null;
+  }
   if (!result) {
-    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "uncertain", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(database, {
+      ownerHash,
+      operationId: input.operation_id,
+      state: "uncertain",
+      changesetId: operation.changeset_id,
+      now: (dependencies.now ?? Date.now)(),
+    });
     return jsonResponse({ status: "uncertain" }, 202);
   }
-  await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "uploaded", changesetId: operation.changeset_id, resultNodeId: String(result.id), resultVersion: result.version, now: (dependencies.now ?? Date.now)() });
-  return finishChangeset(database, ownerHash, input.operation_id, { ...operation, state: "uploaded", result_node_id: String(result.id), result_version: result.version }, token, dependencies);
+  await safelyUpdate(database, {
+    ownerHash,
+    operationId: input.operation_id,
+    state: "uploaded",
+    changesetId: operation.changeset_id,
+    resultNodeId: String(result.id),
+    resultVersion: result.version,
+    now: (dependencies.now ?? Date.now)(),
+  });
+  return finishChangeset(
+    database,
+    ownerHash,
+    input.operation_id,
+    { ...operation, state: "uploaded", result_node_id: String(result.id), result_version: result.version },
+    token,
+    dependencies,
+  );
 }
 
 async function reconcileUncertainCreate(
@@ -270,10 +395,16 @@ async function reconcileUncertainCreate(
     // Closing the changeset is a barrier: OSM will reject any upload that has
     // not committed yet. We can then inspect a stable snapshot without risking
     // that a late request creates a node after we retire this operation.
-    if (!await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch)) {
+    if (!(await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch))) {
       return jsonResponse({ status: "uncertain" }, 202);
     }
-    const response = await requestOSMDevelopmentApi("development", `/api/0.6/changeset/${operation.changeset_id}/download`, token, { method: "GET" }, dependencies.fetch ?? fetch);
+    const response = await requestOSMDevelopmentApi(
+      "development",
+      `/api/0.6/changeset/${operation.changeset_id}/download`,
+      token,
+      { method: "GET" },
+      dependencies.fetch ?? fetch,
+    );
     if (!response.ok) return jsonResponse({ status: "uncertain" }, 202);
     const body = await readLimitedText(response, MAX_MAP_BYTES);
     const result = findCreatedNodeInChangeset(body, operation.changeset_id, input);
@@ -289,17 +420,52 @@ async function reconcileUncertainCreate(
       }
       return jsonResponse({ status: "uncertain" }, 202);
     }
-    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "uploaded", changesetId: operation.changeset_id, resultNodeId: String(result.id), resultVersion: result.version, now: (dependencies.now ?? Date.now)() });
-    return finishChangeset(database, ownerHash, input.operation_id, { ...operation, state: "uploaded", result_node_id: String(result.id), result_version: result.version }, token, dependencies);
+    await safelyUpdate(database, {
+      ownerHash,
+      operationId: input.operation_id,
+      state: "uploaded",
+      changesetId: operation.changeset_id,
+      resultNodeId: String(result.id),
+      resultVersion: result.version,
+      now: (dependencies.now ?? Date.now)(),
+    });
+    return finishChangeset(
+      database,
+      ownerHash,
+      input.operation_id,
+      { ...operation, state: "uploaded", result_node_id: String(result.id), result_version: result.version },
+      token,
+      dependencies,
+    );
   } catch {
     return jsonResponse({ status: "uncertain" }, 202);
   }
 }
 
-async function finishChangeset(database: D1Database, ownerHash: string, operationId: string, operation: OSMDevelopmentWriteOperation, token: string, dependencies: Dependencies): Promise<Response> {
-  if (!operation.changeset_id || !operation.result_node_id || !operation.result_version) return jsonResponse({ status: "uncertain" }, 202);
-  if (!await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch)) return jsonResponse({ status: "uploaded", node_id: operation.result_node_id, version: operation.result_version, close_pending: true }, 202);
-  await safelyUpdate(database, { ownerHash, operationId, state: "complete", changesetId: operation.changeset_id, resultNodeId: operation.result_node_id, resultVersion: operation.result_version, now: (dependencies.now ?? Date.now)() });
+async function finishChangeset(
+  database: D1Database,
+  ownerHash: string,
+  operationId: string,
+  operation: OSMDevelopmentWriteOperation,
+  token: string,
+  dependencies: Dependencies,
+): Promise<Response> {
+  if (!operation.changeset_id || !operation.result_node_id || !operation.result_version)
+    return jsonResponse({ status: "uncertain" }, 202);
+  if (!(await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch)))
+    return jsonResponse(
+      { status: "uploaded", node_id: operation.result_node_id, version: operation.result_version, close_pending: true },
+      202,
+    );
+  await safelyUpdate(database, {
+    ownerHash,
+    operationId,
+    state: "complete",
+    changesetId: operation.changeset_id,
+    resultNodeId: operation.result_node_id,
+    resultVersion: operation.result_version,
+    now: (dependencies.now ?? Date.now)(),
+  });
   return completeResponse(operation);
 }
 
@@ -311,19 +477,28 @@ function isEmptyChangesetDownload(value: string): boolean {
   const content = root[1].replace(/<!--([\s\S]*?)-->/gu, "").trim();
   if (!content) return true;
   // The API may serialize the three empty action groups explicitly.
-  return content.replace(/<(create|modify|delete)\s*\/\s*>/giu, "")
-    .replace(/<(create|modify|delete)\s*>\s*<\/\1\s*>/giu, "").trim().length === 0;
+  return (
+    content
+      .replace(/<(create|modify|delete)\s*\/\s*>/giu, "")
+      .replace(/<(create|modify|delete)\s*>\s*<\/\1\s*>/giu, "")
+      .trim().length === 0
+  );
 }
 
 function buildCreateNodeChange(input: CreateRequest, tags: Record<string, string>, changesetId: string): string {
-  const tagXml = Object.entries(tags).sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, value]) => `<tag k="${escapeXml(key)}" v="${escapeXml(value)}"/>`).join("");
+  const tagXml = Object.entries(tags)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `<tag k="${escapeXml(key)}" v="${escapeXml(value)}"/>`)
+    .join("");
   return `<osmChange version="0.6" generator="AEDjaeger"><create><node id="-1" changeset="${changesetId}" lat="${input.latitude}" lon="${input.longitude}">${tagXml}</node></create></osmChange>`;
 }
 
 function parseCreatedDiff(rawValue: string): { id: number; version: number } | null {
   const value = withoutXmlDeclaration(rawValue);
-  const match = /^\s*<diffResult\b[^>]*>\s*<node\s+old_id="-1"\s+new_id="([1-9]\d*)"\s+new_version="([1-9]\d*)"\s*\/>\s*<\/diffResult>\s*$/u.exec(value);
+  const match =
+    /^\s*<diffResult\b[^>]*>\s*<node\s+old_id="-1"\s+new_id="([1-9]\d*)"\s+new_version="([1-9]\d*)"\s*\/>\s*<\/diffResult>\s*$/u.exec(
+      value,
+    );
   if (!match) return null;
   const id = Number(match[1]);
   const version = Number(match[2]);
@@ -340,16 +515,27 @@ function createdNodeTags(input: CreateRequest): Record<string, string> {
   return { emergency: "defibrillator", check_date: input.observed_on, ...input.details };
 }
 
-function findCreatedNodeInChangeset(value: string, changesetId: string, input: CreateRequest): { id: number; version: number } | null {
+function findCreatedNodeInChangeset(
+  value: string,
+  changesetId: string,
+  input: CreateRequest,
+): { id: number; version: number } | null {
   const tags = createdNodeTags(input);
   for (const match of value.matchAll(/<node\b([^>]*)>([\s\S]*?)<\/node>/gu)) {
     const attributes = parseXmlAttributes(match[1]);
-    if (attributes.changeset !== changesetId || !isNumericId(attributes.id) || !isPositiveIntString(attributes.version)
-      || !nearNumber(attributes.lat, input.latitude) || !nearNumber(attributes.lon, input.longitude)) continue;
+    if (
+      attributes.changeset !== changesetId ||
+      !isNumericId(attributes.id) ||
+      !isPositiveIntString(attributes.version) ||
+      !nearNumber(attributes.lat, input.latitude) ||
+      !nearNumber(attributes.lon, input.longitude)
+    )
+      continue;
     const actualTags: Record<string, string> = {};
     for (const tag of match[2].matchAll(/<tag\b([^>]*)\/?\s*>/gu)) {
       const tagAttributes = parseXmlAttributes(tag[1]);
-      if (typeof tagAttributes.k === "string" && typeof tagAttributes.v === "string") actualTags[tagAttributes.k] = decodeXml(tagAttributes.v);
+      if (typeof tagAttributes.k === "string" && typeof tagAttributes.v === "string")
+        actualTags[tagAttributes.k] = decodeXml(tagAttributes.v);
     }
     if (Object.entries(tags).every(([key, expected]) => actualTags[key] === expected)) {
       return { id: Number(attributes.id), version: Number(attributes.version) };
@@ -363,14 +549,31 @@ function parseXmlAttributes(value: string): Record<string, string> {
   for (const match of value.matchAll(/([a-z_]+)="([^"]*)"/giu)) attributes[match[1]] = match[2];
   return attributes;
 }
-function decodeXml(value: string): string { return value.replaceAll("&quot;", '"').replaceAll("&apos;", "'").replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&"); }
-function nearNumber(value: string | undefined, expected: number): boolean { return value !== undefined && Number.isFinite(Number(value)) && Math.abs(Number(value) - expected) < 0.0000001; }
-function isNumericId(value: string | undefined): value is string { return typeof value === "string" && /^[1-9]\d{0,15}$/u.test(value); }
-function isPositiveIntString(value: string | undefined): value is string { return typeof value === "string" && /^[1-9]\d{0,15}$/u.test(value); }
+function decodeXml(value: string): string {
+  return value
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&amp;", "&");
+}
+function nearNumber(value: string | undefined, expected: number): boolean {
+  return value !== undefined && Number.isFinite(Number(value)) && Math.abs(Number(value) - expected) < 0.0000001;
+}
+function isNumericId(value: string | undefined): value is string {
+  return typeof value === "string" && /^[1-9]\d{0,15}$/u.test(value);
+}
+function isPositiveIntString(value: string | undefined): value is string {
+  return typeof value === "string" && /^[1-9]\d{0,15}$/u.test(value);
+}
 
 function parseRequest(bytes: Uint8Array, now: number): CreateRequest {
   let value: unknown;
-  try { value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); } catch { throw new Error("Invalid JSON"); }
+  try {
+    value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    throw new Error("Invalid JSON");
+  }
   // Erlaubte Felder: fünf Pflichtfelder, dazu genau EINE der beiden Formen für Zusatzangaben
   //  - `details` (aktuelle App): Objekt mit Detailtags,
   //  - `location_description` (ältere App-Versionen, die noch im Browser-Speicher liegen können): Text oder null,
@@ -380,19 +583,41 @@ function parseRequest(bytes: Uint8Array, now: number): CreateRequest {
   const presentKeys = isRecord(value) ? Object.keys(value) : [];
   const hasDetails = presentKeys.includes("details");
   const hasLegacyLocation = presentKeys.includes("location_description");
-  if (!isRecord(value) || hasDetails === hasLegacyLocation
-    || requiredKeys.some((key) => !presentKeys.includes(key))
-    || presentKeys.some((key) => !requiredKeys.includes(key) && !optionalKeys.includes(key) && key !== "details" && key !== "location_description" && key !== "recovery_identity")
-    || value.recovery_identity !== undefined && (typeof value.recovery_identity !== "string" || !/^[a-f0-9]{64}$/u.test(value.recovery_identity))
-    || value.confirmed !== true || value.absence_confirmed !== true || typeof value.operation_id !== "string"
-    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value.operation_id)
-    || typeof value.latitude !== "number" || !Number.isFinite(value.latitude) || value.latitude < -90 || value.latitude > 90
-    || typeof value.longitude !== "number" || !Number.isFinite(value.longitude) || value.longitude < -180 || value.longitude > 180
-    || !isAcceptableObservationDate(value.observed_on, now)
-    || value.confirmed_different_candidate_ids !== undefined && (!Array.isArray(value.confirmed_different_candidate_ids)
-      || value.confirmed_different_candidate_ids.length > 100
-      || value.confirmed_different_candidate_ids.some((id) => typeof id !== "string" || !/^(node|way|relation)\/[1-9]\d{0,15}$/u.test(id))
-      || new Set(value.confirmed_different_candidate_ids).size !== value.confirmed_different_candidate_ids.length)) {
+  if (
+    !isRecord(value) ||
+    hasDetails === hasLegacyLocation ||
+    requiredKeys.some((key) => !presentKeys.includes(key)) ||
+    presentKeys.some(
+      (key) =>
+        !requiredKeys.includes(key) &&
+        !optionalKeys.includes(key) &&
+        key !== "details" &&
+        key !== "location_description" &&
+        key !== "recovery_identity",
+    ) ||
+    (value.recovery_identity !== undefined &&
+      (typeof value.recovery_identity !== "string" || !/^[a-f0-9]{64}$/u.test(value.recovery_identity))) ||
+    value.confirmed !== true ||
+    value.absence_confirmed !== true ||
+    typeof value.operation_id !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value.operation_id) ||
+    typeof value.latitude !== "number" ||
+    !Number.isFinite(value.latitude) ||
+    value.latitude < -90 ||
+    value.latitude > 90 ||
+    typeof value.longitude !== "number" ||
+    !Number.isFinite(value.longitude) ||
+    value.longitude < -180 ||
+    value.longitude > 180 ||
+    !isAcceptableObservationDate(value.observed_on, now) ||
+    (value.confirmed_different_candidate_ids !== undefined &&
+      (!Array.isArray(value.confirmed_different_candidate_ids) ||
+        value.confirmed_different_candidate_ids.length > 100 ||
+        value.confirmed_different_candidate_ids.some(
+          (id) => typeof id !== "string" || !/^(node|way|relation)\/[1-9]\d{0,15}$/u.test(id),
+        ) ||
+        new Set(value.confirmed_different_candidate_ids).size !== value.confirmed_different_candidate_ids.length))
+  ) {
     throw new Error("Invalid request");
   }
 
@@ -432,21 +657,83 @@ function serializeCreateRequestForHash(input: CreateRequest): string {
   const base = {
     // Recovery identity is authenticated separately and the operation is partitioned by account.
     // Excluding it preserves hashes stored by app versions before account-bound recovery.
-    operation_id: input.operation_id, confirmed: input.confirmed, latitude: input.latitude, longitude: input.longitude, observed_on: input.observed_on,
+    operation_id: input.operation_id,
+    confirmed: input.confirmed,
+    latitude: input.latitude,
+    longitude: input.longitude,
+    observed_on: input.observed_on,
   };
   const onlyLocation = Object.keys(input.details).every((key) => key === "defibrillator:location");
   const withExtras = onlyLocation
     ? { ...base, location_description: input.details["defibrillator:location"] ?? null }
     : { ...base, details: input.details };
-  return JSON.stringify(input.confirmed_different_candidate_ids.length > 0
-    ? { ...withExtras, confirmed_different_candidate_ids: input.confirmed_different_candidate_ids }
-    : withExtras);
+  return JSON.stringify(
+    input.confirmed_different_candidate_ids.length > 0
+      ? { ...withExtras, confirmed_different_candidate_ids: input.confirmed_different_candidate_ids }
+      : withExtras,
+  );
 }
 
-function isStringRecord(value: unknown): value is Record<string, string> { return isRecord(value) && Object.keys(value).length <= 512 && Object.entries(value).every(([key, text]) => key.length > 0 && key.length <= 255 && typeof text === "string" && text.length <= 255); }
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return (
+    isRecord(value) &&
+    Object.keys(value).length <= 512 &&
+    Object.entries(value).every(
+      ([key, text]) => key.length > 0 && key.length <= 255 && typeof text === "string" && text.length <= 255,
+    )
+  );
+}
 /** Entfernung zweier Punkte in Metern (Haversine-Formel, Erdradius 6.371 km). */
-async function safelyClaimUpload(database: D1Database, ownerHash: string, operationId: string, now: number): Promise<boolean> { try { return await claimOSMDevelopmentUpload(database, ownerHash, operationId, now); } catch { return false; } }
-async function safelyTouchStarted(database: D1Database, ownerHash: string, operationId: string, now: number): Promise<boolean> { try { return await touchStartedOSMDevelopmentWrite(database, ownerHash, operationId, now); } catch { return false; } }
-async function safelyFinishStarted(database: D1Database, ownerHash: string, operationId: string, state: "conflict" | "failed", now: number): Promise<boolean> { try { return await finishStartedOSMDevelopmentWrite(database, { ownerHash, operationId, state, now }); } catch { return false; } }
-async function safelyUpdate(database: D1Database, input: Parameters<typeof updateOSMDevelopmentWrite>[1]): Promise<void> { try { await updateOSMDevelopmentWrite(database, input); } catch { /* Keep database internals out of user-facing errors. */ } }
-function completeResponse(operation: OSMDevelopmentWriteOperation): Response { return jsonResponse({ status: "complete", node_id: operation.result_node_id, version: operation.result_version }, 200); }
+async function safelyClaimUpload(
+  database: D1Database,
+  ownerHash: string,
+  operationId: string,
+  now: number,
+): Promise<boolean> {
+  try {
+    return await claimOSMDevelopmentUpload(database, ownerHash, operationId, now);
+  } catch {
+    return false;
+  }
+}
+async function safelyTouchStarted(
+  database: D1Database,
+  ownerHash: string,
+  operationId: string,
+  now: number,
+): Promise<boolean> {
+  try {
+    return await touchStartedOSMDevelopmentWrite(database, ownerHash, operationId, now);
+  } catch {
+    return false;
+  }
+}
+async function safelyFinishStarted(
+  database: D1Database,
+  ownerHash: string,
+  operationId: string,
+  state: "conflict" | "failed",
+  now: number,
+): Promise<boolean> {
+  try {
+    return await finishStartedOSMDevelopmentWrite(database, { ownerHash, operationId, state, now });
+  } catch {
+    return false;
+  }
+}
+async function safelyUpdate(
+  database: D1Database,
+  input: Parameters<typeof updateOSMDevelopmentWrite>[1],
+): Promise<void> {
+  try {
+    await updateOSMDevelopmentWrite(database, input);
+  } catch {
+    /* Keep database internals out of user-facing errors. */
+  }
+}
+function completeResponse(operation: OSMDevelopmentWriteOperation): Response {
+  return jsonResponse(
+    { status: "complete", node_id: operation.result_node_id, version: operation.result_version },
+    200,
+  );
+}

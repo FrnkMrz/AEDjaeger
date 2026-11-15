@@ -4,17 +4,42 @@ import { createOSMSession } from "../server/storage/osmSessions";
 import { storeOSMOAuthToken } from "../server/storage/osmOAuthTokens";
 import { importOAuthEncryptionKey } from "../server/auth/osmOAuth";
 import { handleDevelopmentCreateNode } from "../server/osm/developmentCreateNodeRoute";
-import { hashOSMDevelopmentWriteOwner, hashOSMDevelopmentWriteValue } from "../server/storage/osmDevelopmentWriteOperations";
+import {
+  hashOSMDevelopmentWriteOwner,
+  hashOSMDevelopmentWriteValue,
+} from "../server/storage/osmDevelopmentWriteOperations";
 
 const now = Date.UTC(2026, 9, 24, 12);
 const cookieToken = "s".repeat(43);
 const encryptionSecret = "k".repeat(43);
 const operationId = "f1234567-89ab-4cde-8fab-123456789abc";
-const input = { recovery_identity: await hashOSMDevelopmentWriteOwner({ subject: "test-subject", environment: "development" }, encryptionSecret), operation_id: operationId, confirmed: true, absence_confirmed: true, latitude: 52.52, longitude: 13.405, observed_on: "2026-10-24", location_description: "Near main entrance" };
+const input = {
+  recovery_identity: await hashOSMDevelopmentWriteOwner(
+    { subject: "test-subject", environment: "development" },
+    encryptionSecret,
+  ),
+  operation_id: operationId,
+  confirmed: true,
+  absence_confirmed: true,
+  latitude: 52.52,
+  longitude: 13.405,
+  observed_on: "2026-10-24",
+  location_description: "Near main entrance",
+};
 
 type SessionRow = { session_hash: string; osm_subject: string; osm_environment: string; expires_at: number };
 type TokenRow = { session_hash: string; token_iv: string; token_ciphertext: string; token_expires_at: number };
-type OperationRow = { owner_hash: string; operation_id: string; request_hash: string; state: string; changeset_id: string | null; result_version: number | null; result_node_id: string | null; updated_at: number; expires_at: number };
+type OperationRow = {
+  owner_hash: string;
+  operation_id: string;
+  request_hash: string;
+  state: string;
+  changeset_id: string | null;
+  result_version: number | null;
+  result_node_id: string | null;
+  updated_at: number;
+  expires_at: number;
+};
 
 class MemoryD1 implements D1Database {
   sessions = new Map<string, SessionRow>();
@@ -26,37 +51,63 @@ class MemoryD1 implements D1Database {
     const database = this;
     let values: unknown[] = [];
     return {
-      bind(...next: unknown[]) { values = next; return this; },
-      async first<T>() { return database.query<T>(query, values); },
-      async run<T = unknown>() { return database.execute<T>(query, values); },
+      bind(...next: unknown[]) {
+        values = next;
+        return this;
+      },
+      async first<T>() {
+        return database.query<T>(query, values);
+      },
+      async run<T = unknown>() {
+        return database.execute<T>(query, values);
+      },
     } as unknown as D1Statement;
   }
 
   query<T>(sql: string, values: unknown[]): T | null {
     if (sql.includes("FROM osm_sessions") && sql.includes("osm_subject")) {
-      const [hash, time] = values as [string, number]; const row = this.sessions.get(hash);
-      return row && row.expires_at > time ? { osm_subject: row.osm_subject, osm_environment: row.osm_environment } as T : null;
+      const [hash, time] = values as [string, number];
+      const row = this.sessions.get(hash);
+      return row && row.expires_at > time
+        ? ({ osm_subject: row.osm_subject, osm_environment: row.osm_environment } as T)
+        : null;
     }
     if (sql.includes("FROM osm_sessions") && sql.includes("SELECT session_hash")) {
-      const [hash, time] = values as [string, number]; const row = this.sessions.get(hash);
-      return row && row.expires_at > time ? { session_hash: hash } as T : null;
+      const [hash, time] = values as [string, number];
+      const row = this.sessions.get(hash);
+      return row && row.expires_at > time ? ({ session_hash: hash } as T) : null;
     }
     if (sql.includes("FROM osm_oauth_tokens")) {
       const [hash, tokenTime, activeHash, sessionTime] = values as [string, number, string, number];
-      const token = this.tokens.get(hash); const session = this.sessions.get(activeHash);
+      const token = this.tokens.get(hash);
+      const session = this.sessions.get(activeHash);
       return token && token.token_expires_at > tokenTime && session && session.expires_at > sessionTime
-        ? { token_iv: token.token_iv, token_ciphertext: token.token_ciphertext, token_expires_at: token.token_expires_at } as T : null;
+        ? ({
+            token_iv: token.token_iv,
+            token_ciphertext: token.token_ciphertext,
+            token_expires_at: token.token_expires_at,
+          } as T)
+        : null;
     }
     if (sql.includes("FROM osm_development_write_operations")) {
-      const [hash, id, time] = values as [string, string, number]; const row = this.operations.get(`${hash}:${id}`);
+      const [hash, id, time] = values as [string, string, number];
+      const row = this.operations.get(`${hash}:${id}`);
       if (!row || row.expires_at <= time) return null;
-      return { request_hash: row.request_hash, state: row.state, changeset_id: row.changeset_id, result_version: row.result_version, result_node_id: row.result_node_id, updated_at: row.updated_at } as T;
+      return {
+        request_hash: row.request_hash,
+        state: row.state,
+        changeset_id: row.changeset_id,
+        result_version: row.result_version,
+        result_node_id: row.result_node_id,
+        updated_at: row.updated_at,
+      } as T;
     }
     throw new Error(`Unexpected D1 query: ${sql}`);
   }
 
   execute<T>(sql: string, values: unknown[]): D1Result<T> {
-    if (sql.startsWith("UPDATE osm_development_write_operations SET owner_hash")) return { success: true, meta: { changes: 0 } };
+    if (sql.startsWith("UPDATE osm_development_write_operations SET owner_hash"))
+      return { success: true, meta: { changes: 0 } };
     if (sql.startsWith("DELETE FROM osm_development_write_operations")) return { success: true, meta: { changes: 1 } };
     if (sql.startsWith("DELETE FROM osm_sessions")) return { success: true, meta: { changes: 1 } };
     if (sql.startsWith("INSERT INTO osm_sessions")) {
@@ -70,47 +121,105 @@ class MemoryD1 implements D1Database {
       return { success: true, meta: { changes: 1 } };
     }
     if (sql.startsWith("INSERT OR IGNORE INTO osm_development_write_operations")) {
-      const [hash, id, requestHash, _created, _updated, expires] = values as [string, string, string, number, number, number];
+      const [hash, id, requestHash, _created, _updated, expires] = values as [
+        string,
+        string,
+        string,
+        number,
+        number,
+        number,
+      ];
       const key = `${hash}:${id}`;
       if (this.operations.has(key)) return { success: true, meta: { changes: 0 } };
-      this.operations.set(key, { owner_hash: hash, operation_id: id, request_hash: requestHash, state: "started", changeset_id: null, result_version: null, result_node_id: null, updated_at: _updated, expires_at: expires });
+      this.operations.set(key, {
+        owner_hash: hash,
+        operation_id: id,
+        request_hash: requestHash,
+        state: "started",
+        changeset_id: null,
+        result_version: null,
+        result_node_id: null,
+        updated_at: _updated,
+        expires_at: expires,
+      });
       return { success: true, meta: { changes: 1 } };
     }
     if (sql.includes("SET state = 'failed', updated_at = ?")) {
       if (sql.includes("changeset_id = ? AND state IN ('uploading', 'uncertain')")) {
-        const [time, hash, id, changeset, expires] = values as [number, string, string, string, number]; const row = this.operations.get(`${hash}:${id}`);
-        if (!row || row.changeset_id !== changeset || !["uploading", "uncertain"].includes(row.state) || row.expires_at <= expires) return { success: true, meta: { changes: 0 } };
-        row.state = "failed"; row.updated_at = time; return { success: true, meta: { changes: 1 } };
+        const [time, hash, id, changeset, expires] = values as [number, string, string, string, number];
+        const row = this.operations.get(`${hash}:${id}`);
+        if (
+          !row ||
+          row.changeset_id !== changeset ||
+          !["uploading", "uncertain"].includes(row.state) ||
+          row.expires_at <= expires
+        )
+          return { success: true, meta: { changes: 0 } };
+        row.state = "failed";
+        row.updated_at = time;
+        return { success: true, meta: { changes: 1 } };
       }
-      const [time, hash, id, staleBefore, expires] = values as [number, string, string, number, number]; const row = this.operations.get(`${hash}:${id}`);
-      if (!row || row.state !== "started" || row.updated_at > staleBefore || row.expires_at <= expires) return { success: true, meta: { changes: 0 } };
-      row.state = "failed"; row.updated_at = time; return { success: true, meta: { changes: 1 } };
+      const [time, hash, id, staleBefore, expires] = values as [number, string, string, number, number];
+      const row = this.operations.get(`${hash}:${id}`);
+      if (!row || row.state !== "started" || row.updated_at > staleBefore || row.expires_at <= expires)
+        return { success: true, meta: { changes: 0 } };
+      row.state = "failed";
+      row.updated_at = time;
+      return { success: true, meta: { changes: 1 } };
     }
     if (sql.includes("SET state = 'changeset-created'")) {
-      const [changeset, time, hash, id, expires] = values as [string, number, string, string, number]; const row = this.operations.get(`${hash}:${id}`);
-      if (this.failChangesetRecord) { this.failChangesetRecord = false; return { success: true, meta: { changes: 0 } }; }
+      const [changeset, time, hash, id, expires] = values as [string, number, string, string, number];
+      const row = this.operations.get(`${hash}:${id}`);
+      if (this.failChangesetRecord) {
+        this.failChangesetRecord = false;
+        return { success: true, meta: { changes: 0 } };
+      }
       if (!row || row.state !== "started" || row.expires_at <= expires) return { success: true, meta: { changes: 0 } };
-      row.state = "changeset-created"; row.changeset_id = changeset; row.updated_at = time; return { success: true, meta: { changes: 1 } };
+      row.state = "changeset-created";
+      row.changeset_id = changeset;
+      row.updated_at = time;
+      return { success: true, meta: { changes: 1 } };
     }
     if (sql.includes("SET state = ?, updated_at = ?")) {
-      const [state, time, hash, id, expires] = values as [string, number, string, string, number]; const row = this.operations.get(`${hash}:${id}`);
+      const [state, time, hash, id, expires] = values as [string, number, string, string, number];
+      const row = this.operations.get(`${hash}:${id}`);
       if (!row || row.state !== "started" || row.expires_at <= expires) return { success: true, meta: { changes: 0 } };
-      row.state = state; row.updated_at = time; return { success: true, meta: { changes: 1 } };
+      row.state = state;
+      row.updated_at = time;
+      return { success: true, meta: { changes: 1 } };
     }
     if (sql.includes("SET updated_at = ?")) {
-      const [time, hash, id, expires] = values as [number, string, string, number]; const row = this.operations.get(`${hash}:${id}`);
+      const [time, hash, id, expires] = values as [number, string, string, number];
+      const row = this.operations.get(`${hash}:${id}`);
       if (!row || row.state !== "started" || row.expires_at <= expires) return { success: true, meta: { changes: 0 } };
-      row.updated_at = time; return { success: true, meta: { changes: 1 } };
+      row.updated_at = time;
+      return { success: true, meta: { changes: 1 } };
     }
     if (sql.includes("SET state = 'uploading'")) {
-      const [_time, hash, id, expires] = values as [number, string, string, number]; const row = this.operations.get(`${hash}:${id}`);
-      if (!row || row.state !== "changeset-created" || row.expires_at <= expires) return { success: true, meta: { changes: 0 } };
-      row.state = "uploading"; return { success: true, meta: { changes: 1 } };
+      const [_time, hash, id, expires] = values as [number, string, string, number];
+      const row = this.operations.get(`${hash}:${id}`);
+      if (!row || row.state !== "changeset-created" || row.expires_at <= expires)
+        return { success: true, meta: { changes: 0 } };
+      row.state = "uploading";
+      return { success: true, meta: { changes: 1 } };
     }
     if (sql.includes("SET state = ?, changeset_id = COALESCE")) {
-      const [state, changeset, version, nodeId, _time, hash, id] = values as [string, string | null, number | null, string | null, number, string, string];
-      const row = this.operations.get(`${hash}:${id}`); if (!row) return { success: true, meta: { changes: 0 } };
-      row.state = state; row.changeset_id ??= changeset; row.result_version ??= version; row.result_node_id ??= nodeId; row.updated_at = _time;
+      const [state, changeset, version, nodeId, _time, hash, id] = values as [
+        string,
+        string | null,
+        number | null,
+        string | null,
+        number,
+        string,
+        string,
+      ];
+      const row = this.operations.get(`${hash}:${id}`);
+      if (!row) return { success: true, meta: { changes: 0 } };
+      row.state = state;
+      row.changeset_id ??= changeset;
+      row.result_version ??= version;
+      row.result_node_id ??= nodeId;
+      row.updated_at = _time;
       return { success: true, meta: { changes: 1 } };
     }
     throw new Error(`Unexpected D1 statement: ${sql}`);
@@ -127,55 +236,137 @@ async function setupDatabase(environment: "development" | "production" = "develo
 
 function makeRequest(body: unknown = input): Request {
   return new Request("https://aedjaeger.example/api/osm/development/create-node", {
-    method: "POST", headers: { Cookie: `aedjaeger_osm_session=${cookieToken}`, Origin: "https://aedjaeger.example", "Content-Type": "application/json" }, body: JSON.stringify(body),
+    method: "POST",
+    headers: {
+      Cookie: `aedjaeger_osm_session=${cookieToken}`,
+      Origin: "https://aedjaeger.example",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
   });
 }
 
 /** Maskiert Text wie der Server für XML-Attribute; der Testserver-Ersatz braucht dieselbe Schreibweise zum Vergleichen. */
 function xmlAttribute(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
 }
 
-function makeFetch(options: { detailTags?: Record<string, string>; nearbyAedAt?: { lat: number; lon: number; type?: "node" | "way" }; nearbyAed?: boolean; nearbyAedId?: number; loseUploadResponse?: boolean; invalidMap?: boolean; emptyChangeset?: boolean; observedOn?: string; alreadyClosed?: "json" | "xml" | "json-open" | "json-other-id" } = {}) {
+function makeFetch(
+  options: {
+    detailTags?: Record<string, string>;
+    nearbyAedAt?: { lat: number; lon: number; type?: "node" | "way" };
+    nearbyAed?: boolean;
+    nearbyAedId?: number;
+    loseUploadResponse?: boolean;
+    invalidMap?: boolean;
+    emptyChangeset?: boolean;
+    observedOn?: string;
+    alreadyClosed?: "json" | "xml" | "json-open" | "json-other-id";
+  } = {},
+) {
   // Die Tags, die der Server nach den Pflicht-Tags (emergency, check_date) schreiben soll. Standard wie früher: nur der Standort-Text.
   const detailTags = options.detailTags ?? { "defibrillator:location": "Near main entrance" };
-  const detailTagXml = Object.entries(detailTags).map(([key, value]) => `<tag k="${xmlAttribute(key)}" v="${xmlAttribute(value)}"/>`).join("");
+  const detailTagXml = Object.entries(detailTags)
+    .map(([key, value]) => `<tag k="${xmlAttribute(key)}" v="${xmlAttribute(value)}"/>`)
+    .join("");
   let loseUploadResponse = options.loseUploadResponse ?? false;
   let uploadCount = 0;
   const calls: Array<{ url: string; method: string; body?: string }> = [];
   const fetcher: typeof fetch = async (request, init = {}) => {
-    const url = String(request); const method = init.method ?? "GET"; const body = typeof init.body === "string" ? init.body : undefined;
+    const url = String(request);
+    const method = init.method ?? "GET";
+    const body = typeof init.body === "string" ? init.body : undefined;
     calls.push({ url, method, body });
-    if (url.includes("/api/0.6/map.json?bbox=")) return Response.json(options.invalidMap
-      ? { version: "0.6", elements: [{ error: "incomplete map response" }] }
-      : { version: "0.6", elements: [{ type: "node", id: 1 }, ...(options.nearbyAed ? [{ type: "node", id: options.nearbyAedId ?? 2, tags: { emergency: "defibrillator" } }] : []), ...(options.nearbyAedAt ? [{ type: options.nearbyAedAt.type ?? "node", id: 5, ...(options.nearbyAedAt.type === "way" ? {} : { lat: options.nearbyAedAt.lat, lon: options.nearbyAedAt.lon }), tags: { emergency: "defibrillator" } }] : [])] });
+    if (url.includes("/api/0.6/map.json?bbox="))
+      return Response.json(
+        options.invalidMap
+          ? { version: "0.6", elements: [{ error: "incomplete map response" }] }
+          : {
+              version: "0.6",
+              elements: [
+                { type: "node", id: 1 },
+                ...(options.nearbyAed
+                  ? [{ type: "node", id: options.nearbyAedId ?? 2, tags: { emergency: "defibrillator" } }]
+                  : []),
+                ...(options.nearbyAedAt
+                  ? [
+                      {
+                        type: options.nearbyAedAt.type ?? "node",
+                        id: 5,
+                        ...(options.nearbyAedAt.type === "way"
+                          ? {}
+                          : { lat: options.nearbyAedAt.lat, lon: options.nearbyAedAt.lon }),
+                        tags: { emergency: "defibrillator" },
+                      },
+                    ]
+                  : []),
+              ],
+            },
+      );
     if (url.endsWith("/changeset/create")) return new Response("77", { status: 200 });
     if (url.endsWith("/changeset/77/upload")) {
       uploadCount += 1;
       expect(body).toContain('<node id="-1" changeset="77" lat="52.52" lon="13.405">');
       expect(body).toContain('<tag k="emergency" v="defibrillator"/>');
       expect(body).toContain(`<tag k="check_date" v="${options.observedOn ?? "2026-10-24"}"/>`);
-      for (const [key, value] of Object.entries(detailTags)) expect(body).toContain(`<tag k="${xmlAttribute(key)}" v="${xmlAttribute(value)}"/>`);
+      for (const [key, value] of Object.entries(detailTags))
+        expect(body).toContain(`<tag k="${xmlAttribute(key)}" v="${xmlAttribute(value)}"/>`);
       // Genau die erwarteten Tags und keine weiteren: zwei Pflicht-Tags plus die Detailtags.
       expect((body ?? "").match(/<tag /g)).toHaveLength(2 + Object.keys(detailTags).length);
-      if (loseUploadResponse) { loseUploadResponse = false; throw new Error("connection lost after upload"); }
-      return new Response('<?xml version="1.0" encoding="UTF-8"?>\n<diffResult generator="OpenStreetMap server" version="0.6">\n <node old_id="-1" new_id="456" new_version="1"/>\n</diffResult>\n', { status: 200 });
+      if (loseUploadResponse) {
+        loseUploadResponse = false;
+        throw new Error("connection lost after upload");
+      }
+      return new Response(
+        '<?xml version="1.0" encoding="UTF-8"?>\n<diffResult generator="OpenStreetMap server" version="0.6">\n <node old_id="-1" new_id="456" new_version="1"/>\n</diffResult>\n',
+        { status: 200 },
+      );
     }
-    if (url.endsWith("/changeset/77/download")) return new Response(options.emptyChangeset
-      ? '<?xml version="1.0" encoding="UTF-8"?><osmChange version="0.6" generator="test"><create/><modify/><delete/></osmChange>'
-      : `<osmChange version="0.6"><create><node id="456" version="1" lat="52.52" lon="13.405" changeset="77"><tag k="check_date" v="2026-10-24"/><tag k="emergency" v="defibrillator"/>${detailTagXml}</node></create><modify/><delete/></osmChange>`, { status: 200 });
+    if (url.endsWith("/changeset/77/download"))
+      return new Response(
+        options.emptyChangeset
+          ? '<?xml version="1.0" encoding="UTF-8"?><osmChange version="0.6" generator="test"><create/><modify/><delete/></osmChange>'
+          : `<osmChange version="0.6"><create><node id="456" version="1" lat="52.52" lon="13.405" changeset="77"><tag k="check_date" v="2026-10-24"/><tag k="emergency" v="defibrillator"/>${detailTagXml}</node></create><modify/><delete/></osmChange>`,
+        { status: 200 },
+      );
     // Wie der echte Testserver: Der Änderungssatz ist schon geschlossen, "close" meldet 409, und der Status kommt als JSON
     // (wegen "Accept: application/json, ...") oder als XML.
-    if (options.alreadyClosed && url.endsWith("/changeset/77/close")) return new Response("The changeset 77 was closed at 2026-10-24 10:00:00 UTC", { status: 409 });
+    if (options.alreadyClosed && url.endsWith("/changeset/77/close"))
+      return new Response("The changeset 77 was closed at 2026-10-24 10:00:00 UTC", { status: 409 });
     if (options.alreadyClosed && url.endsWith("/api/0.6/changeset/77")) {
-      if (options.alreadyClosed === "xml") return new Response('<?xml version="1.0" encoding="UTF-8"?><osm version="0.6"><changeset id="77" open="false" changes_count="1"/></osm>', { status: 200, headers: { "Content-Type": "application/xml" } });
-      const changeset = options.alreadyClosed === "json-open" ? { id: 77, open: true } : options.alreadyClosed === "json-other-id" ? { id: 78, open: false } : { id: 77, open: false, changes_count: 1, tags: { comment: "AEDjaeger: AED mapped on site", created_by: "AEDjaeger 0.1.0" } };
+      if (options.alreadyClosed === "xml")
+        return new Response(
+          '<?xml version="1.0" encoding="UTF-8"?><osm version="0.6"><changeset id="77" open="false" changes_count="1"/></osm>',
+          { status: 200, headers: { "Content-Type": "application/xml" } },
+        );
+      const changeset =
+        options.alreadyClosed === "json-open"
+          ? { id: 77, open: true }
+          : options.alreadyClosed === "json-other-id"
+            ? { id: 78, open: false }
+            : {
+                id: 77,
+                open: false,
+                changes_count: 1,
+                tags: { comment: "AEDjaeger: AED mapped on site", created_by: "AEDjaeger 0.1.0" },
+              };
       return Response.json({ version: "0.6", generator: "OpenStreetMap server", changeset });
     }
     if (url.endsWith("/changeset/77/close")) return new Response(null, { status: 200 });
     throw new Error(`Unexpected OSM request ${method} ${url}`);
   };
-  return { fetcher, calls, get uploadCount() { return uploadCount; } };
+  return {
+    fetcher,
+    calls,
+    get uploadCount() {
+      return uploadCount;
+    },
+  };
 }
 
 const environment = { OSM_DEV_WRITES_ENABLED: "true", OSM_OAUTH_ENCRYPTION_KEY: encryptionSecret };
@@ -185,23 +376,39 @@ describe("OSM development node creation", () => {
     const DB = await setupDatabase();
     let providerCalls = 0;
     const { absence_confirmed: _omitted, ...withoutAbsenceConfirmation } = input;
-    const response = await handleDevelopmentCreateNode(makeRequest(withoutAbsenceConfirmation), { ...environment, DB }, {
-      now: () => now,
-      fetch: async () => { providerCalls += 1; return new Response(); },
-    });
+    const response = await handleDevelopmentCreateNode(
+      makeRequest(withoutAbsenceConfirmation),
+      { ...environment, DB },
+      {
+        now: () => now,
+        fetch: async () => {
+          providerCalls += 1;
+          return new Response();
+        },
+      },
+    );
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "invalid_request" });
     expect(providerCalls).toBe(0);
   });
   it("creates only the approved minimal tags after a fresh empty API map check", async () => {
-    const DB = await setupDatabase(); const api = makeFetch();
-    const response = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    const DB = await setupDatabase();
+    const api = makeFetch();
+    const response = await handleDevelopmentCreateNode(
+      makeRequest(),
+      { ...environment, DB },
+      { now: () => now, fetch: api.fetcher },
+    );
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ status: "complete", node_id: "456", version: 1 });
     expect(api.calls.find((call) => call.url.endsWith("/changeset/create"))).toBeDefined();
     expect(api.calls.find((call) => call.url.endsWith("/upload"))?.body).toContain("<osmChange");
-    const replay = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    const replay = await handleDevelopmentCreateNode(
+      makeRequest(),
+      { ...environment, DB },
+      { now: () => now, fetch: api.fetcher },
+    );
     expect(replay.status).toBe(200);
     expect(api.calls.filter((call) => call.url.endsWith("/upload"))).toHaveLength(1);
   });
@@ -209,11 +416,23 @@ describe("OSM development node creation", () => {
   it("writes every approved detail tag in one upload, with XML-safe values", async () => {
     const DB = await setupDatabase();
     const details = {
-      "defibrillator:location": "Foyer & Café, links", access: "customers", opening_hours: "Mo-Fr 08:00-18:00", indoor: "yes", level: "-1", operator: "Stadtwerke <Nord>", phone: "+49 911 123456", description: "Schlüssel \"beim\" Empfang", ref: "A-12",
+      "defibrillator:location": "Foyer & Café, links",
+      access: "customers",
+      opening_hours: "Mo-Fr 08:00-18:00",
+      indoor: "yes",
+      level: "-1",
+      operator: "Stadtwerke <Nord>",
+      phone: "+49 911 123456",
+      description: 'Schlüssel "beim" Empfang',
+      ref: "A-12",
     };
     const api = makeFetch({ detailTags: details });
     const { operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on } = input;
-    const response = await handleDevelopmentCreateNode(makeRequest({ operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on, details }), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    const response = await handleDevelopmentCreateNode(
+      makeRequest({ operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on, details }),
+      { ...environment, DB },
+      { now: () => now, fetch: api.fetcher },
+    );
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ status: "complete", node_id: "456", version: 1 });
     // Die Prüfung der Tags (genau diese, keine weiteren) steckt im Testserver-Ersatz makeFetch.
@@ -224,30 +443,60 @@ describe("OSM development node creation", () => {
     const DB = await setupDatabase();
     const api = makeFetch({ detailTags: {} });
     const { operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on } = input;
-    const response = await handleDevelopmentCreateNode(makeRequest({ operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on, details: {} }), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    const response = await handleDevelopmentCreateNode(
+      makeRequest({ operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on, details: {} }),
+      { ...environment, DB },
+      { now: () => now, fetch: api.fetcher },
+    );
     expect(response.status).toBe(200);
     expect(api.uploadCount).toBe(1);
   });
 
   it("treats the old location_description request and the same location in details as one operation", async () => {
-    const DB = await setupDatabase(); const api = makeFetch();
+    const DB = await setupDatabase();
+    const api = makeFetch();
     const dependencies = { now: () => now, fetch: api.fetcher };
     const { operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on } = input;
     const first = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies);
     expect(first.status).toBe(200);
     // Eine Wiederholung aus der neuen App-Version (gleiche Vorgangs-ID, gleicher Standort) darf nicht als fremder Vorgang gelten.
-    const replay = await handleDevelopmentCreateNode(makeRequest({ operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on, details: { "defibrillator:location": "Near main entrance" } }), { ...environment, DB }, dependencies);
+    const replay = await handleDevelopmentCreateNode(
+      makeRequest({
+        operation_id,
+        confirmed,
+        absence_confirmed,
+        latitude,
+        longitude,
+        observed_on,
+        details: { "defibrillator:location": "Near main entrance" },
+      }),
+      { ...environment, DB },
+      dependencies,
+    );
     expect(replay.status).toBe(200);
     expect(api.uploadCount).toBe(1);
   });
 
   it("rejects the same operation id with different details", async () => {
-    const DB = await setupDatabase(); const api = makeFetch({ detailTags: { access: "yes" } });
+    const DB = await setupDatabase();
+    const api = makeFetch({ detailTags: { access: "yes" } });
     const dependencies = { now: () => now, fetch: api.fetcher };
     const { operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on } = input;
     const base = { operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on };
-    expect((await handleDevelopmentCreateNode(makeRequest({ ...base, details: { access: "yes" } }), { ...environment, DB }, dependencies)).status).toBe(200);
-    const changed = await handleDevelopmentCreateNode(makeRequest({ ...base, details: { access: "private" } }), { ...environment, DB }, dependencies);
+    expect(
+      (
+        await handleDevelopmentCreateNode(
+          makeRequest({ ...base, details: { access: "yes" } }),
+          { ...environment, DB },
+          dependencies,
+        )
+      ).status,
+    ).toBe(200);
+    const changed = await handleDevelopmentCreateNode(
+      makeRequest({ ...base, details: { access: "private" } }),
+      { ...environment, DB },
+      dependencies,
+    );
     expect(changed.status).toBe(409);
     expect(await changed.json()).toEqual({ error: "operation_id_conflict" });
     expect(api.uploadCount).toBe(1);
@@ -260,7 +509,9 @@ describe("OSM development node creation", () => {
     const dependencies = { now: () => now, fetch: api.fetcher };
     const { operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on } = input;
     const body = { operation_id, confirmed, absence_confirmed, latitude, longitude, observed_on, details };
-    expect((await handleDevelopmentCreateNode(makeRequest(body), { ...environment, DB }, dependencies)).status).toBe(202);
+    expect((await handleDevelopmentCreateNode(makeRequest(body), { ...environment, DB }, dependencies)).status).toBe(
+      202,
+    );
     const retry = await handleDevelopmentCreateNode(makeRequest(body), { ...environment, DB }, dependencies);
     expect(retry.status).toBe(200);
     expect(api.uploadCount).toBe(1);
@@ -285,8 +536,13 @@ describe("OSM development node creation", () => {
       ["unknown top-level field", { ...base, details: {}, extra: true }],
     ];
     for (const [label, body] of bad) {
-      const DB = await setupDatabase(); const api = makeFetch();
-      const response = await handleDevelopmentCreateNode(makeRequest(body), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+      const DB = await setupDatabase();
+      const api = makeFetch();
+      const response = await handleDevelopmentCreateNode(
+        makeRequest(body),
+        { ...environment, DB },
+        { now: () => now, fetch: api.fetcher },
+      );
       expect(response.status, label).toBe(400);
       expect(api.calls, label).toEqual([]);
     }
@@ -302,52 +558,90 @@ describe("OSM development node creation", () => {
       { now: () => now, fetch: api.fetcher },
     );
     expect(response.status).toBe(200);
-    expect(api.calls.find((call) => call.url.endsWith("/upload"))?.body).toContain(`<tag k="check_date" v="${historicalDate}"/>`);
+    expect(api.calls.find((call) => call.url.endsWith("/upload"))?.body).toContain(
+      `<tag k="check_date" v="${historicalDate}"/>`,
+    );
   });
 
   it("blocks creation only for an AED within 50 m of the new point, the same reach as the search", async () => {
     // Die neue Position ist 52.52 / 13.405. 1 Meter Breite sind etwa 0,000009 Grad.
-    for (const [lat, blocked] of [[52.52027, true], [52.52072, false]] as const) {
-      const DB = await setupDatabase(); const api = makeFetch({ nearbyAedAt: { lat, lon: 13.405 } });
-      const response = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    for (const [lat, blocked] of [
+      [52.52027, true],
+      [52.52072, false],
+    ] as const) {
+      const DB = await setupDatabase();
+      const api = makeFetch({ nearbyAedAt: { lat, lon: 13.405 } });
+      const response = await handleDevelopmentCreateNode(
+        makeRequest(),
+        { ...environment, DB },
+        { now: () => now, fetch: api.fetcher },
+      );
       expect(response.status, `AED bei ${lat}`).toBe(blocked ? 409 : 200);
-      expect(api.calls.some((call) => call.url.endsWith("/changeset/create")), `AED bei ${lat}`).toBe(!blocked);
+      expect(
+        api.calls.some((call) => call.url.endsWith("/changeset/create")),
+        `AED bei ${lat}`,
+      ).toBe(!blocked);
     }
   });
 
   it("still blocks for a way or relation inside the box, because it has no reliable point", async () => {
-    const DB = await setupDatabase(); const api = makeFetch({ nearbyAedAt: { lat: 52.52, lon: 13.405, type: "way" } });
-    const response = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    const DB = await setupDatabase();
+    const api = makeFetch({ nearbyAedAt: { lat: 52.52, lon: 13.405, type: "way" } });
+    const response = await handleDevelopmentCreateNode(
+      makeRequest(),
+      { ...environment, DB },
+      { now: () => now, fetch: api.fetcher },
+    );
     expect(response.status).toBe(409);
     expect(api.calls.some((call) => call.url.endsWith("/changeset/create"))).toBe(false);
   });
 
   it("blocks creation if the fresh OSM map contains any nearby AED object", async () => {
-    const DB = await setupDatabase(); const api = makeFetch({ nearbyAed: true });
-    const response = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    const DB = await setupDatabase();
+    const api = makeFetch({ nearbyAed: true });
+    const response = await handleDevelopmentCreateNode(
+      makeRequest(),
+      { ...environment, DB },
+      { now: () => now, fetch: api.fetcher },
+    );
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "nearby_aed_found" });
     expect(api.calls.some((call) => call.url.endsWith("/changeset/create"))).toBe(false);
   });
 
   it("allows only the exact nearby AEDs explicitly reviewed as different", async () => {
-    const DB = await setupDatabase(); const api = makeFetch({ nearbyAed: true });
-    const response = await handleDevelopmentCreateNode(makeRequest({ ...input, confirmed_different_candidate_ids: ["node/2"] }), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    const DB = await setupDatabase();
+    const api = makeFetch({ nearbyAed: true });
+    const response = await handleDevelopmentCreateNode(
+      makeRequest({ ...input, confirmed_different_candidate_ids: ["node/2"] }),
+      { ...environment, DB },
+      { now: () => now, fetch: api.fetcher },
+    );
     expect(response.status).toBe(200);
     expect(api.calls.some((call) => call.url.endsWith("/upload"))).toBe(true);
   });
 
   it("still blocks an AED that appeared after the person reviewed the search results", async () => {
-    const DB = await setupDatabase(); const api = makeFetch({ nearbyAed: true, nearbyAedId: 3 });
-    const response = await handleDevelopmentCreateNode(makeRequest({ ...input, confirmed_different_candidate_ids: ["node/2"] }), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    const DB = await setupDatabase();
+    const api = makeFetch({ nearbyAed: true, nearbyAedId: 3 });
+    const response = await handleDevelopmentCreateNode(
+      makeRequest({ ...input, confirmed_different_candidate_ids: ["node/2"] }),
+      { ...environment, DB },
+      { now: () => now, fetch: api.fetcher },
+    );
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: "nearby_aed_found" });
     expect(api.calls.some((call) => call.url.endsWith("/changeset/create"))).toBe(false);
   });
 
   it("fails closed when the fresh map response is incomplete", async () => {
-    const DB = await setupDatabase(); const api = makeFetch({ invalidMap: true });
-    const response = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    const DB = await setupDatabase();
+    const api = makeFetch({ invalidMap: true });
+    const response = await handleDevelopmentCreateNode(
+      makeRequest(),
+      { ...environment, DB },
+      { now: () => now, fetch: api.fetcher },
+    );
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({ error: "development_api_unavailable" });
     expect(api.calls.some((call) => call.url.endsWith("/changeset/create"))).toBe(false);
@@ -355,14 +649,23 @@ describe("OSM development node creation", () => {
   });
 
   it("terminates a stale started operation instead of leaving the confirmed draft pending forever", async () => {
-    const DB = await setupDatabase(); const api = makeFetch();
+    const DB = await setupDatabase();
+    const api = makeFetch();
     DB.failChangesetRecord = true;
     const firstTime = now - 121_000;
-    const first = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, { now: () => firstTime, fetch: api.fetcher });
+    const first = await handleDevelopmentCreateNode(
+      makeRequest(),
+      { ...environment, DB },
+      { now: () => firstTime, fetch: api.fetcher },
+    );
     expect(first.status).toBe(422);
     expect(DB.operations.values().next().value?.state).toBe("started");
 
-    const retry = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, { now: () => now, fetch: api.fetcher });
+    const retry = await handleDevelopmentCreateNode(
+      makeRequest(),
+      { ...environment, DB },
+      { now: () => now, fetch: api.fetcher },
+    );
     expect(retry.status).toBe(422);
     expect(await retry.json()).toEqual({ error: "write_failed" });
     expect(DB.operations.values().next().value?.state).toBe("failed");
@@ -371,7 +674,8 @@ describe("OSM development node creation", () => {
   });
 
   it("reconciles a lost upload response from its changeset without a second create", async () => {
-    const DB = await setupDatabase(); const api = makeFetch({ loseUploadResponse: true });
+    const DB = await setupDatabase();
+    const api = makeFetch({ loseUploadResponse: true });
     const dependencies = { now: () => now, fetch: api.fetcher };
     const first = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies);
     expect(first.status).toBe(202);
@@ -383,7 +687,8 @@ describe("OSM development node creation", () => {
 
   it("completes a retry when the changeset is already closed and the server reports it as JSON", async () => {
     // Fehler vom 13.11.2026 auf dem Testserver: Knoten angelegt, Änderungssatz geschlossen, die App blieb bei "Ergebnis unklar".
-    const DB = await setupDatabase(); const api = makeFetch({ loseUploadResponse: true, alreadyClosed: "json" });
+    const DB = await setupDatabase();
+    const api = makeFetch({ loseUploadResponse: true, alreadyClosed: "json" });
     const dependencies = { now: () => now, fetch: api.fetcher };
     expect((await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies)).status).toBe(202);
     const retry = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies);
@@ -393,7 +698,8 @@ describe("OSM development node creation", () => {
   });
 
   it("also completes a retry when the already-closed status arrives as XML", async () => {
-    const DB = await setupDatabase(); const api = makeFetch({ loseUploadResponse: true, alreadyClosed: "xml" });
+    const DB = await setupDatabase();
+    const api = makeFetch({ loseUploadResponse: true, alreadyClosed: "xml" });
     const dependencies = { now: () => now, fetch: api.fetcher };
     expect((await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies)).status).toBe(202);
     const retry = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies);
@@ -403,7 +709,8 @@ describe("OSM development node creation", () => {
 
   it("stays uncertain when the status says the changeset is still open or belongs to another number", async () => {
     for (const alreadyClosed of ["json-open", "json-other-id"] as const) {
-      const DB = await setupDatabase(); const api = makeFetch({ loseUploadResponse: true, alreadyClosed });
+      const DB = await setupDatabase();
+      const api = makeFetch({ loseUploadResponse: true, alreadyClosed });
       const dependencies = { now: () => now, fetch: api.fetcher };
       expect((await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies)).status).toBe(202);
       const retry = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies);
@@ -415,12 +722,20 @@ describe("OSM development node creation", () => {
 
   it("reconciles an older pending create when a retry includes an empty reviewed-candidate list", async () => {
     const DB = await setupDatabase();
-    const ownerHash = await hashOSMDevelopmentWriteOwner({ subject: "test-subject", environment: "development" }, encryptionSecret);
-    const legacyRequestHash = await hashOSMDevelopmentWriteValue(JSON.stringify({
-      operation_id: input.operation_id, confirmed: input.confirmed,
-      latitude: input.latitude, longitude: input.longitude, observed_on: input.observed_on,
-      location_description: input.location_description,
-    }));
+    const ownerHash = await hashOSMDevelopmentWriteOwner(
+      { subject: "test-subject", environment: "development" },
+      encryptionSecret,
+    );
+    const legacyRequestHash = await hashOSMDevelopmentWriteValue(
+      JSON.stringify({
+        operation_id: input.operation_id,
+        confirmed: input.confirmed,
+        latitude: input.latitude,
+        longitude: input.longitude,
+        observed_on: input.observed_on,
+        location_description: input.location_description,
+      }),
+    );
     DB.operations.set(`${ownerHash}:${operationId}`, {
       owner_hash: ownerHash,
       operation_id: operationId,
@@ -446,7 +761,8 @@ describe("OSM development node creation", () => {
   });
 
   it("closes and reconciles an empty changeset before releasing a lost upload", async () => {
-    const DB = await setupDatabase(); const api = makeFetch({ loseUploadResponse: true, emptyChangeset: true });
+    const DB = await setupDatabase();
+    const api = makeFetch({ loseUploadResponse: true, emptyChangeset: true });
     const dependencies = { now: () => now, fetch: api.fetcher };
     const first = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies);
     expect(first.status).toBe(202);
@@ -461,8 +777,19 @@ describe("OSM development node creation", () => {
   });
 
   it("refuses a production session before calling OSM", async () => {
-    const DB = await setupDatabase("production"); let calls = 0;
-    const response = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, { now: () => now, fetch: async () => { calls += 1; return new Response(); } });
+    const DB = await setupDatabase("production");
+    let calls = 0;
+    const response = await handleDevelopmentCreateNode(
+      makeRequest(),
+      { ...environment, DB },
+      {
+        now: () => now,
+        fetch: async () => {
+          calls += 1;
+          return new Response();
+        },
+      },
+    );
     expect(response.status).toBe(403);
     expect(calls).toBe(0);
   });

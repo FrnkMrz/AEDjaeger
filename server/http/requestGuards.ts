@@ -28,7 +28,10 @@ export function isCrossOrigin(request: Request, expectedOrigin: string): boolean
 /** Parse exactly one bounded session cookie; duplicate names are ambiguous and rejected. */
 export function readCookie(header: string | null, name: string): string | null {
   if (!header || header.length > 8_192) return null;
-  const values = header.split(";").map((part) => part.trim()).filter((part) => part.startsWith(`${name}=`));
+  const values = header
+    .split(";")
+    .map((part) => part.trim())
+    .filter((part) => part.startsWith(`${name}=`));
   if (values.length !== 1) return null;
   const value = values[0].slice(name.length + 1);
   return /^[A-Za-z0-9_-]{43}$/u.test(value) ? value : null;

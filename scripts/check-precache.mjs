@@ -14,7 +14,10 @@ for (const assetPath of entries) {
   await access(join(outputDirectory, assetPath.replace(/^\//, "")));
 }
 
-if (!entries.some((assetPath) => assetPath.endsWith(".js")) || !entries.some((assetPath) => assetPath.endsWith(".css"))) {
+if (
+  !entries.some((assetPath) => assetPath.endsWith(".js")) ||
+  !entries.some((assetPath) => assetPath.endsWith(".css"))
+) {
   throw new Error("The precache manifest must include the app's JavaScript and CSS bundles.");
 }
 

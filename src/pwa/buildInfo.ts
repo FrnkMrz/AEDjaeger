@@ -19,7 +19,8 @@ const LATEST_BUILD_MS = Date.UTC(2100, 0, 1);
 export function buildTimeFromRevision(revision: string): Date | null {
   if (!REVISION_PATTERN.test(revision)) return null;
   const milliseconds = Number.parseInt(revision, 36);
-  if (!Number.isSafeInteger(milliseconds) || milliseconds < EARLIEST_BUILD_MS || milliseconds >= LATEST_BUILD_MS) return null;
+  if (!Number.isSafeInteger(milliseconds) || milliseconds < EARLIEST_BUILD_MS || milliseconds >= LATEST_BUILD_MS)
+    return null;
   return new Date(milliseconds);
 }
 

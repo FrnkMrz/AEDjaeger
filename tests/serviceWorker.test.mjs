@@ -12,11 +12,17 @@ function loadWorker() {
     // Ein echtes URL-Objekt: Der Worker liest daraus origin und href. Ein Ersatz ohne origin würde
     // jede Anfrage als „fremd“ ablehnen und die Tests wertlos machen.
     location: new URL("https://aedjaeger.test/sw.js?revision=testbuild"),
-    addEventListener: (type, handler) => { handlers[type] = handler; },
+    addEventListener: (type, handler) => {
+      handlers[type] = handler;
+    },
     skipWaiting: () => undefined,
     clients: { claim: () => undefined },
   };
-  const cache = { match: vi.fn(async () => undefined), put: vi.fn(async () => undefined), addAll: vi.fn(async () => undefined) };
+  const cache = {
+    match: vi.fn(async () => undefined),
+    put: vi.fn(async () => undefined),
+    addAll: vi.fn(async () => undefined),
+  };
   const caches = { open: vi.fn(async () => cache), keys: vi.fn(async () => []), delete: vi.fn(async () => true) };
   const fetchSpy = vi.fn(async () => new Response("network"));
   vm.runInNewContext(source, { self, caches, fetch: fetchSpy, URL, Response });
@@ -26,7 +32,11 @@ function loadWorker() {
 /** Simuliert eine Anfrage und meldet, ob der Worker sie selbst beantworten wollte. */
 function takesOver(handlers, url, overrides = {}) {
   const respondWith = vi.fn();
-  handlers.fetch({ request: { method: "GET", url, mode: "cors", ...overrides }, respondWith, waitUntil: () => undefined });
+  handlers.fetch({
+    request: { method: "GET", url, mode: "cors", ...overrides },
+    respondWith,
+    waitUntil: () => undefined,
+  });
   return respondWith.mock.calls.length > 0;
 }
 

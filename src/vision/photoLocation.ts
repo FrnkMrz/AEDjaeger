@@ -16,11 +16,14 @@ export async function readPhotoLocation(file: File, readGps: GpsReader = gps): P
   try {
     // Passing the File lets exifr read only the metadata segments it needs on mobile devices.
     const coordinates = await readGps(file);
-    if (!coordinates
-      || !Number.isFinite(coordinates.latitude)
-      || Math.abs(coordinates.latitude) > 90
-      || !Number.isFinite(coordinates.longitude)
-      || Math.abs(coordinates.longitude) > 180) return undefined;
+    if (
+      !coordinates ||
+      !Number.isFinite(coordinates.latitude) ||
+      Math.abs(coordinates.latitude) > 90 ||
+      !Number.isFinite(coordinates.longitude) ||
+      Math.abs(coordinates.longitude) > 180
+    )
+      return undefined;
 
     return {
       latitude: coordinates.latitude,

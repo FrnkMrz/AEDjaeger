@@ -19,7 +19,11 @@ export async function fetchWithoutRedirects(
   if (response.status >= 300 && response.status < 400) {
     // Weder Location noch Antworttext übernehmen: Beide können vertrauliche
     // Daten enthalten. Den ungenutzten Body möglichst freigeben.
-    try { await response.body?.cancel(); } catch { /* Die Weiterleitung bleibt abgelehnt. */ }
+    try {
+      await response.body?.cancel();
+    } catch {
+      /* Die Weiterleitung bleibt abgelehnt. */
+    }
     throw new ExternalRedirectError(response.status);
   }
   return response;

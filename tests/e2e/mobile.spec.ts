@@ -5,12 +5,22 @@ const testDevelopmentOwnerHash = "a".repeat(64);
 
 // Most workflow tests exercise the signed-in app; individual access-control tests override this.
 test.beforeEach(async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
-    authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false,
-  } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: true,
+        loginAvailable: true,
+        developmentLoginAvailable: false,
+        developmentSession: false,
+      },
+    }),
+  );
 });
 
-test("serves the app with security headers while photo preview and service worker work", async ({ page, browserName }) => {
+test("serves the app with security headers while photo preview and service worker work", async ({
+  page,
+  browserName,
+}) => {
   const response = await page.goto("/");
   expect(response).not.toBeNull();
   const headers = response!.headers();
@@ -24,7 +34,9 @@ test("serves the app with security headers while photo preview and service worke
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await expect(page.locator("img.photo-preview")).toHaveAttribute("src", /^blob:/u);
   if (browserName === "chromium") {
-    await expect.poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length)).toBeGreaterThan(0);
+    await expect
+      .poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length))
+      .toBeGreaterThan(0);
   }
 });
 
@@ -52,11 +64,22 @@ test("the information roadmap fits a narrow phone screen in all six languages", 
     const iconCredits = dialog.locator(".icon-credits");
     await expect(iconCredits).toBeVisible();
     await expect(iconCredits).toContainText("CC0");
-    await expect(iconCredits.locator("a").nth(0)).toHaveAttribute("href", "https://github.com/mapbox/maki/blob/main/icons/defibrillator.svg");
-    await expect(iconCredits.locator("a").nth(1)).toHaveAttribute("href", "https://creativecommons.org/publicdomain/zero/1.0/");
+    await expect(iconCredits.locator("a").nth(0)).toHaveAttribute(
+      "href",
+      "https://github.com/mapbox/maki/blob/main/icons/defibrillator.svg",
+    );
+    await expect(iconCredits.locator("a").nth(1)).toHaveAttribute(
+      "href",
+      "https://creativecommons.org/publicdomain/zero/1.0/",
+    );
     await expect(dialog.getByRole("heading", { level: 3 }).last()).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth), `horizontal page overflow in ${language}`).toBeLessThanOrEqual(320);
-    expect(await dialog.locator(".info-dialog-content").evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+      `horizontal page overflow in ${language}`,
+    ).toBeLessThanOrEqual(320);
+    expect(
+      await dialog.locator(".info-dialog-content").evaluate((element) => element.scrollWidth <= element.clientWidth),
+    ).toBe(true);
 
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
@@ -80,7 +103,11 @@ test("changing the UI language keeps keyboard focus on the language selector", a
 });
 
 test("the OSM account gate is shown before app features and is localized in all six languages", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
   await page.setViewportSize({ width: 320, height: 720 });
   await page.goto("/");
 
@@ -97,11 +124,25 @@ test("the OSM account gate is shown before app features and is localized in all 
     await page.locator("#language").selectOption(language);
     const signIn = page.getByRole("link", { name: expectedLabels[index] });
     await expect(signIn).toHaveAttribute("href", "/api/auth/osm/start");
-    const createAccount = page.getByRole("link", { name: ["OpenStreetMap-Konto erstellen", "Create an OpenStreetMap account", "Utwórz konto OpenStreetMap", "OpenStreetMapアカウントを作成", "Créer un compte OpenStreetMap", "Crear una cuenta de OpenStreetMap"][index] });
+    const createAccount = page.getByRole("link", {
+      name: [
+        "OpenStreetMap-Konto erstellen",
+        "Create an OpenStreetMap account",
+        "Utwórz konto OpenStreetMap",
+        "OpenStreetMapアカウントを作成",
+        "Créer un compte OpenStreetMap",
+        "Crear una cuenta de OpenStreetMap",
+      ][index],
+    });
     await expect(createAccount).toHaveAttribute("href", "https://www.openstreetmap.org/user/new");
     await expect(page.locator("#camera-input, #file-input")).toHaveCount(0);
-    await expect(page.getByRole("heading", { level: 1 })).toContainText(language === "de" ? "OpenStreetMap-Konto" : "OpenStreetMap");
-    expect(await page.evaluate(() => document.documentElement.scrollWidth), `horizontal page overflow in ${language}`).toBeLessThanOrEqual(320);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(
+      language === "de" ? "OpenStreetMap-Konto" : "OpenStreetMap",
+    );
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+      `horizontal page overflow in ${language}`,
+    ).toBeLessThanOrEqual(320);
   }
 });
 
@@ -133,9 +174,22 @@ test("an older gallery photo requires an explicit observation date before search
   let searchRequests = 0;
   await page.route("**/api/osm/candidates/search", async (route) => {
     searchRequests += 1;
-    await route.fulfill({ json: { status: "complete", coverage_radius_meters: 112, candidates: [
-      { id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2025-01-01" } },
-    ] } });
+    await route.fulfill({
+      json: {
+        status: "complete",
+        coverage_radius_meters: 112,
+        candidates: [
+          {
+            id: "node/123",
+            osmType: "node",
+            version: 7,
+            coordinateQuality: "exact",
+            position: { latitude: 52.52001, longitude: 13.40501 },
+            tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2025-01-01" },
+          },
+        ],
+      },
+    });
   });
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
@@ -167,10 +221,12 @@ test("a camera input photo with an old EXIF date requires confirmation", async (
   await expect(page.getByRole("heading", { name: "Wann hast du den AED gesehen?" })).toBeVisible();
   await expect(page.locator("#photo-observed-on")).toHaveValue("2024-10-20");
   expect(searchRequests).toBe(0);
-  await page.locator("#photo-observed-on").fill(await page.evaluate(() => {
-    const date = new Date();
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-  }));
+  await page.locator("#photo-observed-on").fill(
+    await page.evaluate(() => {
+      const date = new Date();
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    }),
+  );
   await page.locator('[data-action="confirm-photo-date"]').click();
   await expect(page.getByRole("heading", { name: "Standort für die Suche wählen" })).toBeVisible();
   expect(searchRequests).toBe(0);
@@ -183,7 +239,13 @@ test("a fresh camera photo without EXIF date skips the observation-date question
   // Eine im Browser erzeugte Datei trägt die aktuelle Zeit als Dateizeit – wie ein Foto,
   // das die Kamera gerade eben aufgenommen hat. Sie enthält keine EXIF-Daten.
   await page.evaluate(() => {
-    const file = new File(['<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#176b4b"/></svg>'], "kamera.svg", { type: "image/svg+xml" });
+    const file = new File(
+      [
+        '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#176b4b"/></svg>',
+      ],
+      "kamera.svg",
+      { type: "image/svg+xml" },
+    );
     const transfer = new DataTransfer();
     transfer.items.add(file);
     const input = document.querySelector<HTMLInputElement>("#camera-input")!;
@@ -203,7 +265,13 @@ test("a fresh file chosen from the gallery without EXIF date still asks for the 
   // Bei „Foto auswählen“ sagt die Dateizeit nichts über die Aufnahme aus (z. B. ein gerade erst
   // gespeichertes altes Bild). Die 5-Minuten-Regel darf hier ohne EXIF-Zeit nicht greifen.
   await page.evaluate(() => {
-    const file = new File(['<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#176b4b"/></svg>'], "galerie.svg", { type: "image/svg+xml" });
+    const file = new File(
+      [
+        '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#176b4b"/></svg>',
+      ],
+      "galerie.svg",
+      { type: "image/svg+xml" },
+    );
     const transfer = new DataTransfer();
     transfer.items.add(file);
     const input = document.querySelector<HTMLInputElement>("#file-input")!;
@@ -214,7 +282,9 @@ test("a fresh file chosen from the gallery without EXIF date still asks for the 
   await expect(page.getByRole("heading", { name: "Wann hast du den AED gesehen?" })).toBeVisible();
 });
 
-test("an older camera input photo without EXIF date requires explicit observation-date confirmation", async ({ page }) => {
+test("an older camera input photo without EXIF date requires explicit observation-date confirmation", async ({
+  page,
+}) => {
   let searchRequests = 0;
   await page.route("**/api/osm/candidates/search", async (route) => {
     searchRequests += 1;
@@ -227,10 +297,12 @@ test("an older camera input photo without EXIF date requires explicit observatio
   await page.locator("#camera-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
   await expect(page.getByRole("heading", { name: "Wann hast du den AED gesehen?" })).toBeVisible();
-  await expect(page.locator("#photo-observed-on")).toHaveValue(await page.evaluate(() => {
-    const date = new Date();
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-  }));
+  await expect(page.locator("#photo-observed-on")).toHaveValue(
+    await page.evaluate(() => {
+      const date = new Date();
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    }),
+  );
   expect(searchRequests).toBe(0);
   await page.locator('[data-action="confirm-photo-date"]').click();
   await expect(page.getByRole("heading", { name: "Standort für die Suche wählen" })).toBeVisible();
@@ -257,20 +329,35 @@ test.describe("local photo dates near UTC midnight", () => {
 test("a user-confirmed location search shows nearby candidates without writing to OSM", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
   let searchRequests = 0;
   await page.route("**/api/osm/candidates/search", async (route) => {
     searchRequests += 1;
     expect(route.request().method()).toBe("POST");
     expect(route.request().postDataJSON()).toEqual({ latitude: 52.52, longitude: 13.405, accuracy_meters: 12 });
-    await route.fulfill({ json: {
-      status: "complete", coverage_radius_meters: 112,
-      candidates: [{
-        id: "node/123", osmType: "node", coordinateQuality: "exact",
-        position: { latitude: 52.52001, longitude: 13.40501 },
-        tags: { emergency: "defibrillator", name: "Rathaus <img src=x onerror=alert(2)>", check_date: "<img src=x onerror=alert(1)>" },
-      }],
-    } });
+    await route.fulfill({
+      json: {
+        status: "complete",
+        coverage_radius_meters: 112,
+        candidates: [
+          {
+            id: "node/123",
+            osmType: "node",
+            coordinateQuality: "exact",
+            position: { latitude: 52.52001, longitude: 13.40501 },
+            tags: {
+              emergency: "defibrillator",
+              name: "Rathaus <img src=x onerror=alert(2)>",
+              check_date: "<img src=x onerror=alert(1)>",
+            },
+          },
+        ],
+      },
+    });
   });
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
@@ -283,16 +370,21 @@ test("a user-confirmed location search shows nearby candidates without writing t
   await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
   // Bei Treffern zeigt die App eine Umgebungskarte mit einem nummerierten Marker je Treffer.
   await expect(page.locator("#candidate-overview-map")).toBeVisible();
-  await expect(page.locator("#candidate-overview-map .position-map-marker:not(.position-map-marker-origin)")).toHaveText(["1"]);
+  await expect(
+    page.locator("#candidate-overview-map .position-map-marker:not(.position-map-marker-origin)"),
+  ).toHaveText(["1"]);
   // Der gesuchte Standort ist ein fest verankerter roter Marker. Beim Verschieben der Karte
   // muss er mitwandern – sonst würde er eine falsche Stelle als Standort anzeigen.
   const origin = page.locator("#candidate-overview-map .position-map-marker-origin");
   await expect(origin).toHaveCount(1);
   await expect(page.locator("#candidate-overview-map .position-map-crosshair")).toBeHidden();
-  const readMarkerPositions = () => page.locator("#candidate-overview-map .position-map-marker").evaluateAll((markers) => markers.map((marker) => ({
-    x: Number.parseFloat((marker as HTMLElement).style.left),
-    y: Number.parseFloat((marker as HTMLElement).style.top),
-  })));
+  const readMarkerPositions = () =>
+    page.locator("#candidate-overview-map .position-map-marker").evaluateAll((markers) =>
+      markers.map((marker) => ({
+        x: Number.parseFloat((marker as HTMLElement).style.left),
+        y: Number.parseFloat((marker as HTMLElement).style.top),
+      })),
+    );
   const [originBefore, candidateBefore] = await readMarkerPositions();
   await page.locator("#candidate-overview-map").focus();
   await page.keyboard.press("ArrowRight");
@@ -310,7 +402,10 @@ test("a user-confirmed location search shows nearby candidates without writing t
   await expect.poll(readMapZoom).toBe(zoomBeforeKey - 1);
   await page.keyboard.press("=");
   await expect.poll(readMapZoom).toBe(zoomBeforeKey);
-  await expect(page.locator("#candidate-overview-map")).toHaveAttribute("aria-describedby", "overview-map-instructions");
+  await expect(page.locator("#candidate-overview-map")).toHaveAttribute(
+    "aria-describedby",
+    "overview-map-instructions",
+  );
   await expect(page.locator(".candidate-item strong")).toContainText("1. Rathaus");
   expect(searchRequests).toBe(1);
 
@@ -323,9 +418,11 @@ test("a user-confirmed location search shows nearby candidates without writing t
   await expect(page.locator(".capture-content")).toContainText("Rathaus <img src=x onerror=alert(2)>");
   await expect(page.locator(".capture-content")).toContainText("Bisher: <img src=x onerror=alert(1)>");
   await expect(page.locator(".capture-content img[onerror]")).toHaveCount(0);
-  await expect(page.locator(".capture-content")).toContainText(await page.evaluate(() => {
-    return new Intl.DateTimeFormat("de-DE", { dateStyle: "long" }).format(new Date());
-  }));
+  await expect(page.locator(".capture-content")).toContainText(
+    await page.evaluate(() => {
+      return new Intl.DateTimeFormat("de-DE", { dateStyle: "long" }).format(new Date());
+    }),
+  );
   await expect(page.locator(".capture-content")).toContainText("Nur eine Vorschau. Nichts wurde gespeichert.");
   await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
   // Ein einziger Treffer: „Zurück“ zu einer Auswahl hätte keine Bedeutung und entfällt.
@@ -336,7 +433,11 @@ test("a user-confirmed location search shows nearby candidates without writing t
 test("a photo without GPS does not silently search the phone location", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
   let searchRequests = 0;
   await page.route("**/api/osm/candidates/search", async (route) => {
     searchRequests += 1;
@@ -357,12 +458,15 @@ test("a photo without GPS does not silently search the phone location", async ({
   await expect(page.locator(".capture-content")).toContainText("Handy-Standort verwendet");
 });
 
-test("retry keeps an explicitly chosen map location instead of silently switching to phone GPS", async ({ page, context }) => {
+test("retry keeps an explicitly chosen map location instead of silently switching to phone GPS", async ({
+  page,
+  context,
+}) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   const requests: Array<{ latitude: number; longitude: number; accuracy_meters: number }> = [];
   await page.route("**/api/osm/candidates/search", async (route) => {
-    requests.push(route.request().postDataJSON() as typeof requests[number]);
+    requests.push(route.request().postDataJSON() as (typeof requests)[number]);
     if (requests.length === 1) {
       await route.fulfill({ status: 502, headers: { "Retry-After": "0" }, json: { error: "search_unavailable" } });
       return;
@@ -388,24 +492,53 @@ test("retry keeps an explicitly chosen map location instead of silently switchin
   await expect.poll(() => requests.length).toBe(2);
   expect(requests).toHaveLength(2);
   expect(requests[0]).toEqual(requests[1]);
-  expect(`${requests[0].latitude.toFixed(5)}, ${requests[0].longitude.toFixed(5)}`).toBe(selectedCoordinates.match(/-?\d+\.\d{5}, -?\d+\.\d{5}/u)?.[0]);
+  expect(`${requests[0].latitude.toFixed(5)}, ${requests[0].longitude.toFixed(5)}`).toBe(
+    selectedCoordinates.match(/-?\d+\.\d{5}, -?\d+\.\d{5}/u)?.[0],
+  );
 });
 
-test("the development-session preview sends one explicitly confirmed, versioned check-date update", async ({ page, context }) => {
+test("the development-session preview sends one explicitly confirmed, versioned check-date update", async ({
+  page,
+  context,
+}) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
-    authenticated: true, loginAvailable: true, developmentLoginAvailable: true,
-    developmentSession: true, developmentWriteAvailable: true, developmentWriteOwnerHash: testDevelopmentOwnerHash,
-  } }));
-  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
-    status: "complete", coverage_radius_meters: 112,
-    candidates: [{ id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2025-10-20" } }],
-  } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: true,
+        loginAvailable: true,
+        developmentLoginAvailable: true,
+        developmentSession: true,
+        developmentWriteAvailable: true,
+        developmentWriteOwnerHash: testDevelopmentOwnerHash,
+      },
+    }),
+  );
+  await page.route("**/api/osm/candidates/search", (route) =>
+    route.fulfill({
+      json: {
+        status: "complete",
+        coverage_radius_meters: 112,
+        candidates: [
+          {
+            id: "node/123",
+            osmType: "node",
+            version: 7,
+            coordinateQuality: "exact",
+            position: { latitude: 52.52001, longitude: 13.40501 },
+            tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2025-10-20" },
+          },
+        ],
+      },
+    }),
+  );
   const writeRequests: Array<Record<string, unknown>> = [];
   // Die Antwort wird festgehalten, damit sich der Zustand „wird gesendet“ prüfen lässt.
   let releaseWrite: () => void = () => undefined;
-  const writeMayFinish = new Promise<void>((resolve) => { releaseWrite = resolve; });
+  const writeMayFinish = new Promise<void>((resolve) => {
+    releaseWrite = resolve;
+  });
   await page.route("**/api/osm/development/check-date", async (route) => {
     expect(route.request().method()).toBe("POST");
     writeRequests.push(route.request().postDataJSON() as Record<string, unknown>);
@@ -430,21 +563,51 @@ test("the development-session preview sends one explicitly confirmed, versioned 
   // Nach dem Speichern darf der Hinweis erst recht nicht neben der Erfolgsmeldung stehen.
   await expect(page.locator(".capture-content")).not.toContainText("Nur eine Vorschau");
   expect(writeRequests).toHaveLength(1);
-  expect(writeRequests[0]).toMatchObject({ confirmed: true, target: "node/123", expected_version: 7, expected_check_date: "2025-10-20" });
+  expect(writeRequests[0]).toMatchObject({
+    confirmed: true,
+    target: "node/123",
+    expected_version: 7,
+    expected_check_date: "2025-10-20",
+  });
   expect(writeRequests[0].operation_id).toMatch(/^[0-9a-f-]{36}$/u);
 });
 
-test("an uncertain test-server response survives reload and retries with the same operation ID", async ({ page, context }) => {
+test("an uncertain test-server response survives reload and retries with the same operation ID", async ({
+  page,
+  context,
+}) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
-    authenticated: true, loginAvailable: true, developmentLoginAvailable: true,
-    developmentSession: true, developmentWriteAvailable: true, developmentWriteOwnerHash: testDevelopmentOwnerHash,
-  } }));
-  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
-    status: "complete", coverage_radius_meters: 112,
-    candidates: [{ id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2025-10-20" } }],
-  } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: true,
+        loginAvailable: true,
+        developmentLoginAvailable: true,
+        developmentSession: true,
+        developmentWriteAvailable: true,
+        developmentWriteOwnerHash: testDevelopmentOwnerHash,
+      },
+    }),
+  );
+  await page.route("**/api/osm/candidates/search", (route) =>
+    route.fulfill({
+      json: {
+        status: "complete",
+        coverage_radius_meters: 112,
+        candidates: [
+          {
+            id: "node/123",
+            osmType: "node",
+            version: 7,
+            coordinateQuality: "exact",
+            position: { latitude: 52.52001, longitude: 13.40501 },
+            tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2025-10-20" },
+          },
+        ],
+      },
+    }),
+  );
   const operationIds: unknown[] = [];
   let attempts = 0;
   await page.route("**/api/osm/development/check-date", async (route) => {
@@ -473,25 +636,60 @@ test("an uncertain test-server response survives reload and retries with the sam
 test("an expired saved write is discarded instead of opening a stale recovery screen", async ({ page }) => {
   await page.addInitScript(() => {
     const now = Date.now();
-    localStorage.setItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", JSON.stringify({
-      version: 1, savedAt: now - 8 * 24 * 60 * 60 * 1_000, expiresAt: now - 24 * 60 * 60 * 1_000,
-      request: { kind: "check-date", operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", target: "node/42", candidateLabel: "Rathaus", expectedVersion: 3, expectedCheckDate: null, observedOn: "2026-11-14" },
-    }));
+    localStorage.setItem(
+      "aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab",
+      JSON.stringify({
+        version: 1,
+        savedAt: now - 8 * 24 * 60 * 60 * 1_000,
+        expiresAt: now - 24 * 60 * 60 * 1_000,
+        request: {
+          kind: "check-date",
+          operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab",
+          target: "node/42",
+          candidateLabel: "Rathaus",
+          expectedVersion: 3,
+          expectedCheckDate: null,
+          observedOn: "2026-11-14",
+        },
+      }),
+    );
   });
   await page.goto("/");
   await expect(page.locator("#camera-input")).toBeAttached();
   await expect(page.locator(".capture-content")).not.toContainText("Ergebnis unklar");
-  expect(await page.evaluate(() => localStorage.getItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"))).toBeNull();
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"),
+    ),
+  ).toBeNull();
 });
 
 test("a pending write from the previous session-storage format is migrated", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
-    authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true, developmentWriteOwnerHash: testDevelopmentOwnerHash,
-  } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: true,
+        loginAvailable: true,
+        developmentLoginAvailable: true,
+        developmentSession: true,
+        developmentWriteAvailable: true,
+        developmentWriteOwnerHash: testDevelopmentOwnerHash,
+      },
+    }),
+  );
   await page.addInitScript(() => {
-    sessionStorage.setItem("aedjaeger-pending-osm-development-write", JSON.stringify({
-      kind: "check-date", operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", target: "node/42", candidateLabel: "Rathaus", expectedVersion: 3, expectedCheckDate: null, observedOn: "2026-11-14",
-    }));
+    sessionStorage.setItem(
+      "aedjaeger-pending-osm-development-write",
+      JSON.stringify({
+        kind: "check-date",
+        operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab",
+        target: "node/42",
+        candidateLabel: "Rathaus",
+        expectedVersion: 3,
+        expectedCheckDate: null,
+        observedOn: "2026-11-14",
+      }),
+    );
   });
   await page.goto("/");
   await expect(page.getByRole("button", { name: "Testserver: Status erneut prüfen" })).toBeVisible();
@@ -499,22 +697,43 @@ test("a pending write from the previous session-storage format is migrated", asy
     local: localStorage.getItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"),
     legacy: sessionStorage.getItem("aedjaeger-pending-osm-development-write"),
   }));
-  expect(JSON.parse(storage.local ?? "{}")).toMatchObject({ version: 1, request: { operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab" } });
+  expect(JSON.parse(storage.local ?? "{}")).toMatchObject({
+    version: 1,
+    request: { operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab" },
+  });
   expect(storage.legacy).toBeNull();
 });
 
 test("a legacy pending write still recovers when localStorage migration fails", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
-    authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true,
-    developmentWriteAvailable: true, developmentWriteOwnerHash: testDevelopmentOwnerHash,
-  } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: true,
+        loginAvailable: true,
+        developmentLoginAvailable: true,
+        developmentSession: true,
+        developmentWriteAvailable: true,
+        developmentWriteOwnerHash: testDevelopmentOwnerHash,
+      },
+    }),
+  );
   await page.addInitScript(() => {
-    sessionStorage.setItem("aedjaeger-pending-osm-development-write", JSON.stringify({
-      kind: "check-date", operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", target: "node/42", candidateLabel: "Rathaus", expectedVersion: 3, expectedCheckDate: null, observedOn: "2026-11-14",
-    }));
+    sessionStorage.setItem(
+      "aedjaeger-pending-osm-development-write",
+      JSON.stringify({
+        kind: "check-date",
+        operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab",
+        target: "node/42",
+        candidateLabel: "Rathaus",
+        expectedVersion: 3,
+        expectedCheckDate: null,
+        observedOn: "2026-11-14",
+      }),
+    );
     const originalSetItem = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key, value) {
-      if (key.startsWith("aedjaeger-pending-osm-development-write:")) throw new DOMException("quota exceeded", "QuotaExceededError");
+      if (key.startsWith("aedjaeger-pending-osm-development-write:"))
+        throw new DOMException("quota exceeded", "QuotaExceededError");
       originalSetItem.call(this, key, value);
     };
   });
@@ -528,43 +747,90 @@ test("a legacy pending write still recovers when localStorage migration fails", 
 
 test("a pending write stays visible while signed out and continue starts test-server sign-in", async ({ page }) => {
   let testServerLoginStarted = false;
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
-    authenticated: false, loginAvailable: true, developmentLoginAvailable: true, developmentSession: false,
-  } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: false,
+        loginAvailable: true,
+        developmentLoginAvailable: true,
+        developmentSession: false,
+      },
+    }),
+  );
   await page.route("**/api/auth/osm/development/start", async (route) => {
     testServerLoginStarted = true;
     await route.fulfill({ status: 200, contentType: "text/html", body: "<title>Testserver login</title>" });
   });
   await page.addInitScript(() => {
     const now = Date.now();
-    localStorage.setItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", JSON.stringify({
-      version: 1, savedAt: now, expiresAt: now + 7 * 24 * 60 * 60 * 1_000,
-      request: { kind: "check-date", operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", target: "node/42", candidateLabel: "Rathaus", expectedVersion: 3, expectedCheckDate: null, observedOn: "2026-11-14" },
-    }));
+    localStorage.setItem(
+      "aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab",
+      JSON.stringify({
+        version: 1,
+        savedAt: now,
+        expiresAt: now + 7 * 24 * 60 * 60 * 1_000,
+        request: {
+          kind: "check-date",
+          operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab",
+          target: "node/42",
+          candidateLabel: "Rathaus",
+          expectedVersion: 3,
+          expectedCheckDate: null,
+          observedOn: "2026-11-14",
+        },
+      }),
+    );
   });
   await page.goto("/");
   await expect(page.locator(".login-status-wrap")).toContainText("Melde dich beim OSM-Testserver an");
   await page.getByRole("button", { name: "Weiter" }).click();
   await expect(page).toHaveURL(/\/api\/auth\/osm\/development\/start$/u);
   expect(testServerLoginStarted).toBe(true);
-  expect(await page.evaluate(() => localStorage.getItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"))).not.toBeNull();
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"),
+    ),
+  ).not.toBeNull();
 });
 
 test("a restored pending write uses its saved operation ID and ends with a clear success action", async ({ page }) => {
   const operationIds: unknown[] = [];
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
-    authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true, developmentWriteOwnerHash: testDevelopmentOwnerHash,
-  } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: true,
+        loginAvailable: true,
+        developmentLoginAvailable: true,
+        developmentSession: true,
+        developmentWriteAvailable: true,
+        developmentWriteOwnerHash: testDevelopmentOwnerHash,
+      },
+    }),
+  );
   await page.route("**/api/osm/development/check-date", async (route) => {
     operationIds.push((route.request().postDataJSON() as Record<string, unknown>).operation_id);
     await route.fulfill({ json: { status: "complete", version: 9 } });
   });
   await page.addInitScript(() => {
     const now = Date.now();
-    localStorage.setItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", JSON.stringify({
-      version: 1, savedAt: now, expiresAt: now + 7 * 24 * 60 * 60 * 1_000, ownerHash: "a".repeat(64),
-      request: { kind: "check-date", operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", target: "node/42", candidateLabel: "Rathaus", expectedVersion: 3, expectedCheckDate: null, observedOn: "2026-11-14" },
-    }));
+    localStorage.setItem(
+      "aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab",
+      JSON.stringify({
+        version: 1,
+        savedAt: now,
+        expiresAt: now + 7 * 24 * 60 * 60 * 1_000,
+        ownerHash: "a".repeat(64),
+        request: {
+          kind: "check-date",
+          operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab",
+          target: "node/42",
+          candidateLabel: "Rathaus",
+          expectedVersion: 3,
+          expectedCheckDate: null,
+          observedOn: "2026-11-14",
+        },
+      }),
+    );
   });
   await page.goto("/");
   await page.getByRole("button", { name: "Testserver: Status erneut prüfen" }).click();
@@ -572,31 +838,61 @@ test("a restored pending write uses its saved operation ID and ends with a clear
   await expect(page.locator(".capture-content .status-good")).toBeVisible();
   await expect(page.getByRole("button", { name: "Nächsten AED fotografieren" })).toBeVisible();
   expect(operationIds).toEqual(["d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"]);
-  expect(await page.evaluate(() => localStorage.getItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"))).toBeNull();
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"),
+    ),
+  ).toBeNull();
 });
 
 test("a restored write is not submitted under a different OSM test-server account", async ({ page }) => {
   let writes = 0;
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
-    authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true,
-    developmentWriteAvailable: true, developmentWriteOwnerHash: "b".repeat(64),
-  } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: true,
+        loginAvailable: true,
+        developmentLoginAvailable: true,
+        developmentSession: true,
+        developmentWriteAvailable: true,
+        developmentWriteOwnerHash: "b".repeat(64),
+      },
+    }),
+  );
   await page.route("**/api/osm/development/check-date", async (route) => {
     writes += 1;
     await route.fulfill({ json: { status: "complete", version: 10 } });
   });
   await page.addInitScript(() => {
     const now = Date.now();
-    localStorage.setItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", JSON.stringify({
-      version: 1, savedAt: now, expiresAt: now + 7 * 24 * 60 * 60 * 1_000, ownerHash: "a".repeat(64),
-      request: { kind: "check-date", operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", target: "node/42", candidateLabel: "Rathaus", expectedVersion: 3, expectedCheckDate: null, observedOn: "2026-11-14" },
-    }));
+    localStorage.setItem(
+      "aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab",
+      JSON.stringify({
+        version: 1,
+        savedAt: now,
+        expiresAt: now + 7 * 24 * 60 * 60 * 1_000,
+        ownerHash: "a".repeat(64),
+        request: {
+          kind: "check-date",
+          operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab",
+          target: "node/42",
+          candidateLabel: "Rathaus",
+          expectedVersion: 3,
+          expectedCheckDate: null,
+          observedOn: "2026-11-14",
+        },
+      }),
+    );
   });
   await page.goto("/");
   await expect(page.locator(".capture-content")).toContainText("anderen OSM-Testserver-Konto");
   await expect(page.locator('[data-action="continue-recovery"]')).toHaveCount(0);
   expect(writes).toBe(0);
-  expect(await page.evaluate(() => localStorage.getItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"))).not.toBeNull();
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"),
+    ),
+  ).not.toBeNull();
 });
 
 test("a recovery identity mismatch keeps the write when another tab changed the shared session", async ({ page }) => {
@@ -604,10 +900,16 @@ test("a recovery identity mismatch keeps the write when another tab changed the 
   let writes = 0;
   await page.route("**/api/auth/session", (route) => {
     sessionChecks += 1;
-    return route.fulfill({ json: {
-      authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true,
-      developmentWriteAvailable: true, developmentWriteOwnerHash: sessionChecks === 1 ? "a".repeat(64) : "b".repeat(64),
-    } });
+    return route.fulfill({
+      json: {
+        authenticated: true,
+        loginAvailable: true,
+        developmentLoginAvailable: true,
+        developmentSession: true,
+        developmentWriteAvailable: true,
+        developmentWriteOwnerHash: sessionChecks === 1 ? "a".repeat(64) : "b".repeat(64),
+      },
+    });
   });
   await page.route("**/api/osm/development/check-date", async (route) => {
     writes += 1;
@@ -615,10 +917,24 @@ test("a recovery identity mismatch keeps the write when another tab changed the 
   });
   await page.addInitScript(() => {
     const now = Date.now();
-    localStorage.setItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", JSON.stringify({
-      version: 1, savedAt: now, expiresAt: now + 7 * 24 * 60 * 60 * 1_000, ownerHash: "a".repeat(64),
-      request: { kind: "check-date", operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab", target: "node/42", candidateLabel: "Rathaus", expectedVersion: 3, expectedCheckDate: null, observedOn: "2026-11-14" },
-    }));
+    localStorage.setItem(
+      "aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab",
+      JSON.stringify({
+        version: 1,
+        savedAt: now,
+        expiresAt: now + 7 * 24 * 60 * 60 * 1_000,
+        ownerHash: "a".repeat(64),
+        request: {
+          kind: "check-date",
+          operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab",
+          target: "node/42",
+          candidateLabel: "Rathaus",
+          expectedVersion: 3,
+          expectedCheckDate: null,
+          observedOn: "2026-11-14",
+        },
+      }),
+    );
   });
 
   await page.goto("/");
@@ -627,13 +943,21 @@ test("a recovery identity mismatch keeps the write when another tab changed the 
   await expect(page.locator(".capture-content")).toContainText("anderen OSM-Testserver-Konto");
   await expect(page.locator('[data-action="continue-recovery"]')).toHaveCount(0);
   expect(writes).toBe(1);
-  expect(await page.evaluate(() => localStorage.getItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"))).not.toBeNull();
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab"),
+    ),
+  ).not.toBeNull();
 });
 
 test("separate tabs keep their own pending write when one tab completes", async ({ page, context }) => {
   const otherTab = await context.newPage();
   const first = await openExistingAedPreview(page, context, { nodes: [freshNode({})] });
-  const second = await openExistingAedPreview(otherTab, context, { nodes: [freshNode({})], writeStatus: 202, writeBody: { status: "uncertain" } });
+  const second = await openExistingAedPreview(otherTab, context, {
+    nodes: [freshNode({})],
+    writeStatus: 202,
+    writeBody: { status: "uncertain" },
+  });
 
   await otherTab.getByRole("button", { name: "Testserver: Prüfdatum speichern" }).click();
   await expect(otherTab.getByRole("status")).toContainText("Ergebnis unklar");
@@ -642,14 +966,29 @@ test("separate tabs keep their own pending write when one tab completes", async 
   await expect(page.getByRole("status")).toContainText("Vor-Ort-Prüfung gespeichert");
 
   expect(first.writes[0].operation_id).not.toBe(secondOperationId);
-  expect(await page.evaluate((operationId) => localStorage.getItem(`aedjaeger-pending-osm-development-write:${operationId}`), secondOperationId)).not.toBeNull();
-  expect(await page.evaluate((operationId) => localStorage.getItem(`aedjaeger-pending-osm-development-write:${operationId}`), first.writes[0].operation_id)).toBeNull();
+  expect(
+    await page.evaluate(
+      (operationId) => localStorage.getItem(`aedjaeger-pending-osm-development-write:${operationId}`),
+      secondOperationId,
+    ),
+  ).not.toBeNull();
+  expect(
+    await page.evaluate(
+      (operationId) => localStorage.getItem(`aedjaeger-pending-osm-development-write:${operationId}`),
+      first.writes[0].operation_id,
+    ),
+  ).toBeNull();
 });
 
-test("the information dialog and sound choice survive a confirmed save arriving in the background", async ({ page, context }) => {
+test("the information dialog and sound choice survive a confirmed save arriving in the background", async ({
+  page,
+  context,
+}) => {
   await openExistingAedPreview(page, context, { nodes: [freshNode({})] });
   let release: () => void = () => undefined;
-  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   await page.route("**/api/osm/development/check-date", async (route) => {
     await gate;
     await route.fulfill({ json: { status: "complete", version: 10 } });
@@ -667,9 +1006,26 @@ test("the information dialog and sound choice survive a confirmed save arriving 
 
 test("a new AED preview requires confirmed GPS position and a complete empty search", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
-  await page.route("https://tile.openstreetmap.org/**", (route) => route.fulfill({ status: 200, contentType: "image/svg+xml", body: "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"256\"><rect width=\"256\" height=\"256\" fill=\"#e5ece3\"/></svg>" }));
+  await page.route("https://tile.openstreetmap.org/**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "image/svg+xml",
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#e5ece3"/></svg>',
+    }),
+  );
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true, developmentWriteOwnerHash: testDevelopmentOwnerHash } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: true,
+        loginAvailable: true,
+        developmentLoginAvailable: true,
+        developmentSession: true,
+        developmentWriteAvailable: true,
+        developmentWriteOwnerHash: testDevelopmentOwnerHash,
+      },
+    }),
+  );
   let searchRequests = 0;
   const nonSearchOsmRequests: string[] = [];
   page.on("request", (request) => {
@@ -706,7 +1062,9 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
 
   await page.getByRole("button", { name: "Neuen AED vorbereiten" }).click();
   await expect(page.getByRole("heading", { name: "Vorschau für neuen AED" })).toBeVisible();
-  await expect(page.locator(".capture-content")).toContainText("Bestätige zuerst, dass der AED genau an diesem GPS-Punkt steht.");
+  await expect(page.locator(".capture-content")).toContainText(
+    "Bestätige zuerst, dass der AED genau an diesem GPS-Punkt steht.",
+  );
   await expect(page.locator("[data-action='confirm']")).toHaveCount(0);
   await page.getByRole("button", { name: "Zurück", exact: true }).click();
 
@@ -717,10 +1075,18 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
     map.setPointerCapture = () => {};
     map.hasPointerCapture = () => false;
     const dispatch = (type: string, pointerId: number, clientX: number, clientY: number) => {
-      map.dispatchEvent(new PointerEvent(type, {
-        bubbles: true, cancelable: true, pointerId, pointerType: "touch",
-        isPrimary: pointerId === 1, button: 0, clientX, clientY,
-      }));
+      map.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          pointerId,
+          pointerType: "touch",
+          isPrimary: pointerId === 1,
+          button: 0,
+          clientX,
+          clientY,
+        }),
+      );
     };
     dispatch("pointerdown", 1, 120, 120);
     dispatch("pointermove", 1, 170, 120);
@@ -730,7 +1096,11 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   });
   await expect(page.locator("#new-aed-position-confirmed")).not.toBeChecked();
   await expect(page.locator("#new-aed-position-coordinates")).not.toContainText("52.52000, 13.40500");
-  expect(await page.locator("#new-aed-position-map .position-map-tiles").evaluate((layer) => (layer as HTMLElement).style.transform)).toBe("");
+  expect(
+    await page
+      .locator("#new-aed-position-map .position-map-tiles")
+      .evaluate((layer) => (layer as HTMLElement).style.transform),
+  ).toBe("");
 
   await page.locator("#new-aed-position-confirmed").check();
   await page.locator("#new-aed-position-map").evaluate((element) => {
@@ -738,10 +1108,18 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
     map.setPointerCapture = () => {};
     map.hasPointerCapture = () => false;
     const dispatch = (type: string, pointerId: number, clientX: number, clientY: number) => {
-      map.dispatchEvent(new PointerEvent(type, {
-        bubbles: true, cancelable: true, pointerId, pointerType: "touch",
-        isPrimary: pointerId === 3, button: 0, clientX, clientY,
-      }));
+      map.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          pointerId,
+          pointerType: "touch",
+          isPrimary: pointerId === 3,
+          button: 0,
+          clientX,
+          clientY,
+        }),
+      );
     };
     dispatch("pointerdown", 3, 120, 120);
     dispatch("pointerdown", 4, 220, 120);
@@ -749,7 +1127,10 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
     dispatch("pointerup", 4, 160, 120);
     dispatch("pointerup", 3, 120, 120);
   });
-  const zoomAfterPinch = await page.locator("#new-aed-position-map .position-map-tiles img").first().getAttribute("src");
+  const zoomAfterPinch = await page
+    .locator("#new-aed-position-map .position-map-tiles img")
+    .first()
+    .getAttribute("src");
   expect(zoomAfterPinch).not.toBeNull();
   expect(Number(new URL(zoomAfterPinch!).pathname.split("/")[1])).toBeLessThan(19);
   await expect(page.locator("#new-aed-position-confirmed")).toBeChecked();
@@ -759,10 +1140,18 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
     map.setPointerCapture = () => {};
     map.hasPointerCapture = () => false;
     const dispatch = (type: string, pointerId: number, clientX: number, clientY: number) => {
-      map.dispatchEvent(new PointerEvent(type, {
-        bubbles: true, cancelable: true, pointerId, pointerType: "touch",
-        isPrimary: true, button: 0, clientX, clientY,
-      }));
+      map.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          pointerId,
+          pointerType: "touch",
+          isPrimary: true,
+          button: 0,
+          clientX,
+          clientY,
+        }),
+      );
     };
     dispatch("pointerdown", 3, 120, 120);
     dispatch("pointermove", 3, 140, 120);
@@ -809,7 +1198,9 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   const createResponse = page.waitForResponse("**/api/osm/development/create-node");
   await createButton.click();
   await expect.poll(() => createRequest).toBeDefined();
-  const createResponseBody = await createResponse.then((response) => response.json() as Promise<Record<string, unknown>>);
+  const createResponseBody = await createResponse.then(
+    (response) => response.json() as Promise<Record<string, unknown>>,
+  );
   expect(createResponseBody).toEqual({ status: "complete", node_id: "456", version: 1 });
   await expect(page.getByRole("status")).toContainText("Neuer AED wurde eingetragen");
   // Nach dem Speichern steht „nur eine Vorschau“ nicht neben der Erfolgsmeldung.
@@ -829,12 +1220,43 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
 test("a reviewed nearby AED can be rejected before preparing a separate new entry", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("https://tile.openstreetmap.org/**", (route) => route.fulfill({ status: 200, contentType: "image/svg+xml", body: "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"256\"><rect width=\"256\" height=\"256\" fill=\"#e5ece3\"/></svg>" }));
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true, developmentWriteOwnerHash: testDevelopmentOwnerHash } }));
-  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
-    status: "complete", coverage_radius_meters: 112,
-    candidates: [{ id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Rathaus" } }],
-  } }));
+  await page.route("https://tile.openstreetmap.org/**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "image/svg+xml",
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#e5ece3"/></svg>',
+    }),
+  );
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: true,
+        loginAvailable: true,
+        developmentLoginAvailable: true,
+        developmentSession: true,
+        developmentWriteAvailable: true,
+        developmentWriteOwnerHash: testDevelopmentOwnerHash,
+      },
+    }),
+  );
+  await page.route("**/api/osm/candidates/search", (route) =>
+    route.fulfill({
+      json: {
+        status: "complete",
+        coverage_radius_meters: 112,
+        candidates: [
+          {
+            id: "node/123",
+            osmType: "node",
+            version: 7,
+            coordinateQuality: "exact",
+            position: { latitude: 52.52001, longitude: 13.40501 },
+            tags: { emergency: "defibrillator", name: "Rathaus" },
+          },
+        ],
+      },
+    }),
+  );
   let createRequest: Record<string, unknown> | undefined;
   await page.route("**/api/osm/development/create-node", async (route) => {
     createRequest = route.request().postDataJSON() as Record<string, unknown>;
@@ -856,18 +1278,28 @@ test("a reviewed nearby AED can be rejected before preparing a separate new entr
   await page.getByRole("button", { name: "Neuen AED vorbereiten" }).click();
   await page.getByRole("button", { name: "Weiter ohne Angaben" }).click();
   await expect(page.getByRole("heading", { name: "Vorschau für neuen AED" })).toBeVisible();
-  await expect(page.locator(".capture-content")).toContainText("Die angezeigten nahen AED-Einträge wurden als andere Geräte bestätigt.");
+  await expect(page.locator(".capture-content")).toContainText(
+    "Die angezeigten nahen AED-Einträge wurden als andere Geräte bestätigt.",
+  );
   await expect(page.getByRole("button", { name: "Testserver: AED eintragen" })).toBeDisabled();
   await page.locator("#new-aed-absence-confirmed").check();
   await page.getByRole("button", { name: "Testserver: AED eintragen" }).click();
   await expect.poll(() => createRequest).toBeDefined();
-  expect(createRequest).toMatchObject({ confirmed: true, absence_confirmed: true, confirmed_different_candidate_ids: ["node/123"] });
+  expect(createRequest).toMatchObject({
+    confirmed: true,
+    absence_confirmed: true,
+    confirmed_different_candidate_ids: ["node/123"],
+  });
 });
 
 test("a partial nearby search never offers a new AED preview", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
   let searchRequests = 0;
   await page.route("**/api/osm/candidates/search", async (route) => {
     searchRequests += 1;
@@ -885,12 +1317,30 @@ test("a partial nearby search never offers a new AED preview", async ({ page, co
 test("the search result hides technical snapshot details and raw OSM identifiers", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
-  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
-    status: "complete", coverage_radius_meters: 112,
-    candidates: [{ id: "node/123", osmType: "node", coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Rathaus" } }],
-    snapshot_id: "aed-0123456789abcdef0123", data_until: "2026-11-08T12:00:00.000Z",
-  } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
+  await page.route("**/api/osm/candidates/search", (route) =>
+    route.fulfill({
+      json: {
+        status: "complete",
+        coverage_radius_meters: 112,
+        candidates: [
+          {
+            id: "node/123",
+            osmType: "node",
+            coordinateQuality: "exact",
+            position: { latitude: 52.52001, longitude: 13.40501 },
+            tags: { emergency: "defibrillator", name: "Rathaus" },
+          },
+        ],
+        snapshot_id: "aed-0123456789abcdef0123",
+        data_until: "2026-11-08T12:00:00.000Z",
+      },
+    }),
+  );
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
@@ -907,8 +1357,14 @@ test("the search result hides technical snapshot details and raw OSM identifiers
 test("an unavailable regional snapshot cannot offer a new AED", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
-  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ status: 503, json: { error: "coverage_unavailable" } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
+  await page.route("**/api/osm/candidates/search", (route) =>
+    route.fulfill({ status: 503, json: { error: "coverage_unavailable" } }),
+  );
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
@@ -917,29 +1373,46 @@ test("an unavailable regional snapshot cannot offer a new AED", async ({ page, c
   await expect(page.getByRole("button", { name: "Neuen AED vorbereiten" })).toHaveCount(0);
 });
 
-test("a location outside the supported region gets a clear coverage message without a retry", async ({ page, context }) => {
+test("a location outside the supported region gets a clear coverage message without a retry", async ({
+  page,
+  context,
+}) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
-  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ status: 422, json: { error: "outside_coverage" } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
+  await page.route("**/api/osm/candidates/search", (route) =>
+    route.fulfill({ status: 422, json: { error: "outside_coverage" } }),
+  );
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
   await beginNearbySearch(page);
-  await expect(page.locator(".capture-content")).toContainText("Dieser Standort liegt außerhalb der AED-Datenabdeckung");
+  await expect(page.locator(".capture-content")).toContainText(
+    "Dieser Standort liegt außerhalb der AED-Datenabdeckung",
+  );
   await expect(page.getByRole("button", { name: "Standort und AEDs erneut suchen" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Neuen AED vorbereiten" })).toHaveCount(0);
 });
 
 test("denied location access does not send a nearby search request", async ({ page }) => {
   await page.addInitScript(() => {
-    Object.defineProperty(navigator, "geolocation", { value: {
-      getCurrentPosition(_success: PositionCallback, error: PositionErrorCallback) {
-        error({ code: 1, PERMISSION_DENIED: 1, message: "Denied" } as GeolocationPositionError);
+    Object.defineProperty(navigator, "geolocation", {
+      value: {
+        getCurrentPosition(_success: PositionCallback, error: PositionErrorCallback) {
+          error({ code: 1, PERMISSION_DENIED: 1, message: "Denied" } as GeolocationPositionError);
+        },
       },
-    } });
+    });
   });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
   let searchRequests = 0;
   await page.route("**/api/osm/candidates/search", async (route) => {
     searchRequests += 1;
@@ -957,21 +1430,28 @@ test("denied location access does not send a nearby search request", async ({ pa
 test("a denied phone location still allows choosing and searching an explicit map point", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(window, "__locationRequests", { value: 0, writable: true });
-    Object.defineProperty(navigator, "geolocation", { value: {
-      getCurrentPosition(_success: PositionCallback, error: PositionErrorCallback) {
-        (window as typeof window & { __locationRequests: number }).__locationRequests += 1;
-        error({ code: 1, PERMISSION_DENIED: 1, message: "Denied" } as GeolocationPositionError);
+    Object.defineProperty(navigator, "geolocation", {
+      value: {
+        getCurrentPosition(_success: PositionCallback, error: PositionErrorCallback) {
+          (window as typeof window & { __locationRequests: number }).__locationRequests += 1;
+          error({ code: 1, PERMISSION_DENIED: 1, message: "Denied" } as GeolocationPositionError);
+        },
       },
-    } });
+    });
   });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
   let searchLocation: { latitude: number; longitude: number; accuracy_meters: number } | undefined;
   await page.route("**/api/osm/candidates/search", async (route) => {
     searchLocation = route.request().postDataJSON() as typeof searchLocation;
     await route.fulfill({ json: { status: "complete", coverage_radius_meters: 100, candidates: [] } });
   });
   await page.goto("/");
-  const locationRequests = () => page.evaluate(() => (window as typeof window & { __locationRequests: number }).__locationRequests);
+  const locationRequests = () =>
+    page.evaluate(() => (window as typeof window & { __locationRequests: number }).__locationRequests);
   // Die einmalige Standortanfrage nach dem Anmelden ist die einzige Abfrage; sie wird hier abgelehnt.
   await expect.poll(locationRequests).toBe(1);
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
@@ -1005,8 +1485,14 @@ test("a denied phone location still allows choosing and searching an explicit ma
 test("an expired OSM session does not offer a search retry that cannot work", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
-  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ status: 401, json: { error: "authentication_required" } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
+  await page.route("**/api/osm/candidates/search", (route) =>
+    route.fulfill({ status: 401, json: { error: "authentication_required" } }),
+  );
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
@@ -1021,7 +1507,11 @@ test("an expired OSM session does not offer a search retry that cannot work", as
 test("an incomplete search cannot suggest a new AED and offers a retry", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
   let searchRequests = 0;
   await page.route("**/api/osm/candidates/search", async (route) => {
     searchRequests += 1;
@@ -1033,9 +1523,11 @@ test("an incomplete search cannot suggest a new AED and offers a retry", async (
       await route.fulfill({ status: 502, headers: { "Retry-After": "2" }, json: { error: "source_unavailable" } });
       return;
     }
-    await route.fulfill(searchRequests === 1
-      ? { status: 503, headers: { "Retry-After": "2" }, json: { error: "coverage_unavailable" } }
-      : { json: { status: "complete", coverage_radius_meters: 112, candidates: [] } });
+    await route.fulfill(
+      searchRequests === 1
+        ? { status: 503, headers: { "Retry-After": "2" }, json: { error: "coverage_unavailable" } }
+        : { json: { status: "complete", coverage_radius_meters: 112, candidates: [] } },
+    );
   });
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
@@ -1067,7 +1559,11 @@ test("an incomplete search cannot suggest a new AED and offers a retry", async (
 test("an imprecise phone fix is not sent and retry acquires a fresh location", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 150 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
   let searchRequests = 0;
   await page.route("**/api/osm/candidates/search", async (route) => {
     searchRequests += 1;
@@ -1091,8 +1587,14 @@ test("an imprecise phone fix is not sent and retry acquires a fresh location", a
 test("an expired server session is shown as signed out after a 401", async ({ page, context }) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
-  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ status: 401, json: { error: "authentication_required" } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
+  await page.route("**/api/osm/candidates/search", (route) =>
+    route.fulfill({ status: 401, json: { error: "authentication_required" } }),
+  );
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
@@ -1105,17 +1607,33 @@ test("an expired server session is shown as signed out after a 401", async ({ pa
 });
 
 test("the OSM login link stays hidden when the Worker has no OAuth setup", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: false, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: false,
+        loginAvailable: false,
+        developmentLoginAvailable: false,
+        developmentSession: false,
+      },
+    }),
+  );
   await page.goto("/");
 
   await expect(page.locator(".login-card")).toContainText("OpenStreetMap-Anmeldung ist noch nicht eingerichtet");
-  await expect(page.getByRole("link", { name: "OpenStreetMap-Konto erstellen" })).toHaveAttribute("href", "https://www.openstreetmap.org/user/new");
+  await expect(page.getByRole("link", { name: "OpenStreetMap-Konto erstellen" })).toHaveAttribute(
+    "href",
+    "https://www.openstreetmap.org/user/new",
+  );
   await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toHaveCount(0);
 });
 
 test("an authenticated user can end the OSM session without exposing profile data", async ({ page }) => {
   let authenticated = true;
-  page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
   page.route("**/api/auth/logout", async (route) => {
     expect(route.request().method()).toBe("POST");
     authenticated = false;
@@ -1138,7 +1656,11 @@ test("an authenticated user can end the OSM session without exposing profile dat
 test("a failed logout keeps a retry action until the OSM session has ended", async ({ page }) => {
   let authenticated = true;
   let logoutAttempts = 0;
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
   await page.route("**/api/auth/logout", async (route) => {
     logoutAttempts += 1;
     if (logoutAttempts === 1) {
@@ -1161,7 +1683,11 @@ test("a failed logout keeps a retry action until the OSM session has ended", asy
 });
 
 test("a failed OAuth return shows a localized retry message and removes the callback marker", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
   await page.goto("/?login=error");
 
   const errors = [
@@ -1176,20 +1702,39 @@ test("a failed OAuth return shows a localized retry message and removes the call
   for (const [index, language] of languageCodes.entries()) {
     await page.locator("#language").selectOption(language);
     await expect(page.locator(".login-card")).toContainText(errors[index]);
-    await expect(page.getByRole("link", { name: ["Mit OpenStreetMap anmelden", "Sign in with OpenStreetMap", "Zaloguj się przez OpenStreetMap", "OpenStreetMapでログイン", "Se connecter avec OpenStreetMap", "Iniciar sesión con OpenStreetMap"][index] })).toHaveAttribute("href", "/api/auth/osm/start");
+    await expect(
+      page.getByRole("link", {
+        name: [
+          "Mit OpenStreetMap anmelden",
+          "Sign in with OpenStreetMap",
+          "Zaloguj się przez OpenStreetMap",
+          "OpenStreetMapでログイン",
+          "Se connecter avec OpenStreetMap",
+          "Iniciar sesión con OpenStreetMap",
+        ][index],
+      }),
+    ).toHaveAttribute("href", "/api/auth/osm/start");
   }
   await expect(page).not.toHaveURL(/login=error/u);
 });
 
 test("signed-out visitors cannot select a photo", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "AEDjaeger braucht dein OpenStreetMap-Konto" })).toBeVisible();
   await expect(page.locator("#camera-input, #file-input, [data-action]")).toHaveCount(0);
 });
 
 test("the OSM test server login is still offered only when its OAuth setup is available", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
   await page.goto("/");
   await expect(page.getByRole("link", { name: "Mit OSM-Testserver anmelden" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Mit OpenStreetMap anmelden" })).toBeVisible();
@@ -1197,9 +1742,24 @@ test("the OSM test server login is still offered only when its OAuth setup is av
 
 test("the app stays locked while the OSM session check is pending", async ({ page }) => {
   let releaseSessionCheck: (() => void) | undefined;
-  await page.route("**/api/auth/session", (route) => new Promise<void>((resolve) => {
-    releaseSessionCheck = () => { void route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }).then(resolve); };
-  }));
+  await page.route(
+    "**/api/auth/session",
+    (route) =>
+      new Promise<void>((resolve) => {
+        releaseSessionCheck = () => {
+          void route
+            .fulfill({
+              json: {
+                authenticated: false,
+                loginAvailable: true,
+                developmentLoginAvailable: false,
+                developmentSession: false,
+              },
+            })
+            .then(resolve);
+        };
+      }),
+  );
   await page.goto("/");
   await expect(page.getByRole("status")).toContainText("OpenStreetMap-Anmeldung wird geprüft");
   await expect(page.locator("#camera-input, #file-input")).toHaveCount(0);
@@ -1213,7 +1773,14 @@ test("a session status connection error can be retried while the app remains loc
     checks += 1;
     return checks === 1
       ? route.fulfill({ status: 503, json: { error: "session_unavailable" } })
-      : route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } });
+      : route.fulfill({
+          json: {
+            authenticated: false,
+            loginAvailable: true,
+            developmentLoginAvailable: false,
+            developmentSession: false,
+          },
+        });
   });
   await page.goto("/");
   await expect(page.locator(".login-card")).toContainText("Anmeldung ist gerade nicht erreichbar");
@@ -1228,7 +1795,9 @@ test("a session status connection error can be retried while the app remains loc
 });
 
 test("a repeated session status error focuses the retry action", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ status: 503, json: { error: "session_unavailable" } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({ status: 503, json: { error: "session_unavailable" } }),
+  );
   await page.goto("/");
   const retry = page.getByRole("button", { name: "Erneut prüfen" });
   await retry.click();
@@ -1243,7 +1812,9 @@ test("keyboard focus indicators use a high-contrast color throughout the control
   for (const selector of controls) {
     const control = page.locator(selector);
     await control.focus();
-    await expect.poll(() => control.evaluate((element) => getComputedStyle(element).outlineColor)).toBe("rgb(23, 107, 75)");
+    await expect
+      .poll(() => control.evaluate((element) => getComputedStyle(element).outlineColor))
+      .toBe("rgb(23, 107, 75)");
   }
 });
 
@@ -1255,22 +1826,31 @@ test("a damaged image is rejected before the AED flow can start", async ({ page 
   await expect(alert).toBeFocused();
 });
 
-test("the installed app shell and hashed assets remain fetchable after going offline", async ({ page, context, browserName }) => {
+test("the installed app shell and hashed assets remain fetchable after going offline", async ({
+  page,
+  context,
+  browserName,
+}) => {
   test.skip(browserName !== "chromium", "Service-worker offline behavior has dedicated Chromium coverage.");
   // Insert a conflicting home page before AEDjaeger's first install to catch accidental global cache lookups.
   await page.addInitScript(async () => {
     const cache = await caches.open("aaa-other-feature-cache");
     const home = new Request(new URL("/", location.origin));
     if (!(await cache.match(home))) {
-      await cache.put(home, new Response("<!doctype html><title>Other feature cache</title><p>Other app</p>", {
-        headers: { "Content-Type": "text/html" },
-      }));
+      await cache.put(
+        home,
+        new Response("<!doctype html><title>Other feature cache</title><p>Other app</p>", {
+          headers: { "Content-Type": "text/html" },
+        }),
+      );
       await cache.put("/foreign-only.txt", new Response("foreign cache entry"));
     }
   });
   await page.goto("/");
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
-  const workerScript = await page.evaluate(async () => (await navigator.serviceWorker.getRegistration())?.active?.scriptURL ?? "");
+  const workerScript = await page.evaluate(
+    async () => (await navigator.serviceWorker.getRegistration())?.active?.scriptURL ?? "",
+  );
   expect(workerScript).toContain("revision=");
 
   const cachedAppAssets = await page.evaluate(async () => {
@@ -1284,10 +1864,16 @@ test("the installed app shell and hashed assets remain fetchable after going off
   expect(cachedAppAssets).toContain("/");
 
   await context.setOffline(true);
-  const offlineResponses = await page.evaluate(async (paths) => Promise.all(paths.map(async (path) => {
-    const response = await fetch(path);
-    return { path, ok: response.ok, size: (await response.text()).length };
-  })), ["/", ...cachedAppAssets.filter((path) => path.endsWith(".js") || path.endsWith(".css"))]);
+  const offlineResponses = await page.evaluate(
+    async (paths) =>
+      Promise.all(
+        paths.map(async (path) => {
+          const response = await fetch(path);
+          return { path, ok: response.ok, size: (await response.text()).length };
+        }),
+      ),
+    ["/", ...cachedAppAssets.filter((path) => path.endsWith(".js") || path.endsWith(".css"))],
+  );
   expect(offlineResponses.every((response) => response.ok && response.size > 0)).toBe(true);
 
   const offlineNavigation = await page.reload();
@@ -1348,7 +1934,9 @@ test("the ready screen introduction keeps readable contrast", async ({ page }) =
   await page.goto("/");
 
   const introduction = page.locator(".hero p");
-  await expect.poll(() => introduction.evaluate((element) => getComputedStyle(element).color)).toBe("rgb(98, 109, 102)");
+  await expect
+    .poll(() => introduction.evaluate((element) => getComputedStyle(element).color))
+    .toBe("rgb(98, 109, 102)");
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -1360,14 +1948,30 @@ test("the ready screen introduction keeps readable contrast", async ({ page }) =
 
 /** Eine gültige Beobachtung; einzelne Felder lassen sich pro Test überschreiben. */
 function visionObservation(scene: string) {
-  return { scene, device_count: scene === "device_visible" ? 1 : 0, readable_text: [], manufacturer: null, model: null, location_clues: [], image_issues: [] };
+  return {
+    scene,
+    device_count: scene === "device_visible" ? 1 : 0,
+    readable_text: [],
+    manufacturer: null,
+    model: null,
+    location_clues: [],
+    image_issues: [],
+  };
 }
 
 /** Meldet in der Sitzung, dass die Fotoprüfung für dieses Konto aktiv ist. */
 async function enablePhotoCheck(page: import("@playwright/test").Page): Promise<void> {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
-    authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false, photoCheckAvailable: true,
-  } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: true,
+        loginAvailable: true,
+        developmentLoginAvailable: false,
+        developmentSession: false,
+        photoCheckAvailable: true,
+      },
+    }),
+  );
 }
 
 test("a passed photo check continues like a confirmed sighting and uploads no metadata", async ({ page }) => {
@@ -1376,7 +1980,9 @@ test("a passed photo check continues like a confirmed sighting and uploads no me
   await page.route("**/api/vision/analyze", async (route) => {
     const body = route.request().postDataJSON() as Record<string, unknown>;
     uploads.push(body);
-    await route.fulfill({ json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("device_visible") } });
+    await route.fulfill({
+      json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("device_visible") },
+    });
   });
   const searchLocations: { latitude: number; longitude: number }[] = [];
   await page.route("**/api/osm/candidates/search", async (route) => {
@@ -1390,7 +1996,9 @@ test("a passed photo check continues like a confirmed sighting and uploads no me
   await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
 
   // Der Hinweis auf OpenAI steht VOR dem Tippen; die alte Zusage „bleibt auf dem Gerät“ ist weg.
-  await expect(page.locator(".capture-content")).toContainText("Das Foto geht ohne Standort und Metadaten zur Prüfung an OpenAI.");
+  await expect(page.locator(".capture-content")).toContainText(
+    "Das Foto geht ohne Standort und Metadaten zur Prüfung an OpenAI.",
+  );
   await expect(page.locator(".capture-content")).not.toContainText("nicht an einen Bilddienst gesendet");
   expect(uploads).toHaveLength(0);
 
@@ -1417,10 +2025,15 @@ test("a passed photo check continues like a confirmed sighting and uploads no me
 test("a photo without a recognizable AED is blocked and cannot start a search", async ({ page }) => {
   await enablePhotoCheck(page);
   let searches = 0;
-  await page.route("**/api/osm/candidates/search", async (route) => { searches += 1; await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }); });
+  await page.route("**/api/osm/candidates/search", async (route) => {
+    searches += 1;
+    await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } });
+  });
   await page.route("**/api/vision/analyze", async (route) => {
     const body = route.request().postDataJSON() as { request_id: string };
-    await route.fulfill({ json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("other_object") } });
+    await route.fulfill({
+      json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("other_object") },
+    });
   });
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
@@ -1439,10 +2052,15 @@ test("a photo without a recognizable AED is blocked and cannot start a search", 
 test("a rejected photo can still continue after two explicit confirmations", async ({ page }) => {
   await enablePhotoCheck(page);
   const searches: unknown[] = [];
-  await page.route("**/api/osm/candidates/search", async (route) => { searches.push(route.request().postDataJSON()); await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }); });
+  await page.route("**/api/osm/candidates/search", async (route) => {
+    searches.push(route.request().postDataJSON());
+    await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } });
+  });
   await page.route("**/api/vision/analyze", async (route) => {
     const body = route.request().postDataJSON() as { request_id: string };
-    await route.fulfill({ json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("other_object") } });
+    await route.fulfill({
+      json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("other_object") },
+    });
   });
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
@@ -1464,13 +2082,20 @@ test("a rejected photo can still continue after two explicit confirmations", asy
   expect(searches).toHaveLength(1);
 });
 
-test("the second confirmation can be abandoned, and the override is offered for unclear photos too", async ({ page }) => {
+test("the second confirmation can be abandoned, and the override is offered for unclear photos too", async ({
+  page,
+}) => {
   await enablePhotoCheck(page);
   let searches = 0;
-  await page.route("**/api/osm/candidates/search", async (route) => { searches += 1; await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }); });
+  await page.route("**/api/osm/candidates/search", async (route) => {
+    searches += 1;
+    await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } });
+  });
   await page.route("**/api/vision/analyze", async (route) => {
     const body = route.request().postDataJSON() as { request_id: string };
-    await route.fulfill({ json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("unclear") } });
+    await route.fulfill({
+      json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("unclear") },
+    });
   });
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
@@ -1489,7 +2114,9 @@ test("the override texts exist in all six languages", async ({ page }) => {
   await enablePhotoCheck(page);
   await page.route("**/api/vision/analyze", async (route) => {
     const body = route.request().postDataJSON() as { request_id: string };
-    await route.fulfill({ json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("other_object") } });
+    await route.fulfill({
+      json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("other_object") },
+    });
   });
   await page.goto("/");
   const expected: Record<string, { action: string; confirm: string }> = {
@@ -1514,7 +2141,9 @@ test("an unclear photo asks for a closer picture", async ({ page }) => {
   await enablePhotoCheck(page);
   await page.route("**/api/vision/analyze", async (route) => {
     const body = route.request().postDataJSON() as { request_id: string };
-    await route.fulfill({ json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("unclear") } });
+    await route.fulfill({
+      json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("unclear") },
+    });
   });
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
@@ -1524,15 +2153,37 @@ test("an unclear photo asks for a closer picture", async ({ page }) => {
 });
 
 for (const failure of [
-  { name: "the daily budget is used up", status: 429, body: { error: "analysis_budget_exceeded" }, code: "analysis_budget_exceeded (HTTP 429)" },
-  { name: "the provider is down", status: 502, body: { error: "analysis_failed", detail_status: 401, detail_code: "invalid_api_key" }, code: "analysis_failed (HTTP 502, OpenAI 401, invalid_api_key)" },
-  { name: "the budget table is missing", status: 503, body: { error: "analysis_budget_unavailable", detail_code: "missing_table" }, code: "analysis_budget_unavailable (HTTP 503, missing_table)" },
-  { name: "the response is malformed", status: 200, body: { unexpected: true }, code: "invalid_response (unexpected_shape)" },
+  {
+    name: "the daily budget is used up",
+    status: 429,
+    body: { error: "analysis_budget_exceeded" },
+    code: "analysis_budget_exceeded (HTTP 429)",
+  },
+  {
+    name: "the provider is down",
+    status: 502,
+    body: { error: "analysis_failed", detail_status: 401, detail_code: "invalid_api_key" },
+    code: "analysis_failed (HTTP 502, OpenAI 401, invalid_api_key)",
+  },
+  {
+    name: "the budget table is missing",
+    status: 503,
+    body: { error: "analysis_budget_unavailable", detail_code: "missing_table" },
+    code: "analysis_budget_unavailable (HTTP 503, missing_table)",
+  },
+  {
+    name: "the response is malformed",
+    status: 200,
+    body: { unexpected: true },
+    code: "invalid_response (unexpected_shape)",
+  },
 ]) {
   test(`when ${failure.name}, the person can still confirm the sighting themselves`, async ({ page }) => {
     await enablePhotoCheck(page);
     await page.route("**/api/vision/analyze", (route) => route.fulfill({ status: failure.status, json: failure.body }));
-    await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }));
+    await page.route("**/api/osm/candidates/search", (route) =>
+      route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }),
+    );
     await page.goto("/");
     await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
     await page.getByRole("button", { name: "AED gesehen – Foto prüfen" }).click();
@@ -1553,7 +2204,10 @@ for (const failure of [
 
 test("without the server flag the photo never leaves the device", async ({ page }) => {
   let uploads = 0;
-  await page.route("**/api/vision/analyze", async (route) => { uploads += 1; await route.fulfill({ status: 503, json: { error: "analysis_unavailable" } }); });
+  await page.route("**/api/vision/analyze", async (route) => {
+    uploads += 1;
+    await route.fulfill({ status: 503, json: { error: "analysis_unavailable" } });
+  });
   await page.goto("/");
   // Ohne Freigabe bleibt auch die Startseite bei der Zusage „bleibt auf dem Gerät“.
   await expect(page.locator(".capture-actions")).toContainText("nicht an einen Bilddienst gesendet");
@@ -1568,8 +2222,12 @@ test("without the server flag the photo never leaves the device", async ({ page 
 test("the photo check texts exist in all six languages", async ({ page }) => {
   await enablePhotoCheck(page);
   const expectedActions: Record<string, string> = {
-    de: "AED gesehen – Foto prüfen", en: "I see an AED — check photo", pl: "Widzę AED — sprawdź zdjęcie",
-    ja: "AEDを確認 — 写真を確認する", fr: "Je vois un DAE — vérifier la photo", es: "Veo un DEA — comprobar la foto",
+    de: "AED gesehen – Foto prüfen",
+    en: "I see an AED — check photo",
+    pl: "Widzę AED — sprawdź zdjęcie",
+    ja: "AEDを確認 — 写真を確認する",
+    fr: "Je vois un DAE — vérifier la photo",
+    es: "Veo un DEA — comprobar la foto",
   };
   await page.goto("/");
   for (const code of languageCodes) {
@@ -1589,11 +2247,18 @@ test("the info dialog tells the truth about the optional photo check in all six 
   // Aussagen, die mit aktiver Fotoprüfung falsch wären (je Sprache ein Auszug). Der Demo-Text
   // „Beispielszenarien laufen lokal …“ gehört nicht dazu: Er beschreibt nur die Demo, die nie hochlädt.
   const falseClaims = [
-    "Das Foto bleibt lokal; OSM-Änderungen", "Photos stay local; OSM", "Zdjęcia pozostają lokalnie; zmiany",
-    "写真は端末内に残り、OSMへの変更", "Les photos restent locales ; les modifications", "Las fotos permanecen locales; los cambios",
-    "Automatische Erkennung ist nicht im Pilot", "Automatic recognition is not part of the pilot",
-    "Automatyczne rozpoznawanie nie jest częścią pilotażu", "自動認識はパイロットに含まれません",
-    "La reconnaissance automatique ne fait pas partie du pilote", "El reconocimiento automático no forma parte del piloto",
+    "Das Foto bleibt lokal; OSM-Änderungen",
+    "Photos stay local; OSM",
+    "Zdjęcia pozostają lokalnie; zmiany",
+    "写真は端末内に残り、OSMへの変更",
+    "Les photos restent locales ; les modifications",
+    "Las fotos permanecen locales; los cambios",
+    "Automatische Erkennung ist nicht im Pilot",
+    "Automatic recognition is not part of the pilot",
+    "Automatyczne rozpoznawanie nie jest częścią pilotażu",
+    "自動認識はパイロットに含まれません",
+    "La reconnaissance automatique ne fait pas partie du pilote",
+    "El reconocimiento automático no forma parte del piloto",
   ];
   for (const language of languageCodes) {
     await page.locator("#language").selectOption(language);
@@ -1622,7 +2287,9 @@ test("a newer published version shows a banner and never reloads by itself", asy
   await publishNewVersion(page);
   await page.goto("/");
   // Markierung im Fenster: Sie überlebt kein Neuladen und beweist, dass die App nicht von selbst neu lädt.
-  await page.evaluate(() => { (window as unknown as { __notReloaded: boolean }).__notReloaded = true; });
+  await page.evaluate(() => {
+    (window as unknown as { __notReloaded: boolean }).__notReloaded = true;
+  });
 
   const banner = page.locator("#update-banner");
   await expect(banner).toContainText("Neue Version verfügbar.");
@@ -1686,7 +2353,9 @@ test("the update banner fits a narrow phone screen", async ({ page }) => {
 test("a crashed worker shows the HTTP status instead of a bare failure", async ({ page }) => {
   await enablePhotoCheck(page);
   // Cloudflare liefert bei einem abgestürzten Worker eine HTML-Fehlerseite statt JSON.
-  await page.route("**/api/vision/analyze", (route) => route.fulfill({ status: 500, contentType: "text/html", body: "<html>Error 1102</html>" }));
+  await page.route("**/api/vision/analyze", (route) =>
+    route.fulfill({ status: 500, contentType: "text/html", body: "<html>Error 1102</html>" }),
+  );
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
   await page.getByRole("button", { name: "AED gesehen – Foto prüfen" }).click();
@@ -1704,14 +2373,25 @@ test("a lost connection during the check shows a client-side code", async ({ pag
 
 test("the error code is translated and hidden when the check works", async ({ page }) => {
   await enablePhotoCheck(page);
-  await page.route("**/api/vision/analyze", (route) => route.fulfill({ status: 502, json: { error: "analysis_failed", detail_code: "timeout" } }));
+  await page.route("**/api/vision/analyze", (route) =>
+    route.fulfill({ status: 502, json: { error: "analysis_failed", detail_code: "timeout" } }),
+  );
   await page.goto("/");
-  const labels: Record<string, string> = { de: "Fehlercode:", en: "Error code:", pl: "Kod błędu:", ja: "エラーコード:", fr: "Code d’erreur :", es: "Código de error:" };
+  const labels: Record<string, string> = {
+    de: "Fehlercode:",
+    en: "Error code:",
+    pl: "Kod błędu:",
+    ja: "エラーコード:",
+    fr: "Code d’erreur :",
+    es: "Código de error:",
+  };
   for (const code of languageCodes) {
     await page.locator("#language").selectOption(code);
     await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
     await page.locator('[data-action="check-photo"]').click();
-    await expect(page.locator(".photo-check-code")).toContainText(`${labels[code]} analysis_failed (HTTP 502, timeout)`);
+    await expect(page.locator(".photo-check-code")).toContainText(
+      `${labels[code]} analysis_failed (HTTP 502, timeout)`,
+    );
     await page.locator('[data-action="retake"]').click();
   }
 });
@@ -1731,16 +2411,26 @@ test("a green lamp shows the connection, and it is red when signed out", async (
   // Kein Textblock „Mit OSM-Testserver verbunden“ mehr auf dem Hauptbildschirm.
   await expect(page.locator("main")).not.toContainText("verbunden");
 
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
   await page.reload();
   await expect(page.locator(".connection-lamp")).toHaveClass(/connection-lamp-off/);
   await expect(page.locator(".connection-lamp")).toHaveText("−");
   await expect(page.locator("#connection-lamp")).toHaveAttribute("aria-label", "Nicht verbunden");
-  expect(await page.locator(".connection-lamp").evaluate((element) => getComputedStyle(element).backgroundColor)).toBe("rgb(214, 69, 69)");
+  expect(await page.locator(".connection-lamp").evaluate((element) => getComputedStyle(element).backgroundColor)).toBe(
+    "rgb(214, 69, 69)",
+  );
 });
 
 test("the lamp label and the logout section exist in all six languages", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true },
+    }),
+  );
   await page.goto("/");
   for (const code of languageCodes) {
     await page.locator("#language").selectOption(code);
@@ -1756,9 +2446,24 @@ test("the lamp label and the logout section exist in all six languages", async (
 });
 
 test("the confirmation page shows only the essentials and offers no way out of the app", async ({ page }) => {
-  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: { status: "complete", coverage_radius_meters: 112, candidates: [
-    { id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", "defibrillator:location": "Links neben dem Garagentor" } },
-  ] } }));
+  await page.route("**/api/osm/candidates/search", (route) =>
+    route.fulfill({
+      json: {
+        status: "complete",
+        coverage_radius_meters: 112,
+        candidates: [
+          {
+            id: "node/123",
+            osmType: "node",
+            version: 7,
+            coordinateQuality: "exact",
+            position: { latitude: 52.52001, longitude: 13.40501 },
+            tags: { emergency: "defibrillator", "defibrillator:location": "Links neben dem Garagentor" },
+          },
+        ],
+      },
+    }),
+  );
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
@@ -1772,7 +2477,14 @@ test("the confirmation page shows only the essentials and offers no way out of t
   await expect(content).toContainText("Prüfdatum:");
   // Weg sind: Verweis nach OpenStreetMap, „Ausgewählter AED:“, „Einzige vorgeschlagene Änderung“, „Bisher: nicht gesetzt“.
   await expect(content.locator("a")).toHaveCount(0);
-  for (const removed of ["In OpenStreetMap", "Ausgewählter AED", "Einzige vorgeschlagene", "Bisher", "nicht gesetzt", "Testserver"]) {
+  for (const removed of [
+    "In OpenStreetMap",
+    "Ausgewählter AED",
+    "Einzige vorgeschlagene",
+    "Bisher",
+    "nicht gesetzt",
+    "Testserver",
+  ]) {
     await expect(content).not.toContainText(removed);
   }
   // Ein einziger Treffer: „Zurück zu den Treffern“ hätte keine Bedeutung und entfällt.
@@ -1781,10 +2493,32 @@ test("the confirmation page shows only the essentials and offers no way out of t
 });
 
 test("with several matches the confirmation page can go back to choose another one", async ({ page }) => {
-  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: { status: "complete", coverage_radius_meters: 112, candidates: [
-    { id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Rathaus" } },
-    { id: "node/124", osmType: "node", version: 3, coordinateQuality: "exact", position: { latitude: 52.52002, longitude: 13.40502 }, tags: { emergency: "defibrillator", name: "Bahnhof" } },
-  ] } }));
+  await page.route("**/api/osm/candidates/search", (route) =>
+    route.fulfill({
+      json: {
+        status: "complete",
+        coverage_radius_meters: 112,
+        candidates: [
+          {
+            id: "node/123",
+            osmType: "node",
+            version: 7,
+            coordinateQuality: "exact",
+            position: { latitude: 52.52001, longitude: 13.40501 },
+            tags: { emergency: "defibrillator", name: "Rathaus" },
+          },
+          {
+            id: "node/124",
+            osmType: "node",
+            version: 3,
+            coordinateQuality: "exact",
+            position: { latitude: 52.52002, longitude: 13.40502 },
+            tags: { emergency: "defibrillator", name: "Bahnhof" },
+          },
+        ],
+      },
+    }),
+  );
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
@@ -1797,9 +2531,24 @@ test("with several matches the confirmation page can go back to choose another o
 });
 
 test("the confirmation page shows the earlier check date only when there is one", async ({ page }) => {
-  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: { status: "complete", coverage_radius_meters: 112, candidates: [
-    { id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2025-01-01" } },
-  ] } }));
+  await page.route("**/api/osm/candidates/search", (route) =>
+    route.fulfill({
+      json: {
+        status: "complete",
+        coverage_radius_meters: 112,
+        candidates: [
+          {
+            id: "node/123",
+            osmType: "node",
+            version: 7,
+            coordinateQuality: "exact",
+            position: { latitude: 52.52001, longitude: 13.40501 },
+            tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2025-01-01" },
+          },
+        ],
+      },
+    }),
+  );
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
@@ -1819,7 +2568,13 @@ async function takeFreshCameraPhotoWithoutGps(page: import("@playwright/test").P
   // Erst warten, bis die App den Aufnahmeknopf gezeichnet hat; sonst gibt es unter Last noch kein Eingabefeld.
   await page.locator("#camera-input").waitFor({ state: "attached" });
   await page.evaluate((age) => {
-    const file = new File(['<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#176b4b"/></svg>'], "kamera.svg", { type: "image/svg+xml", lastModified: Date.now() - age });
+    const file = new File(
+      [
+        '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#176b4b"/></svg>',
+      ],
+      "kamera.svg",
+      { type: "image/svg+xml", lastModified: Date.now() - age },
+    );
     const transfer = new DataTransfer();
     transfer.items.add(file);
     const input = document.querySelector<HTMLInputElement>("#camera-input")!;
@@ -1828,11 +2583,17 @@ async function takeFreshCameraPhotoWithoutGps(page: import("@playwright/test").P
   }, ageMs);
 }
 
-test("a fresh camera photo without GPS uses the allowed phone location without asking again", async ({ page, context }) => {
+test("a fresh camera photo without GPS uses the allowed phone location without asking again", async ({
+  page,
+  context,
+}) => {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   const searches: { latitude: number; longitude: number }[] = [];
-  await page.route("**/api/osm/candidates/search", async (route) => { searches.push(route.request().postDataJSON()); await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }); });
+  await page.route("**/api/osm/candidates/search", async (route) => {
+    searches.push(route.request().postDataJSON());
+    await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } });
+  });
   await page.goto("/");
   await takeFreshCameraPhotoWithoutGps(page);
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
@@ -1849,7 +2610,10 @@ test("the phone location is not used for a gallery photo, even when it was allow
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   let searches = 0;
-  await page.route("**/api/osm/candidates/search", async (route) => { searches += 1; await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }); });
+  await page.route("**/api/osm/candidates/search", async (route) => {
+    searches += 1;
+    await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } });
+  });
   await page.goto("/");
   // Ein Foto aus der Galerie kann alt sein: Das Handy ist vielleicht längst woanders.
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
@@ -1864,7 +2628,10 @@ test("an older camera photo without GPS still asks where the AED is", async ({ p
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   let searches = 0;
-  await page.route("**/api/osm/candidates/search", async (route) => { searches += 1; await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }); });
+  await page.route("**/api/osm/candidates/search", async (route) => {
+    searches += 1;
+    await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } });
+  });
   await page.goto("/");
   // Eine Stunde alt: Die Person ist inzwischen vielleicht weitergegangen.
   await takeFreshCameraPhotoWithoutGps(page, 60 * 60 * 1_000);
@@ -1877,7 +2644,10 @@ test("an older camera photo without GPS still asks where the AED is", async ({ p
 
 test("without the location permission a fresh camera photo still shows the explicit choice", async ({ page }) => {
   let searches = 0;
-  await page.route("**/api/osm/candidates/search", async (route) => { searches += 1; await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }); });
+  await page.route("**/api/osm/candidates/search", async (route) => {
+    searches += 1;
+    await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } });
+  });
   await page.goto("/");
   await takeFreshCameraPhotoWithoutGps(page);
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
@@ -1889,7 +2659,10 @@ test("the GPS of the photo wins over the phone location", async ({ page, context
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 48.137, longitude: 11.575, accuracy: 10 });
   const searches: { latitude: number }[] = [];
-  await page.route("**/api/osm/candidates/search", async (route) => { searches.push(route.request().postDataJSON()); await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }); });
+  await page.route("**/api/osm/candidates/search", async (route) => {
+    searches.push(route.request().postDataJSON());
+    await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } });
+  });
   await page.goto("/");
   await page.locator("#camera-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
@@ -1910,7 +2683,10 @@ test.describe("the one-time location request", () => {
     await page.addInitScript(() => {
       const original = navigator.geolocation.getCurrentPosition.bind(navigator.geolocation);
       navigator.geolocation.getCurrentPosition = (...args: Parameters<Geolocation["getCurrentPosition"]>) => {
-        window.localStorage.setItem("test-geolocation-calls", String(Number(window.localStorage.getItem("test-geolocation-calls") ?? "0") + 1));
+        window.localStorage.setItem(
+          "test-geolocation-calls",
+          String(Number(window.localStorage.getItem("test-geolocation-calls") ?? "0") + 1),
+        );
         return original(...args);
       };
     });
@@ -1927,7 +2703,16 @@ test.describe("the one-time location request", () => {
   });
 
   test("does not ask while signed out", async ({ page }) => {
-    await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+    await page.route("**/api/auth/session", (route) =>
+      route.fulfill({
+        json: {
+          authenticated: false,
+          loginAvailable: true,
+          developmentLoginAvailable: false,
+          developmentSession: false,
+        },
+      }),
+    );
     await page.goto("/");
     await expect(page.locator(".connection-lamp-off")).toBeVisible();
     await page.waitForTimeout(500);
@@ -1947,7 +2732,10 @@ test("a camera photo that became stale while waiting no longer uses the phone lo
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   let searches = 0;
-  await page.route("**/api/osm/candidates/search", async (route) => { searches += 1; await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }); });
+  await page.route("**/api/osm/candidates/search", async (route) => {
+    searches += 1;
+    await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } });
+  });
   // Eine kontrollierbare Uhr: So lässt sich „die App lag zehn Minuten im Hintergrund“ nachstellen.
   await page.clock.install({ time: new Date("2026-11-11T07:00:00Z") });
   await page.goto("/");
@@ -1965,7 +2753,10 @@ test("a camera photo that is still fresh at confirmation uses the phone location
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   let searches = 0;
-  await page.route("**/api/osm/candidates/search", async (route) => { searches += 1; await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } }); });
+  await page.route("**/api/osm/candidates/search", async (route) => {
+    searches += 1;
+    await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } });
+  });
   await page.clock.install({ time: new Date("2026-11-11T07:00:00Z") });
   await page.goto("/");
   await takeFreshCameraPhotoWithoutGps(page);
@@ -1977,7 +2768,10 @@ test("a camera photo that is still fresh at confirmation uses the phone location
 
 // Wiederholen nach einem Fehlschlag: Ein von der App selbst eingesetzter Handy-Standort gilt nur, solange das Foto frisch ist.
 // Ein ausdrücklich gewählter Handy-Standort wird dagegen wie bisher neu geholt.
-async function setUpFailingFirstSearch(page: import("@playwright/test").Page, context: import("@playwright/test").BrowserContext) {
+async function setUpFailingFirstSearch(
+  page: import("@playwright/test").Page,
+  context: import("@playwright/test").BrowserContext,
+) {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   const requests = { count: 0 };
@@ -1993,7 +2787,10 @@ async function setUpFailingFirstSearch(page: import("@playwright/test").Page, co
   return requests;
 }
 
-test("retrying an automatic phone-location search after the photo went stale asks for the location again", async ({ page, context }) => {
+test("retrying an automatic phone-location search after the photo went stale asks for the location again", async ({
+  page,
+  context,
+}) => {
   const requests = await setUpFailingFirstSearch(page, context);
   await page.goto("/");
   await takeFreshCameraPhotoWithoutGps(page);
@@ -2010,7 +2807,10 @@ test("retrying an automatic phone-location search after the photo went stale ask
   expect(requests.count).toBe(1);
 });
 
-test("retrying an automatic phone-location search while the photo is still fresh searches again", async ({ page, context }) => {
+test("retrying an automatic phone-location search while the photo is still fresh searches again", async ({
+  page,
+  context,
+}) => {
   const requests = await setUpFailingFirstSearch(page, context);
   await page.goto("/");
   await takeFreshCameraPhotoWithoutGps(page);
@@ -2023,7 +2823,10 @@ test("retrying an automatic phone-location search while the photo is still fresh
   expect(requests.count).toBe(2);
 });
 
-test("retrying an explicitly chosen phone location still reacquires it, however much time has passed", async ({ page, context }) => {
+test("retrying an explicitly chosen phone location still reacquires it, however much time has passed", async ({
+  page,
+  context,
+}) => {
   const requests = await setUpFailingFirstSearch(page, context);
   await page.goto("/");
   // Ein älteres Kamerafoto: Die App setzt den Standort nicht selbst ein, die Person wählt ihn ausdrücklich.
@@ -2065,7 +2868,9 @@ test("the header with the lamp fits a narrow phone screen in all six languages",
     await page.locator("#language").selectOption(code);
     const box = await page.locator("header .connection-lamp").boundingBox();
     expect(box!.x + box!.width, `Lampe in ${code} im Bild`).toBeLessThanOrEqual(320);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth), `Überlauf in ${code}`).toBeLessThanOrEqual(320);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `Überlauf in ${code}`).toBeLessThanOrEqual(
+      320,
+    );
     // Die Lampe überlappt weder den Namen noch die Info-Schaltfläche.
     const infoBox = await page.locator("#open-info").boundingBox();
     // Mindestens 12 px Luft: Die Schrift eines echten Geräts kann breiter sein als die der Testumgebung.
@@ -2091,9 +2896,14 @@ test("the header has no check mark in front of the name, only the lamp shows the
   await expect(page.locator("header .connection-lamp")).toBeVisible();
 });
 
-test("tapping the green lamp opens the sign-out section, and signing out only happens on the sign-out button", async ({ page }) => {
+test("tapping the green lamp opens the sign-out section, and signing out only happens on the sign-out button", async ({
+  page,
+}) => {
   let signOutRequests = 0;
-  await page.route("**/api/auth/logout", (route) => { signOutRequests += 1; return route.fulfill({ json: { ok: true } }); });
+  await page.route("**/api/auth/logout", (route) => {
+    signOutRequests += 1;
+    return route.fulfill({ json: { ok: true } });
+  });
   await page.goto("/");
   await expect(page.locator(".connection-lamp-on")).toBeVisible();
   await page.locator("#connection-lamp").click();
@@ -2106,10 +2916,17 @@ test("tapping the green lamp opens the sign-out section, and signing out only ha
 });
 
 test("tapping the red lamp never signs in by itself, only the sign-in button does", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: true, developmentSession: false } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: true, developmentSession: false },
+    }),
+  );
   // Jede Anmeldeanfrage wird gezählt und mit einer Dummy-Seite beantwortet; nichts geht zu OpenStreetMap.
   const signInRequests: string[] = [];
-  const countSignIn = (route: import("@playwright/test").Route) => { signInRequests.push(new URL(route.request().url()).pathname); return route.fulfill({ status: 200, contentType: "text/html", body: "<p>OSM</p>" }); };
+  const countSignIn = (route: import("@playwright/test").Route) => {
+    signInRequests.push(new URL(route.request().url()).pathname);
+    return route.fulfill({ status: 200, contentType: "text/html", body: "<p>OSM</p>" });
+  };
   await page.route("**/api/auth/osm/start", countSignIn);
   await page.route("**/api/auth/osm/development/start", countSignIn);
   await page.goto("/");
@@ -2126,10 +2943,19 @@ test("tapping the red lamp never signs in by itself, only the sign-in button doe
   await expect.poll(() => signInRequests).toEqual(["/api/auth/osm/start"]);
 });
 
-test("tapping the red lamp with only the test-server login focuses that button and does not sign in", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: false, developmentLoginAvailable: true, developmentSession: false } }));
+test("tapping the red lamp with only the test-server login focuses that button and does not sign in", async ({
+  page,
+}) => {
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: false, loginAvailable: false, developmentLoginAvailable: true, developmentSession: false },
+    }),
+  );
   let signInStarted = false;
-  await page.route("**/api/auth/osm/development/start", (route) => { signInStarted = true; return route.fulfill({ status: 200, contentType: "text/html", body: "<p>OSM</p>" }); });
+  await page.route("**/api/auth/osm/development/start", (route) => {
+    signInStarted = true;
+    return route.fulfill({ status: 200, contentType: "text/html", body: "<p>OSM</p>" });
+  });
   await page.goto("/");
   await page.locator("#connection-lamp").click();
   await expect(page.locator("#osm-dev-sign-in")).toBeFocused();
@@ -2157,10 +2983,15 @@ test("the lamp tap area is large enough for a finger but does not push the heade
   expect(Math.abs(button!.x + button!.width / 2 - (dot!.x + dot!.width / 2))).toBeLessThan(1);
 });
 
-test("signing out really signs out: if the server still reports a session, the app shows an error instead of staying signed in", async ({ page }) => {
+test("signing out really signs out: if the server still reports a session, the app shows an error instead of staying signed in", async ({
+  page,
+}) => {
   // Der Server antwortet auf „Abmelden“ mit 204, meldet aber weiter „angemeldet“ (zum Beispiel ein Cookie, das nicht gelöscht wurde).
   let logoutRequests = 0;
-  await page.route("**/api/auth/logout", (route) => { logoutRequests += 1; return route.fulfill({ status: 204 }); });
+  await page.route("**/api/auth/logout", (route) => {
+    logoutRequests += 1;
+    return route.fulfill({ status: 204 });
+  });
   await page.goto("/");
   await expect(page.locator(".connection-lamp-on")).toBeVisible();
   await page.locator("#connection-lamp").click();
@@ -2174,12 +3005,29 @@ test("signing out really signs out: if the server still reports a session, the a
   await expect(page.locator("#camera-input")).toHaveCount(0);
 });
 
-test("signing out ends the session: after the logout request the app shows the login page and never signs in by itself", async ({ page }) => {
+test("signing out ends the session: after the logout request the app shows the login page and never signs in by itself", async ({
+  page,
+}) => {
   let signedIn = true;
   let signInRequests = 0;
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: signedIn, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
-  await page.route("**/api/auth/logout", (route) => { signedIn = false; return route.fulfill({ status: 204 }); });
-  await page.route("**/api/auth/osm/start", (route) => { signInRequests += 1; return route.fulfill({ status: 200, contentType: "text/html", body: "<p>OSM</p>" }); });
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: signedIn,
+        loginAvailable: true,
+        developmentLoginAvailable: false,
+        developmentSession: false,
+      },
+    }),
+  );
+  await page.route("**/api/auth/logout", (route) => {
+    signedIn = false;
+    return route.fulfill({ status: 204 });
+  });
+  await page.route("**/api/auth/osm/start", (route) => {
+    signInRequests += 1;
+    return route.fulfill({ status: 200, contentType: "text/html", body: "<p>OSM</p>" });
+  });
   await page.goto("/");
   await expect(page.locator(".connection-lamp-on")).toBeVisible();
   await page.locator("#connection-lamp").click();
@@ -2195,11 +3043,20 @@ test("signing out ends the session: after the logout request the app shows the l
   expect(signInRequests).toBe(0);
 });
 
-test("the info dialog shows the build version, the same one the server publishes, in all six languages", async ({ page }) => {
+test("the info dialog shows the build version, the same one the server publishes, in all six languages", async ({
+  page,
+}) => {
   await page.goto("/");
   const published = (await (await page.request.get("/version.json")).json()) as { revision: string };
   expect(published.revision).toMatch(/^[a-z0-9]{4,32}$/);
-  const expectedWord: Record<string, string> = { de: "Version", en: "Version", pl: "Wersja", ja: "バージョン", fr: "Version", es: "Versión" };
+  const expectedWord: Record<string, string> = {
+    de: "Version",
+    en: "Version",
+    pl: "Wersja",
+    ja: "バージョン",
+    fr: "Version",
+    es: "Versión",
+  };
   for (const code of languageCodes) {
     await page.locator("#language").selectOption(code);
     await page.locator("#open-info").click();
@@ -2212,7 +3069,11 @@ test("the info dialog shows the build version, the same one the server publishes
 });
 
 test("the build version is also visible in the info dialog when signed out", async ({ page }) => {
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
   await page.goto("/");
   await page.locator("#open-info").click();
   await expect(page.locator("#build-version")).toContainText("Version ");
@@ -2232,7 +3093,11 @@ test("the build number sits small in the footer of every screen and matches the 
   await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
   await expect(page.locator('[data-action="confirm-sighting"]')).toBeVisible();
   await expect(mark).toContainText(published.revision);
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: false, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
   await page.reload();
   await expect(page.locator("footer #build-mark")).toContainText(published.revision);
 });
@@ -2245,7 +3110,9 @@ test("the footer with the build number fits a narrow phone screen in all six lan
     const mark = await page.locator("footer #build-mark").boundingBox();
     expect(mark!.x, `Nummer links im Bild (${code})`).toBeGreaterThanOrEqual(0);
     expect(mark!.x + mark!.width, `Nummer rechts im Bild (${code})`).toBeLessThanOrEqual(320);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth), `Überlauf in ${code}`).toBeLessThanOrEqual(320);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `Überlauf in ${code}`).toBeLessThanOrEqual(
+      320,
+    );
   }
 });
 
@@ -2261,11 +3128,47 @@ async function installFakeAudio(page: import("@playwright/test").Page): Promise<
     const counters = { contexts: 0, resumes: 0, oscillators: 0 };
     (window as unknown as { __sound: SoundCounters }).__sound = counters;
     class FakeAudioContext {
-      state = "running"; currentTime = 0; destination = {};
-      constructor() { counters.contexts += 1; }
-      resume() { counters.resumes += 1; return Promise.resolve(); }
-      createOscillator() { counters.oscillators += 1; return { type: "sine", frequency: { value: 0 }, connect() { /* nichts */ }, start() { /* nichts */ }, stop() { /* nichts */ } }; }
-      createGain() { return { gain: { setValueAtTime() { /* nichts */ }, exponentialRampToValueAtTime() { /* nichts */ } }, connect() { /* nichts */ } }; }
+      state = "running";
+      currentTime = 0;
+      destination = {};
+      constructor() {
+        counters.contexts += 1;
+      }
+      resume() {
+        counters.resumes += 1;
+        return Promise.resolve();
+      }
+      createOscillator() {
+        counters.oscillators += 1;
+        return {
+          type: "sine",
+          frequency: { value: 0 },
+          connect() {
+            /* nichts */
+          },
+          start() {
+            /* nichts */
+          },
+          stop() {
+            /* nichts */
+          },
+        };
+      }
+      createGain() {
+        return {
+          gain: {
+            setValueAtTime() {
+              /* nichts */
+            },
+            exponentialRampToValueAtTime() {
+              /* nichts */
+            },
+          },
+          connect() {
+            /* nichts */
+          },
+        };
+      }
     }
     (window as unknown as { AudioContext: unknown }).AudioContext = FakeAudioContext;
   });
@@ -2276,16 +3179,46 @@ async function readSound(page: import("@playwright/test").Page): Promise<SoundCo
 }
 
 /** Bringt die App bis zum Speichern-Knopf für das Prüfdatum und gibt ihn zurück. */
-async function openCheckDateSaveButton(page: import("@playwright/test").Page, context: import("@playwright/test").BrowserContext, onWrite: (route: import("@playwright/test").Route) => Promise<void>, tags: Record<string, string> = { emergency: "defibrillator", name: "Rathaus", check_date: "2025-10-20" }, source?: "archive" | "development") {
+async function openCheckDateSaveButton(
+  page: import("@playwright/test").Page,
+  context: import("@playwright/test").BrowserContext,
+  onWrite: (route: import("@playwright/test").Route) => Promise<void>,
+  tags: Record<string, string> = { emergency: "defibrillator", name: "Rathaus", check_date: "2025-10-20" },
+  source?: "archive" | "development",
+) {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
-    authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true, developmentWriteOwnerHash: testDevelopmentOwnerHash,
-  } }));
-  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
-    status: "complete", coverage_radius_meters: 112,
-    candidates: [{ id: "node/123", osmType: "node", version: 7, coordinateQuality: "exact", ...(source ? { source } : {}), position: { latitude: 52.52001, longitude: 13.40501 }, tags }],
-  } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: true,
+        loginAvailable: true,
+        developmentLoginAvailable: true,
+        developmentSession: true,
+        developmentWriteAvailable: true,
+        developmentWriteOwnerHash: testDevelopmentOwnerHash,
+      },
+    }),
+  );
+  await page.route("**/api/osm/candidates/search", (route) =>
+    route.fulfill({
+      json: {
+        status: "complete",
+        coverage_radius_meters: 112,
+        candidates: [
+          {
+            id: "node/123",
+            osmType: "node",
+            version: 7,
+            coordinateQuality: "exact",
+            ...(source ? { source } : {}),
+            position: { latitude: 52.52001, longitude: 13.40501 },
+            tags,
+          },
+        ],
+      },
+    }),
+  );
   await page.route("**/api/osm/development/check-date", onWrite);
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
@@ -2295,11 +3228,19 @@ async function openCheckDateSaveButton(page: import("@playwright/test").Page, co
   return page.getByRole("button", { name: "Testserver: Prüfdatum speichern" });
 }
 
-test("the success sound plays once, only after the server confirmed the save, and is unlocked by the tap", async ({ page, context }) => {
+test("the success sound plays once, only after the server confirmed the save, and is unlocked by the tap", async ({
+  page,
+  context,
+}) => {
   await installFakeAudio(page);
   let releaseWrite: () => void = () => undefined;
-  const writeMayFinish = new Promise<void>((resolve) => { releaseWrite = resolve; });
-  const saveButton = await openCheckDateSaveButton(page, context, async (route) => { await writeMayFinish; await route.fulfill({ json: { status: "complete", version: 8 } }); });
+  const writeMayFinish = new Promise<void>((resolve) => {
+    releaseWrite = resolve;
+  });
+  const saveButton = await openCheckDateSaveButton(page, context, async (route) => {
+    await writeMayFinish;
+    await route.fulfill({ json: { status: "complete", version: 8 } });
+  });
   // Vor dem Tippen: kein Audio-Baustein, kein Ton (schont Musik im Hintergrund).
   expect(await readSound(page)).toEqual({ contexts: 0, resumes: 0, oscillators: 0 });
   await saveButton.click();
@@ -2314,7 +3255,9 @@ test("the success sound plays once, only after the server confirmed the save, an
 
 test("no success sound when the save ends unclear", async ({ page, context }) => {
   await installFakeAudio(page);
-  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ status: 503, json: { error: "write_status_unavailable" } }));
+  const saveButton = await openCheckDateSaveButton(page, context, (route) =>
+    route.fulfill({ status: 503, json: { error: "write_status_unavailable" } }),
+  );
   await saveButton.click();
   await expect(page.getByRole("status")).toContainText("Ergebnis unklar");
   expect((await readSound(page)).oscillators).toBe(0);
@@ -2322,28 +3265,41 @@ test("no success sound when the save ends unclear", async ({ page, context }) =>
 
 test("no success sound when the server reports a conflict", async ({ page, context }) => {
   await installFakeAudio(page);
-  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ status: 409, json: { error: "newer_check_date_exists" } }));
+  const saveButton = await openCheckDateSaveButton(page, context, (route) =>
+    route.fulfill({ status: 409, json: { error: "newer_check_date_exists" } }),
+  );
   await saveButton.click();
   await expect(page.getByRole("status")).not.toContainText("wird gesendet");
   await page.waitForTimeout(300);
   expect((await readSound(page)).oscillators).toBe(0);
 });
 
-test("with the sound switched off, a confirmed save is silent and no audio is even created", async ({ page, context }) => {
+test("with the sound switched off, a confirmed save is silent and no audio is even created", async ({
+  page,
+  context,
+}) => {
   await installFakeAudio(page);
   await page.addInitScript(() => localStorage.setItem("aedjaeger-success-sound", "off"));
-  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ json: { status: "complete", version: 8 } }));
+  const saveButton = await openCheckDateSaveButton(page, context, (route) =>
+    route.fulfill({ json: { status: "complete", version: 8 } }),
+  );
   await saveButton.click();
   await expect(page.getByRole("status")).toContainText("Vor-Ort-Prüfung gespeichert");
   expect(await readSound(page)).toEqual({ contexts: 0, resumes: 0, oscillators: 0 });
 });
 
-test("the sound switch in the info dialog is saved, plays a preview when switched on, and exists in all six languages", async ({ page }) => {
+test("the sound switch in the info dialog is saved, plays a preview when switched on, and exists in all six languages", async ({
+  page,
+}) => {
   await installFakeAudio(page);
   await page.goto("/");
   const expectedLabel: Record<string, string> = {
-    de: "Ton, wenn das Speichern gelingt", en: "Sound when saving succeeds", pl: "Dźwięk po udanym zapisie",
-    ja: "保存に成功したら音を鳴らす", fr: "Son lorsque l'enregistrement réussit", es: "Sonido cuando el guardado se completa",
+    de: "Ton, wenn das Speichern gelingt",
+    en: "Sound when saving succeeds",
+    pl: "Dźwięk po udanym zapisie",
+    ja: "保存に成功したら音を鳴らす",
+    fr: "Son lorsque l'enregistrement réussit",
+    es: "Sonido cuando el guardado se completa",
   };
   for (const code of languageCodes) {
     await page.locator("#language").selectOption(code);
@@ -2368,7 +3324,10 @@ test("the sound switch in the info dialog is saved, plays a preview when switche
   await expect(page.locator("#success-sound-toggle")).not.toBeChecked();
 });
 
-test("the sound can be switched off for the open page even when the browser storage is blocked", async ({ page, context }) => {
+test("the sound can be switched off for the open page even when the browser storage is blocked", async ({
+  page,
+  context,
+}) => {
   await installFakeAudio(page);
   // Wie bei vollem oder gesperrtem Speicher: Das Schreiben der Ton-Einstellung schlägt fehl (QuotaExceededError).
   // Andere Schlüssel (zum Beispiel der offene Speichervorgang) bleiben schreibbar, sonst verweigert die App das
@@ -2381,7 +3340,10 @@ test("the sound can be switched off for the open page even when the browser stor
     };
   });
   let writes = 0;
-  const saveButton = await openCheckDateSaveButton(page, context, async (route) => { writes += 1; await route.fulfill({ json: { status: "complete", version: 8 } }); });
+  const saveButton = await openCheckDateSaveButton(page, context, async (route) => {
+    writes += 1;
+    await route.fulfill({ json: { status: "complete", version: 8 } });
+  });
   // Der Schalter im Info-Dialog: ausschalten, und die Wahl hält bis zum Neuladen.
   await page.locator("#open-info").click();
   const toggle = page.locator("#success-sound-toggle");
@@ -2407,7 +3369,9 @@ test("the app starts and works when the browser storage cannot even be accessed"
   page.on("pageerror", (error) => pageErrors.push(error.message));
   // Wie bei „alle Cookies blockieren“: Schon der Zugriff auf localStorage und sessionStorage wirft einen Fehler.
   await page.addInitScript(() => {
-    const blocked = () => { throw new DOMException("denied", "SecurityError"); };
+    const blocked = () => {
+      throw new DOMException("denied", "SecurityError");
+    };
     Object.defineProperty(window, "localStorage", { get: blocked, configurable: true });
     Object.defineProperty(window, "sessionStorage", { get: blocked, configurable: true });
   });
@@ -2444,10 +3408,16 @@ test("switching the language still works when only writing to the browser storag
 // "Schon aktuell": Der Server schreibt nichts, wenn das Datum schon so auf dem Knoten steht
 // ---------------------------------------------------------------------------------------------
 
-test("an already-current check date says nothing was changed, plays no sound and offers no second save", async ({ page, context }) => {
+test("an already-current check date says nothing was changed, plays no sound and offers no second save", async ({
+  page,
+  context,
+}) => {
   await installFakeAudio(page);
   let writes = 0;
-  const saveButton = await openCheckDateSaveButton(page, context, async (route) => { writes += 1; await route.fulfill({ json: { status: "complete", version: 1, already_current: true } }); });
+  const saveButton = await openCheckDateSaveButton(page, context, async (route) => {
+    writes += 1;
+    await route.fulfill({ json: { status: "complete", version: 1, already_current: true } });
+  });
   await saveButton.click();
   await expect(page.getByRole("status")).toContainText("Schon aktuell. Es wurde nichts geändert.");
   // Nicht als "gespeichert" ausgeben, kein Ton, kein zweiter Speichern-Knopf.
@@ -2457,7 +3427,12 @@ test("an already-current check date says nothing was changed, plays no sound and
   expect((await readSound(page)).oscillators).toBe(0);
   // Der Hinweis steht in allen sechs Sprachen da.
   const expected: Record<string, string> = {
-    de: "Schon aktuell", en: "Already up to date", pl: "Już aktualne", ja: "すでに最新です", fr: "déjà à jour", es: "ya está actualizado",
+    de: "Schon aktuell",
+    en: "Already up to date",
+    pl: "Już aktualne",
+    ja: "すでに最新です",
+    fr: "déjà à jour",
+    es: "ya está actualizado",
   };
   for (const code of languageCodes) {
     await page.locator("#language").selectOption(code);
@@ -2467,19 +3442,36 @@ test("an already-current check date says nothing was changed, plays no sound and
 
 test("a real change still says saved and plays the sound once", async ({ page, context }) => {
   await installFakeAudio(page);
-  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ json: { status: "complete", version: 2 } }));
+  const saveButton = await openCheckDateSaveButton(page, context, (route) =>
+    route.fulfill({ json: { status: "complete", version: 2 } }),
+  );
   await saveButton.click();
   await expect(page.getByRole("status")).toContainText("Vor-Ort-Prüfung gespeichert");
   await expect(page.getByRole("status")).not.toContainText("Schon aktuell");
   expect((await readSound(page)).oscillators).toBe(4);
 });
 
-test("a node without a name shows a readable label instead of the technical identifier, in all six languages", async ({ page, context }) => {
-  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ json: { status: "complete", version: 2 } }), { emergency: "defibrillator", check_date: "2025-10-20" });
+test("a node without a name shows a readable label instead of the technical identifier, in all six languages", async ({
+  page,
+  context,
+}) => {
+  const saveButton = await openCheckDateSaveButton(
+    page,
+    context,
+    (route) => route.fulfill({ json: { status: "complete", version: 2 } }),
+    { emergency: "defibrillator", check_date: "2025-10-20" },
+  );
   await expect(saveButton).toBeVisible();
   const preview = page.locator(".result-message");
   await expect(preview).not.toContainText("node/123");
-  const expected: Record<string, string> = { de: "AED (ohne Namen)", en: "AED (no name)", pl: "AED (bez nazwy)", ja: "AED（名称なし）", fr: "DAE (sans nom)", es: "DEA (sin nombre)" };
+  const expected: Record<string, string> = {
+    de: "AED (ohne Namen)",
+    en: "AED (no name)",
+    pl: "AED (bez nazwy)",
+    ja: "AED（名称なし）",
+    fr: "DAE (sans nom)",
+    es: "DEA (sin nombre)",
+  };
   for (const code of languageCodes) {
     await page.locator("#language").selectOption(code);
     await expect(preview, `Bezeichnung in ${code}`).toContainText(expected[code]);
@@ -2487,7 +3479,9 @@ test("a node without a name shows a readable label instead of the technical iden
 });
 
 test("a named node still shows its name", async ({ page, context }) => {
-  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ json: { status: "complete", version: 2 } }));
+  const saveButton = await openCheckDateSaveButton(page, context, (route) =>
+    route.fulfill({ json: { status: "complete", version: 2 } }),
+  );
   await expect(saveButton).toBeVisible();
   await expect(page.locator(".result-message")).toContainText("Rathaus");
 });
@@ -2496,14 +3490,31 @@ test("a named node still shows its name", async ({ page, context }) => {
 // AED aus dem echten Archiv lassen sich auf dem Testserver nicht ändern
 // ---------------------------------------------------------------------------------------------
 
-test("an AED from the real archive has no save button on the test server and says why, in all six languages", async ({ page, context }) => {
+test("an AED from the real archive has no save button on the test server and says why, in all six languages", async ({
+  page,
+  context,
+}) => {
   let writes = 0;
-  await openCheckDateSaveButton(page, context, async (route) => { writes += 1; await route.fulfill({ json: { status: "complete", version: 8 } }); }, undefined, "archive");
+  await openCheckDateSaveButton(
+    page,
+    context,
+    async (route) => {
+      writes += 1;
+      await route.fulfill({ json: { status: "complete", version: 8 } });
+    },
+    undefined,
+    "archive",
+  );
   await expect(page.getByRole("button", { name: "Testserver: Prüfdatum speichern" })).toHaveCount(0);
   await expect(page.locator(".result-message")).toContainText("Dieser AED stammt aus dem echten OSM");
   await expect(page.locator(".result-message")).not.toContainText("Nur eine Vorschau");
   const expected: Record<string, string> = {
-    de: "stammt aus dem echten OSM", en: "comes from the real OSM", pl: "pochodzi z prawdziwego OSM", ja: "本番のOSMのもの", fr: "provient du vrai OSM", es: "procede del OSM real",
+    de: "stammt aus dem echten OSM",
+    en: "comes from the real OSM",
+    pl: "pochodzi z prawdziwego OSM",
+    ja: "本番のOSMのもの",
+    fr: "provient du vrai OSM",
+    es: "procede del OSM real",
   };
   for (const code of languageCodes) {
     await page.locator("#language").selectOption(code);
@@ -2513,14 +3524,26 @@ test("an AED from the real archive has no save button on the test server and say
 });
 
 test("an AED found on the test server itself can be saved", async ({ page, context }) => {
-  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ json: { status: "complete", version: 2 } }), undefined, "development");
+  const saveButton = await openCheckDateSaveButton(
+    page,
+    context,
+    (route) => route.fulfill({ json: { status: "complete", version: 2 } }),
+    undefined,
+    "development",
+  );
   await expect(saveButton).toBeVisible();
   await expect(page.locator(".result-message")).not.toContainText("stammt aus dem echten OSM");
 });
 
-test("a node that does not exist on the test server ends in a clear message without a retry button, in all six languages", async ({ page, context }) => {
+test("a node that does not exist on the test server ends in a clear message without a retry button, in all six languages", async ({
+  page,
+  context,
+}) => {
   let writes = 0;
-  const saveButton = await openCheckDateSaveButton(page, context, async (route) => { writes += 1; await route.fulfill({ status: 404, json: { error: "target_not_found" } }); });
+  const saveButton = await openCheckDateSaveButton(page, context, async (route) => {
+    writes += 1;
+    await route.fulfill({ status: 404, json: { error: "target_not_found" } });
+  });
   await saveButton.click();
   await expect(page.getByRole("status")).toContainText("existiert auf dem Testserver nicht");
   await expect(page.getByRole("status")).not.toContainText("unklar");
@@ -2528,8 +3551,12 @@ test("a node that does not exist on the test server ends in a clear message with
   await expect(page.locator('[data-action="retry-development-write"]')).toHaveCount(0);
   expect(writes).toBe(1);
   const expected: Record<string, string> = {
-    de: "existiert auf dem Testserver nicht", en: "does not exist on the test server", pl: "nie istnieje na serwerze testowym",
-    ja: "テストサーバーには存在しません", fr: "n'existe pas sur le serveur de test", es: "no existe en el servidor de pruebas",
+    de: "existiert auf dem Testserver nicht",
+    en: "does not exist on the test server",
+    pl: "nie istnieje na serwerze testowym",
+    ja: "テストサーバーには存在しません",
+    fr: "n'existe pas sur le serveur de test",
+    es: "no existe en el servidor de pruebas",
   };
   for (const code of languageCodes) {
     await page.locator("#language").selectOption(code);
@@ -2537,8 +3564,13 @@ test("a node that does not exist on the test server ends in a clear message with
   }
 });
 
-test("a definitive server failure is shown as failed, not as unclear, and has no retry button", async ({ page, context }) => {
-  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ status: 502, json: { error: "write_failed" } }));
+test("a definitive server failure is shown as failed, not as unclear, and has no retry button", async ({
+  page,
+  context,
+}) => {
+  const saveButton = await openCheckDateSaveButton(page, context, (route) =>
+    route.fulfill({ status: 502, json: { error: "write_failed" } }),
+  );
   await saveButton.click();
   await expect(page.getByRole("status")).toContainText("Änderung fehlgeschlagen");
   await expect(page.getByRole("status")).not.toContainText("unklar");
@@ -2546,7 +3578,9 @@ test("a definitive server failure is shown as failed, not as unclear, and has no
 });
 
 test("a transient server error still counts as unclear and offers the retry button", async ({ page, context }) => {
-  const saveButton = await openCheckDateSaveButton(page, context, (route) => route.fulfill({ status: 503, json: { error: "write_status_unavailable" } }));
+  const saveButton = await openCheckDateSaveButton(page, context, (route) =>
+    route.fulfill({ status: 503, json: { error: "write_status_unavailable" } }),
+  );
   await saveButton.click();
   await expect(page.getByRole("status")).toContainText("Ergebnis unklar");
   await expect(page.locator('[data-action="retry-development-write"]')).toBeVisible();
@@ -2559,22 +3593,44 @@ test("a transient server error still counts as unclear and offers the retry butt
 type TestCandidate = { id: string; name: string; latitudeOffsetMeters: number; tags?: Record<string, string> };
 
 /** Bringt die App bis zur Trefferliste. Die Treffer liegen nördlich des Standorts (52.52, 13.405), 1 m = 0,000009 Grad. */
-async function openCandidateList(page: import("@playwright/test").Page, context: import("@playwright/test").BrowserContext, candidates: TestCandidate[], options: { accuracy?: number; development?: boolean } = {}): Promise<{ searchRequests: () => number }> {
+async function openCandidateList(
+  page: import("@playwright/test").Page,
+  context: import("@playwright/test").BrowserContext,
+  candidates: TestCandidate[],
+  options: { accuracy?: number; development?: boolean } = {},
+): Promise<{ searchRequests: () => number }> {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: options.accuracy ?? 12 });
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: {
-    authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: options.development ?? false,
-    developmentWriteAvailable: options.development ?? false, ...(options.development ? { developmentWriteOwnerHash: testDevelopmentOwnerHash } : {}),
-  } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: true,
+        loginAvailable: true,
+        developmentLoginAvailable: true,
+        developmentSession: options.development ?? false,
+        developmentWriteAvailable: options.development ?? false,
+        ...(options.development ? { developmentWriteOwnerHash: testDevelopmentOwnerHash } : {}),
+      },
+    }),
+  );
   let searches = 0;
-  await page.route("**/api/osm/candidates/search", (route) => { searches += 1; return route.fulfill({ json: {
-    status: "complete", coverage_radius_meters: 200,
-    candidates: candidates.map((candidate) => ({
-      id: candidate.id, osmType: "node", version: 3, coordinateQuality: "exact",
-      position: { latitude: 52.52 + candidate.latitudeOffsetMeters * 0.000009, longitude: 13.405 },
-      tags: candidate.tags ?? { emergency: "defibrillator", name: candidate.name, check_date: "2025-10-20" },
-    })),
-  } }); });
+  await page.route("**/api/osm/candidates/search", (route) => {
+    searches += 1;
+    return route.fulfill({
+      json: {
+        status: "complete",
+        coverage_radius_meters: 200,
+        candidates: candidates.map((candidate) => ({
+          id: candidate.id,
+          osmType: "node",
+          version: 3,
+          coordinateQuality: "exact",
+          position: { latitude: 52.52 + candidate.latitudeOffsetMeters * 0.000009, longitude: 13.405 },
+          tags: candidate.tags ?? { emergency: "defibrillator", name: candidate.name, check_date: "2025-10-20" },
+        })),
+      },
+    });
+  });
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.locator('[data-action="confirm-sighting"]').click();
@@ -2582,7 +3638,10 @@ async function openCandidateList(page: import("@playwright/test").Page, context:
   return { searchRequests: () => searches };
 }
 
-test("only an AED within 10 m can be confirmed, one within 50 m is a hint, and one farther away is not shown", async ({ page, context }) => {
+test("only an AED within 10 m can be confirmed, one within 50 m is a hint, and one farther away is not shown", async ({
+  page,
+  context,
+}) => {
   await openCandidateList(page, context, [
     { id: "node/101", name: "Nah", latitudeOffsetMeters: 3 },
     { id: "node/102", name: "Mittel", latitudeOffsetMeters: 35 },
@@ -2609,7 +3668,12 @@ test("an unnamed AED in the candidate list gets a readable label in all six lang
   ]);
   const item = page.locator(".candidate-item");
   const expected: Record<string, string> = {
-    de: "AED (ohne Namen)", en: "AED (no name)", pl: "AED (bez nazwy)", ja: "AED（名称なし）", fr: "DAE (sans nom)", es: "DEA (sin nombre)",
+    de: "AED (ohne Namen)",
+    en: "AED (no name)",
+    pl: "AED (bez nazwy)",
+    ja: "AED（名称なし）",
+    fr: "DAE (sans nom)",
+    es: "DEA (sin nombre)",
   };
   for (const code of languageCodes) {
     await page.locator("#language").selectOption(code);
@@ -2618,12 +3682,19 @@ test("an unnamed AED in the candidate list gets a readable label in all six lang
   }
 });
 
-test("an AED between 10 m and 50 m can only be noted, never confirmed, in all six languages", async ({ page, context }) => {
+test("an AED between 10 m and 50 m can only be noted, never confirmed, in all six languages", async ({
+  page,
+  context,
+}) => {
   await openCandidateList(page, context, [{ id: "node/102", name: "Mittel", latitudeOffsetMeters: 35 }]);
   await expect(page.locator('[data-action="preview-candidate"]')).toHaveCount(0);
   const expected: Record<string, string> = {
-    de: "Zu weit weg zum Bestätigen", en: "Too far away to confirm", pl: "Za daleko, by potwierdzić",
-    ja: "確認するには遠すぎます", fr: "Trop loin pour confirmer", es: "Demasiado lejos para confirmar",
+    de: "Zu weit weg zum Bestätigen",
+    en: "Too far away to confirm",
+    pl: "Za daleko, by potwierdzić",
+    ja: "確認するには遠すぎます",
+    fr: "Trop loin pour confirmer",
+    es: "Demasiado lejos para confirmar",
   };
   for (const code of languageCodes) {
     await page.locator("#language").selectOption(code);
@@ -2632,7 +3703,10 @@ test("an AED between 10 m and 50 m can only be noted, never confirmed, in all si
   }
 });
 
-test("when the only AEDs are farther than 50 m, the search shows no match and offers a new entry", async ({ page, context }) => {
+test("when the only AEDs are farther than 50 m, the search shows no match and offers a new entry", async ({
+  page,
+  context,
+}) => {
   await openCandidateList(page, context, [{ id: "node/103", name: "Weit", latitudeOffsetMeters: 170 }]);
   await expect(page.locator(".candidate-item")).toHaveCount(0);
   await expect(page.locator(".capture-content")).toContainText("Kein AED-Eintrag in der Nähe gefunden");
@@ -2640,7 +3714,12 @@ test("when the only AEDs are farther than 50 m, the search shows no match and of
 });
 
 test("a GPS accuracy worse than 50 m sends no search and asks for the map position", async ({ page, context }) => {
-  const { searchRequests } = await openCandidateList(page, context, [{ id: "node/101", name: "Nah", latitudeOffsetMeters: 3 }], { accuracy: 70 });
+  const { searchRequests } = await openCandidateList(
+    page,
+    context,
+    [{ id: "node/101", name: "Nah", latitudeOffsetMeters: 3 }],
+    { accuracy: 70 },
+  );
   await expect(page.locator(".capture-content")).toContainText("Der Standort ist zu ungenau");
   expect(searchRequests()).toBe(0);
 });
@@ -2649,22 +3728,47 @@ test("a GPS accuracy worse than 50 m sends no search and asks for the map positi
 // Ein Foto kann älter sein als das Prüfdatum, das schon in OSM steht
 // ---------------------------------------------------------------------------------------------
 
-test("a photo older than the check date already in OSM cannot be saved, says why, and names that date, in all six languages", async ({ page, context }) => {
-  await openCandidateList(page, context, [
-    { id: "node/101", name: "Rathaus", latitudeOffsetMeters: 3, tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2099-01-01" } },
-  ], { development: true });
+test("a photo older than the check date already in OSM cannot be saved, says why, and names that date, in all six languages", async ({
+  page,
+  context,
+}) => {
+  await openCandidateList(
+    page,
+    context,
+    [
+      {
+        id: "node/101",
+        name: "Rathaus",
+        latitudeOffsetMeters: 3,
+        tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2099-01-01" },
+      },
+    ],
+    { development: true },
+  );
   await page.locator('[data-action="preview-candidate"]').click();
-  await expect(page.locator(".result-message")).toContainText("In OpenStreetMap steht schon ein neueres Prüfdatum (1. Januar 2099)");
+  await expect(page.locator(".result-message")).toContainText(
+    "In OpenStreetMap steht schon ein neueres Prüfdatum (1. Januar 2099)",
+  );
   await expect(page.locator(".result-message")).toContainText("Es wird nichts geändert");
   // Kein Speichern-Knopf und kein „nur eine Vorschau“.
   await expect(page.getByRole("button", { name: "Testserver: Prüfdatum speichern" })).toHaveCount(0);
   await expect(page.locator(".result-message")).not.toContainText("Nur eine Vorschau");
   await expect(page.locator(".result-message")).not.toContainText("kein einzelner AED-Knoten");
   const expected: Record<string, string> = {
-    de: "neueres Prüfdatum", en: "newer check date", pl: "nowsza data kontroli", ja: "新しい確認日", fr: "plus récente", es: "más reciente",
+    de: "neueres Prüfdatum",
+    en: "newer check date",
+    pl: "nowsza data kontroli",
+    ja: "新しい確認日",
+    fr: "plus récente",
+    es: "más reciente",
   };
   const dates: Record<string, string> = {
-    de: "1. Januar 2099", en: "January 1, 2099", pl: "1 stycznia 2099", ja: "2099年1月1日", fr: "1 janvier 2099", es: "1 de enero de 2099",
+    de: "1. Januar 2099",
+    en: "January 1, 2099",
+    pl: "1 stycznia 2099",
+    ja: "2099年1月1日",
+    fr: "1 janvier 2099",
+    es: "1 de enero de 2099",
   };
   for (const code of languageCodes) {
     await page.locator("#language").selectOption(code);
@@ -2675,9 +3779,19 @@ test("a photo older than the check date already in OSM cannot be saved, says why
 });
 
 test("the same or an older check date in OSM still allows saving", async ({ page, context }) => {
-  await openCandidateList(page, context, [
-    { id: "node/101", name: "Rathaus", latitudeOffsetMeters: 3, tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2020-01-01" } },
-  ], { development: true });
+  await openCandidateList(
+    page,
+    context,
+    [
+      {
+        id: "node/101",
+        name: "Rathaus",
+        latitudeOffsetMeters: 3,
+        tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2020-01-01" },
+      },
+    ],
+    { development: true },
+  );
   await page.locator('[data-action="preview-candidate"]').click();
   await expect(page.getByRole("button", { name: "Testserver: Prüfdatum speichern" })).toBeVisible();
 });
@@ -2690,12 +3804,34 @@ test("the same or an older check date in OSM still allows saving", async ({ page
  * Bringt die App bis zum Detailformular: angemeldetes Testserver-Konto, Foto mit Standort, Suche ohne Treffer,
  * beide Bestätigungen vor dem Formular (neu eintragen, Position bestätigt). Gespeichert wird nichts.
  */
-async function openNewAedDetailForm(page: import("@playwright/test").Page, context: import("@playwright/test").BrowserContext): Promise<void> {
+async function openNewAedDetailForm(
+  page: import("@playwright/test").Page,
+  context: import("@playwright/test").BrowserContext,
+): Promise<void> {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
-  await page.route("https://tile.openstreetmap.org/**", (route) => route.fulfill({ status: 200, contentType: "image/svg+xml", body: "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"256\"><rect width=\"256\" height=\"256\" fill=\"#e5ece3\"/></svg>" }));
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: true, developmentWriteOwnerHash: testDevelopmentOwnerHash } }));
-  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: { status: "complete", coverage_radius_meters: 112, candidates: [] } }));
+  await page.route("https://tile.openstreetmap.org/**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "image/svg+xml",
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#e5ece3"/></svg>',
+    }),
+  );
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: true,
+        loginAvailable: true,
+        developmentLoginAvailable: true,
+        developmentSession: true,
+        developmentWriteAvailable: true,
+        developmentWriteOwnerHash: testDevelopmentOwnerHash,
+      },
+    }),
+  );
+  await page.route("**/api/osm/candidates/search", (route) =>
+    route.fulfill({ json: { status: "complete", coverage_radius_meters: 112, candidates: [] } }),
+  );
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
@@ -2706,7 +3842,10 @@ async function openNewAedDetailForm(page: import("@playwright/test").Page, conte
   await expect(page.getByRole("heading", { name: "Angaben zum AED" })).toBeVisible();
 }
 
-test("the detail form turns a few taps into OSM tags and keeps its entries when going back", async ({ page, context }) => {
+test("the detail form turns a few taps into OSM tags and keeps its entries when going back", async ({
+  page,
+  context,
+}) => {
   await openNewAedDetailForm(page, context);
   let createRequest: Record<string, unknown> | undefined;
   await page.route("**/api/osm/development/create-node", async (route) => {
@@ -2757,7 +3896,15 @@ test("the detail form turns a few taps into OSM tags and keeps its entries when 
   await continueButton.click();
   await expect(page.getByRole("heading", { name: "Vorschau für neuen AED" })).toBeVisible();
   const preview = page.locator(".capture-content");
-  for (const tag of ["emergency=defibrillator", "defibrillator:location=Foyer, Empfang", "access=customers", "opening_hours=Mo-Fr 08:00-18:00", "indoor=yes", "level=1", "phone=+49 911 123456"]) {
+  for (const tag of [
+    "emergency=defibrillator",
+    "defibrillator:location=Foyer, Empfang",
+    "access=customers",
+    "opening_hours=Mo-Fr 08:00-18:00",
+    "indoor=yes",
+    "level=1",
+    "phone=+49 911 123456",
+  ]) {
     await expect(preview).toContainText(tag);
   }
 
@@ -2776,12 +3923,20 @@ test("the detail form turns a few taps into OSM tags and keeps its entries when 
   await page.getByRole("button", { name: "Testserver: AED eintragen" }).click();
   await expect.poll(() => createRequest).toBeDefined();
   expect(createRequest?.details).toEqual({
-    "defibrillator:location": "Foyer, Empfang", access: "customers", opening_hours: "Mo-Fr 08:00-18:00", indoor: "yes", level: "1", phone: "+49 911 123456",
+    "defibrillator:location": "Foyer, Empfang",
+    access: "customers",
+    opening_hours: "Mo-Fr 08:00-18:00",
+    indoor: "yes",
+    level: "1",
+    phone: "+49 911 123456",
   });
   expect(createRequest).not.toHaveProperty("location_description");
 });
 
-test("choosing drinnen and then draußen drops the level, and 24/7 only follows an explicit choice", async ({ page, context }) => {
+test("choosing drinnen and then draußen drops the level, and 24/7 only follows an explicit choice", async ({
+  page,
+  context,
+}) => {
   await openNewAedDetailForm(page, context);
   await page.getByText("Drinnen", { exact: true }).click();
   await page.getByRole("button", { name: "Eine Ebene tiefer" }).click();
@@ -2813,7 +3968,10 @@ test("the detail form radio groups work with the keyboard and keep the focus", a
   await expect(page.getByRole("group", { name: "Wer kommt ran?" })).toBeVisible();
 });
 
-test("the detail form fits a 320 px phone in all six languages with the main button always reachable", async ({ page, context }) => {
+test("the detail form fits a 320 px phone in all six languages with the main button always reachable", async ({
+  page,
+  context,
+}) => {
   await page.setViewportSize({ width: 320, height: 640 });
   await openNewAedDetailForm(page, context);
   // Alle Folgefelder einblenden, damit das Formular so lang wie möglich ist.
@@ -2824,14 +3982,31 @@ test("the detail form fits a 320 px phone in all six languages with the main but
   for (const language of languageCodes) {
     await page.locator("#language").selectOption(language);
     await expect(page.locator("#detail-form")).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth), `horizontal page overflow in ${language}`).toBeLessThanOrEqual(320);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+      `horizontal page overflow in ${language}`,
+    ).toBeLessThanOrEqual(320);
     // Kein Bedienelement ragt rechts über den Bildschirm hinaus.
-    const overflowing = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>("#detail-form .chip, #detail-form .field, #detail-form .step-button, #detail-form summary, .detail-footer .button")]
-      .filter((element) => element.getBoundingClientRect().right > window.innerWidth + 0.5).map((element) => element.className));
+    const overflowing = await page.evaluate(() =>
+      [
+        ...document.querySelectorAll<HTMLElement>(
+          "#detail-form .chip, #detail-form .field, #detail-form .step-button, #detail-form summary, .detail-footer .button",
+        ),
+      ]
+        .filter((element) => element.getBoundingClientRect().right > window.innerWidth + 0.5)
+        .map((element) => element.className),
+    );
     expect(overflowing, `controls beyond the screen in ${language}`).toEqual([]);
     // Alle Tippflächen sind mindestens 44 px hoch.
-    const tooSmall = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>("#detail-form .chip, #detail-form .step-button, #detail-form summary, #detail-form .field, .detail-footer .button")]
-      .filter((element) => element.getBoundingClientRect().height < 44).map((element) => element.textContent?.trim() ?? element.className));
+    const tooSmall = await page.evaluate(() =>
+      [
+        ...document.querySelectorAll<HTMLElement>(
+          "#detail-form .chip, #detail-form .step-button, #detail-form summary, #detail-form .field, .detail-footer .button",
+        ),
+      ]
+        .filter((element) => element.getBoundingClientRect().height < 44)
+        .map((element) => element.textContent?.trim() ?? element.className),
+    );
     expect(tooSmall, `touch targets below 44 px in ${language}`).toEqual([]);
     // Die feste Fußleiste: Der Hauptknopf liegt ohne Scrollen im sichtbaren Bereich, auch bei langem Formular.
     await page.evaluate(() => window.scrollTo(0, 0));
@@ -2854,17 +4029,51 @@ type NodeAnswer = { status: number; body?: unknown };
 async function openExistingAedPreview(
   page: import("@playwright/test").Page,
   context: import("@playwright/test").BrowserContext,
-  options: { nodes: NodeAnswer[]; writeStatus?: number; writeBody?: unknown; corrections?: boolean; atList?: boolean; candidateSource?: "archive" | "development"; writeAvailable?: boolean },
+  options: {
+    nodes: NodeAnswer[];
+    writeStatus?: number;
+    writeBody?: unknown;
+    corrections?: boolean;
+    atList?: boolean;
+    candidateSource?: "archive" | "development";
+    writeAvailable?: boolean;
+  },
 ) {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   // Mit `corrections` meldet der Server-Ersatz zusätzlich, dass der Betreiber Korrekturen freigegeben hat.
-  await page.route("**/api/auth/session", (route) => route.fulfill({ json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: true, developmentSession: true, developmentWriteAvailable: options.writeAvailable ?? true, developmentWriteOwnerHash: testDevelopmentOwnerHash, ...(options.corrections ? { developmentCorrectionsAvailable: true } : {}) } }));
-  await page.route("**/api/osm/candidates/search", (route) => route.fulfill({ json: {
-    status: "complete", coverage_radius_meters: 112,
-    // Das Archiv kennt nur ältere, unvollständige Tags; der frische Stand kommt über die eigene Leseroute.
-    candidates: [{ id: "node/123", osmType: "node", coordinateQuality: "exact", position: { latitude: 52.52001, longitude: 13.40501 }, tags: { emergency: "defibrillator", name: "Rathaus" }, ...(options.candidateSource ? { source: options.candidateSource } : {}) }],
-  } }));
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: true,
+        loginAvailable: true,
+        developmentLoginAvailable: true,
+        developmentSession: true,
+        developmentWriteAvailable: options.writeAvailable ?? true,
+        developmentWriteOwnerHash: testDevelopmentOwnerHash,
+        ...(options.corrections ? { developmentCorrectionsAvailable: true } : {}),
+      },
+    }),
+  );
+  await page.route("**/api/osm/candidates/search", (route) =>
+    route.fulfill({
+      json: {
+        status: "complete",
+        coverage_radius_meters: 112,
+        // Das Archiv kennt nur ältere, unvollständige Tags; der frische Stand kommt über die eigene Leseroute.
+        candidates: [
+          {
+            id: "node/123",
+            osmType: "node",
+            coordinateQuality: "exact",
+            position: { latitude: 52.52001, longitude: 13.40501 },
+            tags: { emergency: "defibrillator", name: "Rathaus" },
+            ...(options.candidateSource ? { source: options.candidateSource } : {}),
+          },
+        ],
+      },
+    }),
+  );
   const nodeRequests: string[] = [];
   let answerIndex = 0;
   await page.route("**/api/osm/development/node**", async (route) => {
@@ -2876,7 +4085,10 @@ async function openExistingAedPreview(
   const writes: Array<Record<string, unknown>> = [];
   await page.route("**/api/osm/development/check-date", async (route) => {
     writes.push(route.request().postDataJSON() as Record<string, unknown>);
-    await route.fulfill({ status: options.writeStatus ?? 200, json: options.writeBody ?? { status: "complete", version: 10 } });
+    await route.fulfill({
+      status: options.writeStatus ?? 200,
+      json: options.writeBody ?? { status: "complete", version: 10 },
+    });
   });
   await page.goto("/");
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
@@ -2892,11 +4104,24 @@ async function openExistingAedPreview(
   return { nodeRequests, writes };
 }
 
-const freshNode = (tags: Record<string, string>, version = 9): NodeAnswer => ({ status: 200, body: { status: "ok", id: "node/123", version, tags } });
+const freshNode = (tags: Record<string, string>, version = 9): NodeAnswer => ({
+  status: 200,
+  body: { status: "ok", id: "node/123", version, tags },
+});
 
-test("adding details to an existing AED locks what is already entered and sends only the additions", async ({ page, context }) => {
+test("adding details to an existing AED locks what is already entered and sends only the additions", async ({
+  page,
+  context,
+}) => {
   const { nodeRequests, writes } = await openExistingAedPreview(page, context, {
-    nodes: [freshNode({ access: "yes", indoor: "yes", "defibrillator:location": "Links neben dem Garagentor", check_date: "2025-10-20" })],
+    nodes: [
+      freshNode({
+        access: "yes",
+        indoor: "yes",
+        "defibrillator:location": "Links neben dem Garagentor",
+        check_date: "2025-10-20",
+      }),
+    ],
   });
   // Ohne Tipp auf „Ergänzen“ wird nichts gelesen.
   expect(nodeRequests).toEqual([]);
@@ -2936,12 +4161,18 @@ test("adding details to an existing AED locks what is already entered and sends 
   expect(writes).toHaveLength(1);
   // Die Version und das Prüfdatum kommen aus dem frisch gelesenen Stand, nicht aus dem alten Treffer.
   expect(writes[0]).toMatchObject({
-    confirmed: true, target: "node/123", expected_version: 9, expected_check_date: "2025-10-20",
+    confirmed: true,
+    target: "node/123",
+    expected_version: 9,
+    expected_check_date: "2025-10-20",
     details: { opening_hours: "24/7", level: "0" },
   });
 });
 
-test("the quick confirmation stays a single tap without reading the object or sending details", async ({ page, context }) => {
+test("the quick confirmation stays a single tap without reading the object or sending details", async ({
+  page,
+  context,
+}) => {
   const { nodeRequests, writes } = await openExistingAedPreview(page, context, { nodes: [freshNode({})] });
   await page.getByRole("button", { name: "Testserver: Prüfdatum speichern" }).click();
   await expect(page.getByRole("status")).toContainText("Vor-Ort-Prüfung gespeichert");
@@ -2950,7 +4181,10 @@ test("the quick confirmation stays a single tap without reading the object or se
   expect(writes[0]).not.toHaveProperty("details");
 });
 
-test("going back from the preview keeps the entries, going back from the form resets them", async ({ page, context }) => {
+test("going back from the preview keeps the entries, going back from the form resets them", async ({
+  page,
+  context,
+}) => {
   await openExistingAedPreview(page, context, { nodes: [freshNode({ check_date: "2025-10-20" })] });
   await page.getByRole("button", { name: "Fehlende Angaben ergänzen" }).click();
   await page.getByText("Jeder", { exact: true }).click();
@@ -2967,7 +4201,9 @@ test("going back from the preview keeps the entries, going back from the form re
 });
 
 test("a failed read offers a retry, and the retry shows the form", async ({ page, context }) => {
-  const { nodeRequests } = await openExistingAedPreview(page, context, { nodes: [{ status: 502, body: { error: "development_api_unavailable" } }, freshNode({ check_date: "2025-10-20" })] });
+  const { nodeRequests } = await openExistingAedPreview(page, context, {
+    nodes: [{ status: 502, body: { error: "development_api_unavailable" } }, freshNode({ check_date: "2025-10-20" })],
+  });
   await page.getByRole("button", { name: "Fehlende Angaben ergänzen" }).click();
   await expect(page.getByRole("alert")).toContainText("Die aktuellen Daten ließen sich nicht laden");
   await expect(page.locator("#detail-form")).toHaveCount(0);
@@ -2986,9 +4222,21 @@ test("a deleted object says so and offers no useless retry", async ({ page, cont
 });
 
 test("an AED with everything already entered says so and offers nothing to fill in", async ({ page, context }) => {
-  await openExistingAedPreview(page, context, { nodes: [freshNode({
-    "defibrillator:location": "Foyer", access: "customers", opening_hours: "Mo-Fr 08:00-18:00", indoor: "no", operator: "Stadtwerke", phone: "112", description: "Notiz", ref: "7", check_date: "2025-10-20",
-  })] });
+  await openExistingAedPreview(page, context, {
+    nodes: [
+      freshNode({
+        "defibrillator:location": "Foyer",
+        access: "customers",
+        opening_hours: "Mo-Fr 08:00-18:00",
+        indoor: "no",
+        operator: "Stadtwerke",
+        phone: "112",
+        description: "Notiz",
+        ref: "7",
+        check_date: "2025-10-20",
+      }),
+    ],
+  });
   await page.getByRole("button", { name: "Fehlende Angaben ergänzen" }).click();
   await expect(page.locator(".capture-content")).toContainText("schon alles eingetragen");
   await expect(page.locator("#detail-form input[type='text'], #detail-form input[type='radio']")).toHaveCount(0);
@@ -2997,7 +4245,9 @@ test("an AED with everything already entered says so and offers nothing to fill 
 });
 
 test("an existing value from OSM is shown as plain text and never as markup", async ({ page, context }) => {
-  await openExistingAedPreview(page, context, { nodes: [freshNode({ "defibrillator:location": "<img src=x onerror=window.__pwned=1>", check_date: "2025-10-20" })] });
+  await openExistingAedPreview(page, context, {
+    nodes: [freshNode({ "defibrillator:location": "<img src=x onerror=window.__pwned=1>", check_date: "2025-10-20" })],
+  });
   await page.getByRole("button", { name: "Fehlende Angaben ergänzen" }).click();
   await expect(page.locator("#detail-group-location")).toContainText("<img src=x onerror=window.__pwned=1>");
   expect(await page.evaluate(() => (window as unknown as { __pwned?: number }).__pwned)).toBeUndefined();
@@ -3005,7 +4255,11 @@ test("an existing value from OSM is shown as plain text and never as markup", as
 });
 
 test("a server conflict while saving added details asks for a new check", async ({ page, context }) => {
-  await openExistingAedPreview(page, context, { nodes: [freshNode({ check_date: "2025-10-20" })], writeStatus: 409, writeBody: { error: "version_conflict" } });
+  await openExistingAedPreview(page, context, {
+    nodes: [freshNode({ check_date: "2025-10-20" })],
+    writeStatus: 409,
+    writeBody: { error: "version_conflict" },
+  });
   await page.getByRole("button", { name: "Fehlende Angaben ergänzen" }).click();
   await page.getByText("Nur Kunden", { exact: true }).click();
   await page.locator("#detail-continue").click();
@@ -3015,16 +4269,28 @@ test("a server conflict while saving added details asks for a new check", async 
 
 test("the add-details form fits a 320 px phone in all six languages", async ({ page, context }) => {
   await page.setViewportSize({ width: 320, height: 640 });
-  await openExistingAedPreview(page, context, { nodes: [freshNode({ access: "yes", indoor: "yes", check_date: "2025-10-20" })] });
+  await openExistingAedPreview(page, context, {
+    nodes: [freshNode({ access: "yes", indoor: "yes", check_date: "2025-10-20" })],
+  });
   await page.getByRole("button", { name: "Fehlende Angaben ergänzen" }).click();
   await expect(page.locator("#detail-form")).toBeVisible();
   await page.getByText("Mehr Angaben", { exact: true }).click();
   for (const language of languageCodes) {
     await page.locator("#language").selectOption(language);
     await expect(page.locator("#detail-form")).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth), `horizontal page overflow in ${language}`).toBeLessThanOrEqual(320);
-    const overflowing = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>("#detail-form .chip, #detail-form .field, #detail-form .detail-locked, #detail-form summary, .detail-footer .button")]
-      .filter((element) => element.getBoundingClientRect().right > window.innerWidth + 0.5).map((element) => element.className));
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+      `horizontal page overflow in ${language}`,
+    ).toBeLessThanOrEqual(320);
+    const overflowing = await page.evaluate(() =>
+      [
+        ...document.querySelectorAll<HTMLElement>(
+          "#detail-form .chip, #detail-form .field, #detail-form .detail-locked, #detail-form summary, .detail-footer .button",
+        ),
+      ]
+        .filter((element) => element.getBoundingClientRect().right > window.innerWidth + 0.5)
+        .map((element) => element.className),
+    );
     expect(overflowing, `controls beyond the screen in ${language}`).toEqual([]);
     // Die gesperrten Zeilen nennen den bestehenden Wert in der gewählten Sprache.
     await expect(page.locator("#detail-group-access .detail-locked")).not.toBeEmpty();
@@ -3035,10 +4301,21 @@ test("the add-details form fits a 320 px phone in all six languages", async ({ p
 // Bestehende Angaben korrigieren (Etappe P5): nur mit Betreiber-Schalter, mit „alt → neu“ und zweiter Bestätigung
 // ---------------------------------------------------------------------------------------------------------------
 
-const knownNode = { access: "private", opening_hours: "24/7", indoor: "yes", level: "1", operator: "Stadtwerke", check_date: "2025-10-20" };
-const correctButton = (page: import("@playwright/test").Page) => page.getByRole("button", { name: "Angaben ergänzen oder korrigieren", exact: true });
+const knownNode = {
+  access: "private",
+  opening_hours: "24/7",
+  indoor: "yes",
+  level: "1",
+  operator: "Stadtwerke",
+  check_date: "2025-10-20",
+};
+const correctButton = (page: import("@playwright/test").Page) =>
+  page.getByRole("button", { name: "Angaben ergänzen oder korrigieren", exact: true });
 
-test("with corrections allowed the form is prefilled, shows the old value of every change and needs a second confirmation", async ({ page, context }) => {
+test("with corrections allowed the form is prefilled, shows the old value of every change and needs a second confirmation", async ({
+  page,
+  context,
+}) => {
   const { writes } = await openExistingAedPreview(page, context, { nodes: [freshNode(knownNode)], corrections: true });
   await correctButton(page).click();
   await expect(page.getByRole("heading", { name: "Angaben ergänzen oder korrigieren" })).toBeVisible();
@@ -3084,7 +4361,10 @@ test("with corrections allowed the form is prefilled, shows the old value of eve
   await expect(page.getByRole("status")).toContainText("Prüfdatum und Änderungen gespeichert");
   expect(writes).toHaveLength(1);
   expect(writes[0]).toMatchObject({
-    confirmed: true, target: "node/123", expected_version: 9, expected_check_date: "2025-10-20",
+    confirmed: true,
+    target: "node/123",
+    expected_version: 9,
+    expected_check_date: "2025-10-20",
     details: { access: "yes", level: "2", ref: "7" },
     expected_before: { access: "private", level: "1" },
     confirmed_corrections: true,
@@ -3135,11 +4415,22 @@ test("clearing a field never deletes the value in OSM", async ({ page, context }
   await expect(page.locator(".capture-content")).not.toContainText("operator");
 });
 
-test("a value the form cannot show stays locked and unchanged, and does not block other details", async ({ page, context }) => {
-  const { writes } = await openExistingAedPreview(page, context, { nodes: [freshNode({
-    // Ein Zeilenumbruch mitten im Text und eine Nummer mit Wörtern lassen sich im Formular nicht darstellen.
-    access: "permissive", phone: "bitte anrufen", description: "Zeile1\nZeile2", check_date: "2025-10-20",
-  })], corrections: true });
+test("a value the form cannot show stays locked and unchanged, and does not block other details", async ({
+  page,
+  context,
+}) => {
+  const { writes } = await openExistingAedPreview(page, context, {
+    nodes: [
+      freshNode({
+        // Ein Zeilenumbruch mitten im Text und eine Nummer mit Wörtern lassen sich im Formular nicht darstellen.
+        access: "permissive",
+        phone: "bitte anrufen",
+        description: "Zeile1\nZeile2",
+        check_date: "2025-10-20",
+      }),
+    ],
+    corrections: true,
+  });
   await correctButton(page).click();
   await expect(page.locator("#detail-group-access")).toContainText("Schon eingetragen: permissive");
   await expect(page.locator("#detail-group-access")).toContainText("lässt sich hier nicht ändern");
@@ -3169,7 +4460,12 @@ test("going back from the preview keeps the changes and shows the old values aga
 });
 
 test("a server conflict on a correction asks for a new check", async ({ page, context }) => {
-  await openExistingAedPreview(page, context, { nodes: [freshNode(knownNode)], corrections: true, writeStatus: 409, writeBody: { error: "version_conflict" } });
+  await openExistingAedPreview(page, context, {
+    nodes: [freshNode(knownNode)],
+    corrections: true,
+    writeStatus: 409,
+    writeBody: { error: "version_conflict" },
+  });
   await correctButton(page).click();
   await page.getByText("Jeder", { exact: true }).click();
   await page.locator("#detail-continue").click();
@@ -3178,7 +4474,10 @@ test("a server conflict on a correction asks for a new check", async ({ page, co
   await expect(page.getByRole("status")).toContainText("Nichts wurde geändert");
 });
 
-test("without the operator switch there is no correction mode: existing values stay locked", async ({ page, context }) => {
+test("without the operator switch there is no correction mode: existing values stay locked", async ({
+  page,
+  context,
+}) => {
   await openExistingAedPreview(page, context, { nodes: [freshNode(knownNode)] });
   await expect(correctButton(page)).toHaveCount(0);
   await page.getByRole("button", { name: "Fehlende Angaben ergänzen" }).click();
@@ -3197,9 +4496,19 @@ test("the correction form fits a 320 px phone in all six languages", async ({ pa
   for (const language of languageCodes) {
     await page.locator("#language").selectOption(language);
     await expect(page.locator("#detail-form")).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth), `horizontal page overflow in ${language}`).toBeLessThanOrEqual(320);
-    const overflowing = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>("#detail-form .chip, #detail-form .field, #detail-form .detail-was, #detail-form summary, .detail-footer .button")]
-      .filter((element) => !element.hidden && element.getBoundingClientRect().right > window.innerWidth + 0.5).map((element) => element.className));
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+      `horizontal page overflow in ${language}`,
+    ).toBeLessThanOrEqual(320);
+    const overflowing = await page.evaluate(() =>
+      [
+        ...document.querySelectorAll<HTMLElement>(
+          "#detail-form .chip, #detail-form .field, #detail-form .detail-was, #detail-form summary, .detail-footer .button",
+        ),
+      ]
+        .filter((element) => !element.hidden && element.getBoundingClientRect().right > window.innerWidth + 0.5)
+        .map((element) => element.className),
+    );
     expect(overflowing, `controls beyond the screen in ${language}`).toEqual([]);
     // Die „Vorher“-Zeile steht sichtbar und nennt den alten Wert in der gewählten Sprache.
     await expect(page.locator('[data-detail-was="access"]')).toBeVisible();
@@ -3211,11 +4520,18 @@ test("the correction form fits a 320 px phone in all six languages", async ({ pa
 // Tags direkt aus der Trefferliste ansehen und ändern, vor der Datumsbestätigung
 // ---------------------------------------------------------------------------------------------------------------
 
-const detailsFromList = (page: import("@playwright/test").Page) => page.getByRole("button", { name: /^Angaben ansehen und (ergänzen|ändern)$/u });
+const detailsFromList = (page: import("@playwright/test").Page) =>
+  page.getByRole("button", { name: /^Angaben ansehen und (ergänzen|ändern)$/u });
 
-test("the hit list offers the tags before the date: view, add, and confirm the date once at the end", async ({ page, context }) => {
+test("the hit list offers the tags before the date: view, add, and confirm the date once at the end", async ({
+  page,
+  context,
+}) => {
   const { nodeRequests, writes } = await openExistingAedPreview(page, context, {
-    atList: true, nodes: [freshNode({ access: "yes", "defibrillator:location": "Links neben dem Garagentor", check_date: "2025-10-20" })],
+    atList: true,
+    nodes: [
+      freshNode({ access: "yes", "defibrillator:location": "Links neben dem Garagentor", check_date: "2025-10-20" }),
+    ],
   });
   // Neben „Als noch vorhanden bestätigen“ steht der Weg zu den Tags. Es wurde noch nichts gelesen oder gesendet.
   await expect(detailsFromList(page)).toBeVisible();
@@ -3241,7 +4557,10 @@ test("the hit list offers the tags before the date: view, add, and confirm the d
   expect(writes[0]).toMatchObject({ target: "node/123", expected_version: 9, details: { opening_hours: "24/7" } });
 });
 
-test("going back from the form that was opened in the list returns to the list, and the preview returns to the form", async ({ page, context }) => {
+test("going back from the form that was opened in the list returns to the list, and the preview returns to the form", async ({
+  page,
+  context,
+}) => {
   await openExistingAedPreview(page, context, { atList: true, nodes: [freshNode({ check_date: "2025-10-20" })] });
   await detailsFromList(page).click();
   await page.getByText("Jeder", { exact: true }).click();
@@ -3267,7 +4586,11 @@ test("the quick confirmation in the list still leads to the date page in one tap
 });
 
 test("the list offers the change wording only when corrections are allowed", async ({ page, context }) => {
-  await openExistingAedPreview(page, context, { atList: true, nodes: [freshNode({ access: "private", check_date: "2025-10-20" })], corrections: true });
+  await openExistingAedPreview(page, context, {
+    atList: true,
+    nodes: [freshNode({ access: "private", check_date: "2025-10-20" })],
+    corrections: true,
+  });
   await expect(page.getByRole("button", { name: "Angaben ansehen und ändern" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Angaben ansehen und ergänzen" })).toHaveCount(0);
   await page.getByRole("button", { name: "Angaben ansehen und ändern" }).click();
@@ -3275,7 +4598,10 @@ test("the list offers the change wording only when corrections are allowed", asy
   await expect(page.locator("#detail-access-private")).toBeChecked();
 });
 
-test("an AED from the real-OSM archive or a session without test-server writing gets no tag button", async ({ page, context }) => {
+test("an AED from the real-OSM archive or a session without test-server writing gets no tag button", async ({
+  page,
+  context,
+}) => {
   await openExistingAedPreview(page, context, { atList: true, candidateSource: "archive", nodes: [freshNode({})] });
   await expect(detailsFromList(page)).toHaveCount(0);
 });
@@ -3290,7 +4616,10 @@ test("the tag button in the list fits a 320 px phone in all six languages", asyn
   await openExistingAedPreview(page, context, { atList: true, nodes: [freshNode({})] });
   for (const language of languageCodes) {
     await page.locator("#language").selectOption(language);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth), `horizontal page overflow in ${language}`).toBeLessThanOrEqual(320);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+      `horizontal page overflow in ${language}`,
+    ).toBeLessThanOrEqual(320);
     const buttons = page.locator('.candidate-item [data-action="open-candidate-details"]');
     await expect(buttons).toHaveCount(1);
     const box = await buttons.boundingBox();
@@ -3304,7 +4633,11 @@ test("the tag button in the list fits a 320 px phone in all six languages", asyn
 // ---------------------------------------------------------------------------------------------------------------
 
 test("the brand link cannot discard a draft while the save result is unclear", async ({ page, context }) => {
-  await openExistingAedPreview(page, context, { nodes: [freshNode({})], writeStatus: 202, writeBody: { status: "uncertain" } });
+  await openExistingAedPreview(page, context, {
+    nodes: [freshNode({})],
+    writeStatus: 202,
+    writeBody: { status: "uncertain" },
+  });
   await page.getByRole("button", { name: "Testserver: Prüfdatum speichern" }).click();
   await expect(page.getByRole("status")).toContainText("Ergebnis unklar");
 
@@ -3319,10 +4652,15 @@ test("the brand link cannot discard a draft while the save result is unclear", a
   await expect(page.getByRole("button", { name: "Testserver: Status erneut prüfen" })).toBeVisible();
 });
 
-test("the brand link stays disabled while a save is being sent and is free again afterwards", async ({ page, context }) => {
+test("the brand link stays disabled while a save is being sent and is free again afterwards", async ({
+  page,
+  context,
+}) => {
   await openExistingAedPreview(page, context, { nodes: [freshNode({})] });
   let release: () => void = () => undefined;
-  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   // Die spätere Route gewinnt: Die Antwort kommt erst, wenn der Test sie freigibt.
   await page.route("**/api/osm/development/check-date", async (route) => {
     await gate;
@@ -3343,7 +4681,11 @@ test("the brand link stays disabled while a save is being sent and is free again
 
 test("the reload button stays blocked while a save result is unclear", async ({ page, context }) => {
   await publishNewVersion(page);
-  await openExistingAedPreview(page, context, { nodes: [freshNode({})], writeStatus: 202, writeBody: { status: "uncertain" } });
+  await openExistingAedPreview(page, context, {
+    nodes: [freshNode({})],
+    writeStatus: 202,
+    writeBody: { status: "uncertain" },
+  });
   await expect(page.locator("#update-banner")).toBeVisible();
   await page.getByRole("button", { name: "Testserver: Prüfdatum speichern" }).click();
   // Der Update-Hinweis ist selbst ein Status; die Meldung zum Speichern steht im Inhaltsbereich.
@@ -3355,7 +4697,9 @@ test("the reload button stays blocked while a save result is unclear", async ({ 
   await expect(banner).toContainText("Neu laden geht, sobald das Speichern abgeschlossen ist.");
 
   // Nach der Statusprüfung ist der Vorgang abgeschlossen und der Knopf wieder frei.
-  await page.route("**/api/osm/development/check-date", (route) => route.fulfill({ json: { status: "complete", version: 10 } }));
+  await page.route("**/api/osm/development/check-date", (route) =>
+    route.fulfill({ json: { status: "complete", version: 10 } }),
+  );
   await page.getByRole("button", { name: "Testserver: Status erneut prüfen" }).click();
   await expect(page.locator(".capture-content")).toContainText("Vor-Ort-Prüfung gespeichert");
   await expect(banner.getByRole("button", { name: "Neu laden" })).toBeEnabled();

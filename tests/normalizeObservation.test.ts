@@ -4,7 +4,13 @@ import { explainObservationMismatch, normalizeProviderObservation } from "../ser
 import { analyzeAedPhoto } from "../server/vision/openai";
 
 const base: VisionObservation = {
-  scene: "other_object", device_count: 0, readable_text: [], manufacturer: null, model: null, location_clues: [], image_issues: [],
+  scene: "other_object",
+  device_count: 0,
+  readable_text: [],
+  manufacturer: null,
+  model: null,
+  location_clues: [],
+  image_issues: [],
 };
 
 /** Aufbereiten und danach streng prüfen: genau der Weg, den die Antwort des Anbieters nimmt. */
@@ -20,7 +26,10 @@ function validObservationFor(overrides: Record<string, unknown>): VisionObservat
 describe("normalizeProviderObservation", () => {
   it("turns line breaks and control characters in text fragments into spaces", () => {
     // Das war der Fall im Handytest: ein Flaschenetikett mit mehrzeiligem Text.
-    const value = validObservationFor({ readable_text: ["ISOPROPANOL\n99,9 %\r\nREINSTALKOHOL", "750\tml"], manufacturer: "MAXXI\nCLEAN" });
+    const value = validObservationFor({
+      readable_text: ["ISOPROPANOL\n99,9 %\r\nREINSTALKOHOL", "750\tml"],
+      manufacturer: "MAXXI\nCLEAN",
+    });
     expect(value.readable_text).toEqual(["ISOPROPANOL 99,9 % REINSTALKOHOL", "750 ml"]);
     expect(value.manufacturer).toBe("MAXXI CLEAN");
   });
@@ -49,7 +58,10 @@ describe("normalizeProviderObservation", () => {
   });
 
   it("keeps only known image issues, once each", () => {
-    expect(validObservationFor({ image_issues: ["blurry", "blurry", "noisy", 3, "dark"] }).image_issues).toEqual(["blurry", "dark"]);
+    expect(validObservationFor({ image_issues: ["blurry", "blurry", "noisy", 3, "dark"] }).image_issues).toEqual([
+      "blurry",
+      "dark",
+    ]);
   });
 
   describe("when the device count contradicts the scene", () => {
@@ -61,15 +73,32 @@ describe("normalizeProviderObservation", () => {
     });
 
     it("keeps the recognized scene and fits the count to it", () => {
-      expect(validObservationFor({ scene: "device_visible", device_count: 0 })).toMatchObject({ scene: "device_visible", device_count: 1 });
-      expect(validObservationFor({ scene: "device_visible", device_count: 3 })).toMatchObject({ scene: "multiple_devices", device_count: 3 });
-      expect(validObservationFor({ scene: "multiple_devices", device_count: 1 })).toMatchObject({ scene: "device_visible", device_count: 1 });
-      expect(validObservationFor({ scene: "multiple_devices", device_count: 0 })).toMatchObject({ scene: "multiple_devices", device_count: 2 });
+      expect(validObservationFor({ scene: "device_visible", device_count: 0 })).toMatchObject({
+        scene: "device_visible",
+        device_count: 1,
+      });
+      expect(validObservationFor({ scene: "device_visible", device_count: 3 })).toMatchObject({
+        scene: "multiple_devices",
+        device_count: 3,
+      });
+      expect(validObservationFor({ scene: "multiple_devices", device_count: 1 })).toMatchObject({
+        scene: "device_visible",
+        device_count: 1,
+      });
+      expect(validObservationFor({ scene: "multiple_devices", device_count: 0 })).toMatchObject({
+        scene: "multiple_devices",
+        device_count: 2,
+      });
     });
 
     it("leaves an unclear scene alone and clamps an oversized count", () => {
-      expect(validObservationFor({ scene: "unclear", device_count: 4 })).toMatchObject({ scene: "unclear", device_count: 4 });
-      expect(validObservationFor({ scene: "multiple_devices", device_count: 99 }).device_count).toBe(OBSERVATION_LIMITS.deviceCount);
+      expect(validObservationFor({ scene: "unclear", device_count: 4 })).toMatchObject({
+        scene: "unclear",
+        device_count: 4,
+      });
+      expect(validObservationFor({ scene: "multiple_devices", device_count: 99 }).device_count).toBe(
+        OBSERVATION_LIMITS.deviceCount,
+      );
     });
   });
 
@@ -96,7 +125,9 @@ describe("normalizeProviderObservation", () => {
 
     it("never turns a negative scene into a recognized one", () => {
       for (const scene of ["other_object", "sign_only", "empty_holder", "unclear"]) {
-        expect(["device_visible", "multiple_devices"]).not.toContain(validObservationFor({ scene, device_count: 5 }).scene);
+        expect(["device_visible", "multiple_devices"]).not.toContain(
+          validObservationFor({ scene, device_count: 5 }).scene,
+        );
       }
     });
   });
@@ -124,16 +155,38 @@ describe("explainObservationMismatch", () => {
 
 describe("the check with a photo like the one from the phone test", () => {
   // Ein winziges, aber vollständiges JPEG, damit der Test ohne Netz und ohne Bilddatei auskommt.
-  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00, 0x00, 0xff, 0xd9]);
-  const answer = (value: unknown) => vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-    status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(value) }] }],
-  })));
+  const jpeg = new Uint8Array([
+    0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0xff, 0xda, 0x00, 0x08,
+    0x01, 0x01, 0x00, 0x00, 0x3f, 0x00, 0x00, 0xff, 0xd9,
+  ]);
+  const answer = (value: unknown) =>
+    vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: "completed",
+          output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(value) }] }],
+        }),
+      ),
+    );
 
   it("returns the scene instead of failing when the label text has line breaks and other devices are counted", async () => {
-    const result = await analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", answer({
-      scene: "other_object", device_count: 2, readable_text: ["ISOPROPANOL\n99,9 %", "750 ml"],
-      manufacturer: "MAXXI", model: null, location_clues: ["Schreibtisch"], image_issues: [],
-    }));
-    expect(result).toMatchObject({ scene: "other_object", device_count: 0, readable_text: ["ISOPROPANOL 99,9 %", "750 ml"] });
+    const result = await analyzeAedPhoto(
+      { bytes: jpeg, contentType: "image/jpeg" },
+      "test-secret",
+      answer({
+        scene: "other_object",
+        device_count: 2,
+        readable_text: ["ISOPROPANOL\n99,9 %", "750 ml"],
+        manufacturer: "MAXXI",
+        model: null,
+        location_clues: ["Schreibtisch"],
+        image_issues: [],
+      }),
+    );
+    expect(result).toMatchObject({
+      scene: "other_object",
+      device_count: 0,
+      readable_text: ["ISOPROPANOL 99,9 %", "750 ml"],
+    });
   });
 });

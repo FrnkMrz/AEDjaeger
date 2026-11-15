@@ -6,10 +6,8 @@ import type { VisionObservation } from "../src/contracts/visionObservation";
 
 const sessionToken = "s".repeat(43);
 const imageBytes = Uint8Array.from([
-  0xff, 0xd8,
-  0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01, 0x01, 0x11, 0x00,
-  0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00,
-  0x00, 0xff, 0xd9,
+  0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0xff, 0xda, 0x00, 0x08,
+  0x01, 0x01, 0x00, 0x00, 0x3f, 0x00, 0x00, 0xff, 0xd9,
 ]);
 const observation: VisionObservation = {
   scene: "device_visible",
@@ -21,7 +19,17 @@ const observation: VisionObservation = {
   image_issues: [],
 };
 
-function createDatabase(options: { authenticated?: boolean; environment?: "production" | "development"; reserved?: boolean; runError?: boolean; runErrorMessage?: string; claimError?: boolean; duplicate?: "reserved" | "started" } = {}) {
+function createDatabase(
+  options: {
+    authenticated?: boolean;
+    environment?: "production" | "development";
+    reserved?: boolean;
+    runError?: boolean;
+    runErrorMessage?: string;
+    claimError?: boolean;
+    duplicate?: "reserved" | "started";
+  } = {},
+) {
   const calls: string[] = [];
   const budgetIdentities: string[] = [];
   let reservationDay: string | undefined;
@@ -32,7 +40,11 @@ function createDatabase(options: { authenticated?: boolean; environment?: "produ
       const statement: D1Statement = {
         bind(...values) {
           boundValues = values;
-          if (query.includes("INSERT INTO analysis_budget_reservations") || query.includes("provider_started_at IS NULL")) budgetIdentities.push(String(values[1]));
+          if (
+            query.includes("INSERT INTO analysis_budget_reservations") ||
+            query.includes("provider_started_at IS NULL")
+          )
+            budgetIdentities.push(String(values[1]));
           return statement;
         },
         async run<T>() {
@@ -41,24 +53,38 @@ function createDatabase(options: { authenticated?: boolean; environment?: "produ
             reservationDay = String(boundValues[3]);
             reservationCost = Number(boundValues[4]);
           }
-          if (options.runError && query.includes("INSERT INTO analysis_budget_reservations")) throw new Error(options.runErrorMessage ?? "private D1 diagnostic");
-          if (options.claimError && query.includes("provider_started_at IS NULL")) throw new Error("private D1 claim diagnostic");
-          const changes = query.includes("INSERT INTO analysis_budget_reservations") ? (options.reserved === false ? 0 : 1) : 1;
+          if (options.runError && query.includes("INSERT INTO analysis_budget_reservations"))
+            throw new Error(options.runErrorMessage ?? "private D1 diagnostic");
+          if (options.claimError && query.includes("provider_started_at IS NULL"))
+            throw new Error("private D1 claim diagnostic");
+          const changes = query.includes("INSERT INTO analysis_budget_reservations")
+            ? options.reserved === false
+              ? 0
+              : 1
+            : 1;
           return { success: true, meta: { changes } } as D1Result<T>;
         },
         async first<T>() {
           calls.push(query);
           if (query.includes("FROM osm_sessions")) {
-            return (options.authenticated === false ? null : { osm_subject: "osm-test-user", osm_environment: options.environment ?? "production" }) as T | null;
+            return (
+              options.authenticated === false
+                ? null
+                : { osm_subject: "osm-test-user", osm_environment: options.environment ?? "production" }
+            ) as T | null;
           }
           if (query.includes("FROM analysis_budget_reservations")) {
-            return (options.duplicate ? {
-              id: "prior-reservation",
-              status: "reserved",
-              provider_started_at: options.duplicate === "started" ? 1 : null,
-              utc_day: reservationDay,
-              cost_micros: reservationCost,
-            } : null) as T | null;
+            return (
+              options.duplicate
+                ? {
+                    id: "prior-reservation",
+                    status: "reserved",
+                    provider_started_at: options.duplicate === "started" ? 1 : null,
+                    utc_day: reservationDay,
+                    cost_micros: reservationCost,
+                  }
+                : null
+            ) as T | null;
           }
           return null;
         },
@@ -82,15 +108,25 @@ function environment(database: D1Database, overrides: Partial<VisionRouteEnviron
   };
 }
 
-function analysisRequest(options: { cookie?: string; origin?: string; contentType?: string; body?: string } = {}): Request {
+function analysisRequest(
+  options: { cookie?: string; origin?: string; contentType?: string; body?: string } = {},
+): Request {
   return new Request("https://aedjaeger.test/api/vision/analyze", {
     method: "POST",
     headers: {
-      ...(options.cookie === undefined ? { Cookie: `aedjaeger_osm_session=${sessionToken}` } : { Cookie: options.cookie }),
+      ...(options.cookie === undefined
+        ? { Cookie: `aedjaeger_osm_session=${sessionToken}` }
+        : { Cookie: options.cookie }),
       ...(options.origin === undefined ? { Origin: "https://aedjaeger.test" } : { Origin: options.origin }),
       "Content-Type": options.contentType ?? "application/json",
     },
-    body: options.body ?? JSON.stringify({ request_id: "request_1234567890", content_type: "image/jpeg", image_base64: btoa(String.fromCharCode(...imageBytes)) }),
+    body:
+      options.body ??
+      JSON.stringify({
+        request_id: "request_1234567890",
+        content_type: "image/jpeg",
+        image_base64: btoa(String.fromCharCode(...imageBytes)),
+      }),
   });
 }
 
@@ -102,7 +138,11 @@ describe("protected image analysis route", () => {
   it("stays disabled until the operator explicitly enables it and sets every budget", async () => {
     const { database, calls } = createDatabase();
     const analyze = successfulAnalysis();
-    const response = await handleVisionAnalysis(analysisRequest(), environment(database, { AI_ANALYSIS_ENABLED: "false" }), { analyze });
+    const response = await handleVisionAnalysis(
+      analysisRequest(),
+      environment(database, { AI_ANALYSIS_ENABLED: "false" }),
+      { analyze },
+    );
 
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: "analysis_unavailable" });
@@ -122,7 +162,10 @@ describe("protected image analysis route", () => {
 
   it("rejects cross-origin requests before session lookup", async () => {
     const { database, calls } = createDatabase();
-    const response = await handleVisionAnalysis(analysisRequest({ origin: "https://attacker.example" }), environment(database));
+    const response = await handleVisionAnalysis(
+      analysisRequest({ origin: "https://attacker.example" }),
+      environment(database),
+    );
 
     expect(response.status).toBe(403);
     expect(calls).toEqual([]);
@@ -130,9 +173,18 @@ describe("protected image analysis route", () => {
 
   it("fails closed when operator budget limits are absent or invalid", async () => {
     const { database, calls } = createDatabase();
-    const response = await handleVisionAnalysis(analysisRequest(), environment(database, { AI_ANALYSIS_GLOBAL_DAILY_LIMIT_MICROS: "0" }));
-    const missingKey = await handleVisionAnalysis(analysisRequest(), environment(database, { OPENAI_API_KEY: undefined }));
-    const missingAllowlist = await handleVisionAnalysis(analysisRequest(), environment(database, { AI_ANALYSIS_ALLOWED_OSM_SUBJECTS: undefined }));
+    const response = await handleVisionAnalysis(
+      analysisRequest(),
+      environment(database, { AI_ANALYSIS_GLOBAL_DAILY_LIMIT_MICROS: "0" }),
+    );
+    const missingKey = await handleVisionAnalysis(
+      analysisRequest(),
+      environment(database, { OPENAI_API_KEY: undefined }),
+    );
+    const missingAllowlist = await handleVisionAnalysis(
+      analysisRequest(),
+      environment(database, { AI_ANALYSIS_ALLOWED_OSM_SUBJECTS: undefined }),
+    );
 
     expect(response.status).toBe(503);
     expect(missingKey.status).toBe(503);
@@ -143,7 +195,11 @@ describe("protected image analysis route", () => {
   it("rejects authenticated OSM users outside the configured pilot allowlist before reading the image or reserving budget", async () => {
     const { database, calls } = createDatabase();
     const analyze = successfulAnalysis();
-    const response = await handleVisionAnalysis(analysisRequest(), environment(database, { AI_ANALYSIS_ALLOWED_OSM_SUBJECTS: "another-osm-user" }), { analyze });
+    const response = await handleVisionAnalysis(
+      analysisRequest(),
+      environment(database, { AI_ANALYSIS_ALLOWED_OSM_SUBJECTS: "another-osm-user" }),
+      { analyze },
+    );
 
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: "analysis_not_allowed" });
@@ -176,7 +232,11 @@ describe("protected image analysis route", () => {
   it("does not reserve cost or call OpenAI for malformed image bytes", async () => {
     const { database, calls } = createDatabase();
     const analyze = successfulAnalysis();
-    const body = JSON.stringify({ request_id: "request_1234567890", content_type: "image/jpeg", image_base64: btoa("no image") });
+    const body = JSON.stringify({
+      request_id: "request_1234567890",
+      content_type: "image/jpeg",
+      image_base64: btoa("no image"),
+    });
     const response = await handleVisionAnalysis(analysisRequest({ body }), environment(database), { analyze });
 
     expect(response.status).toBe(400);
@@ -238,7 +298,13 @@ describe("protected image analysis route", () => {
     expect(development.budgetIdentities[1]).toBe(development.budgetIdentities[0]);
 
     const productionResponse = await handleVisionAnalysis(
-      analysisRequest({ body: JSON.stringify({ request_id: "request_2234567890", content_type: "image/jpeg", image_base64: btoa(String.fromCharCode(...imageBytes)) }) }),
+      analysisRequest({
+        body: JSON.stringify({
+          request_id: "request_2234567890",
+          content_type: "image/jpeg",
+          image_base64: btoa(String.fromCharCode(...imageBytes)),
+        }),
+      }),
       environment(production.database),
       { analyze: successfulAnalysis() },
     );
@@ -249,7 +315,9 @@ describe("protected image analysis route", () => {
   it("never calls the provider when a reservation is denied or cannot be confirmed", async () => {
     const analyze = successfulAnalysis();
     const exhausted = createDatabase({ reserved: false });
-    const exhaustedResponse = await handleVisionAnalysis(analysisRequest(), environment(exhausted.database), { analyze });
+    const exhaustedResponse = await handleVisionAnalysis(analysisRequest(), environment(exhausted.database), {
+      analyze,
+    });
     expect(exhaustedResponse.status).toBe(429);
     expect(await exhaustedResponse.json()).toEqual({ error: "analysis_budget_exceeded" });
     expect(analyze).not.toHaveBeenCalled();
@@ -257,7 +325,7 @@ describe("protected image analysis route", () => {
     const broken = createDatabase({ runError: true });
     const brokenResponse = await handleVisionAnalysis(analysisRequest(), environment(broken.database), { analyze });
     expect(brokenResponse.status).toBe(503);
-    expect((await brokenResponse.text())).not.toContain("private D1 diagnostic");
+    expect(await brokenResponse.text()).not.toContain("private D1 diagnostic");
     expect(analyze).not.toHaveBeenCalled();
   });
 
@@ -298,7 +366,10 @@ describe("protected image analysis route", () => {
     it("names a missing budget table without exposing the database message", async () => {
       const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
       try {
-        const { database } = createDatabase({ runError: true, runErrorMessage: "D1_ERROR: no such table: analysis_budget_reservations: SQLITE_ERROR" });
+        const { database } = createDatabase({
+          runError: true,
+          runErrorMessage: "D1_ERROR: no such table: analysis_budget_reservations: SQLITE_ERROR",
+        });
         const analyze = successfulAnalysis();
         const response = await handleVisionAnalysis(analysisRequest(), environment(database), { analyze });
         const body = await response.text();
@@ -320,12 +391,22 @@ describe("protected image analysis route", () => {
       const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
       try {
         const { database } = createDatabase();
-        const analyze = vi.fn(async () => { throw new VisionAnalysisError("provider_error", "internal text server-only-test-key", { providerStatus: 401, providerCode: "invalid_api_key" }); });
+        const analyze = vi.fn(async () => {
+          throw new VisionAnalysisError("provider_error", "internal text server-only-test-key", {
+            providerStatus: 401,
+            providerCode: "invalid_api_key",
+          });
+        });
         const response = await handleVisionAnalysis(analysisRequest(), environment(database), { analyze });
         const body = await response.text();
 
         expect(response.status).toBe(502);
-        expect(JSON.parse(body)).toEqual({ error: "analysis_failed", request_id: "request_1234567890", detail_status: 401, detail_code: "invalid_api_key" });
+        expect(JSON.parse(body)).toEqual({
+          error: "analysis_failed",
+          request_id: "request_1234567890",
+          detail_status: 401,
+          detail_code: "invalid_api_key",
+        });
         // Die interne Meldung der Ausnahme gelangt weder in die Antwort noch ins Protokoll.
         expect(body).not.toContain("server-only-test-key");
         expect(logged(log)).toContain("invalid_api_key");
@@ -339,7 +420,9 @@ describe("protected image analysis route", () => {
 
   it("keeps provider errors, photos and secrets out of the response", async () => {
     const { database } = createDatabase();
-    const analyze = vi.fn(async () => { throw new Error("provider payload includes server-only-test-key and photo bytes"); });
+    const analyze = vi.fn(async () => {
+      throw new Error("provider payload includes server-only-test-key and photo bytes");
+    });
     const response = await handleVisionAnalysis(analysisRequest(), environment(database), { analyze });
     const body = await response.text();
 
@@ -351,7 +434,10 @@ describe("protected image analysis route", () => {
 
   it("allows only POST and JSON bodies", async () => {
     const { database } = createDatabase();
-    const get = await handleVisionAnalysis(new Request("https://aedjaeger.test/api/vision/analyze"), environment(database));
+    const get = await handleVisionAnalysis(
+      new Request("https://aedjaeger.test/api/vision/analyze"),
+      environment(database),
+    );
     const text = await handleVisionAnalysis(analysisRequest({ contentType: "text/plain" }), environment(database));
     const oversized = new Request("https://aedjaeger.test/api/vision/analyze", {
       method: "POST",

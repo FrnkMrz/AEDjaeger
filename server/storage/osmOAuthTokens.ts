@@ -24,7 +24,13 @@ export async function storeOSMOAuthToken(
   encryptionKey: CryptoKey,
   cryptoApi: Crypto = crypto,
 ): Promise<void> {
-  if (!isSecret(sessionToken) || !isAccessToken(accessToken) || !isTimestamp(now) || !isTimestamp(expiresAt) || expiresAt <= now) {
+  if (
+    !isSecret(sessionToken) ||
+    !isAccessToken(accessToken) ||
+    !isTimestamp(now) ||
+    !isTimestamp(expiresAt) ||
+    expiresAt <= now
+  ) {
     throw new Error("Ungültiger OSM-Zugriff.");
   }
 
@@ -91,7 +97,14 @@ export async function findOSMOAuthToken(
 
     const iv = fromBase64Url(row.token_iv);
     if (iv.byteLength !== AES_GCM_IV_BYTES) throw new Error("Invalid token IV");
-    const token = await decryptToken(row.token_ciphertext, sessionHash, row.token_expires_at, iv, encryptionKey, cryptoApi);
+    const token = await decryptToken(
+      row.token_ciphertext,
+      sessionHash,
+      row.token_expires_at,
+      iv,
+      encryptionKey,
+      cryptoApi,
+    );
     if (!isAccessToken(token)) throw new Error("Invalid decrypted token");
     return token;
   } catch {
@@ -108,7 +121,10 @@ export async function deleteOSMOAuthToken(
   if (!isSecret(sessionToken)) return;
   try {
     const sessionHash = await sha256Hex(sessionToken, cryptoApi);
-    const result = await database.prepare("DELETE FROM osm_oauth_tokens WHERE session_hash = ?").bind(sessionHash).run();
+    const result = await database
+      .prepare("DELETE FROM osm_oauth_tokens WHERE session_hash = ?")
+      .bind(sessionHash)
+      .run();
     if (!result.success) throw new Error("D1 delete failed");
   } catch {
     throw new Error("Der OSM-Zugriff konnte nicht sicher gelöscht werden.");
@@ -156,13 +172,14 @@ function isSecret(value: unknown): value is string {
 }
 
 function isAccessToken(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= MAX_TOKEN_LENGTH && /^[\x21-\x7E]+$/u.test(value);
+  return (
+    typeof value === "string" && value.length > 0 && value.length <= MAX_TOKEN_LENGTH && /^[\x21-\x7E]+$/u.test(value)
+  );
 }
 
 function isTimestamp(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) >= 0;
 }
-
 
 function toBase64Url(bytes: Uint8Array): string {
   let binary = "";

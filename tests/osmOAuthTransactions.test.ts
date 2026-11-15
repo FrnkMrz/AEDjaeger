@@ -54,7 +54,8 @@ function createDatabase(returnPayload = true) {
             storedRow.stateHash !== values[0] ||
             storedRow.bindingHash !== values[1] ||
             storedRow.expiresAt <= Number(values[2])
-          ) return null;
+          )
+            return null;
           consumed = true;
           return { payload_iv: storedRow.payload_iv, payload_ciphertext: storedRow.payload_ciphertext } as T;
         },
@@ -129,7 +130,13 @@ describe("OSM OAuth transaction storage", () => {
     await storeOSMOAuthTransaction(database, validInput, key);
 
     await expect(
-      consumeOSMOAuthTransaction(database, validInput.state, validInput.browserBinding, validInput.createdAt + 600_000, key),
+      consumeOSMOAuthTransaction(
+        database,
+        validInput.state,
+        validInput.browserBinding,
+        validInput.createdAt + 600_000,
+        key,
+      ),
     ).resolves.toBeNull();
   });
 
@@ -159,10 +166,22 @@ describe("OSM OAuth transaction storage", () => {
     await storeOSMOAuthTransaction(database, validInput, originalKey);
 
     await expect(
-      consumeOSMOAuthTransaction(database, validInput.state, validInput.browserBinding, validInput.createdAt + 1, wrongKey),
+      consumeOSMOAuthTransaction(
+        database,
+        validInput.state,
+        validInput.browserBinding,
+        validInput.createdAt + 1,
+        wrongKey,
+      ),
     ).rejects.toThrow("nicht sicher fortgesetzt");
     await expect(
-      consumeOSMOAuthTransaction(database, validInput.state, validInput.browserBinding, validInput.createdAt + 1, originalKey),
+      consumeOSMOAuthTransaction(
+        database,
+        validInput.state,
+        validInput.browserBinding,
+        validInput.createdAt + 1,
+        originalKey,
+      ),
     ).resolves.toBeNull();
   });
 

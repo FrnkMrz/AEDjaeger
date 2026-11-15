@@ -31,7 +31,12 @@ export async function fetchDeployedRevision(fetcher: typeof fetch = fetch): Prom
   const timeout = globalThis.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     // no-store: Weder Browser noch Zwischenspeicher dürfen eine alte Antwort liefern.
-    const response = await fetcher(VERSION_URL, { cache: "no-store", credentials: "same-origin", headers: { Accept: "application/json" }, signal: controller.signal });
+    const response = await fetcher(VERSION_URL, {
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
     if (!response.ok) return null;
     const payload: unknown = await response.json();
     if (typeof payload !== "object" || payload === null) return null;

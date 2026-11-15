@@ -28,6 +28,9 @@ if (!command) {
   throw new Error("Bitte einen Wrangler-Befehl angeben, zum Beispiel `check` oder `dev`.");
 }
 
-const result = spawnSync(process.execPath, [wranglerCli, ...argumentsForWrangler], { env: environment, stdio: "inherit" });
+const result = spawnSync(process.execPath, [wranglerCli, ...argumentsForWrangler], {
+  env: environment,
+  stdio: "inherit",
+});
 if (result.error) throw result.error;
 process.exitCode = result.status ?? 1;

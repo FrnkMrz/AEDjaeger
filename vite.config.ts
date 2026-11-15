@@ -9,7 +9,8 @@ export default defineConfig({
   // the same restrictive policy locally instead of silently bypassing it.
   preview: {
     headers: {
-      "Content-Security-Policy": "default-src 'self'; img-src 'self' blob: https://tile.openstreetmap.org; connect-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "Content-Security-Policy":
+        "default-src 'self'; img-src 'self' blob: https://tile.openstreetmap.org; connect-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
       "Strict-Transport-Security": "max-age=31536000",
       "X-Content-Type-Options": "nosniff",
       "X-Frame-Options": "DENY",

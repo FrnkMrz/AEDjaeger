@@ -8,9 +8,9 @@ import {
 
 describe("OSM OAuth PKCE building blocks", () => {
   it("creates the S256 challenge from the RFC 7636 example verifier", async () => {
-    await expect(
-      createCodeChallenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"),
-    ).resolves.toBe("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
+    await expect(createCodeChallenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")).resolves.toBe(
+      "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+    );
   });
 
   it("creates a fresh state and verifier in the PKCE-supported length range", async () => {
@@ -29,8 +29,7 @@ describe("OSM OAuth PKCE building blocks", () => {
   });
 
   it("rejects malformed PKCE verifiers before deriving a challenge", async () => {
-    await expect(createCodeChallenge("not a valid verifier"))
-      .rejects.toThrow("PKCE-Verifier");
+    await expect(createCodeChallenge("not a valid verifier")).rejects.toThrow("PKCE-Verifier");
   });
 
   it("builds only the fixed OSM authorization endpoint and login-only scope", async () => {
@@ -63,22 +62,28 @@ describe("OSM OAuth PKCE building blocks", () => {
     expect(authorizationUrl.origin).toBe("https://master.apis.dev.openstreetmap.org");
     expect(authorizationUrl.pathname).toBe("/oauth2/authorize");
     expect(authorizationUrl.searchParams.get("scope")).toBe("openid write_api");
-    expect(authorizationUrl.searchParams.get("redirect_uri")).toBe("https://aedjaeger.example/api/auth/osm/development/callback");
+    expect(authorizationUrl.searchParams.get("redirect_uri")).toBe(
+      "https://aedjaeger.example/api/auth/osm/development/callback",
+    );
   });
 
   it("rejects insecure redirect URLs and caller-controlled OAuth state", async () => {
     const transaction = await createPkceTransaction();
 
-    expect(() => buildOSMAuthorizationUrl({
-      clientId: "client",
-      redirectUri: "http://evil.example/callback",
-      transaction,
-    })).toThrow("HTTPS");
-    expect(() => buildOSMAuthorizationUrl({
-      clientId: "client",
-      redirectUri: "https://aedjaeger.example/callback",
-      transaction: { ...transaction, state: "caller-controlled" },
-    })).toThrow("OAuth-Transaktion");
+    expect(() =>
+      buildOSMAuthorizationUrl({
+        clientId: "client",
+        redirectUri: "http://evil.example/callback",
+        transaction,
+      }),
+    ).toThrow("HTTPS");
+    expect(() =>
+      buildOSMAuthorizationUrl({
+        clientId: "client",
+        redirectUri: "https://aedjaeger.example/callback",
+        transaction: { ...transaction, state: "caller-controlled" },
+      }),
+    ).toThrow("OAuth-Transaktion");
   });
 
   it("accepts one matching callback code and rejects state tampering or duplicate codes", async () => {

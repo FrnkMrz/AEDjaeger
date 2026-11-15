@@ -1,8 +1,25 @@
 import { findOSMSession } from "../storage/osmSessions";
 import type { D1Database } from "../storage/d1";
-import { markAnalysisProviderStarted, releaseAnalysisBudgetReservation, reserveAnalysisBudget } from "../storage/analysisBudget";
-import { analyzeAedPhoto, MAX_VISION_IMAGE_BYTES, OPENAI_VISION_MODEL, validateAedImage, VisionAnalysisError, type SupportedImageType } from "./openai";
-import { BodyTooLargeError, isCrossOrigin, jsonResponse, readOSMSessionCookie, readLimitedBody } from "../http/requestGuards";
+import {
+  markAnalysisProviderStarted,
+  releaseAnalysisBudgetReservation,
+  reserveAnalysisBudget,
+} from "../storage/analysisBudget";
+import {
+  analyzeAedPhoto,
+  MAX_VISION_IMAGE_BYTES,
+  OPENAI_VISION_MODEL,
+  validateAedImage,
+  VisionAnalysisError,
+  type SupportedImageType,
+} from "./openai";
+import {
+  BodyTooLargeError,
+  isCrossOrigin,
+  jsonResponse,
+  readOSMSessionCookie,
+  readLimitedBody,
+} from "../http/requestGuards";
 import { sha256Hex } from "../crypto/hash";
 
 // JSON base64 encoding adds about one third to the original image size.
@@ -67,7 +84,10 @@ export async function handleVisionAnalysis(
   try {
     body = await readLimitedBody(request, MAX_REQUEST_BYTES);
   } catch (error) {
-    return jsonResponse({ error: error instanceof BodyTooLargeError ? "request_too_large" : "invalid_request" }, error instanceof BodyTooLargeError ? 413 : 400);
+    return jsonResponse(
+      { error: error instanceof BodyTooLargeError ? "request_too_large" : "invalid_request" },
+      error instanceof BodyTooLargeError ? 413 : 400,
+    );
   }
 
   const payload = parseRequestBody(body);
@@ -94,7 +114,10 @@ export async function handleVisionAnalysis(
       createdAt: now,
     });
     if (!reservation.reserved) {
-      return jsonResponse({ error: reservation.reason === "duplicate" ? "duplicate_request" : "analysis_budget_exceeded" }, reservation.reason === "duplicate" ? 409 : 429);
+      return jsonResponse(
+        { error: reservation.reason === "duplicate" ? "duplicate_request" : "analysis_budget_exceeded" },
+        reservation.reason === "duplicate" ? 409 : 429,
+      );
     }
   } catch (error) {
     // Fail closed: no provider call unless D1 confirmed a reservation first.
@@ -124,13 +147,21 @@ export async function handleVisionAnalysis(
     return jsonResponse({ request_id: payload.requestId, model: OPENAI_VISION_MODEL, observation }, 200);
   } catch (error) {
     const status = error instanceof VisionAnalysisError && error.code === "invalid_image" ? 400 : 502;
-    const code = error instanceof VisionAnalysisError && error.code === "invalid_image" ? "invalid_image" : "analysis_failed";
+    const code =
+      error instanceof VisionAnalysisError && error.code === "invalid_image" ? "invalid_image" : "analysis_failed";
     const detail = error instanceof VisionAnalysisError ? error.detail : {};
-    return failure(code, status, payload.requestId, { detailStatus: detail.providerStatus, detailCode: detail.providerCode });
+    return failure(code, status, payload.requestId, {
+      detailStatus: detail.providerStatus,
+      detailCode: detail.providerCode,
+    });
   }
 }
 
-async function safelyReleaseAnalysisReservation(database: D1Database, userId: string, requestId: string): Promise<void> {
+async function safelyReleaseAnalysisReservation(
+  database: D1Database,
+  userId: string,
+  requestId: string,
+): Promise<void> {
   try {
     await releaseAnalysisBudgetReservation(database, userId, requestId);
   } catch {
@@ -147,20 +178,39 @@ async function safelyReleaseAnalysisReservation(database: D1Database, userId: st
  * sein. Übernommen werden nur feste Kennungen und Statuszahlen, nie Fehlertexte, Fotos, Schlüssel
  * oder Kontodaten. Die Kennungen gehen auch an die App, damit sie dort auf dem Handy lesbar sind.
  */
-function failure(error: string, status: number, requestId: string | undefined, hint: { detailStatus?: number; detailCode?: string } = {}): Response {
-  console.error(JSON.stringify({ event: "vision_analysis_failed", error, status, detail_status: hint.detailStatus, detail_code: hint.detailCode }));
-  return jsonResponse({
-    error,
-    ...(requestId ? { request_id: requestId } : {}),
-    ...(hint.detailStatus ? { detail_status: hint.detailStatus } : {}),
-    ...(hint.detailCode ? { detail_code: hint.detailCode } : {}),
-  }, status);
+function failure(
+  error: string,
+  status: number,
+  requestId: string | undefined,
+  hint: { detailStatus?: number; detailCode?: string } = {},
+): Response {
+  console.error(
+    JSON.stringify({
+      event: "vision_analysis_failed",
+      error,
+      status,
+      detail_status: hint.detailStatus,
+      detail_code: hint.detailCode,
+    }),
+  );
+  return jsonResponse(
+    {
+      error,
+      ...(requestId ? { request_id: requestId } : {}),
+      ...(hint.detailStatus ? { detail_status: hint.detailStatus } : {}),
+      ...(hint.detailCode ? { detail_code: hint.detailCode } : {}),
+    },
+    status,
+  );
 }
 
 /** Ordnet einen Datenbankfehler einer festen Kennung zu, ohne seinen Text weiterzugeben. */
 function describeStorageFailure(error: unknown): string {
   // D1 meldet eine fehlende Tabelle als „no such table“; das ist der häufigste Einrichtungsfehler.
-  return error instanceof Error && /no such table/iu.test(`${error.message} ${(error.cause as Error | undefined)?.message ?? ""}`) ? "missing_table" : "storage_error";
+  return error instanceof Error &&
+    /no such table/iu.test(`${error.message} ${(error.cause as Error | undefined)?.message ?? ""}`)
+    ? "missing_table"
+    : "storage_error";
 }
 
 /**
@@ -183,7 +233,9 @@ export function isPhotoCheckAvailable(
   return limits.allowedSubjects.includes(`${session.environment}:${session.subject}`);
 }
 
-function parseRequestBody(bytes: Uint8Array): { requestId: string; contentType: SupportedImageType; imageBytes: Uint8Array } | null {
+function parseRequestBody(
+  bytes: Uint8Array,
+): { requestId: string; contentType: SupportedImageType; imageBytes: Uint8Array } | null {
   let decoded: unknown;
   try {
     decoded = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
@@ -192,9 +244,23 @@ function parseRequestBody(bytes: Uint8Array): { requestId: string; contentType: 
   }
   if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) return null;
   const record = decoded as Record<string, unknown>;
-  if (Object.keys(record).length !== 3 || typeof record.request_id !== "string" || !/^[A-Za-z0-9_-]{16,128}$/u.test(record.request_id)) return null;
-  if (typeof record.content_type !== "string" || !ALLOWED_IMAGE_TYPES.includes(record.content_type as SupportedImageType)) return null;
-  if (typeof record.image_base64 !== "string" || record.image_base64.length === 0 || record.image_base64.length > Math.ceil(MAX_VISION_IMAGE_BYTES / 3) * 4) return null;
+  if (
+    Object.keys(record).length !== 3 ||
+    typeof record.request_id !== "string" ||
+    !/^[A-Za-z0-9_-]{16,128}$/u.test(record.request_id)
+  )
+    return null;
+  if (
+    typeof record.content_type !== "string" ||
+    !ALLOWED_IMAGE_TYPES.includes(record.content_type as SupportedImageType)
+  )
+    return null;
+  if (
+    typeof record.image_base64 !== "string" ||
+    record.image_base64.length === 0 ||
+    record.image_base64.length > Math.ceil(MAX_VISION_IMAGE_BYTES / 3) * 4
+  )
+    return null;
   if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(record.image_base64)) return null;
 
   let binary: string;
@@ -208,7 +274,9 @@ function parseRequestBody(bytes: Uint8Array): { requestId: string; contentType: 
   return { requestId: record.request_id, contentType: record.content_type as SupportedImageType, imageBytes };
 }
 
-function getAnalysisLimits(environment: VisionRouteEnvironment): { allowedSubjects: string[]; reservationMicros: number; userDailyMicros: number; globalDailyMicros: number } | null {
+function getAnalysisLimits(
+  environment: VisionRouteEnvironment,
+): { allowedSubjects: string[]; reservationMicros: number; userDailyMicros: number; globalDailyMicros: number } | null {
   if (environment.AI_ANALYSIS_ENABLED !== "true") return null;
   const allowedSubjects = parseAllowedSubjects(environment.AI_ANALYSIS_ALLOWED_OSM_SUBJECTS);
   const reservationMicros = parsePositiveInteger(environment.AI_ANALYSIS_COST_RESERVATION_MICROS);
@@ -222,7 +290,11 @@ function getAnalysisLimits(environment: VisionRouteEnvironment): { allowedSubjec
 function parseAllowedSubjects(value: string | undefined): string[] | null {
   if (!value || value.length > 25_600) return null;
   const subjects = value.split(",").map((subject) => subject.trim());
-  if (subjects.length === 0 || subjects.length > 100 || subjects.some((subject) => !subject || subject.length > 320 || /[\u0000-\u001f]/u.test(subject))) {
+  if (
+    subjects.length === 0 ||
+    subjects.length > 100 ||
+    subjects.some((subject) => !subject || subject.length > 320 || /[\u0000-\u001f]/u.test(subject))
+  ) {
     return null;
   }
   return [...new Set(subjects)];

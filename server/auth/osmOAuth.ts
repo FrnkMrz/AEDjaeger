@@ -32,7 +32,12 @@ export async function createPkceTransaction(cryptoApi: Crypto = crypto): Promise
 
 /** PKCE S256 bildet den SHA-256-Hash ohne Padding als base64url ab. */
 export async function createCodeChallenge(verifier: string, cryptoApi: Crypto = crypto): Promise<string> {
-  if (typeof verifier !== "string" || verifier.length < 43 || verifier.length > 128 || !/^[A-Za-z0-9._~-]+$/u.test(verifier)) {
+  if (
+    typeof verifier !== "string" ||
+    verifier.length < 43 ||
+    verifier.length > 128 ||
+    !/^[A-Za-z0-9._~-]+$/u.test(verifier)
+  ) {
     throw new Error("Ungültiger PKCE-Verifier.");
   }
 
@@ -51,7 +56,11 @@ export function buildOSMAuthorizationUrl(input: {
   }
 
   const redirectUri = validateRedirectUri(input.redirectUri);
-  if (!isOAuthValue(input.transaction.state) || !isOAuthValue(input.transaction.nonce) || !isOAuthValue(input.transaction.challenge)) {
+  if (
+    !isOAuthValue(input.transaction.state) ||
+    !isOAuthValue(input.transaction.nonce) ||
+    !isOAuthValue(input.transaction.challenge)
+  ) {
     throw new Error("Ungültige OAuth-Transaktion.");
   }
 

@@ -2,19 +2,26 @@ import { describe, expect, it } from "vitest";
 import { reserveSearchSlot } from "../server/storage/searchCooldown";
 import type { D1Database, D1Result, D1Statement } from "../server/storage/d1";
 
-function createDatabase(options: { changes?: number; success?: boolean; runError?: boolean; nextAllowedAt?: number } = {}) {
+function createDatabase(
+  options: { changes?: number; success?: boolean; runError?: boolean; nextAllowedAt?: number } = {},
+) {
   const calls: Array<{ query: string; values: unknown[] }> = [];
   const database: D1Database = {
     prepare(query: string) {
       let values: unknown[] = [];
       const statement: D1Statement = {
-        bind(...boundValues) { values = boundValues; return statement; },
+        bind(...boundValues) {
+          values = boundValues;
+          return statement;
+        },
         async run<T>() {
           calls.push({ query, values });
           if (options.runError) throw new Error("private D1 details");
           return { success: options.success ?? true, meta: { changes: options.changes ?? 1 } } as D1Result<T>;
         },
-        async first<T>() { return (options.nextAllowedAt === undefined ? null : { next_allowed_at: options.nextAllowedAt }) as T | null; },
+        async first<T>() {
+          return (options.nextAllowedAt === undefined ? null : { next_allowed_at: options.nextAllowedAt }) as T | null;
+        },
       };
       return statement;
     },
@@ -26,7 +33,10 @@ describe("account search cooldown", () => {
   it("atomically reserves a 30-second slot with a one-way account hash and no coordinates", async () => {
     const { database, calls } = createDatabase();
 
-    await expect(reserveSearchSlot(database, "osm-user-7", 1_000)).resolves.toEqual({ reserved: true, nextAllowedAt: 31_000 });
+    await expect(reserveSearchSlot(database, "osm-user-7", 1_000)).resolves.toEqual({
+      reserved: true,
+      nextAllowedAt: 31_000,
+    });
     expect(calls[0].query).toContain("DELETE FROM overpass_search_cooldowns WHERE next_allowed_at <= ?");
     expect(calls[1].query).toContain("INSERT INTO overpass_search_cooldowns");
     expect(calls[1].query).toContain("osm_subject_hash");
@@ -37,7 +47,10 @@ describe("account search cooldown", () => {
 
   it("rejects concurrent searches until the next slot is available", async () => {
     const { database } = createDatabase({ changes: 0, nextAllowedAt: 28_100 });
-    await expect(reserveSearchSlot(database, "osm-user-7", 26_500)).resolves.toEqual({ reserved: false, retryAfterSeconds: 2 });
+    await expect(reserveSearchSlot(database, "osm-user-7", 26_500)).resolves.toEqual({
+      reserved: false,
+      retryAfterSeconds: 2,
+    });
   });
 
   it("fails closed when D1 cannot reserve a slot", async () => {

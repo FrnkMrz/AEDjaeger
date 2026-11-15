@@ -107,7 +107,11 @@ export async function consumeOSMOAuthTransaction(
       .bind(stateHash, bindingHash, now)
       .first<EncryptedPayload>();
 
-    if (!encryptedPayload || typeof encryptedPayload.payload_iv !== "string" || typeof encryptedPayload.payload_ciphertext !== "string") {
+    if (
+      !encryptedPayload ||
+      typeof encryptedPayload.payload_iv !== "string" ||
+      typeof encryptedPayload.payload_ciphertext !== "string"
+    ) {
       return null;
     }
 
@@ -156,8 +160,11 @@ function validateInput(input: OSMOAuthTransactionInput): void {
 function isPayload(value: unknown): value is OSMOAuthTransactionPayload {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const payload = value as Record<string, unknown>;
-  return isVerifier(payload.verifier) && isOAuthToken(payload.nonce) &&
-    (payload.environment === undefined || payload.environment === "production" || payload.environment === "development");
+  return (
+    isVerifier(payload.verifier) &&
+    isOAuthToken(payload.nonce) &&
+    (payload.environment === undefined || payload.environment === "production" || payload.environment === "development")
+  );
 }
 
 function isOAuthToken(value: unknown): value is string {
@@ -186,7 +193,6 @@ async function encryptPayload(
   );
   return toBase64Url(new Uint8Array(encrypted));
 }
-
 
 function toBase64Url(bytes: Uint8Array): string {
   let binary = "";
