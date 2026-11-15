@@ -63,6 +63,7 @@ import {
   localCalendarDate,
   photoDateNeedsConfirmation,
 } from "./domain/localDate";
+import { defibrillatorMark, displayCandidateLabel, escapeHtml, icon } from "./ui/markup";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root element was not found.");
@@ -75,7 +76,7 @@ const languageNames: Record<Language, string> = {
   fr: "Français",
   es: "Español",
 };
-// Exact Maki defibrillator path (CC0 1.0); the Info dialog and SVG assets keep its source visible.
+// Exakter Maki-Pfad (CC0 1.0); der Info-Dialog zeigt Quelle und Lizenz an.
 const defibrillatorPath =
   "m1.54995 7.33811c-2.386799-4.5965 3.63-7.660899 5.952-3.0644 2.3215-4.596499 8.33875-1.5322 5.95235 3.0644-.0869.1671-.2028.3456-.3114.5212h-1.8079l-1.81455-2.7216c-.06321-.09473-.1511-.1704-.25417-.21884-.10308-.04843-.21743-.06779-.3307-.05599-.11327.01181-.22117.05433-.31205.12298-.09087.06865-.16126.16082-.20358.26655l-1.6484 4.12-1.33-1.33c-.11716-.11707-.27597-.18288-.4416-.183h-3.1389c-.1086-.1757-.2245-.3542-.3111-.5213zm9.45005 1.7713c-.103-.00003-.2044-.02545-.2951-.07399-.0908-.04854-.1682-.11871-.2254-.20431l-1.34085-2.0111-1.5587 3.89679c-.03839.096-.10002.181-.17936.2474-.07935.0663-.17393.1119-.27524.1326-.04125.0086-.08327.0128-.1254.0126-.16568.0001-.32462-.0656-.4419-.1826l-1.8169-1.81739h-2.0054c1.36645 1.66819 2.85739 3.23039 4.46 4.67319.08531.077.19616.1197.3111.1197s.22579-.0427.3111-.1197c1.59778-1.4447 3.08545-3.0068 4.45055-4.67319z";
 const supportedLanguages = Object.keys(translations) as Language[];
@@ -398,7 +399,7 @@ function accountViewContext() {
     photoSelectionPending,
     activePhotoDraft: hasActivePhotoDraft(state),
     pendingDevelopmentWrite: Boolean(pendingDevelopmentWrite),
-    illustrationMarkup: defibrillatorMark(),
+    illustrationMarkup: defibrillatorMark(defibrillatorPath),
   };
 }
 
@@ -464,18 +465,6 @@ function buildVersionText(): string {
   const text = tv("buildVersion", { revision: __AEDJAEGER_BUILD_REVISION__ });
   const time = formatBuildTime(__AEDJAEGER_BUILD_REVISION__, language);
   return time ? `${text} · ${time}` : text;
-}
-
-/** Bezeichnung eines AED für die Anzeige: Ist keine bekannt (leer), steht ein lesbarer Ersatz da, in der gewählten Sprache. */
-function displayCandidateLabel(label: string): string {
-  return label.trim() === "" ? tv("unnamedAed") : label;
-}
-
-function escapeHtml(value: string): string {
-  return value.replace(
-    /[&<>"']/g,
-    (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character,
-  );
 }
 
 function getPhotoUrl(current: FlowState): string | undefined {
@@ -1028,7 +1017,7 @@ function statusContent(): string {
     : "";
   switch (state.kind) {
     case "ready":
-      return `<div class="empty-illustration" aria-hidden="true"><span class="device-card">${defibrillatorMark()}</span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>`;
+      return `<div class="empty-illustration" aria-hidden="true"><span class="device-card">${defibrillatorMark(defibrillatorPath)}</span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>`;
     case "photo": {
       // The first pilot deliberately relies on the person's on-site confirmation, not a model.
       // The image and its remaining metadata stay in this browser; only selected coordinates
@@ -1099,7 +1088,10 @@ function statusContent(): string {
       const numbered = assessment.kind === "candidate-review";
       const candidates = candidatesToShow
         .map(({ candidate, distanceMeters }, index) => {
-          const name = displayCandidateLabel(candidate.tags.name || candidate.tags["defibrillator:location"] || "");
+          const name = displayCandidateLabel(
+            candidate.tags.name || candidate.tags["defibrillator:location"] || "",
+            tv("unnamedAed"),
+          );
           const label = numbered ? `${index + 1}. ${name}` : name;
           const distance =
             distanceMeters === undefined
@@ -1350,10 +1342,10 @@ function statusContent(): string {
           ? `<button class="button button-primary" data-action="retake">${tv("nextAed")}</button>`
           : `${backButton}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
       const successful = state.writeStatus === "complete";
-      return `${photoMarkup}<div class="result-message"><span class="status-icon ${successful ? "status-good" : "status-warn"}" aria-hidden="true">${successful ? "✓" : "!"}</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.candidateLabel))}</strong></p>${content}${changedList}${addedList}${levelLeftNote}${noWriteNotice}${writeStatus}</div></div>${writeAction}${addDetailsButton}${navigation}`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon ${successful ? "status-good" : "status-warn"}" aria-hidden="true">${successful ? "✓" : "!"}</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.candidateLabel, tv("unnamedAed")))}</strong></p>${content}${changedList}${addedList}${levelLeftNote}${noWriteNotice}${writeStatus}</div></div>${writeAction}${addDetailsButton}${navigation}`;
     }
     case "existing-aed-details": {
-      const label = escapeHtml(displayCandidateLabel(state.candidateLabel));
+      const label = escapeHtml(displayCandidateLabel(state.candidateLabel, tv("unnamedAed")));
       const header = `<div class="result-message"><span class="status-icon status-good" aria-hidden="true">✓</span><div><h2>${tv(developmentCorrectionsAvailable ? "detailsCorrectTitle" : "detailsExistingTitle")}</h2><p><strong>${label}</strong></p><p>${tv(developmentCorrectionsAvailable ? "detailsCorrectIntro" : "detailsExistingIntro")}</p></div></div>`;
       if (state.load.status === "loading") {
         return `${photoMarkup}${header}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv("detailLoading")}</span></div>`;
@@ -1408,7 +1400,7 @@ function statusContent(): string {
             ? `<button class="button button-primary" data-action="continue-recovery"${state.writeStatus === "sending" ? " disabled" : ""}>${state.writeStatus === "sending" ? tv("developmentSending") : developmentSession && developmentWriteAvailable ? tv("developmentRetry") : tv("recoveryContinue")}</button>`
             : `<button class="button button-primary" data-action="retake">${state.writeStatus === "complete" ? tv("nextAed") : tv("recoveryContinue")}</button>`;
       const successful = state.writeStatus === "complete";
-      return `<div class="result-message"><span class="status-icon ${successful ? "status-good" : "status-warn"}" aria-hidden="true">${successful ? "✓" : "!"}</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.request.candidateLabel))}</strong></p>${targetLink}<p class="simulation-note ${successful ? "save-status-success" : ""}" role="status">${recoveryMessage}</p>${blockedReason ? `<p class="simulation-note" role="status">${blockedReason}</p>` : ""}</div></div>${action}`;
+      return `<div class="result-message"><span class="status-icon ${successful ? "status-good" : "status-warn"}" aria-hidden="true">${successful ? "✓" : "!"}</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.request.candidateLabel, tv("unnamedAed")))}</strong></p>${targetLink}<p class="simulation-note ${successful ? "save-status-success" : ""}" role="status">${recoveryMessage}</p>${blockedReason ? `<p class="simulation-note" role="status">${blockedReason}</p>` : ""}</div></div>${action}`;
     }
     case "candidate-error": {
       const errorKey: Record<typeof state.reason, FlowMessageKey> = {
@@ -1441,19 +1433,6 @@ function statusContent(): string {
   }
 }
 
-function icon(kind: "camera" | "search" | "check"): string {
-  const paths = {
-    camera: '<path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
-    search: '<circle cx="10.8" cy="10.8" r="6.2"/><path d="m15.5 15.5 4 4"/>',
-    check: '<path d="m5 12 4.3 4.3L19 6.8"/>',
-  };
-  return `<svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[kind]}</svg>`;
-}
-
-function defibrillatorMark(): string {
-  return `<svg class="device-mark" viewBox="0 0 15 15" fill="currentColor" aria-hidden="true"><path d="${defibrillatorPath}" /></svg>`;
-}
-
 function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void {
   const infoDialogWasOpen =
     preserveOpenInfoDialog && (document.querySelector<HTMLDialogElement>("#info-dialog")?.open ?? false);
@@ -1471,7 +1450,7 @@ function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void 
           ? `<main>
         <section class="hero ${isReady ? "" : "hero-compact"}"><div class="hero-kicker"><span></span>${t("eyebrow")}</div><h1>${isReady ? t("title") : state.kind === "photo-checking" || state.kind === "candidate-searching" ? t("checking") : t("tagline")}</h1>${isReady ? `<p>${t("intro")}</p>` : ""}</section>
         <section class="capture-card" aria-live="polite" aria-atomic="false">
-          <div class="capture-content">${isReady ? `${photoSelectionError ? `<p class="photo-selection-error" role="alert" tabindex="-1">${t("cameraError")}</p>` : ""}<div class="empty-illustration" aria-hidden="true"><span class="device-card">${defibrillatorMark()}</span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>` : statusContent()}</div>
+          <div class="capture-content">${isReady ? `${photoSelectionError ? `<p class="photo-selection-error" role="alert" tabindex="-1">${t("cameraError")}</p>` : ""}<div class="empty-illustration" aria-hidden="true"><span class="device-card">${defibrillatorMark(defibrillatorPath)}</span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>` : statusContent()}</div>
           ${isReady ? `<div class="capture-actions"><label class="button button-primary camera-label">${icon("camera")}<span>${t("camera")}</span><input id="camera-input" type="file" accept="image/*" capture="environment" /></label><label class="button button-secondary camera-label">${t("choosePhoto")}<input id="file-input" type="file" accept="image/*" /></label><p class="supporting-copy">${photoCheckAvailable ? tv("photoCheckNotice") : t("privacy")}</p></div>` : ""}
         </section>
       </main>${accountPanel()}`
