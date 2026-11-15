@@ -45,8 +45,23 @@ import {
 } from "./contracts/aedDetails";
 import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } from "./osm/candidateSearch";
 import { ExistingNodeError, requestExistingNode } from "./osm/existingNode";
+import { sendDevelopmentWrite } from "./net/developmentWrite";
 import { createPhotoSessionState } from "./state/photoSession";
 import { dispatchPhotoLocationAction } from "./ui/actions/photoLocationActions";
+import { renderPhotoState } from "./ui/views/photoStates";
+import {
+  accountPanel as renderAccountPanel,
+  loginEntry as renderLoginEntry,
+  type AccountState,
+} from "./ui/views/accountViews";
+import {
+  detailContinueLabel as renderDetailContinueLabel,
+  detailHas as detailHasValue,
+  detailMoreCountText as renderDetailMoreCountText,
+  existingValueLabel as renderExistingValueLabel,
+  renderDetailForm,
+  type DetailFormViewContext,
+} from "./ui/views/detailForm";
 import {
   formatCalendarDate,
   isCalendarDate,
@@ -55,6 +70,7 @@ import {
   localCalendarDate,
   photoDateNeedsConfirmation,
 } from "./domain/localDate";
+import { defibrillatorMark, displayCandidateLabel, escapeHtml, icon } from "./ui/markup";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("App root element was not found.");
@@ -67,7 +83,7 @@ const languageNames: Record<Language, string> = {
   fr: "Français",
   es: "Español",
 };
-// Exact Maki defibrillator path (CC0 1.0); the Info dialog and SVG assets keep its source visible.
+// Exakter Maki-Pfad (CC0 1.0); der Info-Dialog zeigt Quelle und Lizenz an.
 const defibrillatorPath =
   "m1.54995 7.33811c-2.386799-4.5965 3.63-7.660899 5.952-3.0644 2.3215-4.596499 8.33875-1.5322 5.95235 3.0644-.0869.1671-.2028.3456-.3114.5212h-1.8079l-1.81455-2.7216c-.06321-.09473-.1511-.1704-.25417-.21884-.10308-.04843-.21743-.06779-.3307-.05599-.11327.01181-.22117.05433-.31205.12298-.09087.06865-.16126.16082-.20358.26655l-1.6484 4.12-1.33-1.33c-.11716-.11707-.27597-.18288-.4416-.183h-3.1389c-.1086-.1757-.2245-.3542-.3111-.5213zm9.45005 1.7713c-.103-.00003-.2044-.02545-.2951-.07399-.0908-.04854-.1682-.11871-.2254-.20431l-1.34085-2.0111-1.5587 3.89679c-.03839.096-.10002.181-.17936.2474-.07935.0663-.17393.1119-.27524.1326-.04125.0086-.08327.0128-.1254.0126-.16568.0001-.32462-.0656-.4419-.1826l-1.8169-1.81739h-2.0054c1.36645 1.66819 2.85739 3.23039 4.46 4.67319.08531.077.19616.1197.3111.1197s.22579-.0427.3111-.1197c1.59778-1.4447 3.08545-3.0068 4.45055-4.67319z";
 const supportedLanguages = Object.keys(translations) as Language[];
@@ -93,14 +109,6 @@ let pendingDevelopmentWrite = readPendingDevelopmentWrite();
 let state: FlowState = pendingDevelopmentWrite
   ? { kind: "development-write-recovery", request: pendingDevelopmentWrite, writeStatus: "uncertain" }
   : { kind: "ready" };
-type AccountState =
-  | "checking"
-  | "not-configured"
-  | "connection-error"
-  | "login-error"
-  | "signed-out"
-  | "signed-in"
-  | "logout-error";
 let accountState: AccountState = "checking";
 let productionLoginAvailable = false;
 let developmentLoginAvailable = false;
@@ -368,75 +376,26 @@ function t(key: TranslationKey, values?: Record<string, number | string>): strin
 function tv(key: FlowMessageKey, values?: Record<string, number | string>): string {
   return translateFlow(language, key, values);
 }
-function signInLinks(): string {
-  const productionLink = productionLoginAvailable
-    ? `<a class="button button-primary account-sign-in" id="osm-sign-in" href="/api/auth/osm/start">${t("accountSignIn")}</a>`
-    : "";
-  const developmentLink = developmentLoginAvailable
-    ? `<a class="button button-secondary account-sign-in" id="osm-dev-sign-in" href="/api/auth/osm/development/start">${t("accountDevSignIn")}</a><p class="simulation-note">${t("accountDevNotice")}</p>`
-    : "";
-  return `${productionLink}${developmentLink}`;
+function accountViewContext() {
+  return {
+    t,
+    tv,
+    accountState,
+    productionLoginAvailable,
+    developmentLoginAvailable,
+    photoSelectionPending: photoSession.selectionPending,
+    activePhotoDraft: hasActivePhotoDraft(state),
+    pendingDevelopmentWrite: Boolean(pendingDevelopmentWrite),
+    illustrationMarkup: defibrillatorMark(defibrillatorPath),
+  };
 }
 
-/** Die OSM-Anmeldung ist Voraussetzung für alle Arbeitsfunktionen der App. */
 function loginEntry(): string {
-  const registerLink = `<a class="account-create-link" href="https://www.openstreetmap.org/user/new" target="_blank" rel="noopener noreferrer">${t("accountCreate")}</a>`;
-  const createHelp = `<p class="account-create-help">${t("accountCreateHelp")}</p>`;
-  let status = "";
-  let actions = "";
-  const pendingRecovery = pendingDevelopmentWrite
-    ? `<div class="login-status-wrap"><p class="login-status" role="status">${tv("recoveryNeedSignIn")}</p><button class="button button-secondary" data-action="continue-recovery">${tv("recoveryContinue")}</button></div>`
-    : "";
-
-  if (accountState === "checking") {
-    status = `<p class="login-status" role="status" aria-live="polite">${t("accountChecking")}</p>`;
-  } else if (accountState === "connection-error") {
-    status = `<p class="login-status" role="alert">${t("accountConnectionError")}</p>`;
-    actions = `<button class="button button-secondary account-sign-in" id="osm-session-retry" type="button">${t("accountRetry")}</button>`;
-  } else if (accountState === "not-configured") {
-    status = `<p class="login-status" role="status">${t("accountUnavailable")}</p>`;
-  } else {
-    if (accountState === "login-error") status = `<p class="login-status" role="alert">${t("accountLoginError")}</p>`;
-    if (accountState === "logout-error") {
-      status = `<p class="login-status" role="alert">${t("accountSignOutError")}</p>`;
-      // Keep logout retryable if the server may still hold the user's session.
-      actions = `<button class="button button-secondary account-sign-in" id="osm-sign-out" type="button">${t("accountSignOut")}</button>`;
-    } else {
-      actions = signInLinks();
-    }
-  }
-
-  return `<section class="login-card" aria-labelledby="login-title">
-    <div class="empty-illustration" aria-hidden="true"><span class="device-card">${defibrillatorMark()}</span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>
-    <p class="hero-kicker"><span></span>${t("eyebrow")}</p>
-    <h1 id="login-title" tabindex="-1">${t("accountGateTitle")}</h1>
-    <p class="login-intro">${t("accountGateIntro")}</p>
-    <p class="login-requirement">${t("accountRequired")}</p>
-    ${status ? `<div class="login-status-wrap">${status}</div>` : ""}
-    ${actions ? `<div class="login-actions">${actions}</div>` : ""}
-    ${pendingRecovery}
-    <div class="account-create">${registerLink}${createHelp}</div>
-    <p class="login-credentials-note">${t("accountCredentialsNote")}</p>
-  </section>`;
+  return renderLoginEntry(accountViewContext());
 }
 
 function accountPanel(): string {
-  if (accountState === "checking")
-    return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountChecking")}</section>`;
-  if (accountState === "not-configured")
-    return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountUnavailable")}</section>`;
-  if (accountState === "connection-error")
-    return `<section class="account-panel" aria-live="polite" tabindex="-1"><span>${t("accountConnectionError")}</span><button class="account-button" id="osm-session-retry" type="button">${t("accountRetry")}</button></section>`;
-  if ((photoSession.selectionPending || hasActivePhotoDraft(state)) && accountState !== "signed-in")
-    return `<section class="account-panel" aria-live="polite" tabindex="-1">${t("accountLoginBlocked")}</section>`;
-  if (accountState === "login-error")
-    return `<section class="account-panel" aria-live="polite"><p role="alert">${t("accountLoginError")}</p>${signInLinks()}</section>`;
-  // Angemeldet: Kein Block auf dem Hauptbildschirm. Der Status steht als Lampe in der Fußzeile, „Abmelden“ im Info-Dialog.
-  if (accountState === "signed-in") return "";
-  if (accountState === "logout-error") {
-    return `<section class="account-panel" aria-live="polite"><span>${t("accountSignOutError")}</span><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>`;
-  }
-  return `<section class="account-panel">${signInLinks()}<p>${t("accountIdentityOnly")}</p></section>`;
+  return renderAccountPanel(accountViewContext());
 }
 /**
  * Die Lampe neben dem Namen in der Kopfzeile zeigt, ob die App mit OpenStreetMap verbunden ist: grün = verbunden,
@@ -493,18 +452,6 @@ function buildVersionText(): string {
   const text = tv("buildVersion", { revision: __AEDJAEGER_BUILD_REVISION__ });
   const time = formatBuildTime(__AEDJAEGER_BUILD_REVISION__, language);
   return time ? `${text} · ${time}` : text;
-}
-
-/** Bezeichnung eines AED für die Anzeige: Ist keine bekannt (leer), steht ein lesbarer Ersatz da, in der gewählten Sprache. */
-function displayCandidateLabel(label: string): string {
-  return label.trim() === "" ? tv("unnamedAed") : label;
-}
-
-function escapeHtml(value: string): string {
-  return value.replace(
-    /[&<>"']/g,
-    (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character,
-  );
 }
 
 function getPhotoUrl(current: FlowState): string | undefined {
@@ -647,95 +594,28 @@ function pickAllowed<T extends string>(allowed: readonly T[], raw: string): T | 
   return (allowed as readonly string[]).includes(raw) ? (raw as T) : null;
 }
 
-/**
- * Eine Auswahl-Kachel. Technisch ein echtes Radio-Feld (versteckt) mit sichtbarem Etikett. Dadurch funktionieren
- * Tastatur (Pfeiltasten), Screenreader und Fokus ohne eigenen Code; die Kachel ist 48 px hoch (siehe styles.css).
- */
-function detailRadio(
-  field: "access" | "hoursMode" | "indoor",
-  value: string,
-  label: string,
-  checked: boolean,
-  isUnknown = false,
-): string {
-  const id = `detail-${field}-${value === "" ? "unknown" : value}`;
-  return `<span class="chip-wrap"><input class="chip-input" type="radio" name="detail-${field}" id="${id}" value="${escapeHtml(value)}" data-detail-radio="${field}"${checked ? " checked" : ""} /><label class="chip${isUnknown ? " chip-unknown" : ""}" for="${id}">${escapeHtml(label)}</label></span>`;
+function detailFormViewContext(): DetailFormViewContext {
+  return {
+    t,
+    tv,
+    escapeHtml,
+    form: detailForm,
+    existingTags: detailExistingTags,
+    correctMode: detailCorrectMode,
+    lockedKeys: detailLockedKeys,
+    moreOpen: detailMoreOpen,
+  };
 }
 
-/** Ein Textfeld des Formulars; Änderungen landen über den `input`-Handler in `detailForm`. */
-function detailTextInput(field: DetailTextField, id: string, maxLength: number, extraAttributes = ""): string {
-  return `<input class="field" id="${id}" type="text" maxlength="${maxLength}" value="${escapeHtml(detailForm[field])}" data-detail-text="${field}" autocomplete="off" ${extraAttributes} />`;
-}
-
-/** Ein Abschnitt: Überschrift, Hinweis, Inhalt und ein (zunächst verborgener) Platz für die Fehlermeldung. */
-function detailGroup(id: string, title: string, hint: string, body: string): string {
-  // Ein <div role="group"> statt <fieldset>: Die Überschrift liegt dann sauber IM Kasten (bei <legend> läuft der Rahmen
-  // durch sie hindurch). Für Screenreader ist die Gruppe über aria-labelledby genauso benannt.
-  return `<div class="detail-group" id="detail-group-${id}" role="group" aria-labelledby="detail-legend-${id}"><p class="detail-legend" id="detail-legend-${id}">${escapeHtml(title)}</p>${hint ? `<p class="detail-hint">${escapeHtml(hint)}</p>` : ""}${body}<p class="detail-was" data-detail-was="${id}" hidden></p><p class="detail-error" role="alert" data-detail-error="${id}" hidden>${tv("detailInvalid")}</p></div>`;
-}
-
-/** Text für den Zähler an „Mehr Angaben“: wie viele der seltenen Angaben schon gesetzt sind. */
 function detailMoreCountText(): string {
-  const set = [detailForm.operator, detailForm.phone, detailForm.description, detailForm.ref].filter(
-    (text) => text.trim() !== "",
-  ).length;
-  return set === 0 ? tv("detailMoreOptional") : tv("detailMoreCount", { count: set });
+  return renderDetailMoreCountText(detailFormViewContext());
 }
 
-/** Beschriftung des Hauptknopfs: nennt, wie viele Angaben mitgehen. */
 function detailContinueLabel(count: number): string {
-  if (count === 0) return tv("detailContinueNone");
-  return count === 1 ? tv("detailContinueOne") : tv("detailContinueMany", { count });
+  return renderDetailContinueLabel(count, tv);
 }
 
-/** Ist dieser Schlüssel am bestehenden AED schon eingetragen? (Nur beim Ergänzen; bei einer Neuanlage immer false.) */
-function detailHas(key: DetailKey): boolean {
-  return detailExistingTags !== undefined && Object.prototype.hasOwnProperty.call(detailExistingTags, key);
-}
-
-/**
- * Ist das Feld zu diesem Schlüssel gesperrt?
- *  - Neuanlage: nie.
- *  - Ergänzen (nur Fehlendes): alles, was in OSM schon steht.
- *  - Korrigieren: nur, was sich im Formular nicht darstellen lässt. Alles andere ist vorbelegt und änderbar.
- */
-function detailLocked(key: DetailKey): boolean {
-  if (detailExistingTags === undefined) return false;
-  return detailCorrectMode ? detailLockedKeys.has(key) : detailHas(key);
-}
-
-/** Zeigt einen bestehenden OSM-Wert in der Sprache der Person, soweit er einer unserer Auswahlwerte ist. */
-function existingValueLabel(key: DetailKey, value: string): string {
-  if (key === "access")
-    return (
-      (
-        {
-          yes: tv("detailAccessYes"),
-          customers: tv("detailAccessCustomers"),
-          private: tv("detailAccessPrivate"),
-        } as Record<string, string>
-      )[value] ?? value
-    );
-  if (key === "indoor")
-    return ({ yes: tv("detailIndoorYes"), no: tv("detailIndoorNo") } as Record<string, string>)[value] ?? value;
-  if (key === "opening_hours" && value === "24/7") return tv("detailHoursAlways");
-  return value;
-}
-
-/** Zeile „Schon eingetragen: …“ für einen gesperrten Wert. Der Wert kommt aus OSM und wird wie jeder fremde Text maskiert. */
-function detailLockedLine(key: DetailKey): string {
-  const value = detailExistingTags?.[key] ?? "";
-  // Im Korrekturmodus ist ein gesperrter Wert einer, den das Formular nicht darstellen kann: Das sagt ein kurzer Hinweis.
-  const note = detailCorrectMode ? `<p class="detail-hint">${tv("detailNotEditable")}</p>` : "";
-  return `<p class="detail-locked">${escapeHtml(tv("detailExistingValue", { value: existingValueLabel(key, value) }))}</p>${note}`;
-}
-
-/**
- * Sind beim bestehenden AED alle Angaben schon eingetragen, die das Formular erfassen kann?
- * Dann gibt es nichts zu ergänzen, und die Oberfläche sagt es.
- */
 function detailEverythingPresent(): boolean {
-  // Im Korrekturmodus gibt es immer etwas zu tun (vorhandene Werte lassen sich ändern).
   if (detailExistingTags === undefined || detailCorrectMode) return false;
   const keys: DetailKey[] = [
     "defibrillator:location",
@@ -747,9 +627,8 @@ function detailEverythingPresent(): boolean {
     "description",
     "ref",
   ];
-  if (!keys.every(detailHas)) return false;
-  // Die Ebene fehlt nur dann nicht, wenn sie schon da ist oder der AED nicht im Gebäude hängt.
-  return detailHas("level") || detailExistingTags.indoor !== "yes";
+  if (!keys.every((key) => detailHasValue(detailFormViewContext(), key))) return false;
+  return detailHasValue(detailFormViewContext(), "level") || detailExistingTags.indoor !== "yes";
 }
 
 /**
@@ -758,99 +637,7 @@ function detailEverythingPresent(): boolean {
  * gesperrte Zeile „Schon eingetragen: …“. Nur Fehlendes lässt sich ausfüllen.
  */
 function detailFormMarkup(): string {
-  const f = detailForm;
-  const unknown = tv("detailUnknown");
-  // Im Korrekturmodus ist bei einem vorhandenen Wert „Weiß ich nicht“ überflüssig: Den alten Wert wählt die Person einfach wieder an.
-  const hasValue = (key: DetailKey): boolean => detailCorrectMode && detailHas(key);
-
-  // 1. Wo genau? Textfeld plus Schnellwahl-Wörter, die ans Ende des Textes angehängt werden.
-  const quickWords = [
-    tv("detailLocEntrance"),
-    tv("detailLocFoyer"),
-    tv("detailLocOutside"),
-    tv("detailLocReception"),
-    tv("detailLocStairs"),
-  ];
-  const location = detailGroup(
-    "location",
-    tv("detailLocationLabel"),
-    detailLocked("defibrillator:location") ? "" : tv("detailLocationHint"),
-    detailLocked("defibrillator:location")
-      ? detailLockedLine("defibrillator:location")
-      : `<input class="field" id="detail-location" type="text" maxlength="${DETAIL_LIMITS.location}" value="${escapeHtml(f.location)}" data-detail-text="location" autocomplete="off" placeholder="${escapeHtml(tv("detailLocationPlaceholder"))}" aria-label="${escapeHtml(tv("detailLocationLabel"))}" />` +
-          `<div class="chip-row">${quickWords.map((word) => `<button type="button" class="chip chip-small" data-detail-addloc="${escapeHtml(word)}">${escapeHtml(word)}</button>`).join("")}</div>`,
-  );
-
-  // 2. Wer kommt ran? Die Frage meint das Gerät, nicht das Gebäude.
-  const access = detailGroup(
-    "access",
-    tv("detailAccessLabel"),
-    detailLocked("access") ? "" : tv("detailAccessHint"),
-    detailLocked("access")
-      ? detailLockedLine("access")
-      : `<div class="chip-row">${detailRadio("access", "yes", tv("detailAccessYes"), f.access === "yes")}${detailRadio("access", "customers", tv("detailAccessCustomers"), f.access === "customers")}${detailRadio("access", "private", tv("detailAccessPrivate"), f.access === "private")}${hasValue("access") ? "" : detailRadio("access", "", unknown, f.access === null, true)}</div>`,
-  );
-
-  // 3. Wann erreichbar? „Rund um die Uhr“ nur nach ausdrücklicher Wahl; das Zeiten-Feld erscheint bei „Zu bestimmten Zeiten“.
-  const timesField =
-    f.hoursMode === "times"
-      ? `<div class="detail-sub"><label class="detail-hint" for="detail-hours-text">${tv("detailHoursTextLabel")}</label>${detailTextInput("hoursText", "detail-hours-text", DETAIL_LIMITS.openingHours, 'placeholder="Mo-Fr 08:00-18:00" autocapitalize="off" spellcheck="false"')}<div class="chip-row"><button type="button" class="chip chip-small" data-detail-hours-preset="Mo-Fr 08:00-18:00">Mo-Fr 08:00-18:00</button><button type="button" class="chip chip-small" data-detail-hours-preset="Mo-Sa 07:00-20:00">Mo-Sa 07:00-20:00</button></div></div>`
-      : "";
-  const hours = detailGroup(
-    "hours",
-    tv("detailHoursLabel"),
-    detailLocked("opening_hours") ? "" : tv("detailHoursHint"),
-    detailLocked("opening_hours")
-      ? detailLockedLine("opening_hours")
-      : `<div class="chip-row">${detailRadio("hoursMode", "always", tv("detailHoursAlways"), f.hoursMode === "always")}${detailRadio("hoursMode", "times", tv("detailHoursTimes"), f.hoursMode === "times")}${hasValue("opening_hours") ? "" : detailRadio("hoursMode", "", unknown, f.hoursMode === null, true)}</div>${timesField}`,
-  );
-
-  // 4. Drinnen oder draußen? Die Ebene erscheint nur bei „Drinnen“ (gewählt oder in OSM schon eingetragen).
-  // Der erste Tipp auf + oder − setzt 0 (Erdgeschoss).
-  const effectiveIndoor = detailLocked("indoor") ? detailExistingTags?.indoor : f.indoor;
-  const levelField =
-    effectiveIndoor === "yes"
-      ? detailLocked("level")
-        ? detailLockedLine("level")
-        : `<div class="detail-sub"><span class="detail-hint" id="detail-level-label">${tv("detailLevelLabel")}</span><div class="stepper" role="group" aria-labelledby="detail-level-label"><button type="button" class="step-button" id="detail-level-down" data-detail-step="-1" aria-label="${escapeHtml(tv("detailLevelLower"))}">−</button><output class="step-value" id="detail-level-value" aria-live="polite">${f.level === null ? "–" : f.level}</output><button type="button" class="step-button" id="detail-level-up" data-detail-step="1" aria-label="${escapeHtml(tv("detailLevelHigher"))}">+</button>${hasValue("level") ? "" : `<button type="button" class="chip chip-small chip-unknown" id="detail-level-clear" data-detail-level-clear="1">${unknown}</button>`}</div></div>`
-      : "";
-  const indoor = detailGroup(
-    "indoor",
-    tv("detailIndoorLabel"),
-    "",
-    (detailLocked("indoor")
-      ? detailLockedLine("indoor")
-      : `<div class="chip-row">${detailRadio("indoor", "yes", tv("detailIndoorYes"), f.indoor === "yes")}${detailRadio("indoor", "no", tv("detailIndoorNo"), f.indoor === "no")}${hasValue("indoor") ? "" : detailRadio("indoor", "", unknown, f.indoor === null, true)}</div>`) +
-      levelField,
-  );
-
-  // 5. Seltene Angaben, eingeklappt. Gehäuse bleibt vorerst draußen (offene Entscheidung, siehe docs/offene-fragen.md).
-  // Jedes Feld ist entweder gesperrt (schon eingetragen) oder ein Eingabefeld.
-  const moreField = (
-    key: "operator" | "phone" | "description" | "ref",
-    label: string,
-    maxLength: number,
-    extra = "",
-    note = "",
-  ): string =>
-    detailLocked(key)
-      ? `<div><span class="detail-hint">${label}</span>${detailLockedLine(key)}</div>`
-      : `<div><label class="detail-hint" for="detail-${key}">${label}</label>${detailTextInput(key, `detail-${key}`, maxLength, extra)}${note}</div>`;
-  const more =
-    `<details class="detail-more" id="detail-more"${detailMoreOpen ? " open" : ""}><summary><span>${tv("detailMoreTitle")}</span><span class="detail-more-count" id="detail-more-count">${detailMoreCountText()}</span></summary><div class="detail-more-body">` +
-    moreField("operator", tv("detailOperatorLabel"), DETAIL_LIMITS.operator) +
-    moreField(
-      "phone",
-      tv("detailPhoneLabel"),
-      DETAIL_LIMITS.phone,
-      'inputmode="tel" autocomplete="off"',
-      `<p class="detail-hint">${tv("detailPhoneHint")}</p>`,
-    ) +
-    moreField("description", tv("detailDescriptionLabel"), DETAIL_LIMITS.description) +
-    moreField("ref", tv("detailRefLabel"), DETAIL_LIMITS.ref) +
-    `<p class="detail-hint">${tv("detailNoCode")}</p><p class="detail-was" data-detail-was="more" hidden></p><p class="detail-error" role="alert" data-detail-error="more" hidden>${tv("detailInvalid")}</p></div></details>`;
-
-  return `${location}${access}${hours}${indoor}${more}`;
+  return renderDetailForm(detailFormViewContext());
 }
 
 /**
@@ -935,7 +722,9 @@ function showDetailChanges(corrections: readonly DetailCorrection[], levelNote =
   for (const correction of corrections) {
     const group = DETAIL_GROUP_OF_KEY[correction.key];
     const label = group === "indoor" || group === "more" ? DETAIL_KEY_LABEL[correction.key] : undefined;
-    const was = tv("detailWas", { value: existingValueLabel(correction.key, correction.before) });
+    const was = tv("detailWas", {
+      value: renderExistingValueLabel(detailFormViewContext(), correction.key, correction.before),
+    });
     linesByGroup.set(group, [...(linesByGroup.get(group) ?? []), label ? `${tv(label)}: ${was}` : was]);
   }
   app!.querySelectorAll<HTMLElement>("[data-detail-was]").forEach((slot) => {
@@ -1055,64 +844,29 @@ function statusContent(): string {
   const photoMarkup = photoUrl
     ? `<img class="photo-preview" src="${escapeHtml(photoUrl)}" alt="${t("photoAlt")}" />`
     : "";
+  if (
+    state.kind === "photo" ||
+    state.kind === "photo-checking" ||
+    state.kind === "photo-rejected" ||
+    state.kind === "photo-date" ||
+    state.kind === "location-choice" ||
+    state.kind === "location-map" ||
+    state.kind === "candidate-searching"
+  )
+    return renderPhotoState(state, {
+      t,
+      tv,
+      escapeHtml,
+      photoMarkup,
+      photoCheckAvailable,
+      selectedPhotoFileAvailable: photoSession.file !== undefined,
+      mapLocationOverride: photoSession.mapLocationOverride,
+      minimumMapSearchZoom,
+    });
+
   switch (state.kind) {
     case "ready":
-      return `<div class="empty-illustration" aria-hidden="true"><span class="device-card">${defibrillatorMark()}</span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>`;
-    case "photo": {
-      // The first pilot deliberately relies on the person's on-site confirmation, not a model.
-      // The image and its remaining metadata stay in this browser; only selected coordinates
-      // leave it later when the person explicitly starts a location search.
-      //
-      // Neu: Gibt der Server die Fotoprüfung für dieses Konto frei, ersetzt „AED gesehen – Foto
-      // prüfen“ die reine Selbstbestätigung. Dann ehrlich anzeigen, dass das Foto (ohne Standort und
-      // Metadaten) das Gerät verlässt. Ist die Prüfung gescheitert (photoCheck „unavailable“),
-      // gilt wieder die Selbstbestätigung samt Hinweis, damit die App nicht an OpenAI hängt.
-      const useCheck = photoCheckAvailable && state.photoCheck !== "unavailable" && photoSession.file !== undefined;
-      const photoAction = useCheck
-        ? `<button class="button button-primary" data-action="check-photo">${tv("photoCheckAction")}</button>`
-        : `<button class="button button-primary" data-action="confirm-sighting">${tv("sightingConfirm")}</button>`;
-      // Nach einem gescheiterten Prüfversuch darf NICHT stehen, das Foto bleibe auf dem Gerät: Bei
-      // einer Zeitüberschreitung oder einer ungültigen Antwort kann der Upload bereits erfolgt sein.
-      // Dann nur sagen, dass die Prüfung nicht möglich war. Die lokale Zusage gilt nur, wenn die
-      // Prüfung gar nicht erst angeboten wurde.
-      const photoNote = useCheck
-        ? `<p class="supporting-copy">${tv("photoCheckNotice")}</p>`
-        : state.photoCheck === "unavailable"
-          ? // Der Fehlercode steht klein darunter, damit sich im Pilot eingrenzen lässt, warum die Prüfung scheiterte.
-            `<p class="supporting-copy">${tv("photoCheckUnavailable")}</p>${state.photoCheckCode ? `<p class="supporting-copy photo-check-code">${escapeHtml(tv("photoCheckCode", { code: state.photoCheckCode }))}</p>` : ""}`
-          : `<p class="supporting-copy">${tv("photoStaysLocal")}</p>`;
-      return `${photoMarkup}${photoAction}${photoNote}<button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
-    }
-    case "photo-checking":
-      return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv("photoChecking")}</span></div>`;
-    case "photo-rejected":
-      // Standardweg ist „Anderes Foto“: Ein Foto ohne erkennbaren AED soll nicht in die Suche laufen.
-      // Weil die Prüfung auch irren kann (zum Beispiel bei einem echten, aber ungünstig fotografierten AED),
-      // gibt es eine Ausnahme, die ZWEI ausdrückliche Bestätigungen verlangt: erst „Trotzdem: Hier ist ein AED“,
-      // dann „Ja, AED oder Gehäuse ist zu sehen – weiter“. Danach gilt der normale Ablauf mit seinen eigenen
-      // Bestätigungen (Datum, Standort, bei Neuanlagen wieder zwei).
-      if (state.overrideStep === "confirm") {
-        return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("photoOverrideTitle")}</h2><p>${tv("photoOverrideBody")}</p></div></div><button class="button button-primary" data-action="confirm-photo-override">${tv("photoOverrideConfirm")}</button><button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
-      }
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv(state.reason === "unclear" ? "photoUnclearTitle" : "photoRejectedTitle")}</h2><p>${tv(state.reason === "unclear" ? "photoUnclearBody" : "photoRejectedBody")}</p></div></div><button class="button button-primary" data-action="retake">${t("retake")}</button><button class="button button-secondary" data-action="start-photo-override">${tv("photoOverrideAction")}</button>`;
-    case "photo-date":
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("photoDateTitle")}</h2><p>${tv("photoDateHelp")}</p><label for="photo-observed-on">${tv("photoDateLabel")}</label><input id="photo-observed-on" type="date" value="${escapeHtml(state.suggestedDate)}" max="${localCalendarDate()}" /></div></div><button class="button button-primary" data-action="confirm-photo-date">${tv("photoDateConfirm")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-    case "location-choice":
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("locationTitle")}</h2><p>${tv("photoLocationMissing")}</p></div></div><button class="button button-primary" data-action="use-phone-location">${tv("usePhoneLocation")}</button><button class="button button-secondary" data-action="choose-map-location">${tv("chooseMapLocation")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-    case "location-map": {
-      const selectedPosition = photoSession.mapLocationOverride ?? state.center;
-      const mapHasSelection =
-        photoSession.mapLocationOverride !== undefined && (state.initialZoom ?? 19) >= minimumMapSearchZoom;
-      const mapPositionLabel = mapHasSelection
-        ? tv("mapLocationCoordinates", {
-            latitude: selectedPosition.latitude.toFixed(5),
-            longitude: selectedPosition.longitude.toFixed(5),
-          })
-        : tv("mapLocationInitial");
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">◎</span><div><h2>${tv("chooseMapLocation")}</h2><p>${tv("mapLocationHelp")}</p></div></div><div id="search-location-map" class="position-map" role="application" tabindex="0" aria-label="${tv("chooseMapLocation")}" aria-describedby="search-map-instructions"></div><p class="sr-only" id="search-map-instructions">${tv("mapNavigationHelp")}</p><p class="position-map-coordinates" id="search-location-coordinates" aria-live="polite">${mapPositionLabel}</p><button class="button button-primary" data-action="confirm-map-location"${mapHasSelection ? "" : " disabled"}>${tv("searchAction")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-    }
-    case "candidate-searching":
-      return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv("searchProgress")}</span></div>`;
+      return `<div class="empty-illustration" aria-hidden="true"><span class="device-card">${defibrillatorMark(defibrillatorPath)}</span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>`;
     case "candidate-result": {
       const { assessment, search } = state;
       const candidatesToShow: Array<{ candidate: (typeof search.candidates)[number]; distanceMeters?: number }> = [];
@@ -1129,7 +883,10 @@ function statusContent(): string {
       const numbered = assessment.kind === "candidate-review";
       const candidates = candidatesToShow
         .map(({ candidate, distanceMeters }, index) => {
-          const name = displayCandidateLabel(candidate.tags.name || candidate.tags["defibrillator:location"] || "");
+          const name = displayCandidateLabel(
+            candidate.tags.name || candidate.tags["defibrillator:location"] || "",
+            tv("unnamedAed"),
+          );
           const label = numbered ? `${index + 1}. ${name}` : name;
           const distance =
             distanceMeters === undefined
@@ -1380,10 +1137,10 @@ function statusContent(): string {
           ? `<button class="button button-primary" data-action="retake">${tv("nextAed")}</button>`
           : `${backButton}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
       const successful = state.writeStatus === "complete";
-      return `${photoMarkup}<div class="result-message"><span class="status-icon ${successful ? "status-good" : "status-warn"}" aria-hidden="true">${successful ? "✓" : "!"}</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.candidateLabel))}</strong></p>${content}${changedList}${addedList}${levelLeftNote}${noWriteNotice}${writeStatus}</div></div>${writeAction}${addDetailsButton}${navigation}`;
+      return `${photoMarkup}<div class="result-message"><span class="status-icon ${successful ? "status-good" : "status-warn"}" aria-hidden="true">${successful ? "✓" : "!"}</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.candidateLabel, tv("unnamedAed")))}</strong></p>${content}${changedList}${addedList}${levelLeftNote}${noWriteNotice}${writeStatus}</div></div>${writeAction}${addDetailsButton}${navigation}`;
     }
     case "existing-aed-details": {
-      const label = escapeHtml(displayCandidateLabel(state.candidateLabel));
+      const label = escapeHtml(displayCandidateLabel(state.candidateLabel, tv("unnamedAed")));
       const header = `<div class="result-message"><span class="status-icon status-good" aria-hidden="true">✓</span><div><h2>${tv(developmentCorrectionsAvailable ? "detailsCorrectTitle" : "detailsExistingTitle")}</h2><p><strong>${label}</strong></p><p>${tv(developmentCorrectionsAvailable ? "detailsCorrectIntro" : "detailsExistingIntro")}</p></div></div>`;
       if (state.load.status === "loading") {
         return `${photoMarkup}${header}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv("detailLoading")}</span></div>`;
@@ -1438,7 +1195,7 @@ function statusContent(): string {
             ? `<button class="button button-primary" data-action="continue-recovery"${state.writeStatus === "sending" ? " disabled" : ""}>${state.writeStatus === "sending" ? tv("developmentSending") : developmentSession && developmentWriteAvailable ? tv("developmentRetry") : tv("recoveryContinue")}</button>`
             : `<button class="button button-primary" data-action="retake">${state.writeStatus === "complete" ? tv("nextAed") : tv("recoveryContinue")}</button>`;
       const successful = state.writeStatus === "complete";
-      return `<div class="result-message"><span class="status-icon ${successful ? "status-good" : "status-warn"}" aria-hidden="true">${successful ? "✓" : "!"}</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.request.candidateLabel))}</strong></p>${targetLink}<p class="simulation-note ${successful ? "save-status-success" : ""}" role="status">${recoveryMessage}</p>${blockedReason ? `<p class="simulation-note" role="status">${blockedReason}</p>` : ""}</div></div>${action}`;
+      return `<div class="result-message"><span class="status-icon ${successful ? "status-good" : "status-warn"}" aria-hidden="true">${successful ? "✓" : "!"}</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.request.candidateLabel, tv("unnamedAed")))}</strong></p>${targetLink}<p class="simulation-note ${successful ? "save-status-success" : ""}" role="status">${recoveryMessage}</p>${blockedReason ? `<p class="simulation-note" role="status">${blockedReason}</p>` : ""}</div></div>${action}`;
     }
     case "candidate-error": {
       const errorKey: Record<typeof state.reason, FlowMessageKey> = {
@@ -1471,19 +1228,6 @@ function statusContent(): string {
   }
 }
 
-function icon(kind: "camera" | "search" | "check"): string {
-  const paths = {
-    camera: '<path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
-    search: '<circle cx="10.8" cy="10.8" r="6.2"/><path d="m15.5 15.5 4 4"/>',
-    check: '<path d="m5 12 4.3 4.3L19 6.8"/>',
-  };
-  return `<svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[kind]}</svg>`;
-}
-
-function defibrillatorMark(): string {
-  return `<svg class="device-mark" viewBox="0 0 15 15" fill="currentColor" aria-hidden="true"><path d="${defibrillatorPath}" /></svg>`;
-}
-
 function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void {
   const infoDialogWasOpen =
     preserveOpenInfoDialog && (document.querySelector<HTMLDialogElement>("#info-dialog")?.open ?? false);
@@ -1501,7 +1245,7 @@ function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void 
           ? `<main>
         <section class="hero ${isReady ? "" : "hero-compact"}"><div class="hero-kicker"><span></span>${t("eyebrow")}</div><h1>${isReady ? t("title") : state.kind === "photo-checking" || state.kind === "candidate-searching" ? t("checking") : t("tagline")}</h1>${isReady ? `<p>${t("intro")}</p>` : ""}</section>
         <section class="capture-card" aria-live="polite" aria-atomic="false">
-          <div class="capture-content">${isReady ? `${photoSession.selectionError ? `<p class="photo-selection-error" role="alert" tabindex="-1">${t("cameraError")}</p>` : ""}<div class="empty-illustration" aria-hidden="true"><span class="device-card">${defibrillatorMark()}</span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>` : statusContent()}</div>
+          <div class="capture-content">${isReady ? `${photoSession.selectionError ? `<p class="photo-selection-error" role="alert" tabindex="-1">${t("cameraError")}</p>` : ""}<div class="empty-illustration" aria-hidden="true"><span class="device-card">${defibrillatorMark(defibrillatorPath)}</span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>` : statusContent()}</div>
           ${isReady ? `<div class="capture-actions"><label class="button button-primary camera-label">${icon("camera")}<span>${t("camera")}</span><input id="camera-input" type="file" accept="image/*" capture="environment" /></label><label class="button button-secondary camera-label">${t("choosePhoto")}<input id="file-input" type="file" accept="image/*" /></label><p class="supporting-copy">${photoCheckAvailable ? tv("photoCheckNotice") : t("privacy")}</p></div>` : ""}
         </section>
       </main>${accountPanel()}`
@@ -1847,50 +1591,13 @@ async function retryOSMSessionStatus(): Promise<void> {
 async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Promise<void> {
   try {
     const isCheckDate = requestBody.kind === "check-date";
-    const response = await fetch(isCheckDate ? "/api/osm/development/check-date" : "/api/osm/development/create-node", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      cache: "no-store",
-      body: JSON.stringify(
-        requestBody.kind === "check-date"
-          ? {
-              recovery_identity: developmentWriteOwnerHash,
-              operation_id: requestBody.operationId,
-              confirmed: true,
-              target: requestBody.target,
-              expected_version: requestBody.expectedVersion,
-              expected_check_date: requestBody.expectedCheckDate,
-              observed_on: requestBody.observedOn,
-              // Nur mit ergänzten Angaben; ohne sie bleibt die Anfrage (und ihr Abgleichswert) wie früher.
-              ...(requestBody.details && Object.keys(requestBody.details).length > 0
-                ? { details: requestBody.details }
-                : {}),
-              // Nur bei Korrekturen: die alten Werte und die ausdrückliche Bestätigung der Person.
-              ...(requestBody.expectedBefore && requestBody.confirmedCorrections === true
-                ? { expected_before: requestBody.expectedBefore, confirmed_corrections: true }
-                : {}),
-            }
-          : {
-              recovery_identity: developmentWriteOwnerHash,
-              operation_id: requestBody.operationId,
-              confirmed: true,
-              absence_confirmed: true,
-              latitude: requestBody.latitude,
-              longitude: requestBody.longitude,
-              observed_on: requestBody.observedOn,
-              details: requestBody.details,
-              confirmed_different_candidate_ids: requestBody.confirmedDifferentCandidateIds,
-            },
-      ),
-    });
-    const payload: unknown = await response.json();
+    const { ok, status, payload } = await sendDevelopmentWrite(requestBody, developmentWriteOwnerHash);
     const matchesCurrentRequest =
       (state.kind === "new-aed-preview" && state.operationId === requestBody.operationId) ||
       (state.kind === "osm-preview" && state.operationId === requestBody.operationId) ||
       (state.kind === "development-write-recovery" && state.request.operationId === requestBody.operationId);
     if (!matchesCurrentRequest) return;
-    if (response.ok && isDevelopmentWriteResponse(payload, "complete")) {
+    if (ok && isDevelopmentWriteResponse(payload, "complete")) {
       // "already_current": Das Datum stand schon so auf dem Knoten. Der Server hat bewusst nichts geschrieben (kein neuer
       // Änderungssatz). Das ist ein Erfolg im Sinne von "der Stand stimmt", aber kein Speichern. Darum eine eigene
       // Meldung ("Schon aktuell. Es wurde nichts geändert.") und kein Ton: Ein Ton für nichts wäre eine Belohnung ohne Leistung.
@@ -1899,10 +1606,10 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
       clearPendingDevelopmentCheck(requestBody.operationId);
       // Nur bei einem vom Server bestätigten, echten Schreibvorgang erklingt der Ton. Er ändert nichts am Ablauf.
       if (!unchanged) successSound.play();
-    } else if (response.status === 409) {
+    } else if (status === 409) {
       setDevelopmentWriteStatus(requestBody.operationId, "conflict");
       clearPendingDevelopmentCheck(requestBody.operationId);
-    } else if (response.status === 404 && isRecord(payload) && payload.error === "target_not_found") {
+    } else if (status === 404 && isRecord(payload) && payload.error === "target_not_found") {
       // Eindeutig: Den Knoten gibt es auf dem Testserver nicht (zum Beispiel ein AED aus dem Archiv des echten OSM).
       // Nichts wurde geschrieben; ein erneutes Prüfen würde dasselbe ergeben. Darum kein "unklar" und kein Prüfen-Knopf.
       setDevelopmentWriteStatus(requestBody.operationId, "notFound");
@@ -1912,13 +1619,13 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
       // darum "fehlgeschlagen" (neuer Versuch von vorn) statt "unklar".
       setDevelopmentWriteStatus(requestBody.operationId, "failed");
       clearPendingDevelopmentCheck(requestBody.operationId);
-    } else if (response.status === 403 && isRecord(payload) && payload.error === "recovery_identity_mismatch") {
+    } else if (status === 403 && isRecord(payload) && payload.error === "recovery_identity_mismatch") {
       // Ein anderer Tab kann das gemeinsame Sitzungscookie inzwischen auf ein anderes Konto umgestellt haben.
       // Der Server hat deshalb nichts geschrieben; den Marker aber behalten, bis das richtige Konto zurück ist.
       setDevelopmentWriteStatus(requestBody.operationId, "uncertain");
       await refreshAccountState();
       return;
-    } else if (response.status === 202 || response.status >= 500 || (!response.ok && !isRecord(payload))) {
+    } else if (status === 202 || status >= 500 || (!ok && !isRecord(payload))) {
       setDevelopmentWriteStatus(requestBody.operationId, "uncertain");
     } else {
       setDevelopmentWriteStatus(requestBody.operationId, "failed");
