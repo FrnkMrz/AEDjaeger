@@ -39,9 +39,11 @@ export interface VisionObservation {
  * is hidden. Visible-device count is descriptive only and must not gate the flow.
  */
 export function isAedRecognized(observation: Pick<VisionObservation, "scene">): boolean {
-  return observation.scene === "device_visible"
-    || observation.scene === "enclosure_visible"
-    || observation.scene === "multiple_devices";
+  return (
+    observation.scene === "device_visible" ||
+    observation.scene === "enclosure_visible" ||
+    observation.scene === "multiple_devices"
+  );
 }
 
 export type VisionObservationParseResult =
@@ -101,10 +103,12 @@ function isConsistentSceneCount(scene: VisionObservation["scene"], count: number
 
 /** Accept only bounded plain text; callers must still render it as untrusted text. */
 function isBoundedText(value: unknown, maximumLength: number): value is string {
-  return typeof value === "string"
-    && value.trim().length > 0
-    && value.length <= maximumLength
-    && !/[\u0000-\u001f\u007f]/u.test(value);
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0 &&
+    value.length <= maximumLength &&
+    !/[\u0000-\u001f\u007f]/u.test(value)
+  );
 }
 
 function isDenseArray(value: unknown[]): boolean {
@@ -115,10 +119,12 @@ function isDenseArray(value: unknown[]): boolean {
 }
 
 function isTextList(value: unknown, maxItems: number, maxItemLength: number): value is string[] {
-  return Array.isArray(value)
-    && value.length <= maxItems
-    && isDenseArray(value)
-    && value.every((item) => isBoundedText(item, maxItemLength));
+  return (
+    Array.isArray(value) &&
+    value.length <= maxItems &&
+    isDenseArray(value) &&
+    value.every((item) => isBoundedText(item, maxItemLength))
+  );
 }
 
 function isOneOf<T extends readonly string[]>(value: unknown, allowed: T): value is T[number] {
@@ -142,20 +148,20 @@ export function parseVisionObservation(input: unknown): VisionObservationParseRe
   }
 
   if (
-    !isOneOf(record.scene, VISION_SCENES)
-    || typeof record.device_count !== "number"
-    || !Number.isInteger(record.device_count)
-    || record.device_count < 0
-    || record.device_count > MAX_DEVICE_COUNT
-    || !isConsistentSceneCount(record.scene, record.device_count)
-    || !isTextList(record.readable_text, MAX_READABLE_TEXT_ITEMS, MAX_TEXT_LENGTH)
-    || !(record.manufacturer === null || isBoundedText(record.manufacturer, MAX_LABEL_LENGTH))
-    || !(record.model === null || isBoundedText(record.model, MAX_LABEL_LENGTH))
-    || !isTextList(record.location_clues, MAX_LOCATION_CLUES, MAX_TEXT_LENGTH)
-    || !Array.isArray(record.image_issues)
-    || record.image_issues.length > MAX_IMAGE_ISSUES
-    || !isDenseArray(record.image_issues)
-    || !record.image_issues.every((issue) => isOneOf(issue, IMAGE_ISSUES))
+    !isOneOf(record.scene, VISION_SCENES) ||
+    typeof record.device_count !== "number" ||
+    !Number.isInteger(record.device_count) ||
+    record.device_count < 0 ||
+    record.device_count > MAX_DEVICE_COUNT ||
+    !isConsistentSceneCount(record.scene, record.device_count) ||
+    !isTextList(record.readable_text, MAX_READABLE_TEXT_ITEMS, MAX_TEXT_LENGTH) ||
+    !(record.manufacturer === null || isBoundedText(record.manufacturer, MAX_LABEL_LENGTH)) ||
+    !(record.model === null || isBoundedText(record.model, MAX_LABEL_LENGTH)) ||
+    !isTextList(record.location_clues, MAX_LOCATION_CLUES, MAX_TEXT_LENGTH) ||
+    !Array.isArray(record.image_issues) ||
+    record.image_issues.length > MAX_IMAGE_ISSUES ||
+    !isDenseArray(record.image_issues) ||
+    !record.image_issues.every((issue) => isOneOf(issue, IMAGE_ISSUES))
   ) {
     return { ok: false, reason: "invalid-shape" };
   }

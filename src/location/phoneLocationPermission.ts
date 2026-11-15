@@ -20,7 +20,11 @@ export type LocationPermission = "granted" | "denied" | "prompt" | "unknown";
 export const LOCATION_PROMPTED_KEY = "aedjaeger-location-prompted";
 
 type PermissionsApi = {
-  query(descriptor: { name: "geolocation" }): Promise<{ state: string; addEventListener?: (type: "change", listener: () => void) => void; removeEventListener?: (type: "change", listener: () => void) => void }>;
+  query(descriptor: { name: "geolocation" }): Promise<{
+    state: string;
+    addEventListener?: (type: "change", listener: () => void) => void;
+    removeEventListener?: (type: "change", listener: () => void) => void;
+  }>;
 };
 
 function toPermission(state: string): LocationPermission {
@@ -28,7 +32,9 @@ function toPermission(state: string): LocationPermission {
 }
 
 /** Liest den aktuellen Zustand, ohne etwas anzufragen. Jeder Fehler ergibt „unknown“. */
-export async function readLocationPermission(permissions: PermissionsApi | undefined = globalThis.navigator?.permissions): Promise<LocationPermission> {
+export async function readLocationPermission(
+  permissions: PermissionsApi | undefined = globalThis.navigator?.permissions,
+): Promise<LocationPermission> {
   if (!permissions) return "unknown";
   try {
     return toPermission((await permissions.query({ name: "geolocation" })).state);
@@ -68,7 +74,11 @@ export async function watchLocationPermission(
  *
  * @param nowMs Aktuelle Zeit; nur für Tests überschreibbar.
  */
-export function phoneLocationFitsPhoto(options: { fromCamera: boolean; capturedAtMs: number | undefined; nowMs?: number }): boolean {
+export function phoneLocationFitsPhoto(options: {
+  fromCamera: boolean;
+  capturedAtMs: number | undefined;
+  nowMs?: number;
+}): boolean {
   return options.fromCamera && isFreshCapture(options.capturedAtMs, options.nowMs ?? Date.now());
 }
 

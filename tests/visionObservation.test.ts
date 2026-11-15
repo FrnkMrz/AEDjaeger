@@ -36,10 +36,12 @@ describe("parseVisionObservation", () => {
   });
 
   it("rejects unknown fields instead of passing them downstream", () => {
-    expect(parseVisionObservation({
-      ...validObservation,
-      osm_tags: { emergency: "defibrillator" },
-    })).toEqual({ ok: false, reason: "invalid-shape" });
+    expect(
+      parseVisionObservation({
+        ...validObservation,
+        osm_tags: { emergency: "defibrillator" },
+      }),
+    ).toEqual({ ok: false, reason: "invalid-shape" });
   });
 
   it("keeps prompt-like OCR as plain observation text without accepting extra instructions", () => {

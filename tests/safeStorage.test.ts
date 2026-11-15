@@ -3,9 +3,22 @@ import { readStoredValue, writeStoredValue } from "../src/storage/safeStorage";
 
 function memoryStorage(initial: Record<string, string> = {}) {
   const values = new Map(Object.entries(initial));
-  return { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); }, values };
+  return {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      values.set(key, value);
+    },
+    values,
+  };
 }
-const blocked = { getItem: () => { throw new DOMException("denied", "SecurityError"); }, setItem: () => { throw new DOMException("full", "QuotaExceededError"); } };
+const blocked = {
+  getItem: () => {
+    throw new DOMException("denied", "SecurityError");
+  },
+  setItem: () => {
+    throw new DOMException("full", "QuotaExceededError");
+  },
+};
 
 describe("safe browser storage", () => {
   it("reads and writes normally", () => {

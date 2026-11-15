@@ -12,17 +12,22 @@
     "build": "tsc --noEmit && vite build && node scripts/check-precache.mjs",
     "worker:check": "node scripts/run-wrangler.mjs check",
     "worker:deploy": "node scripts/run-wrangler.mjs deploy",
+    "check:d1-migrations": "node scripts/check-d1-migrations.mjs",
     "test:worker-http": "node scripts/check-worker-http.mjs",
     "check:live-search": "node scripts/check-live-search.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
     "preview": "vite preview"
   },
   "devDependencies": {
-    "@playwright/test": "1.64.1",
-    "typescript": "^5.8.3",
-    "vite": "^6.3.5",
-    "vitest": "^5.0.5",
+    "@axe-core/playwright": "^4.14.0",
+    "@biomejs/biome": "2.6.7",
+    "@playwright/test": "1.65.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0",
     "wrangler": "^4.151.2"
   },
   "dependencies": {

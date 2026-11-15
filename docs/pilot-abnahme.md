@@ -71,7 +71,7 @@ Ausführung entweder
 | B4 | Ebene `defibrillators` | Anzahl an Features in der Testkachel; keine Meldung „Ebene fehlt“ | `[x]` Lauf #2: 28 Features in Kachel Zoom 14, 8696/5595 |
 | B5 | Zweite Koordinate (z. B. Hamburg oder Wien) | Ebenfalls bestanden, sofern die Kachel Daten enthält | `[ ]` offen: bisher nur die Standardkoordinate (Nürnberg Hbf) geprüft |
 
-Belege: [Lauf #2 vom 10.11.2026, 09:20 UTC](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42789878021) (Stand nach der Anhebung des Höchstalters auf 120 Stunden, Commit `ee1dc41`). Lauf [#1](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42784569321) bestand ebenfalls, noch mit der alten Grenze von 48 Stunden. Beide Läufe sind Stichproben zu einem Zeitpunkt und belegen die Verfügbarkeit nicht für später. Für B5 den Workflow oder `npm run check:live-search -- --lat <Breite> --lon <Länge>` mit einer zweiten Koordinate ausführen. Das Skript kennt die Koordinate als Option, der GitHub-Workflow hat dafür bisher keine Eingabe.
+Belege: [Lauf #2 vom 10.11.2026, 09:20 UTC](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42789878021) (Stand nach der Anhebung des Höchstalters auf 120 Stunden, Commit `ee1dc41`). Lauf [#1](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42784569321) bestand ebenfalls, noch mit der alten Grenze von 48 Stunden. Beide Läufe sind Stichproben zu einem Zeitpunkt und belegen die Verfügbarkeit nicht für später. Für B5 den Workflow oder `npm run check:live-search -- --lat <Breite> --lon <Länge>` mit einer zweiten Koordinate ausführen. Der GitHub-Workflow „Live-Check AED-Datenquelle“ hat dafür die Eingaben `lat` und `lon` (leer = Nürnberg Hbf). Sie stehen erst nach dem Merge dieser Änderung auf `main` im Dialog „Run workflow“ zur Verfügung.
 
 Bei einem Fehler gilt: Eine Fehlermeldung zu fehlenden Kacheln oder Ebenen ist **kein Beleg**, dass an dieser Stelle kein AED existiert. Die App sperrt in diesem Fall korrekt die Suche und den Neuanlagevorschlag.
 
@@ -125,6 +125,20 @@ Ablauf:
 | C6 | Produktions-OSM prüfen | Es gibt keine Änderung durch diesen Test | `[ ]` |
 
 **Erster Versuch am 13.11.2026 (iPhone):** Die Neuanlage legte auf dem Testserver den Knoten `4365809370` an (Änderungssatz `725093`, Version 1, genau die zwei Angaben `emergency=defibrillator` und `check_date=2026-11-13`; der Änderungssatz wurde nach etwa 10 Sekunden geschlossen). Die App blieb trotzdem bei „Testserver: Ergebnis unklar“. Ursache: Die Statusprüfung des Änderungssatzes las nur XML, der Testserver antwortete mit JSON. Behoben im Code, mit Tests; ohne Deploy bleibt der Zustand unverändert. Nach dem Deploy bestätigt „Testserver: Status erneut prüfen“ den vorhandenen Vorgang, ohne einen zweiten Knoten anzulegen. Der Test ist erst abgehakt, wenn die App „erstellt“ meldet.
+
+### Zusatztest für den Detailweg (Etappen P2 bis P5)
+
+Erst nach C2 bis C4, am gleichen Testort und mit demselben Schalter `OSM_DEV_WRITES_ENABLED`. Der Schalter `OSM_DETAIL_CORRECTIONS_ENABLED` wird wie der Schreibschalter nur vom Projektinhaber gesetzt, nie von einem Agenten, und nur für D4 bis D6 eingeschaltet.
+
+| Nr | Schritt | Erwartetes Ergebnis | Ergebnis |
+| --- | --- | --- | --- |
+| D1 | Neuanlage mit einigen Angaben (Standort-Text, Zugang, Zeiten) | Die Vorschau nennt alle Tags. Der neue Knoten hat genau diese Tags plus `emergency=defibrillator` und `check_date` | `[ ]` |
+| D2 | Am Knoten aus D1 „Fehlende Angaben ergänzen“ und zum Beispiel Ebene und Betreiber ergänzen | Die schon eingetragenen Werte stehen als gesperrte Zeilen da. Der Änderungssatz enthält nur die neuen Tags und `check_date`; Kommentar „missing details added“; alle anderen Tags unverändert | `[ ]` |
+| D3 | Dasselbe mit einem Wert, der schon vorhanden ist, in einem zweiten Browserfenster, das vor D2 geöffnet wurde | Konflikt-Meldung; nichts wird geschrieben | `[ ]` |
+| D4 | `OSM_DETAIL_CORRECTIONS_ENABLED` = `true` setzen. `https://aedjaeger.aedjaeger.workers.dev/api/auth/session` zeigt `"developmentCorrectionsAvailable":true`. In der App erscheint „Angaben ergänzen oder korrigieren“ | Das Formular ist vorbelegt | `[ ]` |
+| D5 | Einen Wert korrigieren (zum Beispiel Zugang) | Gelb umrandet mit „Vorher: …“; die Vorschau zeigt `alt → neu`; Speichern erst nach dem Haken; der Änderungssatz ändert nur diesen Wert und `check_date`; Kommentar „details added and corrected“ | `[ ]` |
+| D6 | Den Wert in einem zweiten Fenster (oder iD) ändern und danach im alten Fenster speichern | Konflikt-Meldung; der fremde Wert bleibt unverändert | `[ ]` |
+| D7 | Beide Schalter wieder ausschalten | Der Sitzungsstatus enthält kein `developmentCorrectionsAvailable`; ein erneuter Schreibversuch mit Korrektur wird mit 403 abgelehnt | `[ ]` |
 
 Abnahmebericht (ausfüllen, ohne Tokens):
 

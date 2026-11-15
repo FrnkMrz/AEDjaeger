@@ -1,9 +1,27 @@
 import { findOSMSession } from "../storage/osmSessions";
 import type { D1Database } from "../storage/d1";
-import { markAnalysisProviderStarted, reserveAnalysisBudget } from "../storage/analysisBudget";
-import { analyzeAedPhoto, MAX_VISION_IMAGE_BYTES, OPENAI_VISION_MODEL, validateAedImage, VisionAnalysisError, type SupportedImageType } from "./openai";
+import {
+  markAnalysisProviderStarted,
+  releaseAnalysisBudgetReservation,
+  reserveAnalysisBudget,
+} from "../storage/analysisBudget";
+import {
+  analyzeAedPhoto,
+  MAX_VISION_IMAGE_BYTES,
+  OPENAI_VISION_MODEL,
+  validateAedImage,
+  VisionAnalysisError,
+  type SupportedImageType,
+} from "./openai";
+import {
+  BodyTooLargeError,
+  isCrossOrigin,
+  jsonResponse,
+  readOSMSessionCookie,
+  readLimitedBody,
+} from "../http/requestGuards";
+import { sha256Hex } from "../crypto/hash";
 
-const SESSION_COOKIE = "aedjaeger_osm_session";
 // JSON base64 encoding adds about one third to the original image size.
 const MAX_REQUEST_BYTES = Math.ceil(MAX_VISION_IMAGE_BYTES / 3) * 4 + 1_024;
 const ALLOWED_IMAGE_TYPES: readonly SupportedImageType[] = ["image/jpeg", "image/png", "image/webp"];
@@ -43,7 +61,7 @@ export async function handleVisionAnalysis(
     return jsonResponse({ error: "analysis_unavailable" }, 503);
   }
 
-  const sessionToken = readCookie(request.headers.get("Cookie"), SESSION_COOKIE);
+  const sessionToken = readOSMSessionCookie(request.headers.get("Cookie"));
   if (!sessionToken) return jsonResponse({ error: "authentication_required" }, 401);
 
   let session: { subject: string; environment: "production" | "development" } | null;
@@ -66,7 +84,10 @@ export async function handleVisionAnalysis(
   try {
     body = await readLimitedBody(request, MAX_REQUEST_BYTES);
   } catch (error) {
-    return jsonResponse({ error: error instanceof BodyTooLargeError ? "request_too_large" : "invalid_request" }, error instanceof BodyTooLargeError ? 413 : 400);
+    return jsonResponse(
+      { error: error instanceof BodyTooLargeError ? "request_too_large" : "invalid_request" },
+      error instanceof BodyTooLargeError ? 413 : 400,
+    );
   }
 
   const payload = parseRequestBody(body);
@@ -93,19 +114,29 @@ export async function handleVisionAnalysis(
       createdAt: now,
     });
     if (!reservation.reserved) {
-      return jsonResponse({ error: reservation.reason === "duplicate" ? "duplicate_request" : "analysis_budget_exceeded" }, reservation.reason === "duplicate" ? 409 : 429);
+      return jsonResponse(
+        { error: reservation.reason === "duplicate" ? "duplicate_request" : "analysis_budget_exceeded" },
+        reservation.reason === "duplicate" ? 409 : 429,
+      );
     }
   } catch (error) {
     // Fail closed: no provider call unless D1 confirmed a reservation first.
     return failure("analysis_budget_unavailable", 503, undefined, { detailCode: describeStorageFailure(error) });
   }
 
+  let claimed: boolean;
   try {
-    const claimed = await markAnalysisProviderStarted(environment.DB, budgetUserId, payload.requestId, now);
-    if (!claimed) return jsonResponse({ error: "duplicate_request" }, 409);
+    claimed = await markAnalysisProviderStarted(environment.DB, budgetUserId, payload.requestId, now);
   } catch (error) {
     // D1 may have committed the claim before losing its reply; this state must not be retried blindly.
+    // If the claim did not commit, the conditional release recovers the budget. If it
+    // did commit, provider_started_at prevents release and preserves fail-closed behavior.
+    await safelyReleaseAnalysisReservation(environment.DB, budgetUserId, payload.requestId);
     return failure("analysis_claim_uncertain", 503, undefined, { detailCode: describeStorageFailure(error) });
+  }
+  if (!claimed) {
+    await safelyReleaseAnalysisReservation(environment.DB, budgetUserId, payload.requestId);
+    return jsonResponse({ error: "duplicate_request" }, 409);
   }
 
   try {
@@ -116,9 +147,26 @@ export async function handleVisionAnalysis(
     return jsonResponse({ request_id: payload.requestId, model: OPENAI_VISION_MODEL, observation }, 200);
   } catch (error) {
     const status = error instanceof VisionAnalysisError && error.code === "invalid_image" ? 400 : 502;
-    const code = error instanceof VisionAnalysisError && error.code === "invalid_image" ? "invalid_image" : "analysis_failed";
+    const code =
+      error instanceof VisionAnalysisError && error.code === "invalid_image" ? "invalid_image" : "analysis_failed";
     const detail = error instanceof VisionAnalysisError ? error.detail : {};
-    return failure(code, status, payload.requestId, { detailStatus: detail.providerStatus, detailCode: detail.providerCode });
+    return failure(code, status, payload.requestId, {
+      detailStatus: detail.providerStatus,
+      detailCode: detail.providerCode,
+    });
+  }
+}
+
+async function safelyReleaseAnalysisReservation(
+  database: D1Database,
+  userId: string,
+  requestId: string,
+): Promise<void> {
+  try {
+    await releaseAnalysisBudgetReservation(database, userId, requestId);
+  } catch {
+    // A failed cleanup must not make a pre-provider failure look successful.
+    // The original reservation expires from budget accounting at the UTC day boundary.
   }
 }
 
@@ -130,20 +178,39 @@ export async function handleVisionAnalysis(
  * sein. Übernommen werden nur feste Kennungen und Statuszahlen, nie Fehlertexte, Fotos, Schlüssel
  * oder Kontodaten. Die Kennungen gehen auch an die App, damit sie dort auf dem Handy lesbar sind.
  */
-function failure(error: string, status: number, requestId: string | undefined, hint: { detailStatus?: number; detailCode?: string } = {}): Response {
-  console.error(JSON.stringify({ event: "vision_analysis_failed", error, status, detail_status: hint.detailStatus, detail_code: hint.detailCode }));
-  return jsonResponse({
-    error,
-    ...(requestId ? { request_id: requestId } : {}),
-    ...(hint.detailStatus ? { detail_status: hint.detailStatus } : {}),
-    ...(hint.detailCode ? { detail_code: hint.detailCode } : {}),
-  }, status);
+function failure(
+  error: string,
+  status: number,
+  requestId: string | undefined,
+  hint: { detailStatus?: number; detailCode?: string } = {},
+): Response {
+  console.error(
+    JSON.stringify({
+      event: "vision_analysis_failed",
+      error,
+      status,
+      detail_status: hint.detailStatus,
+      detail_code: hint.detailCode,
+    }),
+  );
+  return jsonResponse(
+    {
+      error,
+      ...(requestId ? { request_id: requestId } : {}),
+      ...(hint.detailStatus ? { detail_status: hint.detailStatus } : {}),
+      ...(hint.detailCode ? { detail_code: hint.detailCode } : {}),
+    },
+    status,
+  );
 }
 
 /** Ordnet einen Datenbankfehler einer festen Kennung zu, ohne seinen Text weiterzugeben. */
 function describeStorageFailure(error: unknown): string {
   // D1 meldet eine fehlende Tabelle als „no such table“; das ist der häufigste Einrichtungsfehler.
-  return error instanceof Error && /no such table/iu.test(`${error.message} ${(error.cause as Error | undefined)?.message ?? ""}`) ? "missing_table" : "storage_error";
+  return error instanceof Error &&
+    /no such table/iu.test(`${error.message} ${(error.cause as Error | undefined)?.message ?? ""}`)
+    ? "missing_table"
+    : "storage_error";
 }
 
 /**
@@ -166,47 +233,9 @@ export function isPhotoCheckAvailable(
   return limits.allowedSubjects.includes(`${session.environment}:${session.subject}`);
 }
 
-class BodyTooLargeError extends Error {}
-
-async function readLimitedBody(request: Request, maximumBytes: number): Promise<Uint8Array> {
-  const declaredLength = request.headers.get("Content-Length");
-  if (declaredLength !== null && (!/^\d+$/u.test(declaredLength) || Number(declaredLength) > maximumBytes)) {
-    throw new BodyTooLargeError();
-  }
-  if (!request.body) return new Uint8Array();
-
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      totalBytes += value.byteLength;
-      if (totalBytes > maximumBytes) {
-        try {
-          await reader.cancel();
-        } catch {
-          // A failed cancellation must not hide the size violation from the caller.
-        }
-        throw new BodyTooLargeError();
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  const body = new Uint8Array(totalBytes);
-  let offset = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return body;
-}
-
-function parseRequestBody(bytes: Uint8Array): { requestId: string; contentType: SupportedImageType; imageBytes: Uint8Array } | null {
+function parseRequestBody(
+  bytes: Uint8Array,
+): { requestId: string; contentType: SupportedImageType; imageBytes: Uint8Array } | null {
   let decoded: unknown;
   try {
     decoded = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
@@ -215,9 +244,23 @@ function parseRequestBody(bytes: Uint8Array): { requestId: string; contentType: 
   }
   if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) return null;
   const record = decoded as Record<string, unknown>;
-  if (Object.keys(record).length !== 3 || typeof record.request_id !== "string" || !/^[A-Za-z0-9_-]{16,128}$/u.test(record.request_id)) return null;
-  if (typeof record.content_type !== "string" || !ALLOWED_IMAGE_TYPES.includes(record.content_type as SupportedImageType)) return null;
-  if (typeof record.image_base64 !== "string" || record.image_base64.length === 0 || record.image_base64.length > Math.ceil(MAX_VISION_IMAGE_BYTES / 3) * 4) return null;
+  if (
+    Object.keys(record).length !== 3 ||
+    typeof record.request_id !== "string" ||
+    !/^[A-Za-z0-9_-]{16,128}$/u.test(record.request_id)
+  )
+    return null;
+  if (
+    typeof record.content_type !== "string" ||
+    !ALLOWED_IMAGE_TYPES.includes(record.content_type as SupportedImageType)
+  )
+    return null;
+  if (
+    typeof record.image_base64 !== "string" ||
+    record.image_base64.length === 0 ||
+    record.image_base64.length > Math.ceil(MAX_VISION_IMAGE_BYTES / 3) * 4
+  )
+    return null;
   if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(record.image_base64)) return null;
 
   let binary: string;
@@ -231,7 +274,9 @@ function parseRequestBody(bytes: Uint8Array): { requestId: string; contentType: 
   return { requestId: record.request_id, contentType: record.content_type as SupportedImageType, imageBytes };
 }
 
-function getAnalysisLimits(environment: VisionRouteEnvironment): { allowedSubjects: string[]; reservationMicros: number; userDailyMicros: number; globalDailyMicros: number } | null {
+function getAnalysisLimits(
+  environment: VisionRouteEnvironment,
+): { allowedSubjects: string[]; reservationMicros: number; userDailyMicros: number; globalDailyMicros: number } | null {
   if (environment.AI_ANALYSIS_ENABLED !== "true") return null;
   const allowedSubjects = parseAllowedSubjects(environment.AI_ANALYSIS_ALLOWED_OSM_SUBJECTS);
   const reservationMicros = parsePositiveInteger(environment.AI_ANALYSIS_COST_RESERVATION_MICROS);
@@ -245,7 +290,11 @@ function getAnalysisLimits(environment: VisionRouteEnvironment): { allowedSubjec
 function parseAllowedSubjects(value: string | undefined): string[] | null {
   if (!value || value.length > 25_600) return null;
   const subjects = value.split(",").map((subject) => subject.trim());
-  if (subjects.length === 0 || subjects.length > 100 || subjects.some((subject) => !subject || subject.length > 320 || /[\u0000-\u001f]/u.test(subject))) {
+  if (
+    subjects.length === 0 ||
+    subjects.length > 100 ||
+    subjects.some((subject) => !subject || subject.length > 320 || /[\u0000-\u001f]/u.test(subject))
+  ) {
     return null;
   }
   return [...new Set(subjects)];
@@ -254,42 +303,11 @@ function parseAllowedSubjects(value: string | undefined): string[] | null {
 async function createBudgetUserId(environment: "production" | "development", subject: string): Promise<string> {
   // OSM subjects are unique only within an issuer. Hash both values so D1 stores
   // a fixed-size key that cannot collide across the production and test servers.
-  const source = new TextEncoder().encode(`${environment}\0${subject}`);
-  const digest = await crypto.subtle.digest("SHA-256", source);
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return sha256Hex(`${environment}\0${subject}`);
 }
 
 function parsePositiveInteger(value: string | undefined): number | null {
   if (!value || !/^\d+$/u.test(value)) return null;
   const number = Number(value);
   return Number.isSafeInteger(number) && number > 0 ? number : null;
-}
-
-function isCrossOrigin(request: Request, requestOrigin: string): boolean {
-  const origin = request.headers.get("Origin");
-  return (origin !== null && origin !== requestOrigin) || request.headers.get("Sec-Fetch-Site") === "cross-site";
-}
-
-function readCookie(cookieHeader: string | null, name: string): string | null {
-  if (!cookieHeader) return null;
-  for (const part of cookieHeader.split(";")) {
-    const separator = part.indexOf("=");
-    if (separator < 0 || part.slice(0, separator).trim() !== name) continue;
-    const value = part.slice(separator + 1).trim();
-    return /^[A-Za-z0-9_-]{43}$/u.test(value) ? value : null;
-  }
-  return null;
-}
-
-function jsonResponse(body: Record<string, unknown>, status: number, extraHeaders: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store",
-      "X-Content-Type-Options": "nosniff",
-      "Referrer-Policy": "no-referrer",
-      ...extraHeaders,
-    },
-  });
 }

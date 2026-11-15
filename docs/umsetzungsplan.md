@@ -12,11 +12,15 @@ Die GitHub-Actions-Workflowdatei `.github/workflows/ci.yml` prüft PRs und Pushe
 
 Der Merge von PR #49 löste den automatischen Deploy aus; GitHub-Actions-Lauf [#234](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42672639423) war erfolgreich. Der jüngste Deploy stammt vom Merge von PR #54 (CI [#248](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42853298091), 10.11.2026) und war ebenfalls erfolgreich. Die Umgebung benötigt das Secret `CLOUDFLARE_API_TOKEN` und die Variable `CLOUDFLARE_ACCOUNT_ID`. Sie sollen ausschließlich in den GitHub-Environment-Einstellungen gespeichert werden. Eine zusätzliche Deploy-Freigabe hängt von den aktuellen Repository-Environment-Regeln ab; der Merge-Deploy #234 ist bereits erfolgreich durchgelaufen.
 
+Vor dem Worker-Deploy liest CI den D1-Migrationsstand per `SELECT` und stoppt bei Abweichungen. Migrationen werden nach Prüfung manuell angewendet; sie laufen nicht automatisch beim Deploy. Das Token im GitHub-Environment `production` benötigt dafür D1-Lesezugriff. Der Live-Check der AED-Datenquelle kann manuell und täglich um 06:17 UTC laufen; er ist lesend und verwendet keine Secrets.
+
 ## Reihenfolge und aktueller Stand
+
+**Ergänzung vom 15.11.2026:** Der Produktions-D1-Migrationsschutz (P8) ist mit PR #99 gemergt; die Migrationen `0010` und `0011` wurden geprüft und angewendet, der anschließende Worker-Deploy war erfolgreich. P9 ist mit PR #100 als dokumentierter Entwurf abgeschlossen; es erteilt keine Freigabe für echte OSM-Schreibvorgänge. P10 wird in sechs verhaltensneutralen PRs #101–#106 umgesetzt. Die Pull Requests zielen jeweils auf `main`, sind aber als überprüfte Merge-Reihe vorbereitet: #102 enthält #101, #103 enthält #101–#102 usw. bis #106. Sie müssen in dieser Reihenfolge gemergt werden; danach wird der nächste PR-Diff gegen den dann aktuellen `main`-Stand geprüft. Status, Dateigrenzen, Tests und verbleibende Review-Schritte stehen in [Offene Fragen](offene-fragen.md#aufteilung-von-maint-ts-p10). Bis zu einer separaten Produktentscheidung bleiben produktive OSM-Schreibzugriffe ausgeschaltet.
 
 | Schritt | Ergebnis | Status |
 | --- | --- | --- |
-| A. Bedienprototyp | Mobil nutzbarer Fotoablauf mit simulierten Treffern, Rückfragen und Fehlern; sechs Sprachen | Begonnen |
+| A. Bedienprototyp | Mobil nutzbarer Fotoablauf mit simulierten Treffern, Rückfragen und Fehlern; sechs Sprachen | Abgelöst durch den echten Ablauf. Die Simulation („Vorschau testen“) wurde am 14.11.2026 entfernt |
 | B. Vor-Ort-Prüfung | Schmale Browseransicht, Info-Texte in sechs Sprachen, Auswahlablauf und Offline-Cache automatisiert geprüft; Kamera, Lesbarkeit und Berechtigungen auf echten Mobilgeräten | Teilweise: Fotoaufnahme und Fotoauswahl wurden lokal auf einem Handy geprüft; die öffentliche PWA ist erreichbar. Der neue Testablauf erklärt Beispieldaten und bietet optionale, datensparsame Diagnose-Logs. Android/iPhone, Berechtigungen, PWA-Installation und Offlinebetrieb bleiben zu prüfen |
 | C. Frühe Erkennungsvorprüfung (historisch) | Damalige qualitative Modellprüfung | Kleine externe Modelltests waren kein kontrollierter Genauigkeitsnachweis und sind keine App-Laufzeitfunktion. Historische Auswertung: [Bildtest](bildtest.md). |
 | D. API-Vorschau (historisch) | Früherer Bildanalyse- und Overpass-Prototyp | Dieser Ablauf ist durch manuelle Sichtbestätigung und den PMTiles-Consumer ersetzt. Der Live-Range-Abruf und der mobile Ende-zu-Ende-Ablauf sind noch separat zu prüfen. |
@@ -24,6 +28,22 @@ Der Merge von PR #49 löste den automatischen Deploy aus; GitHub-Actions-Lauf [#
 | F. Kleiner Pilot | Begrenzter Betrieb, Kosten- und Qualitätsauswertung, reale Geräteprüfung | Offen |
 
 Im ersten Code-Schritt ist Vite mit TypeScript ohne React gewählt. Der lokale Prototyp benötigt keine UI-Bibliothek; der App-Zustand bleibt in einem kleinen Fachmodul, damit Worker-, Feed- und OSM-Adapter getrennt bleiben. Produktive Dienste werden erst nach Abschluss und Prüfung der vorherigen Schritte angeschlossen.
+
+## Detailweg für AED-Angaben
+
+Entscheidung vom 13.11.2026, Mockup abgenommen. Je Etappe ein kleiner PR gegen `main`. Regeln und Tag-Liste: [OSM-Datenmodell](osm.md#detailangaben-entscheidung-vom-13112026); Bedienung: [Produktkonzept](konzept.md).
+
+| Etappe | Ergebnis | Status |
+| --- | --- | --- |
+| P0 | Entscheidung und Dokumentation: `AGENTS.md`, `docs/osm.md`, `docs/konzept.md`, `docs/architektur.md`, `docs/offene-fragen.md`, `CHANGELOG.md` | Gemergt (PR #77, 13.11.2026) und deployed |
+| P1 | Gemeinsamer Datenvertrag `src/contracts/aedDetails.ts` (Schlüsselliste, Werte, Grenzen, `buildDetailTags`, `validateDetailTags`, `diffTags`) mit 31 Tests in `tests/aedDetails.test.ts`. Noch von keinem Programmteil benutzt | Gemergt (PR #77, 13.11.2026) und deployed |
+| P2 | Formular für Neuanlage im Browser (neuer Zustand `new-aed-details`), Texte in allen sechs Sprachen, E2E bei 320 px. Ohne das Feld „Gehäuse“ (siehe [offene Fragen](offene-fragen.md)) | Gemergt (PR #77) und deployed. Nicht auf einem echten Handy geprüft |
+| P3 | Worker schreibt die Detailtags bei Neuanlage (`details` statt `location_description`), Hash und Wiederaufnahme rückwärtskompatibel. Wegen der Schnittstelle zusammen mit P2 umgesetzt | Gemergt (PR #77) und deployed. Nur mit simulierten OSM-Antworten getestet |
+| P4 | Bestehenden AED ergänzen: frisches Lesen von Version und Tags (`GET /api/osm/development/node`), Schreibroute `check-date` mit `details` und Pflicht-`expected_version`, nur fehlende Tags. Statt `expected_before` genügt die Versionsprüfung plus „Schlüssel muss fehlen“, weil P4 nichts ersetzt | Gemergt (PR #77) und deployed. Nur mit simulierten OSM-Antworten getestet, nicht auf einem echten Handy |
+| P5 | Korrekturen bestehender Werte hinter dem Betreiber-Schalter `OSM_DETAIL_CORRECTIONS_ENABLED` (Standard aus), Vorbelegung, „Vorher“-Zeilen, Vorschau `alt → neu`, zusätzliche Bestätigung, Server prüft alte Werte (`expected_before`) | Gemergt (PR #77) und deployed. Nur mit simulierten OSM-Antworten getestet, Schalter aus |
+| P6 | Praxistest auf iPhone (und später Android), Messung der Tipps und Sekunden bis „gespeichert“, Übergabe aktualisieren | Offen |
+
+Alle Schreibwege bleiben auf den OSM-Testserver begrenzt und hinter `OSM_DEV_WRITES_ENABLED`. Tests rufen weder echtes OSM noch OpenAI auf.
 
 ## Rollen und Werkzeuge
 

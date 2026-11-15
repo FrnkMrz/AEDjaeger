@@ -14,10 +14,8 @@ const validObservation: VisionObservation = {
 
 // A tiny but structurally complete JPEG container keeps provider tests offline.
 const jpeg = new Uint8Array([
-  0xff, 0xd8,
-  0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01, 0x01, 0x11, 0x00,
-  0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00,
-  0x00, 0xff, 0xd9,
+  0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0xff, 0xda, 0x00, 0x08,
+  0x01, 0x01, 0x00, 0x00, 0x3f, 0x00, 0x00, 0xff, 0xd9,
 ]);
 
 function pngChunk(type: string, data: number[]): number[] {
@@ -25,25 +23,40 @@ function pngChunk(type: string, data: number[]): number[] {
   let crc = 0xffffffff;
   for (const byte of typeAndData) {
     crc ^= byte;
-    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
   }
   const checksum = (crc ^ 0xffffffff) >>> 0;
   const length = data.length;
-  return [length >>> 24, (length >>> 16) & 0xff, (length >>> 8) & 0xff, length & 0xff, ...typeAndData,
-    (checksum >>> 24) & 0xff, (checksum >>> 16) & 0xff, (checksum >>> 8) & 0xff, checksum & 0xff];
+  return [
+    length >>> 24,
+    (length >>> 16) & 0xff,
+    (length >>> 8) & 0xff,
+    length & 0xff,
+    ...typeAndData,
+    (checksum >>> 24) & 0xff,
+    (checksum >>> 16) & 0xff,
+    (checksum >>> 8) & 0xff,
+    checksum & 0xff,
+  ];
 }
 
 const png = new Uint8Array([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+  0x89,
+  0x50,
+  0x4e,
+  0x47,
+  0x0d,
+  0x0a,
+  0x1a,
+  0x0a,
   ...pngChunk("IHDR", [0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0]),
   ...pngChunk("IDAT", [0]),
   ...pngChunk("IEND", []),
 ]);
 
 const webp = new Uint8Array([
-  0x52, 0x49, 0x46, 0x46, 0x16, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
-  0x56, 0x50, 0x38, 0x20, 0x0a, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x9d, 0x01, 0x2a, 0x01, 0x00, 0x01, 0x00,
+  0x52, 0x49, 0x46, 0x46, 0x16, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x20, 0x0a, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x9d, 0x01, 0x2a, 0x01, 0x00, 0x01, 0x00,
 ]);
 
 function providerResponse(body: unknown, status = 200): Response {
@@ -86,7 +99,9 @@ describe("server-side GPT-6 Luna vision adapter", () => {
     expect(body.text.format.schema.properties.location_clues.maxItems).toBe(3);
     expect(body.text.format.schema.properties.location_clues.items.maxLength).toBe(40);
     expect(body.text.format.schema.properties.location_clues.items.pattern).toBe("\\S");
-    expect(body.input[0].content).toContain("ein als AED-Gehäuse erkennbarer Kasten, auch wenn das Gerät darin nicht sichtbar ist");
+    expect(body.input[0].content).toContain(
+      "ein als AED-Gehäuse erkennbarer Kasten, auch wenn das Gerät darin nicht sichtbar ist",
+    );
     expect(body.input[0].content).toContain("eine eindeutig leere Halterung");
     expect(body.input[1].content[1].type).toBe("input_image");
   });
@@ -97,7 +112,9 @@ describe("server-side GPT-6 Luna vision adapter", () => {
     await expect(analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "  ", fetcher)).rejects.toMatchObject({
       code: "missing_secret",
     });
-    await expect(analyzeAedPhoto({ bytes: jpeg, contentType: "image/png" }, "test-secret", fetcher)).rejects.toMatchObject({
+    await expect(
+      analyzeAedPhoto({ bytes: jpeg, contentType: "image/png" }, "test-secret", fetcher),
+    ).rejects.toMatchObject({
       code: "invalid_image",
     });
     expect(fetcher).not.toHaveBeenCalled();
@@ -110,7 +127,9 @@ describe("server-side GPT-6 Luna vision adapter", () => {
   ])("rejects truncated %s containers before calling the provider", async (_format, contentType, bytes) => {
     const fetcher = vi.fn<typeof fetch>();
 
-    await expect(analyzeAedPhoto({ bytes, contentType }, "test-secret", fetcher)).rejects.toMatchObject({ code: "invalid_image" });
+    await expect(analyzeAedPhoto({ bytes, contentType }, "test-secret", fetcher)).rejects.toMatchObject({
+      code: "invalid_image",
+    });
     expect(fetcher).not.toHaveBeenCalled();
   });
 
@@ -127,7 +146,14 @@ describe("server-side GPT-6 Luna vision adapter", () => {
 
   it("rejects PNGs with excessive chunk counts before calling the provider", async () => {
     const chunks = [
-      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      0x89,
+      0x50,
+      0x4e,
+      0x47,
+      0x0d,
+      0x0a,
+      0x1a,
+      0x0a,
       ...pngChunk("IHDR", [0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0]),
       ...pngChunk("IDAT", [0]),
     ];
@@ -135,7 +161,9 @@ describe("server-side GPT-6 Luna vision adapter", () => {
     chunks.push(...pngChunk("IEND", []));
     const fetcher = vi.fn<typeof fetch>();
 
-    await expect(analyzeAedPhoto({ bytes: new Uint8Array(chunks), contentType: "image/png" }, "test-secret", fetcher)).rejects.toMatchObject({ code: "invalid_image" });
+    await expect(
+      analyzeAedPhoto({ bytes: new Uint8Array(chunks), contentType: "image/png" }, "test-secret", fetcher),
+    ).rejects.toMatchObject({ code: "invalid_image" });
     expect(fetcher).not.toHaveBeenCalled();
   });
 
@@ -153,40 +181,55 @@ describe("server-side GPT-6 Luna vision adapter", () => {
     webpChunks[7] = (riffSize >>> 24) & 0xff;
 
     const fetcher = vi.fn<typeof fetch>();
-    await expect(analyzeAedPhoto({ bytes: new Uint8Array(jpegSegments), contentType: "image/jpeg" }, "test-secret", fetcher)).rejects.toMatchObject({ code: "invalid_image" });
-    await expect(analyzeAedPhoto({ bytes: new Uint8Array(webpChunks), contentType: "image/webp" }, "test-secret", fetcher)).rejects.toMatchObject({ code: "invalid_image" });
+    await expect(
+      analyzeAedPhoto({ bytes: new Uint8Array(jpegSegments), contentType: "image/jpeg" }, "test-secret", fetcher),
+    ).rejects.toMatchObject({ code: "invalid_image" });
+    await expect(
+      analyzeAedPhoto({ bytes: new Uint8Array(webpChunks), contentType: "image/webp" }, "test-secret", fetcher),
+    ).rejects.toMatchObject({ code: "invalid_image" });
     expect(fetcher).not.toHaveBeenCalled();
   });
 
   it("rejects provider output that does not match the observation schema", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(outputResponse({ ...validObservation, osm_tags: { emergency: "defibrillator" } }));
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(outputResponse({ ...validObservation, osm_tags: { emergency: "defibrillator" } }));
 
-    await expect(analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", fetcher)).rejects.toBeInstanceOf(
-      VisionAnalysisError,
-    );
+    await expect(
+      analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", fetcher),
+    ).rejects.toBeInstanceOf(VisionAnalysisError);
   });
 
   it("treats a whitespace-only label as unreadable instead of failing the whole check", async () => {
     // Früher scheiterte der Vorgang hier. Für den Filter zählt nur die Szene; ein leeres Etikett heißt „nicht lesbar“.
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(outputResponse({ ...validObservation, manufacturer: "   " }));
-    await expect(analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", fetcher)).resolves.toMatchObject({ scene: "device_visible", manufacturer: null });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(outputResponse({ ...validObservation, manufacturer: "   " }));
+    await expect(
+      analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", fetcher),
+    ).resolves.toMatchObject({ scene: "device_visible", manufacturer: null });
   });
 
-  it.each([null, { status: "completed", output: {} }, { status: "completed", output: [{ type: "message", content: {} }] }])(
-    "normalizes malformed successful provider responses (%s)",
-    async (providerBody) => {
-      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(providerResponse(providerBody));
+  it.each([
+    null,
+    { status: "completed", output: {} },
+    { status: "completed", output: [{ type: "message", content: {} }] },
+  ])("normalizes malformed successful provider responses (%s)", async (providerBody) => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(providerResponse(providerBody));
 
-      await expect(analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", fetcher)).rejects.toMatchObject({
-        code: "invalid_provider_response",
-      });
-    },
-  );
+    await expect(
+      analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", fetcher),
+    ).rejects.toMatchObject({
+      code: "invalid_provider_response",
+    });
+  });
 
   it("rejects incomplete provider responses even when their text matches the schema", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(outputResponse(validObservation, "incomplete"));
 
-    await expect(analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", fetcher)).rejects.toMatchObject({
+    await expect(
+      analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", fetcher),
+    ).rejects.toMatchObject({
       code: "invalid_provider_response",
       message: "Die Bildanalyse wurde nicht vollständig abgeschlossen.",
     });
@@ -194,8 +237,12 @@ describe("server-side GPT-6 Luna vision adapter", () => {
 
   it("lets the scene decide when the device count contradicts it", async () => {
     // Auf dem Foto liegen andere Geräte: Die Szene „nur Schild“ gilt, gezählt werden nur AED, also 0.
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(outputResponse({ ...validObservation, scene: "sign_only", device_count: 1 }));
-    await expect(analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", fetcher)).resolves.toMatchObject({ scene: "sign_only", device_count: 0 });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(outputResponse({ ...validObservation, scene: "sign_only", device_count: 1 }));
+    await expect(
+      analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", fetcher),
+    ).resolves.toMatchObject({ scene: "sign_only", device_count: 0 });
   });
 
   describe("failure details for diagnosis", () => {
@@ -210,16 +257,35 @@ describe("server-side GPT-6 Luna vision adapter", () => {
     };
 
     it("keeps only the HTTP status and a safe error code from a provider error", async () => {
-      const error = await call(vi.fn<typeof fetch>().mockResolvedValue(providerResponse({ error: { code: "invalid_api_key", type: "invalid_request_error", message: "Incorrect API key provided: sk-secret-value" } }, 401)));
+      const error = await call(
+        vi.fn<typeof fetch>().mockResolvedValue(
+          providerResponse(
+            {
+              error: {
+                code: "invalid_api_key",
+                type: "invalid_request_error",
+                message: "Incorrect API key provided: sk-secret-value",
+              },
+            },
+            401,
+          ),
+        ),
+      );
       expect(error.detail).toEqual({ providerStatus: 401, providerCode: "invalid_api_key" });
       // Die Fehlermeldung des Anbieters wird nie gelesen und taucht nirgends auf.
       expect(JSON.stringify([error.message, error.detail])).not.toContain("sk-secret-value");
     });
 
     it("falls back to the error type and to the status alone", async () => {
-      const typeOnly = await call(vi.fn<typeof fetch>().mockResolvedValue(providerResponse({ error: { type: "insufficient_quota", message: "x" } }, 429)));
+      const typeOnly = await call(
+        vi
+          .fn<typeof fetch>()
+          .mockResolvedValue(providerResponse({ error: { type: "insufficient_quota", message: "x" } }, 429)),
+      );
       expect(typeOnly.detail).toEqual({ providerStatus: 429, providerCode: "insufficient_quota" });
-      const notJson = await call(vi.fn<typeof fetch>().mockResolvedValue(new Response("<html>bad gateway</html>", { status: 502 })));
+      const notJson = await call(
+        vi.fn<typeof fetch>().mockResolvedValue(new Response("<html>bad gateway</html>", { status: 502 })),
+      );
       expect(notJson.detail).toEqual({ providerStatus: 502, providerCode: undefined });
     });
 
@@ -230,37 +296,62 @@ describe("server-side GPT-6 Luna vision adapter", () => {
       ["an overlong value", "a".repeat(49)],
       ["a non-string value", 42],
     ])("drops %s instead of passing it on", async (_name, code) => {
-      const error = await call(vi.fn<typeof fetch>().mockResolvedValue(providerResponse({ error: { code, type: code } }, 400)));
+      const error = await call(
+        vi.fn<typeof fetch>().mockResolvedValue(providerResponse({ error: { code, type: code } }, 400)),
+      );
       expect(error.detail.providerCode).toBeUndefined();
     });
 
     it("tells a timeout from other network failures", async () => {
-      const timeout = await call(vi.fn<typeof fetch>().mockRejectedValue(new DOMException("timed out", "TimeoutError")));
+      const timeout = await call(
+        vi.fn<typeof fetch>().mockRejectedValue(new DOMException("timed out", "TimeoutError")),
+      );
       expect(timeout.detail).toEqual({ providerCode: "timeout" });
       const network = await call(vi.fn<typeof fetch>().mockRejectedValue(new TypeError("fetch failed")));
       expect(network.detail).toEqual({ providerCode: "network_error" });
     });
 
     it("names why a successful HTTP response was still unusable", async () => {
-      const incomplete = await call(vi.fn<typeof fetch>().mockResolvedValue(providerResponse({ status: "incomplete", incomplete_details: { reason: "max_output_tokens" } })));
+      const incomplete = await call(
+        vi
+          .fn<typeof fetch>()
+          .mockResolvedValue(
+            providerResponse({ status: "incomplete", incomplete_details: { reason: "max_output_tokens" } }),
+          ),
+      );
       expect(incomplete.detail.providerCode).toBe("incomplete_max_output_tokens");
-      const noOutput = await call(vi.fn<typeof fetch>().mockResolvedValue(providerResponse({ status: "completed", output: [] })));
+      const noOutput = await call(
+        vi.fn<typeof fetch>().mockResolvedValue(providerResponse({ status: "completed", output: [] })),
+      );
       expect(noOutput.detail.providerCode).toBe("no_output");
-      const badJson = await call(vi.fn<typeof fetch>().mockResolvedValue(providerResponse({ status: "completed", output: [{ type: "message", content: [{ type: "output_text", text: "not json" }] }] })));
+      const badJson = await call(
+        vi.fn<typeof fetch>().mockResolvedValue(
+          providerResponse({
+            status: "completed",
+            output: [{ type: "message", content: [{ type: "output_text", text: "not json" }] }],
+          }),
+        ),
+      );
       expect(badJson.detail.providerCode).toBe("invalid_json");
       // Felder fehlen: Das Modell hat die vorgegebene Form nicht eingehalten.
       const wrongShape = await call(vi.fn<typeof fetch>().mockResolvedValue(outputResponse({ scene: "guess" })));
       expect(wrongShape.detail.providerCode).toBe("schema_unexpected_keys");
       // Alle Felder da, aber ein Szenenwert, den es nicht gibt.
-      const wrongScene = await call(vi.fn<typeof fetch>().mockResolvedValue(outputResponse({ ...validObservation, scene: "guess" })));
+      const wrongScene = await call(
+        vi.fn<typeof fetch>().mockResolvedValue(outputResponse({ ...validObservation, scene: "guess" })),
+      );
       expect(wrongScene.detail.providerCode).toBe("schema_invalid_scene");
     });
   });
 
   it("does not expose provider error details to callers", async () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(providerResponse({ error: { message: "secret and request content" } }, 500));
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(providerResponse({ error: { message: "secret and request content" } }, 500));
 
-    await expect(analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", fetcher)).rejects.toMatchObject({
+    await expect(
+      analyzeAedPhoto({ bytes: jpeg, contentType: "image/jpeg" }, "test-secret", fetcher),
+    ).rejects.toMatchObject({
       code: "provider_error",
       message: "Die Bildanalyse ist vorübergehend fehlgeschlagen.",
     });

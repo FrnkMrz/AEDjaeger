@@ -20,10 +20,7 @@ export interface NearbyAedCandidate {
   tags: Readonly<Record<string, string>>;
 }
 
-export type CandidateSearchFailureReason =
-  | "invalid-request"
-  | "invalid-response"
-  | "coverage-unavailable";
+export type CandidateSearchFailureReason = "invalid-request" | "invalid-response" | "coverage-unavailable";
 
 export interface CandidateSearchResult {
   status: "complete" | "partial" | "failed";

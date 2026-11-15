@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { exchangeOSMCodeForIdentity, exchangeOSMDevelopmentCodeForAccess, OSMOAuthDiagnosticError } from "../server/auth/osmOidc";
+import {
+  exchangeOSMCodeForIdentity,
+  exchangeOSMDevelopmentCodeForAccess,
+  OSMOAuthDiagnosticError,
+} from "../server/auth/osmOidc";
 
 const clientId = "aedjaeger-client";
 const clientSecret = "aedjaeger-test-secret";
@@ -10,8 +14,13 @@ function encode(value: unknown): string {
   return btoa(JSON.stringify(value)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
 }
 
-async function signedFixture(claimOverrides: Record<string, unknown> = {}, environment: "production" | "development" = "production", tokenOverrides: Record<string, unknown> = {}) {
-  const origin = environment === "development" ? "https://master.apis.dev.openstreetmap.org" : "https://www.openstreetmap.org";
+async function signedFixture(
+  claimOverrides: Record<string, unknown> = {},
+  environment: "production" | "development" = "production",
+  tokenOverrides: Record<string, unknown> = {},
+) {
+  const origin =
+    environment === "development" ? "https://master.apis.dev.openstreetmap.org" : "https://www.openstreetmap.org";
   const keyPair = await crypto.subtle.generateKey(
     { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
     true,
@@ -29,9 +38,15 @@ async function signedFixture(claimOverrides: Record<string, unknown> = {}, envir
     ...claimOverrides,
   });
   const signingInput = `${header}.${claims}`;
-  const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", keyPair.privateKey, new TextEncoder().encode(signingInput));
+  const signature = await crypto.subtle.sign(
+    "RSASSA-PKCS1-v1_5",
+    keyPair.privateKey,
+    new TextEncoder().encode(signingInput),
+  );
   const encodedSignature = btoa(String.fromCharCode(...new Uint8Array(signature)))
-    .replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/u, "");
   const token = `${signingInput}.${encodedSignature}`;
   const fetcher = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     expect(init?.redirect).toBe("manual");
@@ -50,12 +65,20 @@ async function signedFixture(claimOverrides: Record<string, unknown> = {}, envir
       expect(body).toContain("code_verifier=verifier-value");
       if (environment === "development") {
         const formEncode = (value: string): string => new URLSearchParams({ value }).toString().slice("value=".length);
-        expect(new Headers(init?.headers).get("Authorization")).toBe(`Basic ${btoa(`${formEncode(clientId)}:${formEncode(clientSecret)}`)}`);
+        expect(new Headers(init?.headers).get("Authorization")).toBe(
+          `Basic ${btoa(`${formEncode(clientId)}:${formEncode(clientSecret)}`)}`,
+        );
         expect(body).not.toContain("client_secret");
       } else {
         expect(new Headers(init?.headers).get("Authorization")).toBeNull();
       }
-      return Response.json({ id_token: token, access_token: "A".repeat(60), token_type: "Bearer", ...(environment === "development" ? { scope: "openid write_api" } : {}), ...tokenOverrides });
+      return Response.json({
+        id_token: token,
+        access_token: "A".repeat(60),
+        token_type: "Bearer",
+        ...(environment === "development" ? { scope: "openid write_api" } : {}),
+        ...tokenOverrides,
+      });
     }
     if (url === `${origin}/oauth2/discovery/keys`) {
       return Response.json({ keys: [{ ...publicJwk, kid: "osm-key-1", use: "sig", alg: "RS256" }] });
@@ -72,25 +95,33 @@ describe("OSM OpenID Connect verification", () => {
       calls.push(String(input));
       return new Response("private redirect body", { status: 302, headers: { Location: "https://attacker.example" } });
     };
-    await expect(exchangeOSMCodeForIdentity({
-      code: "one-time-code", verifier: "verifier-value", nonce, clientId,
-      redirectUri: "https://aedjaeger.example/api/auth/osm/callback", fetcher,
-    })).rejects.toMatchObject({ diagnosticCode: "provider_discovery_http_error", httpStatus: 302 });
+    await expect(
+      exchangeOSMCodeForIdentity({
+        code: "one-time-code",
+        verifier: "verifier-value",
+        nonce,
+        clientId,
+        redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
+        fetcher,
+      }),
+    ).rejects.toMatchObject({ diagnosticCode: "provider_discovery_http_error", httpStatus: 302 });
     expect(calls).toEqual(["https://www.openstreetmap.org/.well-known/openid-configuration"]);
   });
 
   it("exchanges the code and accepts a correctly signed, bound identity token", async () => {
     const { fetcher } = await signedFixture();
 
-    await expect(exchangeOSMCodeForIdentity({
-      code: "one-time-code",
-      verifier: "verifier-value",
-      nonce,
-      clientId,
-      redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
-      now,
-      fetcher,
-    })).resolves.toEqual({ subject: "987654321" });
+    await expect(
+      exchangeOSMCodeForIdentity({
+        code: "one-time-code",
+        verifier: "verifier-value",
+        nonce,
+        clientId,
+        redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
+        now,
+        fetcher,
+      }),
+    ).resolves.toEqual({ subject: "987654321", accessToken: "A".repeat(60), expiresAt: now + 12 * 60 * 60 * 1_000 });
   });
 
   it.each([
@@ -105,25 +136,35 @@ describe("OSM OpenID Connect verification", () => {
         ? new Response(null, { status: 307, headers: { Location: "https://attacker.example" } })
         : fetcher(input, init);
     };
-    await expect(exchangeOSMDevelopmentCodeForAccess({
-      code: "one-time-code", verifier: "verifier-value", nonce, clientId, clientSecret,
-      redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback", now, fetcher: redirectingFetcher,
-    })).rejects.toMatchObject({ diagnosticCode, httpStatus: 307 });
+    await expect(
+      exchangeOSMDevelopmentCodeForAccess({
+        code: "one-time-code",
+        verifier: "verifier-value",
+        nonce,
+        clientId,
+        clientSecret,
+        redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback",
+        now,
+        fetcher: redirectingFetcher,
+      }),
+    ).rejects.toMatchObject({ diagnosticCode, httpStatus: 307 });
     expect(calls.every((url) => new URL(url).origin === "https://master.apis.dev.openstreetmap.org")).toBe(true);
   });
 
   it("exchanges development authorization only against the fixed test issuer and accepts write_api", async () => {
     const { fetcher } = await signedFixture({}, "development", { expires_in: 3_600 });
-    await expect(exchangeOSMDevelopmentCodeForAccess({
-      code: "one-time-code",
-      verifier: "verifier-value",
-      nonce,
-      clientId,
-      clientSecret,
-      redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback",
-      now,
-      fetcher,
-    })).resolves.toMatchObject({
+    await expect(
+      exchangeOSMDevelopmentCodeForAccess({
+        code: "one-time-code",
+        verifier: "verifier-value",
+        nonce,
+        clientId,
+        clientSecret,
+        redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback",
+        now,
+        fetcher,
+      }),
+    ).resolves.toMatchObject({
       subject: "987654321",
       accessToken: "A".repeat(60),
       expiresAt: now + 3_600_000,
@@ -132,44 +173,50 @@ describe("OSM OpenID Connect verification", () => {
 
   it("accepts an omitted scope field because the exact requested scope is unchanged", async () => {
     const { fetcher } = await signedFixture({}, "development", { scope: undefined });
-    await expect(exchangeOSMDevelopmentCodeForAccess({
-      code: "one-time-code",
-      verifier: "verifier-value",
-      nonce,
-      clientId,
-      clientSecret,
-      redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback",
-      now,
-      fetcher,
-    })).resolves.toMatchObject({ subject: "987654321", accessToken: "A".repeat(60) });
+    await expect(
+      exchangeOSMDevelopmentCodeForAccess({
+        code: "one-time-code",
+        verifier: "verifier-value",
+        nonce,
+        clientId,
+        clientSecret,
+        redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback",
+        now,
+        fetcher,
+      }),
+    ).resolves.toMatchObject({ subject: "987654321", accessToken: "A".repeat(60) });
   });
 
   it("rejects extra scopes from the OSM development authorization", async () => {
     const { fetcher } = await signedFixture({}, "development", { scope: "openid write_api read_prefs" });
-    await expect(exchangeOSMDevelopmentCodeForAccess({
-      code: "one-time-code",
-      verifier: "verifier-value",
-      nonce,
-      clientId,
-      clientSecret,
-      redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback",
-      now,
-      fetcher,
-    })).rejects.toThrow("erwarteten Zugriff");
+    await expect(
+      exchangeOSMDevelopmentCodeForAccess({
+        code: "one-time-code",
+        verifier: "verifier-value",
+        nonce,
+        clientId,
+        clientSecret,
+        redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback",
+        now,
+        fetcher,
+      }),
+    ).rejects.toThrow("erwarteten Zugriff");
   });
 
   it("rejects development code exchange without a server-side client secret", async () => {
     const { fetcher } = await signedFixture({}, "development");
-    await expect(exchangeOSMDevelopmentCodeForAccess({
-      code: "one-time-code",
-      verifier: "verifier-value",
-      nonce,
-      clientId,
-      clientSecret: "",
-      redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback",
-      now,
-      fetcher,
-    })).rejects.toThrow("nicht korrekt konfiguriert");
+    await expect(
+      exchangeOSMDevelopmentCodeForAccess({
+        code: "one-time-code",
+        verifier: "verifier-value",
+        nonce,
+        clientId,
+        clientSecret: "",
+        redirectUri: "https://aedjaeger.example/api/auth/osm/development/callback",
+        now,
+        fetcher,
+      }),
+    ).rejects.toThrow("nicht korrekt konfiguriert");
   });
 
   it("classifies token-endpoint rejection without exposing provider error text", async () => {
@@ -215,15 +262,17 @@ describe("OSM OpenID Connect verification", () => {
     ["expiry", { exp: Math.floor(now / 1_000) }],
   ])("rejects a signed token with an invalid %s", async (_label, claimOverrides) => {
     const { fetcher } = await signedFixture(claimOverrides);
-    await expect(exchangeOSMCodeForIdentity({
-      code: "code",
-      verifier: "verifier-value",
-      nonce,
-      clientId,
-      redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
-      now,
-      fetcher,
-    })).rejects.toThrow();
+    await expect(
+      exchangeOSMCodeForIdentity({
+        code: "code",
+        verifier: "verifier-value",
+        nonce,
+        clientId,
+        redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
+        now,
+        fetcher,
+      }),
+    ).rejects.toThrow();
   });
 
   it("rejects a token after its signature is changed", async () => {
@@ -239,49 +288,59 @@ describe("OSM OpenID Connect verification", () => {
       }
       return response;
     };
-    await expect(exchangeOSMCodeForIdentity({
-      code: "code",
-      verifier: "verifier-value",
-      nonce,
-      clientId,
-      redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
-      now,
-      fetcher: changedFetcher,
-    })).rejects.toThrow();
+    await expect(
+      exchangeOSMCodeForIdentity({
+        code: "code",
+        verifier: "verifier-value",
+        nonce,
+        clientId,
+        redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
+        now,
+        fetcher: changedFetcher,
+      }),
+    ).rejects.toThrow();
   });
 
   it("refuses discovery metadata that points to another issuer", async () => {
-    const fetcher = async (): Promise<Response> => Response.json({
-      issuer: "https://attacker.example",
-      token_endpoint: "https://www.openstreetmap.org/oauth2/token",
-      jwks_uri: "https://www.openstreetmap.org/oauth2/discovery/keys",
-      id_token_signing_alg_values_supported: ["RS256"],
-    });
-    await expect(exchangeOSMCodeForIdentity({
-      code: "code",
-      verifier: "verifier-value",
-      nonce,
-      clientId,
-      redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
-      fetcher,
-    })).rejects.toMatchObject({ diagnosticCode: "provider_discovery_invalid_metadata", httpStatus: 200 });
+    const fetcher = async (): Promise<Response> =>
+      Response.json({
+        issuer: "https://attacker.example",
+        token_endpoint: "https://www.openstreetmap.org/oauth2/token",
+        jwks_uri: "https://www.openstreetmap.org/oauth2/discovery/keys",
+        id_token_signing_alg_values_supported: ["RS256"],
+      });
+    await expect(
+      exchangeOSMCodeForIdentity({
+        code: "code",
+        verifier: "verifier-value",
+        nonce,
+        clientId,
+        redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
+        fetcher,
+      }),
+    ).rejects.toMatchObject({ diagnosticCode: "provider_discovery_invalid_metadata", httpStatus: 200 });
   });
 
   it("distinguishes an unreachable discovery endpoint from an invalid HTTP response", async () => {
-    const unreachable = async (): Promise<Response> => { throw new TypeError("network details must not escape"); };
-    await expect(exchangeOSMCodeForIdentity({
-      code: "code",
-      verifier: "verifier-value",
-      nonce,
-      clientId,
-      redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
-      fetcher: unreachable,
-    })).rejects.toMatchObject({ diagnosticCode: "provider_discovery_unreachable" });
+    const unreachable = async (): Promise<Response> => {
+      throw new TypeError("network details must not escape");
+    };
+    await expect(
+      exchangeOSMCodeForIdentity({
+        code: "code",
+        verifier: "verifier-value",
+        nonce,
+        clientId,
+        redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
+        fetcher: unreachable,
+      }),
+    ).rejects.toMatchObject({ diagnosticCode: "provider_discovery_unreachable" });
 
-    const blockedResponse = async (): Promise<Response> => new Response("private block page detail", {
-      status: 403,
-      headers: { "Content-Type": "text/html" },
-    });
+    const blockedResponse = async (): Promise<Response> =>
+      new Response("private block page detail", {
+        status: 403,
+        headers: { "Content-Type": "text/html" },
+      });
     let failure: unknown;
     try {
       await exchangeOSMCodeForIdentity({

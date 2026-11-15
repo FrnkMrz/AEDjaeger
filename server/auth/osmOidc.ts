@@ -1,3 +1,4 @@
+import { isRecord } from "../http/requestGuards";
 import { OSM_SESSION_LIFETIME_MS } from "../storage/osmSessions";
 import { getOSMProviderEndpoints, type OSMEnvironment } from "./osmProvider";
 import { ExternalRedirectError, fetchWithoutRedirects } from "../http/fetchWithoutRedirects";
@@ -8,6 +9,9 @@ const MAX_CLIENT_SECRET_LENGTH = 1_024;
 
 export type OSMIdentityToken = {
   subject: string;
+  /** Optional because identity verification does not depend on API-token scopes. */
+  accessToken?: string;
+  expiresAt?: number;
 };
 
 export type OSMDevelopmentAuthorization = OSMIdentityToken & {
@@ -59,8 +63,18 @@ export async function exchangeOSMCodeForIdentity(input: {
   fetcher?: Fetcher;
   cryptoApi?: Crypto;
 }): Promise<OSMIdentityToken> {
-  const { subject } = await exchangeCode(input, "production");
-  return { subject };
+  const { subject, tokenResponse } = await exchangeCode(input, "production");
+  const accessToken = tokenResponse.access_token;
+  if (typeof accessToken !== "string" || !isAccessToken(accessToken) || tokenResponse.token_type !== "Bearer")
+    return { subject };
+  const now = input.now ?? Date.now();
+  const expiresIn = tokenResponse.expires_in;
+  const expiresAt =
+    typeof expiresIn === "number" && Number.isSafeInteger(expiresIn) && expiresIn > 0
+      ? now + expiresIn * 1_000
+      : now + OSM_SESSION_LIFETIME_MS;
+  if (!Number.isSafeInteger(expiresAt) || expiresAt <= now) return { subject };
+  return { subject, accessToken, expiresAt };
 }
 
 /**
@@ -79,26 +93,41 @@ export async function exchangeOSMDevelopmentCodeForAccess(input: {
   cryptoApi?: Crypto;
 }): Promise<OSMDevelopmentAuthorization> {
   const { subject, tokenResponse } = await exchangeCode(input, "development");
-  const scopes = typeof tokenResponse.scope === "string"
-    ? tokenResponse.scope.split(/\s+/u).filter(Boolean)
-    : tokenResponse.scope === undefined ? ["openid", "write_api"] : [];
+  const scopes =
+    typeof tokenResponse.scope === "string"
+      ? tokenResponse.scope.split(/\s+/u).filter(Boolean)
+      : tokenResponse.scope === undefined
+        ? ["openid", "write_api"]
+        : [];
   const uniqueScopes = new Set(scopes);
   const accessToken = tokenResponse.access_token;
   if (typeof accessToken !== "string" || !isAccessToken(accessToken) || tokenResponse.token_type !== "Bearer") {
-    throw new OSMOAuthDiagnosticError("development_access_token_invalid", undefined, "Die OSM-Testanmeldung hat nicht den erwarteten Zugriff erteilt.");
+    throw new OSMOAuthDiagnosticError(
+      "development_access_token_invalid",
+      undefined,
+      "Die OSM-Testanmeldung hat nicht den erwarteten Zugriff erteilt.",
+    );
   }
-  if (!uniqueScopes.has("openid") || !uniqueScopes.has("write_api") ||
-    [...uniqueScopes].some((scope) => scope !== "openid" && scope !== "write_api")) {
-    throw new OSMOAuthDiagnosticError("development_scope_invalid", undefined, "Die OSM-Testanmeldung hat nicht den erwarteten Zugriff erteilt.");
+  if (
+    !uniqueScopes.has("openid") ||
+    !uniqueScopes.has("write_api") ||
+    [...uniqueScopes].some((scope) => scope !== "openid" && scope !== "write_api")
+  ) {
+    throw new OSMOAuthDiagnosticError(
+      "development_scope_invalid",
+      undefined,
+      "Die OSM-Testanmeldung hat nicht den erwarteten Zugriff erteilt.",
+    );
   }
 
   const now = input.now ?? Date.now();
   const expiresIn = tokenResponse.expires_in;
   // OSM access tokens currently may not provide an expiry. In that case the
   // app limits retention to its own short-lived session instead.
-  const expiresAt = typeof expiresIn === "number" && Number.isSafeInteger(expiresIn) && expiresIn > 0
-    ? now + expiresIn * 1_000
-    : now + OSM_SESSION_LIFETIME_MS;
+  const expiresAt =
+    typeof expiresIn === "number" && Number.isSafeInteger(expiresIn) && expiresIn > 0
+      ? now + expiresIn * 1_000
+      : now + OSM_SESSION_LIFETIME_MS;
   if (!Number.isSafeInteger(expiresAt) || expiresAt <= now) {
     throw new Error("Die OSM-Testanmeldung hat eine ungültige Tokenlaufzeit geliefert.");
   }
@@ -133,7 +162,8 @@ async function exchangeCode(
   const tokenHeaders = new Headers({ "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" });
 
   if (environment === "development") {
-    if (!isOAuthClientSecret(input.clientSecret)) throw new Error("Die OSM-Testanmeldung ist nicht korrekt konfiguriert.");
+    if (!isOAuthClientSecret(input.clientSecret))
+      throw new Error("Die OSM-Testanmeldung ist nicht korrekt konfiguriert.");
     // Der OSM-Testserver verlangt client_secret_basic zusätzlich zu PKCE.
     // Beide Werte werden nur für diesen HTTPS-Tokenaustausch verwendet und
     // bleiben serverseitig; der Browser erhält weder Secret noch Access-Token.
@@ -145,14 +175,19 @@ async function exchangeCode(
 
   let response: Response;
   try {
-    response = await fetchWithoutRedirects(endpoints.token, {
-      method: "POST",
-      signal: AbortSignal.timeout(10_000),
-      headers: tokenHeaders,
-      body: tokenBody,
-    }, fetcher);
+    response = await fetchWithoutRedirects(
+      endpoints.token,
+      {
+        method: "POST",
+        signal: AbortSignal.timeout(10_000),
+        headers: tokenHeaders,
+        body: tokenBody,
+      },
+      fetcher,
+    );
   } catch (error) {
-    if (error instanceof ExternalRedirectError) throw new OSMOAuthDiagnosticError("token_endpoint_rejected", error.httpStatus);
+    if (error instanceof ExternalRedirectError)
+      throw new OSMOAuthDiagnosticError("token_endpoint_rejected", error.httpStatus);
     throw new OSMOAuthDiagnosticError("token_endpoint_unreachable");
   }
 
@@ -169,13 +204,20 @@ async function exchangeCode(
   let jwksResponse: Response;
   let jwks: unknown;
   try {
-    jwksResponse = await fetchWithoutRedirects(endpoints.jwks, {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(10_000),
-    }, fetcher);
+    jwksResponse = await fetchWithoutRedirects(
+      endpoints.jwks,
+      {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(10_000),
+      },
+      fetcher,
+    );
     jwks = await readJson(jwksResponse);
   } catch (error) {
-    throw new OSMOAuthDiagnosticError("identity_keys_unavailable", error instanceof ExternalRedirectError ? error.httpStatus : undefined);
+    throw new OSMOAuthDiagnosticError(
+      "identity_keys_unavailable",
+      error instanceof ExternalRedirectError ? error.httpStatus : undefined,
+    );
   }
   if (!jwksResponse.ok || !isRecord(jwks) || !Array.isArray(jwks.keys)) {
     throw new OSMOAuthDiagnosticError("identity_keys_unavailable", jwksResponse.status);
@@ -190,15 +232,23 @@ async function exchangeCode(
   return { subject, tokenResponse: tokenResponse as TokenResponse };
 }
 
-async function loadDiscovery(fetcher: Fetcher, endpoints: ReturnType<typeof getOSMProviderEndpoints>): Promise<OSMDiscoveryDocument> {
+async function loadDiscovery(
+  fetcher: Fetcher,
+  endpoints: ReturnType<typeof getOSMProviderEndpoints>,
+): Promise<OSMDiscoveryDocument> {
   let response: Response;
   try {
-    response = await fetchWithoutRedirects(endpoints.discovery, {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(10_000),
-    }, fetcher);
+    response = await fetchWithoutRedirects(
+      endpoints.discovery,
+      {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(10_000),
+      },
+      fetcher,
+    );
   } catch (error) {
-    if (error instanceof ExternalRedirectError) throw new OSMOAuthDiagnosticError("provider_discovery_http_error", error.httpStatus);
+    if (error instanceof ExternalRedirectError)
+      throw new OSMOAuthDiagnosticError("provider_discovery_http_error", error.httpStatus);
     throw new OSMOAuthDiagnosticError("provider_discovery_unreachable");
   }
   if (!response.ok) {
@@ -251,7 +301,10 @@ async function verifyIdToken(
   ) {
     throw new Error("Ungültiges OSM-ID-Token.");
   }
-  if (!Array.isArray(discovery.id_token_signing_alg_values_supported) || !discovery.id_token_signing_alg_values_supported.includes("RS256")) {
+  if (
+    !Array.isArray(discovery.id_token_signing_alg_values_supported) ||
+    !discovery.id_token_signing_alg_values_supported.includes("RS256")
+  ) {
     throw new Error("Nicht unterstützte OSM-Signatur.");
   }
 
@@ -265,7 +318,13 @@ async function verifyIdToken(
   );
   if (matchingKeys.length !== 1) throw new Error("Ungültiger OSM-Signaturschlüssel.");
 
-  const publicKey = await cryptoApi.subtle.importKey("jwk", matchingKeys[0], { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+  const publicKey = await cryptoApi.subtle.importKey(
+    "jwk",
+    matchingKeys[0],
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["verify"],
+  );
   const signatureValid = await cryptoApi.subtle.verify(
     "RSASSA-PKCS1-v1_5",
     publicKey,
@@ -334,12 +393,13 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return buffer;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function isAccessToken(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= MAX_ACCESS_TOKEN_LENGTH && /^[\x21-\x7E]+$/u.test(value);
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= MAX_ACCESS_TOKEN_LENGTH &&
+    /^[\x21-\x7E]+$/u.test(value)
+  );
 }
 
 function isOAuthClientSecret(value: unknown): value is string {

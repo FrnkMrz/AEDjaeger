@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildOSMDevelopmentApiUrl, OSM_DEVELOPMENT_SERVER_ORIGIN, requestOSMDevelopmentApi } from "../server/osm/developmentApi";
+import {
+  buildOSMDevelopmentApiUrl,
+  OSM_DEVELOPMENT_SERVER_ORIGIN,
+  requestOSMDevelopmentApi,
+} from "../server/osm/developmentApi";
 
 describe("OSM development API boundary", () => {
   it("rejects a redirect without forwarding the test token or XML body", async () => {
@@ -9,11 +13,23 @@ describe("OSM development API boundary", () => {
       expect(init?.redirect).toBe("manual");
       expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer fixture-token");
       expect(init?.body).toBe("<osm />");
-      return new Response(null, { status: 307, headers: { Location: "https://www.openstreetmap.org/api/0.6/changeset/create" } });
+      return new Response(null, {
+        status: 307,
+        headers: { Location: "https://www.openstreetmap.org/api/0.6/changeset/create" },
+      });
     };
-    await expect(requestOSMDevelopmentApi("development", "/api/0.6/changeset/create", "fixture-token", {
-      method: "PUT", body: "<osm />",
-    }, fetcher)).rejects.toThrow("Weiterleitungen");
+    await expect(
+      requestOSMDevelopmentApi(
+        "development",
+        "/api/0.6/changeset/create",
+        "fixture-token",
+        {
+          method: "PUT",
+          body: "<osm />",
+        },
+        fetcher,
+      ),
+    ).rejects.toThrow("Weiterleitungen");
     expect(calls).toEqual([`${OSM_DEVELOPMENT_SERVER_ORIGIN}/api/0.6/changeset/create`]);
   });
 
@@ -27,8 +43,9 @@ describe("OSM development API boundary", () => {
   it.each([undefined, "", "production", "staging", "Development"])(
     "rejects any environment other than the exact development setting (%s)",
     (environment) => {
-      expect(() => buildOSMDevelopmentApiUrl(environment, "/api/0.6/changeset/create"))
-        .toThrow("ausschließlich für die Entwicklungsinstanz");
+      expect(() => buildOSMDevelopmentApiUrl(environment, "/api/0.6/changeset/create")).toThrow(
+        "ausschließlich für die Entwicklungsinstanz",
+      );
     },
   );
 
@@ -43,7 +60,6 @@ describe("OSM development API boundary", () => {
     "/api/0.6\\node\\create",
     "/oauth2/token",
   ])("rejects paths that could escape the fixed development API (%s)", (path) => {
-    expect(() => buildOSMDevelopmentApiUrl("development", path))
-      .toThrow("Ungültiger Pfad");
+    expect(() => buildOSMDevelopmentApiUrl("development", path)).toThrow("Ungültiger Pfad");
   });
 });

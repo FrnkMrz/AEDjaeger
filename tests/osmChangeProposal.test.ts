@@ -31,7 +31,11 @@ describe("OSM change previews", () => {
 
   it("blocks an observation that is older than the check date already in OSM, and names that date", () => {
     // Ein Foto aus der Mediathek kann älter sein als der Eintrag in OSM. Ein älteres Datum darf ein neueres nie überschreiben.
-    expect(previewExistingAedCheck(nodeCandidate, true, "2023-12-31")).toEqual({ kind: "blocked", reason: "newer-check-date-exists", existingDate: "2024-01-01" });
+    expect(previewExistingAedCheck(nodeCandidate, true, "2023-12-31")).toEqual({
+      kind: "blocked",
+      reason: "newer-check-date-exists",
+      existingDate: "2024-01-01",
+    });
   });
 
   it("still allows the same day and any later day as the check date in OSM", () => {
@@ -41,32 +45,37 @@ describe("OSM change previews", () => {
 
   it("ignores an existing check_date that is not a real date instead of blocking on it", () => {
     for (const check_date of ["gestern", "2024-13-45", "2024-1-1", ""]) {
-      expect(previewExistingAedCheck({ ...nodeCandidate, tags: { ...nodeCandidate.tags, check_date } }, true, "2023-12-31")).toMatchObject({ kind: "ready" });
+      expect(
+        previewExistingAedCheck({ ...nodeCandidate, tags: { ...nodeCandidate.tags, check_date } }, true, "2023-12-31"),
+      ).toMatchObject({ kind: "ready" });
     }
   });
 
   it("blocks an existing update until this candidate is explicitly confirmed", () => {
     expect(previewExistingAedCheck(nodeCandidate, false, "2026-10-23")).toEqual({
-      kind: "blocked", reason: "confirmation-required",
+      kind: "blocked",
+      reason: "confirmation-required",
     });
   });
 
   it("rejects malformed OSM candidate identifiers", () => {
     expect(previewExistingAedCheck({ ...nodeCandidate, id: "node/123/extra" }, true, "2026-10-23")).toEqual({
-      kind: "blocked", reason: "invalid-candidate",
+      kind: "blocked",
+      reason: "invalid-candidate",
     });
   });
 
   it("does not update way or relation candidates using their approximate centers", () => {
     for (const osmType of ["way", "relation"] as const) {
       expect(previewExistingAedCheck({ ...nodeCandidate, id: `${osmType}/456`, osmType }, true, "2026-10-23")).toEqual({
-        kind: "blocked", reason: "unsupported-object",
+        kind: "blocked",
+        reason: "unsupported-object",
       });
     }
   });
 
   it("creates a minimal new-node preview with only approved tags", () => {
-    expect(previewNewAed({ ...newAedInput, locationDescription: "Eingang rechts" })).toEqual({
+    expect(previewNewAed({ ...newAedInput, details: { "defibrillator:location": "Eingang rechts" } })).toEqual({
       kind: "ready",
       operation: "create-node",
       position: { latitude: 52.52, longitude: 13.405 },
@@ -79,18 +88,68 @@ describe("OSM change previews", () => {
     });
   });
 
+  it("adds every approved detail tag next to emergency and check_date", () => {
+    const preview = previewNewAed({
+      ...newAedInput,
+      details: {
+        "defibrillator:location": "Foyer",
+        access: "customers",
+        opening_hours: "Mo-Fr 08:00-18:00",
+        indoor: "yes",
+        level: "0",
+        ref: "A-1",
+      },
+    });
+    expect(preview).toMatchObject({
+      kind: "ready",
+      tags: {
+        emergency: "defibrillator",
+        check_date: "2026-10-23",
+        "defibrillator:location": "Foyer",
+        access: "customers",
+        opening_hours: "Mo-Fr 08:00-18:00",
+        indoor: "yes",
+        level: "0",
+        ref: "A-1",
+      },
+    });
+  });
+
+  it("writes only emergency and check_date when the person gave no details", () => {
+    for (const details of [undefined, {}]) {
+      expect(previewNewAed({ ...newAedInput, ...(details === undefined ? {} : { details }) })).toMatchObject({
+        kind: "ready",
+        tags: { emergency: "defibrillator", check_date: "2026-10-23" },
+      });
+    }
+    const preview = previewNewAed(newAedInput);
+    if (preview.kind === "ready") expect(Object.keys(preview.tags).sort()).toEqual(["check_date", "emergency"]);
+  });
+
+  it("blocks details that could override protected tags or carry unapproved keys", () => {
+    // Details dürfen weder emergency noch check_date ersetzen noch fremde Schlüssel (zum Beispiel den Zugangscode) einschleusen.
+    for (const key of ["emergency", "check_date", "defibrillator:code", "name"]) {
+      expect(previewNewAed({ ...newAedInput, details: { [key]: "x" } as never })).toEqual({
+        kind: "blocked",
+        reason: "invalid-details",
+      });
+    }
+  });
+
   it("allows a new preview after the person explicitly rejects every nearby candidate", () => {
     const candidate = {
       ...nodeCandidate,
       coordinateQuality: "exact" as const,
       position: { latitude: 52.52001, longitude: 13.40501 },
     };
-    expect(previewNewAed({
-      ...newAedInput,
-      assessmentKind: "candidate-review",
-      searchCandidates: [candidate],
-      confirmedDifferentCandidateIds: [candidate.id],
-    })).toMatchObject({
+    expect(
+      previewNewAed({
+        ...newAedInput,
+        assessmentKind: "candidate-review",
+        searchCandidates: [candidate],
+        confirmedDifferentCandidateIds: [candidate.id],
+      }),
+    ).toMatchObject({
       kind: "ready",
       operation: "create-node",
       confirmedDifferentCandidateIds: [candidate.id],
@@ -100,14 +159,21 @@ describe("OSM change previews", () => {
   it("does not allow a new preview if any nearby candidate was not explicitly rejected", () => {
     const candidates = [
       { ...nodeCandidate, coordinateQuality: "exact" as const, position: { latitude: 52.52, longitude: 13.405 } },
-      { ...nodeCandidate, id: "node/456", coordinateQuality: "exact" as const, position: { latitude: 52.52001, longitude: 13.40501 } },
+      {
+        ...nodeCandidate,
+        id: "node/456",
+        coordinateQuality: "exact" as const,
+        position: { latitude: 52.52001, longitude: 13.40501 },
+      },
     ];
-    expect(previewNewAed({
-      ...newAedInput,
-      assessmentKind: "candidate-review",
-      searchCandidates: candidates,
-      confirmedDifferentCandidateIds: [candidates[0]!.id],
-    })).toEqual({ kind: "blocked", reason: "search-found-candidate" });
+    expect(
+      previewNewAed({
+        ...newAedInput,
+        assessmentKind: "candidate-review",
+        searchCandidates: candidates,
+        confirmedDifferentCandidateIds: [candidates[0]!.id],
+      }),
+    ).toEqual({ kind: "blocked", reason: "search-found-candidate" });
   });
 
   it.each([
@@ -121,36 +187,45 @@ describe("OSM change previews", () => {
 
   it("requires the person to confirm the map position", () => {
     expect(previewNewAed({ ...newAedInput, positionConfirmed: false })).toEqual({
-      kind: "blocked", reason: "position-not-confirmed",
+      kind: "blocked",
+      reason: "position-not-confirmed",
     });
   });
 
   it("blocks a proposed point beyond the completed search area", () => {
-    expect(previewNewAed({
-      ...newAedInput,
-      position: { latitude: 48.137, longitude: 11.576 },
-    })).toEqual({ kind: "blocked", reason: "position-outside-search" });
+    expect(
+      previewNewAed({
+        ...newAedInput,
+        position: { latitude: 48.137, longitude: 11.576 },
+      }),
+    ).toEqual({ kind: "blocked", reason: "position-outside-search" });
   });
 
   it("requires the whole nearby-candidate radius around the proposed point to be covered", () => {
-    expect(previewNewAed({
-      ...newAedInput,
-      position: { latitude: 52.5213, longitude: 13.405 },
-    })).toEqual({ kind: "blocked", reason: "position-outside-search" });
+    expect(
+      previewNewAed({
+        ...newAedInput,
+        position: { latitude: 52.5213, longitude: 13.405 },
+      }),
+    ).toEqual({ kind: "blocked", reason: "position-outside-search" });
   });
 
   it("reassesses all search candidates around a moved confirmed point", () => {
-    expect(previewNewAed({
-      ...newAedInput,
-      position: { latitude: 52.52072, longitude: 13.405 },
-      searchCandidates: [{
-        id: "node/999",
-        osmType: "node",
-        coordinateQuality: "exact",
-        position: { latitude: 52.52135, longitude: 13.405 },
-        tags: { emergency: "defibrillator" },
-      }],
-    })).toEqual({ kind: "blocked", reason: "search-found-candidate" });
+    expect(
+      previewNewAed({
+        ...newAedInput,
+        position: { latitude: 52.52072, longitude: 13.405 },
+        searchCandidates: [
+          {
+            id: "node/999",
+            osmType: "node",
+            coordinateQuality: "exact",
+            position: { latitude: 52.52135, longitude: 13.405 },
+            tags: { emergency: "defibrillator" },
+          },
+        ],
+      }),
+    ).toEqual({ kind: "blocked", reason: "search-found-candidate" });
   });
 
   it("keeps undisplayed search results in the duplicate check after the map point moves", () => {
@@ -165,36 +240,58 @@ describe("OSM change previews", () => {
       coordinateQuality: "exact" as const,
       position: { latitude: 52.52, longitude: 13.4067 },
     };
-    expect(previewNewAed({
-      ...newAedInput,
-      position: { latitude: 52.52, longitude: 13.406 },
-      coverageRadiusMeters: 250,
-      assessmentKind: "candidate-review",
-      searchCandidates: [displayed, undisplayed],
-      confirmedDifferentCandidateIds: [displayed.id],
-    })).toEqual({ kind: "blocked", reason: "search-found-candidate" });
+    expect(
+      previewNewAed({
+        ...newAedInput,
+        position: { latitude: 52.52, longitude: 13.406 },
+        coverageRadiusMeters: 250,
+        assessmentKind: "candidate-review",
+        searchCandidates: [displayed, undisplayed],
+        confirmedDifferentCandidateIds: [displayed.id],
+      }),
+    ).toEqual({ kind: "blocked", reason: "search-found-candidate" });
   });
 
   it("keeps approximate existing objects from being treated as an empty search", () => {
-    expect(previewNewAed({
-      ...newAedInput,
-      searchCandidates: [{
-        id: "way/456",
-        osmType: "way",
-        coordinateQuality: "approximate-center",
-        position: { latitude: 52.521, longitude: 13.405 },
-        tags: { emergency: "defibrillator" },
-      }],
-    })).toEqual({ kind: "blocked", reason: "search-found-candidate" });
+    expect(
+      previewNewAed({
+        ...newAedInput,
+        searchCandidates: [
+          {
+            id: "way/456",
+            osmType: "way",
+            coordinateQuality: "approximate-center",
+            position: { latitude: 52.521, longitude: 13.405 },
+            tags: { emergency: "defibrillator" },
+          },
+        ],
+      }),
+    ).toEqual({ kind: "blocked", reason: "search-found-candidate" });
   });
 
   it("rejects impossible dates, invalid coordinates and unsafe optional text", () => {
-    expect(previewExistingAedCheck(nodeCandidate, true, "2026-02-30")).toEqual({ kind: "blocked", reason: "invalid-date" });
-    expect(previewNewAed({ ...newAedInput, position: { latitude: 91, longitude: 13 } })).toEqual({
-      kind: "blocked", reason: "invalid-position",
+    expect(previewExistingAedCheck(nodeCandidate, true, "2026-02-30")).toEqual({
+      kind: "blocked",
+      reason: "invalid-date",
     });
-    expect(previewNewAed({ ...newAedInput, locationDescription: "\nignored" })).toEqual({
-      kind: "blocked", reason: "invalid-location-description",
+    expect(previewNewAed({ ...newAedInput, position: { latitude: 91, longitude: 13 } })).toEqual({
+      kind: "blocked",
+      reason: "invalid-position",
+    });
+    // Ein Zeilenumbruch MITTEN im Text wird abgelehnt. Am Rand entfernt das Trimmen ihn (typisch beim Einfügen aus der Zwischenablage).
+    expect(previewNewAed({ ...newAedInput, details: { "defibrillator:location": "Eingang\nrechts" } })).toEqual({
+      kind: "blocked",
+      reason: "invalid-details",
+    });
+    expect(
+      previewNewAed({ ...newAedInput, details: { "defibrillator:location": "\nEingang rechts\n" } }),
+    ).toMatchObject({
+      kind: "ready",
+      tags: { "defibrillator:location": "Eingang rechts" },
+    });
+    expect(previewNewAed({ ...newAedInput, details: { access: "permissive" } as never })).toEqual({
+      kind: "blocked",
+      reason: "invalid-details",
     });
   });
 });

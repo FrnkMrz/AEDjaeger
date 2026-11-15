@@ -14,9 +14,7 @@ export type AnalysisBudgetRequest = {
   createdAt: number;
 };
 
-export type AnalysisBudgetResult =
-  | { reserved: true }
-  | { reserved: false; reason: "budget_exceeded" | "duplicate" };
+export type AnalysisBudgetResult = { reserved: true } | { reserved: false; reason: "budget_exceeded" | "duplicate" };
 
 type ExistingReservation = {
   id: string;
@@ -39,6 +37,19 @@ export async function reserveAnalysisBudget(
   request: AnalysisBudgetRequest,
 ): Promise<AnalysisBudgetResult> {
   validateRequest(request);
+
+  // Alte Reservierungen können die Tageslimits nicht mehr beeinflussen, da
+  // diese immer nach `utc_day` gruppiert werden. Nach 30 Tagen brauchen wir
+  // sie auch nicht mehr zur Fehlersuche aufzubewahren.
+  try {
+    const cleanup = await database
+      .prepare("DELETE FROM analysis_budget_reservations WHERE created_at < ?")
+      .bind(request.createdAt - 30 * 24 * 60 * 60 * 1_000)
+      .run();
+    if (!cleanup.success) throw new Error();
+  } catch (cause) {
+    throw new Error("Die Analyse konnte nicht sicher reserviert werden.", { cause });
+  }
 
   let result: D1Result<unknown>;
   try {
@@ -100,6 +111,30 @@ export async function reserveAnalysisBudget(
   return duplicate ? { reserved: false, reason: "duplicate" } : { reserved: false, reason: "budget_exceeded" };
 }
 
+/** Gibt eine noch nicht begonnene Anbieterreservierung atomar wieder frei. */
+export async function releaseAnalysisBudgetReservation(
+  database: D1Database,
+  userId: string,
+  requestId: string,
+): Promise<void> {
+  if (!isShortIdentifier(userId) || !isShortIdentifier(requestId)) {
+    throw new Error("Ungültige Kennung für die Analyse-Reservierung.");
+  }
+  try {
+    const result = await database
+      .prepare(
+        `UPDATE analysis_budget_reservations
+         SET status = 'released'
+         WHERE user_id = ? AND request_id = ? AND status = 'reserved' AND provider_started_at IS NULL`,
+      )
+      .bind(userId, requestId)
+      .run();
+    if (!result.success) throw new Error();
+  } catch (cause) {
+    throw new Error("Die Analyse-Reservierung konnte nicht sicher freigegeben werden.", { cause });
+  }
+}
+
 /** Atomically ensure only one request for an ID can begin the paid provider call. */
 export async function markAnalysisProviderStarted(
   database: D1Database,
@@ -107,7 +142,12 @@ export async function markAnalysisProviderStarted(
   requestId: string,
   startedAt: number,
 ): Promise<boolean> {
-  if (!isShortIdentifier(userId) || !isShortIdentifier(requestId) || !Number.isSafeInteger(startedAt) || startedAt < 0) {
+  if (
+    !isShortIdentifier(userId) ||
+    !isShortIdentifier(requestId) ||
+    !Number.isSafeInteger(startedAt) ||
+    startedAt < 0
+  ) {
     throw new Error("Ungültige Kennung für den Analyseaufruf.");
   }
 
@@ -137,13 +177,19 @@ function isResumableReservation(existing: ExistingReservation | null, request: A
   // A reservation is tied to the day and amount checked by the original INSERT.
   // Reusing yesterday's row would bypass today's limits; a changed server-side
   // estimate must also go through a fresh budget check instead of reusing it.
-  return existing?.status === "reserved"
-    && existing.provider_started_at === null
-    && existing.utc_day === request.utcDay
-    && existing.cost_micros === request.costMicros;
+  return (
+    existing?.status === "reserved" &&
+    existing.provider_started_at === null &&
+    existing.utc_day === request.utcDay &&
+    existing.cost_micros === request.costMicros
+  );
 }
 
-async function findExistingReservation(database: D1Database, userId: string, requestId: string): Promise<ExistingReservation | null> {
+async function findExistingReservation(
+  database: D1Database,
+  userId: string,
+  requestId: string,
+): Promise<ExistingReservation | null> {
   try {
     return await database
       .prepare(
@@ -163,7 +209,11 @@ function validateRequest(request: AnalysisBudgetRequest): void {
     throw new Error("Ungültige Analyse-Reservierung.");
   }
 
-  if (!isShortIdentifier(request.reservationId) || !isShortIdentifier(request.userId) || !isShortIdentifier(request.requestId)) {
+  if (
+    !isShortIdentifier(request.reservationId) ||
+    !isShortIdentifier(request.userId) ||
+    !isShortIdentifier(request.requestId)
+  ) {
     throw new Error("Ungültige Kennung für die Analyse-Reservierung.");
   }
 

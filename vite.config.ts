@@ -5,6 +5,19 @@ const buildRevision = Date.now().toString(36);
 
 export default defineConfig({
   define: { __AEDJAEGER_BUILD_REVISION__: JSON.stringify(buildRevision) },
+  // Mirrors Cloudflare's static-asset _headers file so browser tests exercise
+  // the same restrictive policy locally instead of silently bypassing it.
+  preview: {
+    headers: {
+      "Content-Security-Policy":
+        "default-src 'self'; img-src 'self' blob: https://tile.openstreetmap.org; connect-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "Strict-Transport-Security": "max-age=31536000",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+      "Referrer-Policy": "no-referrer",
+      "Permissions-Policy": "geolocation=(self), camera=(self)",
+    },
+  },
   // Playwright tests run in a real browser through their own configuration, not inside Vitest.
   test: { exclude: ["**/node_modules/**", "tests/e2e/**"] },
   // Workers/Static Assets can serve this plain Vite build; no paid service is needed here.

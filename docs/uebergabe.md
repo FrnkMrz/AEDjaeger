@@ -6,6 +6,19 @@ App: [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev)
 
 Dieses Dokument ist die kompakte, aktuelle Übergabe für einen neuen Chat oder einen anderen Coding-Agenten. Es fasst die in diesem Projekt getroffenen Produktentscheidungen, den tatsächlichen technischen Stand und den nächsten sinnvollen Schritt zusammen. Bei Widersprüchen haben die neueren Produktentscheidungen und die Dateien unter „Weiterlesen“ Vorrang vor älteren historischen Abschnitten.
 
+## Nachtrag vom 14. November 2026: Detailweg (PR #77)
+
+Seit dem Stand unten sind weitere PRs gemergt. Der jüngste ist [#77](https://github.com/FrnkMrz/AEDjaeger/pull/77) (13.11.2026, CI-Lauf [43513683666](https://github.com/FrnkMrz/AEDjaeger/actions/runs/43513683666) und Deploy waren grün). Er bringt den **Detailweg** für AED-Angaben. Die Einzelheiten stehen im [Umsetzungsplan](umsetzungsplan.md#detailweg-für-aed-angaben), im [OSM-Datenmodell](osm.md#detailangaben-entscheidung-vom-13112026) und in `AGENTS.md`.
+
+- **Was er kann:** Neben „Noch da – bestätigen“ (schreibt weiter nur `check_date`) erfasst die App freiwillig Standort-Text, Zugang, Zeiten, drinnen/draußen, Ebene sowie unter „Mehr Angaben“ Betreiber, Telefon, Notiz und Nummer. Drei Stufen, jeweils nur auf dem OSM-Testserver: Neuanlage mit Angaben, Fehlendes bei einem bestehenden AED ergänzen, bestehende Werte korrigieren.
+- **Wo der Code liegt:** gemeinsamer Datenvertrag `src/contracts/aedDetails.ts` (Browser und Worker nutzen dieselben Regeln); Formular und Zustände `new-aed-details` und `existing-aed-details` in `src/main.ts`; Schreibrouten `server/osm/developmentCreateNodeRoute.ts` und `server/osm/developmentWriteRoute.ts`; neue lesende Route `server/osm/developmentNodeRoute.ts`.
+- **Schalter (setzt nur der Projektinhaber):** `OSM_DEV_WRITES_ENABLED` für jedes Schreiben, zusätzlich `OSM_DETAIL_CORRECTIONS_ENABLED` (Wert `true`, Standard aus) für Korrekturen. Ohne den zweiten Schalter erscheint „Angaben ergänzen oder korrigieren“ nicht, und der Server antwortet auf Korrekturen mit 403.
+- **Sicherheitsregeln:** nur Schlüssel einer festen Liste; kein Löschen, keine Positionsänderung, nie `defibrillator:code`; Korrekturen nur mit `alt → neu`, zusätzlichem Haken und geprüftem Vorwert (sonst 409). „Weiß ich nicht“ schreibt nichts.
+- **Belegt:** Unit-, Server- und E2E-Tests mit simulierten OSM-Antworten (Stand beim Merge: 537 Unit-Tests, 147 E2E-Tests, alle grün in der CI).
+- **Nicht belegt:** Der Detailweg wurde **nie gegen den echten OSM-Testserver** und **nie auf einem echten Handy** ausprobiert. Die Schritte D1 bis D7 in der [Pilot-Abnahme](pilot-abnahme.md) sind der vorbereitete Test. Die neuen Texte sind nicht muttersprachlich geprüft.
+- **Offen** (Einzelheiten in [offene Fragen](offene-fragen.md)): Schnellwahl-Wörter und Zeiten-Vorlagen; Beschränkung des Korrekturschalters auf bestimmte Konten; ein stehen gebliebenes `level` nach der Korrektur von „drinnen“ auf „draußen“; Phase P6 (Handytest mit Zeitmessung).
+- **Hinweis zur Regel unten:** „Bei ‚noch vorhanden‘ ausschließlich `check_date` ändern“ gilt für den Schnellweg unverändert. Weitere Tags schreibt nur der Detailweg nach den Regeln in `AGENTS.md`.
+
 ## Ziel und gewünschter Ablauf
 
 AEDjaeger soll vor Ort mit möglichst wenigen Schritten helfen, einen AED in OpenStreetMap zu erfassen oder einen bestehenden Eintrag zu bestätigen:
@@ -30,7 +43,7 @@ Die Karte ist Hilfsmittel für die Standortkorrektur, nicht der Startbildschirm.
 - OSM-Login ist erforderlich. Der aktuelle Login ist für die OSM-Entwicklungsumgebung (Dev) gedacht. Geheimnisse und OAuth-Tokens dürfen ausschließlich in serverseitigen Secrets bzw. verschlüsselter Sitzung liegen.
 - `OSM_DEV_WRITES_ENABLED` bleibt **aus**. Es dürfen keine echten OSM-Schreibvorgänge ohne gesonderte Freigabe stattfinden. Normale Tests verwenden Mocks oder OSM Dev, niemals produktives OSM.
 - Die Umgebungssuche ist fehlertolerant, aber fail-closed: Ein Timeout, eine veraltete Quelle oder eine unvollständige Abdeckung bedeutet „Suche fehlgeschlagen“, niemals „hier gibt es keinen AED“.
-- Bei „noch vorhanden“ ausschließlich `check_date` ändern. Bei Neuanlage vor dem Schreiben die Gegend erneut prüfen und keine vorhandenen/fremden Tags überschreiben.
+- Beim Schnellweg „noch vorhanden“ ausschließlich `check_date` ändern (weitere Tags nur über den Detailweg, siehe Nachtrag oben und `AGENTS.md`). Bei Neuanlage vor dem Schreiben die Gegend erneut prüfen und keine vorhandenen/fremden Tags überschreiben.
 
 ## Was aktuell tatsächlich läuft
 
@@ -71,9 +84,9 @@ Nicht belegt:
 - Die Zeile „Standort aus dem Foto verwendet“ steht noch im Suchergebnis. Sie blieb bewusst, kann aber auf Wunsch entfallen.
 - Die Übersichtskarte lädt Kacheln von `tile.openstreetmap.org`, sobald Treffer angezeigt werden.
 - Die zweite Bestätigung für Neuanlagen wirkt nur im Browser; die Schreibroute des Testservers kennt den Haken nicht.
-- Die Konstanten in `scripts/check-live-search.mjs` sind aus `server/osm/staticCandidateSearchRoute.ts` kopiert und müssen synchron bleiben.
+- Die Konstanten in `scripts/check-live-search.mjs` sind aus `server/osm/staticCandidateSearchRoute.ts` kopiert. Ein Test (`tests/checkLiveSearch.test.ts`) vergleicht sie und wird rot, wenn sie auseinanderlaufen.
 - Für einen späteren Produktivbetrieb fehlt eine Absicherung gegen Dubletten bei bis zu 5 Tage alten Daten; auf dem Testserver prüft die Schreibroute den Kartenausschnitt vor einer Neuanlage erneut.
-- Punkt B5 der Pilot-Abnahme (Live-Check an einer zweiten Koordinate) steht aus; der Workflow hat dafür noch keine Eingabefelder.
+- Punkt B5 der Pilot-Abnahme (Live-Check an einer zweiten Koordinate) steht aus. Der Workflow hat jetzt die Eingaben `lat` und `lon`; der Lauf selbst ist Sache des Projektinhabers.
 ## Wie die Datenquelle funktioniert – und was sie nicht bedeutet
 
 AEDjaeger fragt direkt das bestehende Archiv unter [pipeline.openfiremap.org/openfiremap.pmtiles](https://pipeline.openfiremap.org/openfiremap.pmtiles) ab. Der Worker lädt nicht die gesamte Datei: Er prüft frische Metadaten und liest nur die benötigten Zoom-14-Kacheln um den gewählten Standort per HTTP Range aus der Ebene `defibrillators`. Dabei werden Datenalter, Länderextrakte, Abdeckung und Antworten kontrolliert. Ein Fehler oder eine unvollständige Abdeckung sperrt die Suche bzw. Neuanlage.
@@ -101,7 +114,7 @@ Bei einem Fehler Zeitpunkt, genaue Meldung und einen Screenshot notieren. Keine 
 - Arbeitsweise, die sich bewährt hat: kleine Änderung → alle Prüfungen lokal → Commit auf dem Arbeitsbranch → Projektinhaber fragen → PR gegen `main` mit den sechs Abschnitten aus `AGENTS.md` → PR beobachten und Befunde des Codex-Review-Bots prüfen und beheben. Der Bot prüft nur beim Öffnen eines PRs oder nach dem Kommentar `@codex review`. Mergen, Tags und Releases bleiben beim Projektinhaber.
 - Nach einem Merge den Arbeitsbranch frisch von `main` neu aufsetzen; nie auf gemergter Historie weiterarbeiten. Nie direkt auf `main` pushen.
 - Prüfbefehle: `npm test`, `npm run build`, `npm run worker:check`, `npm run test:worker-http`, `npm run test:e2e`. Tests, die Dateien mit Node lesen, sind `.mjs`-Dateien, weil die Typprüfung keine Node-Typen kennt.
-- UI-Texte stehen in `src/i18n/translations.ts` (Start, Info, Demo) und `src/i18n/flowTranslations.ts` (Foto- und Suchablauf). Jede Änderung gilt für alle sechs Sprachen; `tests/translations.test.ts` listet die Schlüssel.
+- UI-Texte stehen in `src/i18n/translations.ts` (Start, Info) und `src/i18n/flowTranslations.ts` (Foto- und Suchablauf). Jede Änderung gilt für alle sechs Sprachen; `tests/translations.test.ts` listet die Schlüssel.
 - Neuen Code ausführlich auf Deutsch kommentieren, so dass ein Einsteiger die Logik versteht; bestehende Kommentare erhalten.
 - Halte `CHANGELOG.md` und `docs/offene-fragen.md` aktuell.
 - Keine neuen Pipeline-/VM-Aufgaben, keine Tests gegen die echte OpenAI-API, keine weiteren Anbieter-APIs, keine kostenpflichtigen Aufrufe außerhalb der freigegebenen Limits, keine Secrets, keine OSM-Schreibvorgänge ohne ausdrücklichen Auftrag. Produktions-OSM bleibt tabu.

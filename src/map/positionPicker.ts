@@ -43,10 +43,10 @@ const MAX_MERCATOR_LATITUDE = 85.05112878;
 export function projectCoordinate(position: Coordinate, zoom: number): PixelPoint {
   const worldSize = TILE_SIZE * 2 ** zoom;
   const latitude = Math.max(-MAX_MERCATOR_LATITUDE, Math.min(MAX_MERCATOR_LATITUDE, position.latitude));
-  const radians = latitude * Math.PI / 180;
+  const radians = (latitude * Math.PI) / 180;
   return {
-    x: (position.longitude + 180) / 360 * worldSize,
-    y: (1 - Math.log(Math.tan(radians) + 1 / Math.cos(radians)) / Math.PI) / 2 * worldSize,
+    x: ((position.longitude + 180) / 360) * worldSize,
+    y: ((1 - Math.log(Math.tan(radians) + 1 / Math.cos(radians)) / Math.PI) / 2) * worldSize,
   };
 }
 
@@ -55,10 +55,10 @@ export function unprojectPixel(point: PixelPoint, zoom: number): Coordinate {
   const worldSize = TILE_SIZE * 2 ** zoom;
   const wrappedX = ((point.x % worldSize) + worldSize) % worldSize;
   const boundedY = Math.max(0, Math.min(worldSize, point.y));
-  const n = Math.PI - 2 * Math.PI * boundedY / worldSize;
+  const n = Math.PI - (2 * Math.PI * boundedY) / worldSize;
   return {
-    latitude: 180 / Math.PI * Math.atan(Math.sinh(n)),
-    longitude: wrappedX / worldSize * 360 - 180,
+    latitude: (180 / Math.PI) * Math.atan(Math.sinh(n)),
+    longitude: (wrappedX / worldSize) * 360 - 180,
   };
 }
 
@@ -85,8 +85,10 @@ export function zoomToFitMarkers(
     const centerPixel = projectCoordinate(center, zoom);
     const allVisible = markers.every((marker) => {
       const pixel = projectCoordinate(marker.position, zoom);
-      return Math.abs(pixel.x - centerPixel.x) <= width / 2 - padding
-        && Math.abs(pixel.y - centerPixel.y) <= height / 2 - padding;
+      return (
+        Math.abs(pixel.x - centerPixel.x) <= width / 2 - padding &&
+        Math.abs(pixel.y - centerPixel.y) <= height / 2 - padding
+      );
     });
     if (allVisible) return zoom;
   }
@@ -105,6 +107,8 @@ export function createPositionPicker(
   let center = { ...initialPosition };
   let zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, options.initialZoom ?? DEFAULT_ZOOM));
   let pointer: { id: number; x: number; y: number; moved: boolean } | undefined;
+  const touchPointers = new Map<number, PixelPoint>();
+  let pinchStart: { distance: number; zoom: number } | undefined;
   const tileLayer = document.createElement("div");
   tileLayer.className = "position-map-tiles";
   // Eigene Ebene für die Zusatzmarker. Sie liegt über den Kacheln und unter dem roten Mittelpunkt.
@@ -160,29 +164,46 @@ export function createPositionPicker(
         image.style.left = `${tileX * TILE_SIZE - left}px`;
         image.style.top = `${tileY * TILE_SIZE - top}px`;
         image.src = `https://tile.openstreetmap.org/${zoom}/${wrappedTileX}/${tileY}.png`;
-        image.addEventListener("error", () => {
-          status.textContent = options.tileErrorLabel;
-          status.hidden = false;
-        }, { once: true });
+        image.addEventListener(
+          "error",
+          () => {
+            status.textContent = options.tileErrorLabel;
+            status.hidden = false;
+          },
+          { once: true },
+        );
         images.push(image);
       }
     }
     tileLayer.replaceChildren(...images);
     // Zusatzmarker an ihre Pixelposition im aktuellen Kartenausschnitt setzen.
     // `textContent` statt innerHTML: Beschriftungen werden nie als HTML interpretiert.
-    markerLayer.replaceChildren(...markers.map((marker) => {
-      const pixel = projectCoordinate(marker.position, zoom);
-      const element = document.createElement("span");
-      element.className = marker.kind === "origin" ? "position-map-marker position-map-marker-origin" : "position-map-marker";
-      element.textContent = marker.label;
-      element.style.left = `${pixel.x - left}px`;
-      element.style.top = `${pixel.y - top}px`;
-      return element;
-    }));
+    markerLayer.replaceChildren(
+      ...markers.map((marker) => {
+        const pixel = projectCoordinate(marker.position, zoom);
+        const element = document.createElement("span");
+        element.className =
+          marker.kind === "origin" ? "position-map-marker position-map-marker-origin" : "position-map-marker";
+        element.textContent = marker.label;
+        element.style.left = `${pixel.x - left}px`;
+        element.style.top = `${pixel.y - top}px`;
+        return element;
+      }),
+    );
     status.hidden = true;
   }
 
   function stopDragging(event: PointerEvent): void {
+    if (event.pointerType === "touch") {
+      touchPointers.delete(event.pointerId);
+      if (pinchStart) {
+        pinchStart = undefined;
+        pointer = undefined;
+        container.classList.remove("is-dragging");
+        if (container.hasPointerCapture(event.pointerId)) container.releasePointerCapture(event.pointerId);
+        return;
+      }
+    }
     if (!pointer || pointer.id !== event.pointerId) return;
     const { id, x, y, moved } = pointer;
     pointer = undefined;
@@ -197,7 +218,29 @@ export function createPositionPicker(
 
   function onPointerDown(event: PointerEvent): void {
     if ((event.target as HTMLElement).closest(".position-map-controls, .position-map-attribution")) return;
-    if (event.button !== 0 || pointer) return;
+    if (event.pointerType === "touch") {
+      touchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      container.setPointerCapture(event.pointerId);
+      if (touchPointers.size === 2) {
+        const [first, second] = [...touchPointers.values()];
+        // A first finger may already have moved the tiles before the second finger lands.
+        // Commit that pan before replacing it with a pinch so pixels and selected coordinates stay aligned.
+        if (pointer?.moved) {
+          const firstTouch = touchPointers.get(pointer.id);
+          if (firstTouch) {
+            center = moveMapCenter(center, firstTouch.x - pointer.x, firstTouch.y - pointer.y, zoom);
+            options.onPositionChange(center);
+          }
+        }
+        renderTiles();
+        pinchStart = { distance: Math.hypot(first.x - second.x, first.y - second.y), zoom };
+        pointer = undefined;
+        container.classList.remove("is-dragging");
+        event.preventDefault();
+        return;
+      }
+    }
+    if (event.button !== 0 || pointer || touchPointers.size > 1) return;
     pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
     container.setPointerCapture(event.pointerId);
     container.classList.add("is-dragging");
@@ -205,6 +248,24 @@ export function createPositionPicker(
   }
 
   function onPointerMove(event: PointerEvent): void {
+    if (event.pointerType === "touch" && touchPointers.has(event.pointerId)) {
+      touchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (pinchStart && touchPointers.size >= 2) {
+        const [first, second] = [...touchPointers.values()];
+        const distance = Math.hypot(first.x - second.x, first.y - second.y);
+        const nextZoom = Math.max(
+          MIN_ZOOM,
+          Math.min(MAX_ZOOM, Math.round(pinchStart.zoom + Math.log2(distance / Math.max(1, pinchStart.distance)))),
+        );
+        if (nextZoom !== zoom) {
+          zoom = nextZoom;
+          options.onZoomChange?.(zoom);
+          renderTiles();
+        }
+        event.preventDefault();
+        return;
+      }
+    }
     if (!pointer || pointer.id !== event.pointerId) return;
     const dragX = event.clientX - pointer.x;
     const dragY = event.clientY - pointer.y;
@@ -217,8 +278,25 @@ export function createPositionPicker(
   }
 
   function onKeyDown(event: KeyboardEvent): void {
+    if (["+", "=", "Add"].includes(event.key)) {
+      event.preventDefault();
+      zoom = Math.min(MAX_ZOOM, zoom + 1);
+      options.onZoomChange?.(zoom);
+      renderTiles();
+      return;
+    }
+    if (["-", "_", "Subtract"].includes(event.key)) {
+      event.preventDefault();
+      zoom = Math.max(MIN_ZOOM, zoom - 1);
+      options.onZoomChange?.(zoom);
+      renderTiles();
+      return;
+    }
     const shifts: Record<string, [number, number]> = {
-      ArrowLeft: [-32, 0], ArrowRight: [32, 0], ArrowUp: [0, -32], ArrowDown: [0, 32],
+      ArrowLeft: [-32, 0],
+      ArrowRight: [32, 0],
+      ArrowUp: [0, -32],
+      ArrowDown: [0, 32],
     };
     const shift = shifts[event.key];
     if (shift) {
@@ -239,7 +317,9 @@ export function createPositionPicker(
     renderTiles();
   }
 
-  function onResize(): void { renderTiles(); }
+  function onResize(): void {
+    renderTiles();
+  }
   const resizeObserver = new ResizeObserver(onResize);
   resizeObserver.observe(container);
   container.addEventListener("pointerdown", onPointerDown);

@@ -1,3 +1,4 @@
+import { sha256Hex } from "../crypto/hash";
 import type { D1Database } from "./d1";
 import type { OSMEnvironment } from "../auth/osmProvider";
 
@@ -106,7 +107,11 @@ export async function consumeOSMOAuthTransaction(
       .bind(stateHash, bindingHash, now)
       .first<EncryptedPayload>();
 
-    if (!encryptedPayload || typeof encryptedPayload.payload_iv !== "string" || typeof encryptedPayload.payload_ciphertext !== "string") {
+    if (
+      !encryptedPayload ||
+      typeof encryptedPayload.payload_iv !== "string" ||
+      typeof encryptedPayload.payload_ciphertext !== "string"
+    ) {
       return null;
     }
 
@@ -155,8 +160,11 @@ function validateInput(input: OSMOAuthTransactionInput): void {
 function isPayload(value: unknown): value is OSMOAuthTransactionPayload {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const payload = value as Record<string, unknown>;
-  return isVerifier(payload.verifier) && isOAuthToken(payload.nonce) &&
-    (payload.environment === undefined || payload.environment === "production" || payload.environment === "development");
+  return (
+    isVerifier(payload.verifier) &&
+    isOAuthToken(payload.nonce) &&
+    (payload.environment === undefined || payload.environment === "production" || payload.environment === "development")
+  );
 }
 
 function isOAuthToken(value: unknown): value is string {
@@ -184,11 +192,6 @@ async function encryptPayload(
     toArrayBuffer(new TextEncoder().encode(JSON.stringify(payload))),
   );
   return toBase64Url(new Uint8Array(encrypted));
-}
-
-async function sha256Hex(value: string, cryptoApi: Crypto): Promise<string> {
-  const digest = await cryptoApi.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function toBase64Url(bytes: Uint8Array): string {

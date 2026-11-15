@@ -1,13 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { markAnalysisProviderStarted, reserveAnalysisBudget, type D1Database, type D1Result, type D1Statement } from "../server/storage/analysisBudget";
+import {
+  markAnalysisProviderStarted,
+  releaseAnalysisBudgetReservation,
+  reserveAnalysisBudget,
+  type D1Database,
+  type D1Result,
+  type D1Statement,
+} from "../server/storage/analysisBudget";
 
-function createDatabase(options: {
-  changes?: number;
-  duplicate?: { id: string; status: string; provider_started_at: number | null; utc_day: string; cost_micros: number } | null;
-  firstError?: Error;
-  runError?: Error;
-  success?: boolean;
-} = {}) {
+function createDatabase(
+  options: {
+    changes?: number;
+    duplicate?: {
+      id: string;
+      status: string;
+      provider_started_at: number | null;
+      utc_day: string;
+      cost_micros: number;
+    } | null;
+    firstError?: Error;
+    runError?: Error;
+    success?: boolean;
+  } = {},
+) {
   const calls: Array<{ query: string; values: unknown[] }> = [];
   const database: D1Database = {
     prepare(query: string) {
@@ -19,7 +34,7 @@ function createDatabase(options: {
         },
         async run<T>() {
           calls.push({ query, values });
-          if (options.runError) throw options.runError;
+          if (options.runError && query.includes("INSERT INTO analysis_budget_reservations")) throw options.runError;
           return {
             success: options.success ?? true,
             meta: { changes: options.changes ?? 1 },
@@ -54,11 +69,13 @@ describe("analysis budget reservation", () => {
 
     await expect(reserveAnalysisBudget(database, validRequest)).resolves.toEqual({ reserved: true });
 
-    expect(calls).toHaveLength(1);
-    expect(calls[0].query).toContain("INSERT INTO analysis_budget_reservations");
-    expect(calls[0].query).toContain("SUM(cost_micros)");
-    expect(calls[0].query).toContain("ON CONFLICT (user_id, request_id) DO NOTHING");
-    expect(calls[0].values).toEqual([
+    expect(calls).toHaveLength(2);
+    expect(calls[0].query).toContain("DELETE FROM analysis_budget_reservations");
+    expect(calls[0].values).toEqual([validRequest.createdAt - 30 * 24 * 60 * 60 * 1_000]);
+    expect(calls[1].query).toContain("INSERT INTO analysis_budget_reservations");
+    expect(calls[1].query).toContain("SUM(cost_micros)");
+    expect(calls[1].query).toContain("ON CONFLICT (user_id, request_id) DO NOTHING");
+    expect(calls[1].values).toEqual([
       "reservation-1",
       "osm-user-7",
       "request-1",
@@ -78,16 +95,22 @@ describe("analysis budget reservation", () => {
   });
 
   it("distinguishes a repeated request from an exhausted budget", async () => {
-    const duplicateDatabase = createDatabase({ changes: 0, duplicate: { ...existingReservation(), provider_started_at: 10 } });
+    const duplicateDatabase = createDatabase({
+      changes: 0,
+      duplicate: { ...existingReservation(), provider_started_at: 10 },
+    });
     const fullDatabase = createDatabase({ changes: 0 });
 
-    await expect(reserveAnalysisBudget(duplicateDatabase.database, validRequest)).resolves.toEqual({ reserved: false, reason: "duplicate" });
+    await expect(reserveAnalysisBudget(duplicateDatabase.database, validRequest)).resolves.toEqual({
+      reserved: false,
+      reason: "duplicate",
+    });
     await expect(reserveAnalysisBudget(fullDatabase.database, validRequest)).resolves.toEqual({
       reserved: false,
       reason: "budget_exceeded",
     });
-    expect(duplicateDatabase.calls).toHaveLength(2);
-    expect(fullDatabase.calls).toHaveLength(2);
+    expect(duplicateDatabase.calls).toHaveLength(3);
+    expect(fullDatabase.calls).toHaveLength(3);
   });
 
   it("resumes a reservation after an ambiguous insert response if no provider claim exists", async () => {
@@ -105,7 +128,10 @@ describe("analysis budget reservation", () => {
   ])("does not resume a reservation from another budget day or amount", async (existing) => {
     const { database } = createDatabase({ changes: 0, duplicate: existing });
 
-    await expect(reserveAnalysisBudget(database, validRequest)).resolves.toEqual({ reserved: false, reason: "duplicate" });
+    await expect(reserveAnalysisBudget(database, validRequest)).resolves.toEqual({
+      reserved: false,
+      reason: "duplicate",
+    });
   });
 
   it("does not resume an ambiguous reservation after the UTC day changes", async () => {
@@ -120,8 +146,21 @@ describe("analysis budget reservation", () => {
   it("claims a provider call only once for a reservation", async () => {
     const { database, calls } = createDatabase({ changes: 1 });
 
-    await expect(markAnalysisProviderStarted(database, validRequest.userId, validRequest.requestId, validRequest.createdAt)).resolves.toBe(true);
+    await expect(
+      markAnalysisProviderStarted(database, validRequest.userId, validRequest.requestId, validRequest.createdAt),
+    ).resolves.toBe(true);
     expect(calls[0].query).toContain("provider_started_at IS NULL");
+  });
+
+  it("releases only a reservation that has not started a provider call", async () => {
+    const { database, calls } = createDatabase();
+
+    await expect(
+      releaseAnalysisBudgetReservation(database, validRequest.userId, validRequest.requestId),
+    ).resolves.toBeUndefined();
+    expect(calls[0].query).toContain("status = 'reserved'");
+    expect(calls[0].query).toContain("provider_started_at IS NULL");
+    expect(calls[0].values).toEqual([validRequest.userId, validRequest.requestId]);
   });
 
   it("fails closed when the database cannot confirm the reservation", async () => {
@@ -134,8 +173,12 @@ describe("analysis budget reservation", () => {
     const runErrorDatabase = createDatabase({ runError: new Error("secret SQL details") });
     const lookupErrorDatabase = createDatabase({ changes: 0, firstError: new Error("secret lookup details") });
 
-    await expect(reserveAnalysisBudget(runErrorDatabase.database, validRequest)).rejects.toThrow("nicht sicher reserviert");
-    await expect(reserveAnalysisBudget(lookupErrorDatabase.database, validRequest)).rejects.toThrow("nicht sicher reserviert");
+    await expect(reserveAnalysisBudget(runErrorDatabase.database, validRequest)).rejects.toThrow(
+      "nicht sicher reserviert",
+    );
+    await expect(reserveAnalysisBudget(lookupErrorDatabase.database, validRequest)).rejects.toThrow(
+      "nicht sicher reserviert",
+    );
   });
 
   it.each([

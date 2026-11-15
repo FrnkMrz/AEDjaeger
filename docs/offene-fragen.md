@@ -1,12 +1,53 @@
 # Entscheidungen und nächste Schritte
 
-Stand: **10.11.2026**. Der aktuelle nächste Schritt ist ein echter, lesender Handytest des nach PR #49 deployten AED-Abgleichs. Diese Liste ersetzt ältere Statusangaben in diesem Dokument; frühere Einträge bleiben nur als historische Begründung erhalten.
+Stand: **15.11.2026**. Gemergt sind der Detailweg (P0 bis P5, PR #77), die Detail-Angaben aus der Trefferliste (PR #80), die Entfernung der Demo „Vorschau testen“ (PR #81), die Code-Härtung P6 (PR #95), Barrierefreiheit/WebKit P7 (PR #96), die Betriebsergänzungen P8 (PR #97), die Migration-/Deploy-Prüfung (PR #99) und der Entwurf des Produktions-Schreibwegs (P9, PR #100). Die Migrationsprüfung ist im Deploy integriert; die Migrationen `0010` und `0011` wurden auf der Produktions-D1 geprüft und angewendet, anschließend lief der Deploy erfolgreich. P10 – die verhaltensneutrale Aufteilung von `src/main.ts` – liegt in sechs kleinen Pull Requests #101 bis #106. Die Änderungen ab #102 wurden nach Integrationstests entlang der Merge-Reihenfolge aufeinander aufgebaut; Details und aktuelle Prüfergebnisse stehen unten. **Produktive OSM-Schreibzugriffe bleiben aus.** **Nächste manuelle Abnahmen:** (1) kontrollierter Schreibtest auf dem OSM-Testserver nach Abschnitt D der [Pilot-Abnahme](pilot-abnahme.md), (2) Handytest des Detailformulars, (3) Rate-Limiting-Regel gemäß [Anleitung](cloudflare-rate-limit.md) im Dashboard prüfen und aktivieren, (4) manueller VoiceOver-/TalkBack-Test nach [Screenreader-Abnahme](screenreader-abnahme.md), (5) unten markierte Produktentscheidungen. Ältere Statusangaben bleiben nur als historische Begründung erhalten.
+
+## Produktions-Schreibweg (P9)
+
+Der ausführliche Entwurf steht in [Produktion-OSM](produktion-osm.md). Er ist nur eine Grundlage für Entscheidungen; er schaltet keine Produktionsfunktion frei. Vor einer Implementierung sind insbesondere API-Suchvollständigkeit, Community-Rückmeldung zu Changeset-Metadaten/`source=survey`, Startlimits, Tokenaufbewahrung und der Pilotumfang zu entscheiden. Produktionsschreibzugriffe und echte OSM-Schreibtests bleiben deaktiviert.
+
+## Aufteilung von `main.ts` (P10)
+
+Der Review empfiehlt vier bis fünf PRs mit klaren Bereichen und ohne Verhaltensänderung. Um besonders die großen Ansichts- und Zustandsblöcke kleiner zu halten, wurde die Arbeit in sechs PRs geteilt:
+
+| PR | abgegrenzter Bereich | Status |
+| --- | --- | --- |
+| [#101](https://github.com/FrnkMrz/AEDjaeger/pull/101) | Gemeinsame Markup-Helfer | offen; CI grün; CodeX-Review des Änderungskomits ohne Findings |
+| [#102](https://github.com/FrnkMrz/AEDjaeger/pull/102) | Konto- und Anmeldeansichten | offen; auf #101 integriert; CI des aktualisierten Heads grün; integrierter Code in CodeX-Prüfung von #106 ohne Findings |
+| [#103](https://github.com/FrnkMrz/AEDjaeger/pull/103) | Foto-, Standort- und Suchstatusansichten | offen; auf #101–#102 integriert; CI des aktualisierten Heads grün; integrierter Code in CodeX-Prüfung von #106 ohne Findings |
+| [#104](https://github.com/FrnkMrz/AEDjaeger/pull/104) | AED-Detailformularansicht | offen; auf #101–#103 integriert; CI des aktualisierten Heads grün; integrierter Code in CodeX-Prüfung von #106 ohne Findings |
+| [#105](https://github.com/FrnkMrz/AEDjaeger/pull/105) | HTTP-Transport für bestätigte OSM-Entwicklungs-Schreibvorschläge | offen; auf #101–#104 integriert; CI des aktualisierten Heads grün; integrierter Code in CodeX-Prüfung von #106 ohne Findings |
+| [#106](https://github.com/FrnkMrz/AEDjaeger/pull/106) | Flüchtiger Foto-/Standortzustand und dessen Aktionen | offen; auf #101–#105 integriert; finaler CI-Lauf #378 grün; CodeX-Review ohne Findings, keine offenen Review-Threads |
+
+Die Ansichten und der reine Schreibtransport erhalten ihre Eingaben über explizite Parameter. Foto, Herkunft, Datum, lokale Foto-Ortsangabe, Suchposition und Kartenauswahl werden als eine flüchtige Sitzung zusammengefasst; die Foto-/Standortaktionen arbeiten mit einem injizierten Zustands- und Effektkontext. Daten, Fotos, Koordinaten und Entwürfe werden dadurch nicht zusätzlich gespeichert. Die übrigen Kandidaten-, Vorschau- und Schreibbestätigungsaktionen bleiben zunächst in `main.ts`, weil sie mehrere Sicherheitsprüfungen und Wiederherstellungszustände koordinieren. Sie werden nicht in einer pauschalen Aktionstabelle umgeschrieben; falls `main.ts` nach diesen PRs weiter verkleinert werden soll, ist das ein separater, ebenso verhaltensneutraler Schritt.
+
+Alle PRs zielen auf `main`, werden aber in der Reihenfolge #101 → #102 → #103 → #104 → #105 → #106 zusammengeführt. Damit Konflikte schon vor dem Merge sichtbar werden, enthält der Branch jedes späteren PRs die vorhergehenden P10-Branches als Merge-Vorfahren. Solange diese Vorfahren noch nicht in `main` sind, kann GitHub im PR eine kumulative Änderung zeigen; nach dem Merge des vorhergehenden PRs schrumpft der verbleibende Diff auf die jeweilige Etappe. Nicht überspringen oder parallel mergen. Vor jedem Merge müssen aktueller Zielstand, Merge-Konflikte, alle Review-Threads und der grüne Status-Check geprüft werden. Nach einem Merge ist der nächste PR erneut gegen den dann aktuellen `main`-Stand zu prüfen; bei einem Konflikt den folgenden Branch aktualisieren und die Prüfung wiederholen. Keine Testinhalte oder Ablaufregeln wurden für P10 geändert. Es gibt keine Produktions-OSM-Aufrufe.
+
+**Barrierefreiheit (P7):** axe- und WebKit-Prüfungen laufen automatisiert. Der echte VoiceOver-/TalkBack-Durchlauf und die anschließende Entscheidung zwischen Fokusführung und Live-Ansage bleiben offen; siehe [Screenreader-Abnahme](screenreader-abnahme.md).
 
 ## Rückmeldungen vom 13.11.2026 (iPhone)
 
 Bestätigt vom Projektinhaber: Die Versionsnummer im Info-Dialog stimmt mit `/version.json` überein. Anmelden, Abmelden und die Lampe verhalten sich wie vorgesehen (die rote Lampe meldet nie von selbst an). Die Fotoprüfung lehnte ein Foto ohne AED mit „Kein AED erkennbar“ ab; die Ausnahme mit zwei Bestätigungen führte bis zur Vorschau. Der Migrationsstand der Datenbank ist geprüft (`0001` bis `0009`). Die Vorbereitung des Schreibtests ist bis auf Testort und zwei Beobachtungsdaten erledigt (siehe [Abnahme](pilot-abnahme.md), Abschnitt C0).
 
 **Android (Stand 13.11.2026):** Der Projektinhaber hat kein Android-Gerät und holt den Android-Test später nach. Er hat den kontrollierten Schreibtest auf dem Testserver trotzdem freigegeben. Für `v0.1.0` (Abschnitt E) bleibt zu entscheiden, ob ein iPhone-Test genügt. Bis dahin steht Android als „nicht getestet“ in der Abnahme.
+
+## Detailangaben für AEDs (Entscheidung vom 13.11.2026)
+
+**Entscheidung des Projektinhabers:** Die App erfasst zusätzlich zum Schnellweg Standortbeschreibung, Zugang, Zeiten, drinnen/draußen, Ebene und unter „Mehr Angaben“ Betreiber, Telefon, Notiz und Nummer. Das gilt für Neuanlagen und für bestehende AEDs, **einschließlich Korrekturen** vorhandener Werte. Das Mockup ist abgenommen. Umsetzung in den Etappen P1 bis P6 ([Umsetzungsplan](umsetzungsplan.md#detailweg-für-aed-angaben)); `AGENTS.md` ist angepasst.
+
+**Offen:**
+
+- **Tags am Wiki prüfen:** Per Websuche (13.11.2026) belegt: `access` kennt `yes`, `customers`, `private`, `no`, nicht aber `permissive`. Beides stammt aus Suchauszügen. Das Wiki ist aus der Agentenumgebung nicht erreichbar; zur Absicherung den Host freigeben oder den Tag-Abschnitt der DE-Seite einfügen. `manufacturer` und `model` bleiben draußen.
+- **Gehäuse-Feld:** Entschieden am 14.11.2026: gestrichen. Weder Oberfläche noch Server kennen `defibrillator:cabinet`; bestehende Werte in OSM bleiben unberührt, weil fremde Tags nie angefasst werden.
+- **Formular auf dem Handy (P2):** Nur im Browser mit Playwright geprüft (Pixel-7-Profil, 320 px, alle sechs Sprachen, Tastatur). Nicht geprüft: echtes iPhone und Android, Bildschirmtastatur (verdeckt sie die Fußleiste?), japanische Eingabemethode, Lesbarkeit im Freien.
+- **Ergänzen bestehender AEDs (P4):** Nur mit simulierten OSM-Antworten und im Browser mit Playwright geprüft. Ein echter Test gegen den OSM-Testserver mit `OSM_DEV_WRITES_ENABLED=true` steht aus (gesonderte Freigabe nötig, siehe [Abnahme](pilot-abnahme.md)). Offen ist außerdem: Soll ein bestehender AED ohne jede ergänzbare Lücke den Knopf „Fehlende Angaben ergänzen“ trotzdem zeigen (heute ja, mit dem Hinweis „schon alles eingetragen“)?
+- **Zeiten-Eingabe:** Zwei feste Vorlagen („Mo-Fr 08:00-18:00“, „Mo-Sa 07:00-20:00“). Offen ist, ob mehr oder gar keine Vorlagen sinnvoll sind.
+- **Schnellwahl beim Standort:** Fünf Wörter (Eingang, Foyer, Außenwand, Empfang, Treppenhaus). Offen ist, ob das die richtigen sind.
+- **Korrekturen (P5):** Umgesetzt hinter dem Betreiber-Schalter `OSM_DETAIL_CORRECTIONS_ENABLED` (Standard aus). Der Schalter gilt für alle angemeldeten Testserver-Konten; eine Beschränkung auf zugelassene Konten gibt es nicht. Offen: Ob eine solche Beschränkung nötig ist. Das nach „draußen“ stehen gebliebene `level` meldet die App seit dem 14.11.2026 im Formular und in der Vorschau. Ein echter Test gegen den OSM-Testserver steht aus (siehe [Abnahme](pilot-abnahme.md), Abschnitt D).
+- **`opening_hours`:** Version 1 prüft nur Länge und Zeichen. Ob später eine Syntaxprüfung (eigene Bibliothek) lohnt, braucht eine eigene Entscheidung.
+- **Telefon und Betreiber:** Es gilt „nur von Gerät oder Schild“. Offen ist, ob die App Nummern zusätzlich automatisch auf Privatnummern prüfen soll (eher nein).
+- **Texte:** Die Mockup-Texte sind nur Deutsch. Die fünf weiteren Sprachen entstehen in P2 und sind nicht muttersprachlich geprüft.
+- **Messung:** Ziel in P6 sind Tipps und Sekunden von „Foto“ bis „gespeichert“, getrennt für „nur bestätigen“ und „mit Details“. Ein Zielwert ist nicht festgelegt.
 
 ## Domain aedjaeger.de (13.11.2026)
 

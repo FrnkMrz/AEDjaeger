@@ -3,13 +3,15 @@ import { loadOSMSession } from "../src/auth/osmSession";
 
 describe("OSM session status", () => {
   it("accepts the explicit production and development login availability flags", async () => {
-    const status = await loadOSMSession(async () => Response.json({
-      authenticated: false,
-      loginAvailable: true,
-      developmentLoginAvailable: false,
-      developmentSession: true,
-      developmentWriteAvailable: true,
-    }));
+    const status = await loadOSMSession(async () =>
+      Response.json({
+        authenticated: false,
+        loginAvailable: true,
+        developmentLoginAvailable: false,
+        developmentSession: true,
+        developmentWriteAvailable: true,
+      }),
+    );
 
     expect(status).toEqual({
       authenticated: false,
@@ -17,15 +19,21 @@ describe("OSM session status", () => {
       developmentLoginAvailable: false,
       developmentSession: true,
       developmentWriteAvailable: true,
+      // Nicht gesendet = Korrekturen aus.
+      developmentCorrectionsAvailable: false,
       // Nicht gesendet = Fotoprüfung aus.
       photoCheckAvailable: false,
     });
   });
 
   it("fails closed when the Worker omits development login availability", async () => {
-    await expect(loadOSMSession(async () => Response.json({
-      authenticated: false,
-      loginAvailable: true,
-    }))).rejects.toThrow("invalid");
+    await expect(
+      loadOSMSession(async () =>
+        Response.json({
+          authenticated: false,
+          loginAvailable: true,
+        }),
+      ),
+    ).rejects.toThrow("invalid");
   });
 });

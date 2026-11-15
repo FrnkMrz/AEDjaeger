@@ -1,9 +1,4 @@
-import {
-  assessCandidates,
-  type CandidateAssessment,
-  type LocationEstimate,
-  type MatchPolicy,
-} from "./candidateMatch";
+import { assessCandidates, type CandidateAssessment, type LocationEstimate, type MatchPolicy } from "./candidateMatch";
 import type { CandidateSearchResult } from "../osm/candidateTypes";
 
 export interface CandidateSearchAssessment {
@@ -17,10 +12,14 @@ export function assessCandidateSearch(
   search: CandidateSearchResult,
   policy: MatchPolicy,
 ): CandidateSearchAssessment {
-  const assessment = assessCandidates(location, {
-    status: search.status,
-    coverageRadiusMeters: search.coverageRadiusMeters,
-    candidates: search.candidates.map(({ id, coordinateQuality, position }) => ({ id, coordinateQuality, position })),
-  }, policy);
+  const assessment = assessCandidates(
+    location,
+    {
+      status: search.status,
+      coverageRadiusMeters: search.coverageRadiusMeters,
+      candidates: search.candidates.map(({ id, coordinateQuality, position }) => ({ id, coordinateQuality, position })),
+    },
+    policy,
+  );
   return { search, assessment };
 }

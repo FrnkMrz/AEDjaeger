@@ -44,14 +44,16 @@ describe("PWA-Symbole", () => {
   });
 
   it("bindet ein 180-Pixel-Symbol für iPhone und iPad ein", () => {
-    expect(readFileSync("index.html", "utf8")).toContain('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />');
+    expect(readFileSync("index.html", "utf8")).toContain(
+      '<link rel="apple-touch-icon" href="/apple-touch-icon.png" />',
+    );
     expect(pngSize("public/apple-touch-icon.png")).toEqual({ width: 180, height: 180 });
   });
 
   it("uses the same Maki defibrillator path in the standard and maskable SVG icons", () => {
     const pathInAppIcon = appIconSvg.match(/<path id="defibrillator" d="([^"]+)"\/>/)?.[1];
     const pathInMaskableIcon = maskableIconSvg.match(/<path id="defibrillator" d="([^"]+)"\/>/)?.[1];
-    const pathInIllustration = appSource.match(/const defibrillatorPath = "([^"]+)";/)?.[1];
+    const pathInIllustration = appSource.match(/const defibrillatorPath\s*=\s*"([^"]+)";/)?.[1];
     expect(pathInAppIcon).toBeTruthy();
     expect(pathInMaskableIcon).toBe(pathInAppIcon);
     expect(pathInIllustration).toBe(pathInAppIcon);
