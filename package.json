@@ -17,10 +17,13 @@
     "check:live-search": "node scripts/check-live-search.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
     "preview": "vite preview"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
+    "@biomejs/biome": "2.6.7",
     "@playwright/test": "1.65.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",

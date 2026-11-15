@@ -1295,7 +1295,9 @@ function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void 
   });
   document.querySelector<HTMLInputElement>("#camera-input")?.addEventListener("change", onPhotoSelected);
   document.querySelector<HTMLInputElement>("#file-input")?.addEventListener("change", onPhotoSelected);
-  document.querySelectorAll<HTMLElement>("[data-action]").forEach((button) => button.addEventListener("click", () => handleAction(button.dataset.action, button)));
+  document.querySelectorAll<HTMLElement>("[data-action]").forEach((button) => {
+    button.addEventListener("click", () => handleAction(button.dataset.action, button));
+  });
   bindAccountPanel();
   renderUpdateBanner();
 
