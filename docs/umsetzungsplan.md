@@ -16,6 +16,8 @@ Vor dem Worker-Deploy liest CI den D1-Migrationsstand per `SELECT` und stoppt be
 
 ## Reihenfolge und aktueller Stand
 
+**Ergänzung vom 15.11.2026:** Der Produktions-D1-Migrationsschutz (P8) ist mit PR #99 gemergt; die Migrationen `0010` und `0011` wurden geprüft und angewendet, der anschließende Worker-Deploy war erfolgreich. Als nächste technische Arbeit folgen P9 ([Entwurf Produktions-Schreibweg](produktion-osm.md), Dokumentation ohne Freigabe für echte OSM-Schreibvorgänge) und P10 (schrittweise Aufteilung von `src/main.ts` in vier bis fünf verhaltensneutrale PRs). Jeder P10-PR wird gegen `main` vorbereitet und erst nach Merge des vorherigen Schnitts fortgesetzt, damit die Arbeitsregel „jeder PR gegen `main`“ eingehalten wird. Bis zu einer separaten Produktentscheidung bleiben produktive OSM-Schreibzugriffe ausgeschaltet.
+
 | Schritt | Ergebnis | Status |
 | --- | --- | --- |
 | A. Bedienprototyp | Mobil nutzbarer Fotoablauf mit simulierten Treffern, Rückfragen und Fehlern; sechs Sprachen | Abgelöst durch den echten Ablauf. Die Simulation („Vorschau testen“) wurde am 14.11.2026 entfernt |
