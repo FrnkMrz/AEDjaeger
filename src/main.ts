@@ -73,7 +73,8 @@ import {
   localCalendarDate,
   photoDateNeedsConfirmation,
 } from "./domain/localDate";
-import { defibrillatorMark, escapeHtml, icon } from "./ui/markup";
+import { defibrillatorMark, escapeHtml } from "./ui/markup";
+import { renderAppShell } from "./ui/views/appShell";
 
 const app = (() => {
   const root = document.querySelector<HTMLDivElement>("#app");
@@ -792,37 +793,35 @@ function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void 
     preserveOpenInfoDialog && (document.querySelector<HTMLDialogElement>("#info-dialog")?.open ?? false);
   activePositionPicker?.destroy();
   activePositionPicker = undefined;
-  const authenticated = accountState === "signed-in";
   const isReady = state.kind === "ready";
   document.documentElement.lang = language;
   document.title = `${t("appName")} · ${t("tagline")}`;
-  app.innerHTML = `
-    <div class="page-shell">
-      <header class="topbar"><div class="brand-group"><a class="brand" href="/" aria-label="${t("appName")}" ${hasUnresolvedSave(state) ? 'aria-disabled="true"' : ""}><span>${t("appName")}</span></a>${connectionLamp()}</div><div class="topbar-actions"><button class="info-link" id="open-info" type="button"><span class="info-mark" aria-hidden="true">i</span><span>${t("aboutButton")}</span></button><label class="language-picker"><span class="sr-only">${t("language")}</span><select id="language" aria-label="${t("language")}">${supportedLanguages.map((code) => `<option value="${code}" ${language === code ? "selected" : ""}>${languageNames[code]}</option>`).join("")}</select><span class="language-globe" aria-hidden="true">◎</span></label></div></header>
-      ${
-        authenticated
-          ? `<main>
-        <section class="hero ${isReady ? "" : "hero-compact"}"><div class="hero-kicker"><span></span>${t("eyebrow")}</div><h1>${isReady ? t("title") : state.kind === "photo-checking" || state.kind === "candidate-searching" ? t("checking") : t("tagline")}</h1>${isReady ? `<p>${t("intro")}</p>` : ""}</section>
-        <section class="capture-card" aria-live="polite" aria-atomic="false">
-          <div class="capture-content">${isReady ? `${photoSession.selectionError ? `<p class="photo-selection-error" role="alert" tabindex="-1">${t("cameraError")}</p>` : ""}<div class="empty-illustration" aria-hidden="true"><span class="device-card">${defibrillatorMark(defibrillatorPath)}</span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>` : statusContent()}</div>
-          ${isReady ? `<div class="capture-actions"><label class="button button-primary camera-label">${icon("camera")}<span>${t("camera")}</span><input id="camera-input" type="file" accept="image/*" capture="environment" /></label><label class="button button-secondary camera-label">${t("choosePhoto")}<input id="file-input" type="file" accept="image/*" /></label><p class="supporting-copy">${photoCheckAvailable ? tv("photoCheckNotice") : t("privacy")}</p></div>` : ""}
-        </section>
-      </main>${accountPanel()}`
-          : `<main class="login-main">${loginEntry()}</main>`
-      }
-      <footer><span>${t("sourceNote")}</span><span class="build-mark" id="build-mark">${escapeHtml(buildVersionText())}</span></footer>
-      <dialog class="info-dialog" id="info-dialog" aria-labelledby="info-title" aria-describedby="info-intro">
-        <div class="info-dialog-content">
-          <div class="info-dialog-header"><div><p class="eyebrow">${t("appName")}</p><h2 id="info-title">${t("aboutTitle")}</h2></div><form method="dialog"><button class="dialog-close" aria-label="${t("closeInfo")}">×</button></form></div>
-          <p class="info-intro" id="info-intro">${t("aboutIntro")}</p>
-          <section class="info-section"><h3>${t("infoHowTitle")}</h3><p>${t("infoHowBody")}</p><h3>${t("infoLimitsTitle")}</h3><p>${t("infoLimitsBody")}</p></section>
-          <section class="info-section icon-credits"><h3>${t("iconCreditsTitle")}</h3><p>${t("iconCreditsBody")} <a href="https://github.com/mapbox/maki/blob/main/icons/defibrillator.svg" target="_blank" rel="noopener noreferrer">${t("iconCreditsSource")}</a> · <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener noreferrer">${t("iconCreditsLicense")}</a>.</p></section>
-          ${authenticated ? `<section class="info-section account-section"><h3>${developmentSession ? t("accountDevSignedIn") : t("accountSignedIn")}</h3><p>${developmentSession ? t("accountDevNotice") : t("accountIdentityOnly")}</p><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>` : ""}
-          <label class="sound-toggle"><input type="checkbox" id="success-sound-toggle" ${successSound.isEnabled() ? "checked" : ""} /><span>${tv("soundToggle")}</span></label>
-          <p class="build-version" id="build-version">${escapeHtml(buildVersionText())}</p>
-        </div>
-      </dialog>
-    </div>`;
+  const authenticated = accountState === "signed-in";
+  const isChecking = state.kind === "photo-checking" || state.kind === "candidate-searching";
+  app.innerHTML = renderAppShell({
+    language,
+    languageNames,
+    supportedLanguages,
+    t,
+    tv,
+    authenticated,
+    isReady,
+    isChecking,
+    photoSelectionError: photoSession.selectionError,
+    photoCheckAvailable,
+    developmentSession,
+    successSoundEnabled: successSound.isEnabled(),
+    brandIsDisabled: hasUnresolvedSave(state),
+    connectionLamp: connectionLamp(),
+    emptyIllustration: () =>
+      `<div class="empty-illustration" aria-hidden="true"><span class="device-card">${defibrillatorMark(defibrillatorPath)}</span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>`,
+    statusContent,
+    accountPanel,
+    loginEntry,
+    sourceNote: t("sourceNote"),
+    buildVersion: buildVersionText(),
+    escapeHtml,
+  });
 
   if (infoDialogWasOpen) document.querySelector<HTMLDialogElement>("#info-dialog")?.showModal();
 
