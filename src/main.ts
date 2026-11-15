@@ -50,6 +50,7 @@ import {
 } from "./contracts/aedDetails";
 import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } from "./osm/candidateSearch";
 import { ExistingNodeError, requestExistingNode } from "./osm/existingNode";
+import { renderPhotoState } from "./ui/views/photoStates";
 import {
   accountPanel as renderAccountPanel,
   loginEntry as renderLoginEntry,
@@ -1015,63 +1016,29 @@ function statusContent(): string {
   const photoMarkup = photoUrl
     ? `<img class="photo-preview" src="${escapeHtml(photoUrl)}" alt="${t("photoAlt")}" />`
     : "";
+  if (
+    state.kind === "photo" ||
+    state.kind === "photo-checking" ||
+    state.kind === "photo-rejected" ||
+    state.kind === "photo-date" ||
+    state.kind === "location-choice" ||
+    state.kind === "location-map" ||
+    state.kind === "candidate-searching"
+  )
+    return renderPhotoState(state, {
+      t,
+      tv,
+      escapeHtml,
+      photoMarkup,
+      photoCheckAvailable,
+      selectedPhotoFileAvailable: selectedPhotoFile !== undefined,
+      mapLocationOverride,
+      minimumMapSearchZoom,
+    });
+
   switch (state.kind) {
     case "ready":
       return `<div class="empty-illustration" aria-hidden="true"><span class="device-card">${defibrillatorMark(defibrillatorPath)}</span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>`;
-    case "photo": {
-      // The first pilot deliberately relies on the person's on-site confirmation, not a model.
-      // The image and its remaining metadata stay in this browser; only selected coordinates
-      // leave it later when the person explicitly starts a location search.
-      //
-      // Neu: Gibt der Server die Fotoprüfung für dieses Konto frei, ersetzt „AED gesehen – Foto
-      // prüfen“ die reine Selbstbestätigung. Dann ehrlich anzeigen, dass das Foto (ohne Standort und
-      // Metadaten) das Gerät verlässt. Ist die Prüfung gescheitert (photoCheck „unavailable“),
-      // gilt wieder die Selbstbestätigung samt Hinweis, damit die App nicht an OpenAI hängt.
-      const useCheck = photoCheckAvailable && state.photoCheck !== "unavailable" && selectedPhotoFile !== undefined;
-      const photoAction = useCheck
-        ? `<button class="button button-primary" data-action="check-photo">${tv("photoCheckAction")}</button>`
-        : `<button class="button button-primary" data-action="confirm-sighting">${tv("sightingConfirm")}</button>`;
-      // Nach einem gescheiterten Prüfversuch darf NICHT stehen, das Foto bleibe auf dem Gerät: Bei
-      // einer Zeitüberschreitung oder einer ungültigen Antwort kann der Upload bereits erfolgt sein.
-      // Dann nur sagen, dass die Prüfung nicht möglich war. Die lokale Zusage gilt nur, wenn die
-      // Prüfung gar nicht erst angeboten wurde.
-      const photoNote = useCheck
-        ? `<p class="supporting-copy">${tv("photoCheckNotice")}</p>`
-        : state.photoCheck === "unavailable"
-          ? // Der Fehlercode steht klein darunter, damit sich im Pilot eingrenzen lässt, warum die Prüfung scheiterte.
-            `<p class="supporting-copy">${tv("photoCheckUnavailable")}</p>${state.photoCheckCode ? `<p class="supporting-copy photo-check-code">${escapeHtml(tv("photoCheckCode", { code: state.photoCheckCode }))}</p>` : ""}`
-          : `<p class="supporting-copy">${tv("photoStaysLocal")}</p>`;
-      return `${photoMarkup}${photoAction}${photoNote}<button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
-    }
-    case "photo-checking":
-      return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv("photoChecking")}</span></div>`;
-    case "photo-rejected":
-      // Standardweg ist „Anderes Foto“: Ein Foto ohne erkennbaren AED soll nicht in die Suche laufen.
-      // Weil die Prüfung auch irren kann (zum Beispiel bei einem echten, aber ungünstig fotografierten AED),
-      // gibt es eine Ausnahme, die ZWEI ausdrückliche Bestätigungen verlangt: erst „Trotzdem: Hier ist ein AED“,
-      // dann „Ja, AED oder Gehäuse ist zu sehen – weiter“. Danach gilt der normale Ablauf mit seinen eigenen
-      // Bestätigungen (Datum, Standort, bei Neuanlagen wieder zwei).
-      if (state.overrideStep === "confirm") {
-        return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("photoOverrideTitle")}</h2><p>${tv("photoOverrideBody")}</p></div></div><button class="button button-primary" data-action="confirm-photo-override">${tv("photoOverrideConfirm")}</button><button class="button button-quiet" data-action="retake">${t("retake")}</button>`;
-      }
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv(state.reason === "unclear" ? "photoUnclearTitle" : "photoRejectedTitle")}</h2><p>${tv(state.reason === "unclear" ? "photoUnclearBody" : "photoRejectedBody")}</p></div></div><button class="button button-primary" data-action="retake">${t("retake")}</button><button class="button button-secondary" data-action="start-photo-override">${tv("photoOverrideAction")}</button>`;
-    case "photo-date":
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("photoDateTitle")}</h2><p>${tv("photoDateHelp")}</p><label for="photo-observed-on">${tv("photoDateLabel")}</label><input id="photo-observed-on" type="date" value="${escapeHtml(state.suggestedDate)}" max="${localCalendarDate()}" /></div></div><button class="button button-primary" data-action="confirm-photo-date">${tv("photoDateConfirm")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-    case "location-choice":
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("locationTitle")}</h2><p>${tv("photoLocationMissing")}</p></div></div><button class="button button-primary" data-action="use-phone-location">${tv("usePhoneLocation")}</button><button class="button button-secondary" data-action="choose-map-location">${tv("chooseMapLocation")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-    case "location-map": {
-      const selectedPosition = mapLocationOverride ?? state.center;
-      const mapHasSelection = mapLocationOverride !== undefined && (state.initialZoom ?? 19) >= minimumMapSearchZoom;
-      const mapPositionLabel = mapHasSelection
-        ? tv("mapLocationCoordinates", {
-            latitude: selectedPosition.latitude.toFixed(5),
-            longitude: selectedPosition.longitude.toFixed(5),
-          })
-        : tv("mapLocationInitial");
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">◎</span><div><h2>${tv("chooseMapLocation")}</h2><p>${tv("mapLocationHelp")}</p></div></div><div id="search-location-map" class="position-map" role="application" tabindex="0" aria-label="${tv("chooseMapLocation")}" aria-describedby="search-map-instructions"></div><p class="sr-only" id="search-map-instructions">${tv("mapNavigationHelp")}</p><p class="position-map-coordinates" id="search-location-coordinates" aria-live="polite">${mapPositionLabel}</p><button class="button button-primary" data-action="confirm-map-location"${mapHasSelection ? "" : " disabled"}>${tv("searchAction")}</button><button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-    }
-    case "candidate-searching":
-      return `${photoMarkup}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv("searchProgress")}</span></div>`;
     case "candidate-result": {
       const { assessment, search } = state;
       const candidatesToShow: Array<{ candidate: (typeof search.candidates)[number]; distanceMeters?: number }> = [];
