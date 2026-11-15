@@ -209,9 +209,10 @@ test("the ready screen introduction keeps readable contrast", async ({ page }) =
 test("the override texts exist in all six languages", async ({ page }) => {
   await enablePhotoCheck(page);
   await page.route("**/api/vision/analyze", async (route) => {
-    const body = route.request().postDataJSON() as { request_id: string };
+    const requestId = route.request().headers()["x-request-id"];
+    if (!requestId) throw new Error("The photo check request is missing its request ID header.");
     await route.fulfill({
-      json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("other_object") },
+      json: { request_id: requestId, model: "gpt-6-luna", observation: visionObservation("other_object") },
     });
   });
   await page.goto("/");

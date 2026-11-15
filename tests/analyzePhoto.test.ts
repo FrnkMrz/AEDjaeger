@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { requestVisionObservation, stripJpegExif, VisionClientError } from "../src/vision/analyzePhoto";
+import {
+  preparePhotoForAnalysis,
+  requestVisionObservation,
+  stripJpegExif,
+  VisionClientError,
+} from "../src/vision/analyzePhoto";
 
 const image = new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: "image/jpeg" });
+const jpegBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xda, 0x00, 0x02, 0x11, 0x22, 0xff, 0xd9]);
 const observation = {
   scene: "device_visible",
   device_count: 1,
@@ -13,7 +19,7 @@ const observation = {
 };
 
 describe("requestVisionObservation", () => {
-  it("sends one explicitly requested, same-origin JPEG and validates structured observations", async () => {
+  it("sends JPEG bytes and the stable request ID separately, then validates structured observations", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -29,7 +35,9 @@ describe("requestVisionObservation", () => {
     const [url, init] = fetcher.mock.calls[0];
     expect(url).toBe("/api/vision/analyze");
     expect(init).toMatchObject({ method: "POST", credentials: "same-origin" });
-    expect(JSON.parse(String(init?.body))).toMatchObject({ request_id: "a".repeat(32), content_type: "image/jpeg" });
+    expect(init?.headers).toEqual({ "Content-Type": "image/jpeg", "X-Request-Id": "a".repeat(32) });
+    expect(init?.body).toBe(image);
+    expect([...new Uint8Array(await new Response(init?.body).arrayBuffer())]).toEqual([0xff, 0xd8, 0xff]);
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
@@ -190,6 +198,50 @@ describe("requestVisionObservation", () => {
       requestVisionObservation(new Blob([new Uint8Array(8 * 1024 * 1024 + 1)], { type: "image/jpeg" }), fetcher),
     ).rejects.toMatchObject({ code: "image_too_large" });
     expect(fetcher).not.toHaveBeenCalled();
+  });
+});
+
+describe("photo upload preparation", () => {
+  it("shrinks the longest image edge to 1,024 px before returning an EXIF-free JPEG", async () => {
+    const dimensions: number[] = [];
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: () => ({
+        fillStyle: "",
+        fillRect: vi.fn(),
+        drawImage: vi.fn(),
+      }),
+      toBlob: (callback: BlobCallback) => callback(new Blob([jpegBytes], { type: "image/jpeg" })),
+    } as unknown as HTMLCanvasElement;
+    const documentStub = {
+      createElement: vi.fn(() => canvas),
+    };
+    class MockImage {
+      naturalWidth = 3_000;
+      naturalHeight = 2_000;
+      src = "";
+
+      async decode(): Promise<void> {}
+    }
+    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:photo-test");
+    const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    vi.stubGlobal("document", documentStub);
+    vi.stubGlobal("Image", MockImage);
+
+    try {
+      const result = await preparePhotoForAnalysis(new File(["source"], "photo.jpg", { type: "image/jpeg" }));
+      dimensions.push(canvas.width, canvas.height);
+      expect(dimensions).toEqual([1_024, 683]);
+      expect(result.type).toBe("image/jpeg");
+      expect(new TextDecoder().decode(await result.arrayBuffer())).not.toContain("Exif");
+      expect(createObjectURL).toHaveBeenCalledOnce();
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:photo-test");
+    } finally {
+      vi.unstubAllGlobals();
+      createObjectURL.mockRestore();
+      revokeObjectURL.mockRestore();
+    }
   });
 });
 
