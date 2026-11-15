@@ -3,6 +3,12 @@ import { expect, test } from "@playwright/test";
 const languageCodes = ["de", "en", "pl", "ja", "fr", "es"];
 const testDevelopmentOwnerHash = "a".repeat(64);
 
+function visionRequestId(route: import("@playwright/test").Route): string {
+  const requestId = route.request().headers()["x-request-id"];
+  if (!requestId) throw new Error("The photo check request is missing its request ID header.");
+  return requestId;
+}
+
 // Most workflow tests exercise the signed-in app; individual access-control tests override this.
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/auth/session", (route) =>
@@ -1976,12 +1982,17 @@ async function enablePhotoCheck(page: import("@playwright/test").Page): Promise<
 
 test("a passed photo check continues like a confirmed sighting and uploads no metadata", async ({ page }) => {
   await enablePhotoCheck(page);
-  const uploads: Record<string, unknown>[] = [];
+  const uploads: Array<{ requestId: string; contentType: string; body: Uint8Array | null }> = [];
   await page.route("**/api/vision/analyze", async (route) => {
-    const body = route.request().postDataJSON() as Record<string, unknown>;
-    uploads.push(body);
+    const request = route.request();
+    const requestId = visionRequestId(route);
+    uploads.push({
+      requestId,
+      contentType: request.headers()["content-type"] ?? "",
+      body: request.postDataBuffer(),
+    });
     await route.fulfill({
-      json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("device_visible") },
+      json: { request_id: requestId, model: "gpt-6-luna", observation: visionObservation("device_visible") },
     });
   });
   const searchLocations: { latitude: number; longitude: number }[] = [];
@@ -2010,13 +2021,17 @@ test("a passed photo check continues like a confirmed sighting and uploads no me
   if (await dateConfirm.isVisible()) await dateConfirm.click();
   await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
 
-  // Genau ein Upload, nur drei Felder, JPEG ohne EXIF-Block (und damit ohne GPS).
+  // Exactly one binary JPEG upload; its MIME type and request ID are separate headers, with no EXIF/GPS.
   expect(uploads).toHaveLength(1);
-  expect(Object.keys(uploads[0]).sort()).toEqual(["content_type", "image_base64", "request_id"]);
-  expect(uploads[0].content_type).toBe("image/jpeg");
-  // atob statt Buffer: Die Testdateien kennen keine Node-Typen.
-  const decoded = atob(uploads[0].image_base64 as string);
-  expect(decoded.includes("Exif")).toBe(false);
+  expect(uploads[0].contentType).toBe("image/jpeg");
+  expect(uploads[0].requestId).toMatch(/^[A-Za-z0-9_-]{16,128}$/u);
+  // Playwright WebKit may not expose binary request bytes through postDataBuffer(); the client unit test
+  // verifies the exact Blob bytes in both engines' shared request code path.
+  if (uploads[0].body) {
+    expect(uploads[0].body[0]).toBe(0xff);
+    expect(uploads[0].body[1]).toBe(0xd8);
+    expect(new TextDecoder().decode(uploads[0].body)).not.toContain("Exif");
+  }
   // Der Standort für die Suche stammt weiterhin lokal aus dem Originalfoto.
   expect(searchLocations).toHaveLength(1);
   expect(searchLocations[0].latitude).toBeCloseTo(52.52, 5);
@@ -2030,9 +2045,9 @@ test("a photo without a recognizable AED is blocked and cannot start a search", 
     await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } });
   });
   await page.route("**/api/vision/analyze", async (route) => {
-    const body = route.request().postDataJSON() as { request_id: string };
+    const requestId = visionRequestId(route);
     await route.fulfill({
-      json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("other_object") },
+      json: { request_id: requestId, model: "gpt-6-luna", observation: visionObservation("other_object") },
     });
   });
   await page.goto("/");
@@ -2057,9 +2072,9 @@ test("a rejected photo can still continue after two explicit confirmations", asy
     await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } });
   });
   await page.route("**/api/vision/analyze", async (route) => {
-    const body = route.request().postDataJSON() as { request_id: string };
+    const requestId = visionRequestId(route);
     await route.fulfill({
-      json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("other_object") },
+      json: { request_id: requestId, model: "gpt-6-luna", observation: visionObservation("other_object") },
     });
   });
   await page.goto("/");
@@ -2092,9 +2107,9 @@ test("the second confirmation can be abandoned, and the override is offered for 
     await route.fulfill({ json: { status: "complete", coverage_radius_meters: 200, candidates: [] } });
   });
   await page.route("**/api/vision/analyze", async (route) => {
-    const body = route.request().postDataJSON() as { request_id: string };
+    const requestId = visionRequestId(route);
     await route.fulfill({
-      json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("unclear") },
+      json: { request_id: requestId, model: "gpt-6-luna", observation: visionObservation("unclear") },
     });
   });
   await page.goto("/");
@@ -2113,9 +2128,9 @@ test("the second confirmation can be abandoned, and the override is offered for 
 test("the override texts exist in all six languages", async ({ page }) => {
   await enablePhotoCheck(page);
   await page.route("**/api/vision/analyze", async (route) => {
-    const body = route.request().postDataJSON() as { request_id: string };
+    const requestId = visionRequestId(route);
     await route.fulfill({
-      json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("other_object") },
+      json: { request_id: requestId, model: "gpt-6-luna", observation: visionObservation("other_object") },
     });
   });
   await page.goto("/");
@@ -2140,9 +2155,9 @@ test("the override texts exist in all six languages", async ({ page }) => {
 test("an unclear photo asks for a closer picture", async ({ page }) => {
   await enablePhotoCheck(page);
   await page.route("**/api/vision/analyze", async (route) => {
-    const body = route.request().postDataJSON() as { request_id: string };
+    const requestId = visionRequestId(route);
     await route.fulfill({
-      json: { request_id: body.request_id, model: "gpt-6-luna", observation: visionObservation("unclear") },
+      json: { request_id: requestId, model: "gpt-6-luna", observation: visionObservation("unclear") },
     });
   });
   await page.goto("/");

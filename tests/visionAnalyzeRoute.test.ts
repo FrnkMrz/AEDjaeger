@@ -109,7 +109,7 @@ function environment(database: D1Database, overrides: Partial<VisionRouteEnviron
 }
 
 function analysisRequest(
-  options: { cookie?: string; origin?: string; contentType?: string; body?: string } = {},
+  options: { cookie?: string; origin?: string; contentType?: string; requestId?: string; body?: BodyInit } = {},
 ): Request {
   return new Request("https://aedjaeger.test/api/vision/analyze", {
     method: "POST",
@@ -118,15 +118,10 @@ function analysisRequest(
         ? { Cookie: `aedjaeger_osm_session=${sessionToken}` }
         : { Cookie: options.cookie }),
       ...(options.origin === undefined ? { Origin: "https://aedjaeger.test" } : { Origin: options.origin }),
-      "Content-Type": options.contentType ?? "application/json",
+      "Content-Type": options.contentType ?? "image/jpeg",
+      "X-Request-Id": options.requestId ?? "request_1234567890",
     },
-    body:
-      options.body ??
-      JSON.stringify({
-        request_id: "request_1234567890",
-        content_type: "image/jpeg",
-        image_base64: btoa(String.fromCharCode(...imageBytes)),
-      }),
+    body: options.body ?? (imageBytes.slice().buffer as ArrayBuffer),
   });
 }
 
@@ -232,11 +227,7 @@ describe("protected image analysis route", () => {
   it("does not reserve cost or call OpenAI for malformed image bytes", async () => {
     const { database, calls } = createDatabase();
     const analyze = successfulAnalysis();
-    const body = JSON.stringify({
-      request_id: "request_1234567890",
-      content_type: "image/jpeg",
-      image_base64: btoa("no image"),
-    });
+    const body = new TextEncoder().encode("no image").buffer;
     const response = await handleVisionAnalysis(analysisRequest({ body }), environment(database), { analyze });
 
     expect(response.status).toBe(400);
@@ -249,16 +240,27 @@ describe("protected image analysis route", () => {
     const { database, calls } = createDatabase();
     const analyze = successfulAnalysis();
     const truncatedJpeg = Uint8Array.from([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x0b]);
-    const body = JSON.stringify({
-      request_id: "request_1234567890",
-      content_type: "image/jpeg",
-      image_base64: btoa(String.fromCharCode(...truncatedJpeg)),
-    });
+    const body = truncatedJpeg.buffer as ArrayBuffer;
     const response = await handleVisionAnalysis(analysisRequest({ body }), environment(database), { analyze });
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "invalid_image" });
     expect(calls.some((query) => query.includes("analysis_budget_reservations"))).toBe(false);
+    expect(analyze).not.toHaveBeenCalled();
+  });
+
+  it("requires a valid request ID before reading or processing the image", async () => {
+    const { database, calls } = createDatabase();
+    const analyze = successfulAnalysis();
+    const response = await handleVisionAnalysis(
+      analysisRequest({ requestId: "invalid" }),
+      environment(database),
+      { analyze },
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "invalid_request" });
+    expect(calls).toEqual([expect.stringContaining("FROM osm_sessions")]);
     expect(analyze).not.toHaveBeenCalled();
   });
 
@@ -299,11 +301,7 @@ describe("protected image analysis route", () => {
 
     const productionResponse = await handleVisionAnalysis(
       analysisRequest({
-        body: JSON.stringify({
-          request_id: "request_2234567890",
-          content_type: "image/jpeg",
-          image_base64: btoa(String.fromCharCode(...imageBytes)),
-        }),
+        requestId: "request_2234567890",
       }),
       environment(production.database),
       { analyze: successfulAnalysis() },
@@ -432,7 +430,7 @@ describe("protected image analysis route", () => {
     expect(body).not.toContain("/9j");
   });
 
-  it("allows only POST and JSON bodies", async () => {
+  it("allows only POST and supported image bodies, bounded by the raw image size", async () => {
     const { database } = createDatabase();
     const get = await handleVisionAnalysis(
       new Request("https://aedjaeger.test/api/vision/analyze"),
@@ -444,10 +442,11 @@ describe("protected image analysis route", () => {
       headers: {
         Cookie: `aedjaeger_osm_session=${sessionToken}`,
         Origin: "https://aedjaeger.test",
-        "Content-Type": "application/json",
+        "Content-Type": "image/jpeg",
+        "X-Request-Id": "request_1234567890",
         "Content-Length": String(13 * 1024 * 1024),
       },
-      body: "{}",
+      body: "x",
     });
     const tooLarge = await handleVisionAnalysis(oversized, environment(database));
 
