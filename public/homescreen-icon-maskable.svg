@@ -10,10 +10,10 @@
     <path d="M365 83h18v18h18v18h-18v18h-18v-18h-18v-18h18Z" fill="#fff"/>
   <!-- Layered sight rings and axes echo the Hydrantenjaeger search reticle. -->
   <g fill="none" stroke="#f0df78" stroke-linecap="round">
-    <path d="M44 256h424 M256 44v424" stroke-width="5"/>
-    <circle cx="256" cy="256" r="204" stroke-width="7"/>
+    <path d="M44 256h102 M366 256h102 M256 44v102 M256 366v102" stroke-width="5"/>
+    <circle cx="256" cy="256" r="204" stroke-width="9"/>
     <circle cx="256" cy="256" r="166" stroke-width="5"/>
-    <circle cx="256" cy="256" r="128" stroke-width="4"/>
+    <circle cx="256" cy="256" r="128" stroke-width="9"/>
   </g>
   <g fill="#f0df78">
     <circle cx="256" cy="52" r="5"/><circle cx="460" cy="256" r="5"/>
