@@ -3,6 +3,11 @@ import { expect, test } from "@playwright/test";
 const languageCodes = ["de", "en", "pl", "ja", "fr", "es"];
 const testDevelopmentOwnerHash = "a".repeat(64);
 
+function requireValue<T>(value: T | null | undefined, description: string): T {
+  if (value === null || value === undefined) throw new Error(`${description} was not available`);
+  return value;
+}
+
 // Most workflow tests exercise the signed-in app; individual access-control tests override this.
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/auth/session", (route) =>
@@ -23,7 +28,7 @@ test("serves the app with security headers while photo preview and service worke
 }) => {
   const response = await page.goto("/");
   expect(response).not.toBeNull();
-  const headers = response!.headers();
+  const headers = requireValue(response, "The app navigation response").headers();
   expect(headers["content-security-policy"]).toContain("default-src 'self'");
   expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
   expect(headers["strict-transport-security"]).toContain("max-age=31536000");
@@ -248,7 +253,8 @@ test("a fresh camera photo without EXIF date skips the observation-date question
     );
     const transfer = new DataTransfer();
     transfer.items.add(file);
-    const input = document.querySelector<HTMLInputElement>("#camera-input")!;
+    const input = document.querySelector<HTMLInputElement>("#camera-input");
+    if (!input) throw new Error("The camera input should be rendered.");
     input.files = transfer.files;
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
@@ -274,7 +280,8 @@ test("a fresh file chosen from the gallery without EXIF date still asks for the 
     );
     const transfer = new DataTransfer();
     transfer.items.add(file);
-    const input = document.querySelector<HTMLInputElement>("#file-input")!;
+    const input = document.querySelector<HTMLInputElement>("#file-input");
+    if (!input) throw new Error("The file input should be rendered.");
     input.files = transfer.files;
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
@@ -395,7 +402,7 @@ test("a user-confirmed location search shows nearby candidates without writing t
   const readMapZoom = async () => {
     const source = await page.locator("#candidate-overview-map .position-map-tiles img").first().getAttribute("src");
     expect(source).not.toBeNull();
-    return Number(new URL(source!).pathname.split("/")[1]);
+    return Number(new URL(requireValue(source, "The candidate map tile source")).pathname.split("/")[1]);
   };
   const zoomBeforeKey = await readMapZoom();
   await page.keyboard.press("-");
@@ -483,7 +490,7 @@ test("retry keeps an explicitly chosen map location instead of silently switchin
   for (let zoom = 0; zoom < 9; zoom += 1) await page.getByRole("button", { name: "Karte vergrößern" }).click();
   await map.focus();
   await page.keyboard.press("ArrowRight");
-  const selectedCoordinates = await page.locator("#search-location-coordinates").innerText();
+  const selectedCoordinates = await page.locator("#search-location-coordinates").textContent();
   await page.locator('[data-action="confirm-map-location"]').click();
   await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Standort und AEDs erneut suchen" })).toBeVisible();
@@ -493,7 +500,7 @@ test("retry keeps an explicitly chosen map location instead of silently switchin
   expect(requests).toHaveLength(2);
   expect(requests[0]).toEqual(requests[1]);
   expect(`${requests[0].latitude.toFixed(5)}, ${requests[0].longitude.toFixed(5)}`).toBe(
-    selectedCoordinates.match(/-?\d+\.\d{5}, -?\d+\.\d{5}/u)?.[0],
+    requireValue(selectedCoordinates, "The selected map coordinates").match(/-?\d+\.\d{5}, -?\d+\.\d{5}/u)?.[0],
   );
 });
 
@@ -1132,7 +1139,7 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
     .first()
     .getAttribute("src");
   expect(zoomAfterPinch).not.toBeNull();
-  expect(Number(new URL(zoomAfterPinch!).pathname.split("/")[1])).toBeLessThan(19);
+  expect(Number(new URL(requireValue(zoomAfterPinch, "The new-entry map tile source")).pathname.split("/")[1])).toBeLessThan(19);
   await expect(page.locator("#new-aed-position-confirmed")).toBeChecked();
 
   await page.locator("#new-aed-position-map").evaluate((element) => {
@@ -1187,7 +1194,8 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   await expect(createButton).toBeDisabled();
   // Auch ein erzwungener Klick ohne Haken darf nichts senden.
   await page.evaluate(() => {
-    const button = document.querySelector<HTMLButtonElement>('[data-action="create-development-node"]')!;
+    const button = document.querySelector<HTMLButtonElement>('[data-action="create-development-node"]');
+    if (!button) throw new Error("The development-node action should be rendered.");
     button.disabled = false;
     button.click();
   });
@@ -1919,7 +1927,8 @@ test("service worker activation removes obsolete AEDjaeger shell caches", async 
 test("the muted text and version footer use the accessible contrast colors", async ({ page }) => {
   await page.goto("/");
   const styles = await page.evaluate(() => {
-    const version = document.querySelector(".build-mark")!;
+    const version = document.querySelector(".build-mark");
+    if (!version) throw new Error("The build version label should be rendered.");
     return {
       muted: getComputedStyle(document.documentElement).getPropertyValue("--muted").trim(),
       versionColor: getComputedStyle(version).color,
@@ -2440,7 +2449,9 @@ test("the lamp label and the logout section exist in all six languages", async (
     const dialog = page.getByRole("dialog");
     await expect(dialog.locator("#osm-sign-out")).toBeVisible();
     // Lampe und Abschnitt im Info-Dialog nennen denselben Status in derselben Sprache.
-    expect(label).toBe((await dialog.locator(".account-section h3").innerText()).trim());
+    expect(label).toBe(
+      requireValue(await dialog.locator(".account-section h3").textContent(), "The account status heading").trim(),
+    );
     await page.keyboard.press("Escape");
   }
 });
@@ -2577,7 +2588,8 @@ async function takeFreshCameraPhotoWithoutGps(page: import("@playwright/test").P
     );
     const transfer = new DataTransfer();
     transfer.items.add(file);
-    const input = document.querySelector<HTMLInputElement>("#camera-input")!;
+    const input = document.querySelector<HTMLInputElement>("#camera-input");
+    if (!input) throw new Error("The camera input should be rendered.");
     input.files = transfer.files;
     input.dispatchEvent(new Event("change", { bubbles: true }));
   }, ageMs);
@@ -2849,16 +2861,18 @@ test("the connection lamp sits in the header next to the name, on every screen",
   await expect(lamp).toBeVisible();
   // Ganz oben und neben dem Namen, nicht in der Fußzeile.
   const box = await lamp.boundingBox();
-  expect(box!.y).toBeLessThan(80);
+  expect(requireValue(box, "The header status lamp bounding box").y).toBeLessThan(80);
   await expect(page.locator("footer .connection-lamp")).toHaveCount(0);
   const brandBox = await page.locator(".brand").boundingBox();
-  expect(box!.x).toBeGreaterThan(brandBox!.x + brandBox!.width - 1);
+  const headerBox = requireValue(box, "The header status lamp bounding box");
+  const brandBoundingBox = requireValue(brandBox, "The brand bounding box");
+  expect(headerBox.x).toBeGreaterThan(brandBoundingBox.x + brandBoundingBox.width - 1);
 
   // Auch auf einer längeren Seite bleibt sie an derselben Stelle der Kopfzeile.
   await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
   await expect(page.locator('[data-action="confirm-sighting"]')).toBeVisible();
   await expect(lamp).toBeVisible();
-  expect((await lamp.boundingBox())!.y).toBeLessThan(80);
+  expect(requireValue(await lamp.boundingBox(), "The header status lamp bounding box").y).toBeLessThan(80);
 });
 
 test("the header with the lamp fits a narrow phone screen in all six languages", async ({ page }) => {
@@ -2867,14 +2881,16 @@ test("the header with the lamp fits a narrow phone screen in all six languages",
   for (const code of languageCodes) {
     await page.locator("#language").selectOption(code);
     const box = await page.locator("header .connection-lamp").boundingBox();
-    expect(box!.x + box!.width, `Lampe in ${code} im Bild`).toBeLessThanOrEqual(320);
+    const lampBox = requireValue(box, `Die Lampe in ${code}`);
+    expect(lampBox.x + lampBox.width, `Lampe in ${code} im Bild`).toBeLessThanOrEqual(320);
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `Überlauf in ${code}`).toBeLessThanOrEqual(
       320,
     );
     // Die Lampe überlappt weder den Namen noch die Info-Schaltfläche.
     const infoBox = await page.locator("#open-info").boundingBox();
     // Mindestens 12 px Luft: Die Schrift eines echten Geräts kann breiter sein als die der Testumgebung.
-    expect(box!.x + box!.width + 12, `Abstand Lampe zu Info in ${code}`).toBeLessThanOrEqual(infoBox!.x);
+    const infoBoundingBox = requireValue(infoBox, `Die Info-Schaltfläche in ${code}`);
+    expect(lampBox.x + lampBox.width + 12, `Abstand Lampe zu Info in ${code}`).toBeLessThanOrEqual(infoBoundingBox.x);
   }
 });
 
@@ -2885,7 +2901,9 @@ test("the header keeps clear of the iPhone status bar and Dynamic Island", async
   await page.evaluate(() => document.documentElement.style.setProperty("--safe-top", "59px"));
   for (const selector of [".brand", "header .connection-lamp", "#open-info"]) {
     const box = await page.locator(selector).boundingBox();
-    expect(box!.y, `${selector} unter der Statusleiste`).toBeGreaterThanOrEqual(59);
+    expect(requireValue(box, `Das Element ${selector}`).y, `${selector} unter der Statusleiste`).toBeGreaterThanOrEqual(
+      59,
+    );
   }
 });
 
@@ -2977,10 +2995,12 @@ test("the lamp tap area is large enough for a finger but does not push the heade
   await page.goto("/");
   const button = await page.locator("#connection-lamp").boundingBox();
   const dot = await page.locator("header .connection-lamp").boundingBox();
-  expect(button!.width).toBeGreaterThanOrEqual(44);
-  expect(button!.height).toBeGreaterThanOrEqual(44);
+  const buttonBox = requireValue(button, "The connection lamp button");
+  const dotBox = requireValue(dot, "The visible connection lamp");
+  expect(buttonBox.width).toBeGreaterThanOrEqual(44);
+  expect(buttonBox.height).toBeGreaterThanOrEqual(44);
   // Die Tippfläche liegt mittig um den sichtbaren Punkt.
-  expect(Math.abs(button!.x + button!.width / 2 - (dot!.x + dot!.width / 2))).toBeLessThan(1);
+  expect(Math.abs(buttonBox.x + buttonBox.width / 2 - (dotBox.x + dotBox.width / 2))).toBeLessThan(1);
 });
 
 test("signing out really signs out: if the server still reports a session, the app shows an error instead of staying signed in", async ({
@@ -3108,8 +3128,9 @@ test("the footer with the build number fits a narrow phone screen in all six lan
   for (const code of languageCodes) {
     await page.locator("#language").selectOption(code);
     const mark = await page.locator("footer #build-mark").boundingBox();
-    expect(mark!.x, `Nummer links im Bild (${code})`).toBeGreaterThanOrEqual(0);
-    expect(mark!.x + mark!.width, `Nummer rechts im Bild (${code})`).toBeLessThanOrEqual(320);
+    const markBox = requireValue(mark, `Die Versionsnummer in ${code}`);
+    expect(markBox.x, `Nummer links im Bild (${code})`).toBeGreaterThanOrEqual(0);
+    expect(markBox.x + markBox.width, `Nummer rechts im Bild (${code})`).toBeLessThanOrEqual(320);
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `Überlauf in ${code}`).toBeLessThanOrEqual(
       320,
     );
@@ -4012,7 +4033,8 @@ test("the detail form fits a 320 px phone in all six languages with the main but
     await page.evaluate(() => window.scrollTo(0, 0));
     const footerBox = await page.locator("#detail-continue").boundingBox();
     expect(footerBox, `main button visible in ${language}`).not.toBeNull();
-    expect(footerBox!.y + footerBox!.height, `main button inside the viewport in ${language}`).toBeLessThanOrEqual(640);
+    const buttonBox = requireValue(footerBox, `Der Hauptknopf in ${language}`);
+    expect(buttonBox.y + buttonBox.height, `main button inside the viewport in ${language}`).toBeLessThanOrEqual(640);
   }
 });
 
@@ -4350,7 +4372,8 @@ test("with corrections allowed the form is prefilled, shows the old value of eve
   const save = page.getByRole("button", { name: "Testserver: Änderungen speichern" });
   await expect(save).toBeDisabled();
   await page.evaluate(() => {
-    const button = document.querySelector<HTMLButtonElement>('[data-action="save-development-check"]')!;
+    const button = document.querySelector<HTMLButtonElement>('[data-action="save-development-check"]');
+    if (!button) throw new Error("The save action should be rendered.");
     button.disabled = false;
     button.click();
   });
@@ -4623,8 +4646,9 @@ test("the tag button in the list fits a 320 px phone in all six languages", asyn
     const buttons = page.locator('.candidate-item [data-action="open-candidate-details"]');
     await expect(buttons).toHaveCount(1);
     const box = await buttons.boundingBox();
-    expect(box!.x + box!.width, `button beyond the screen in ${language}`).toBeLessThanOrEqual(320);
-    expect(box!.height, `touch target in ${language}`).toBeGreaterThanOrEqual(44);
+    const buttonBox = requireValue(box, `The candidate-details button in ${language}`);
+    expect(buttonBox.x + buttonBox.width, `button beyond the screen in ${language}`).toBeLessThanOrEqual(320);
+    expect(buttonBox.height, `touch target in ${language}`).toBeGreaterThanOrEqual(44);
   }
 });
 

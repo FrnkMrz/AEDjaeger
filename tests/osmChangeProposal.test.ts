@@ -171,7 +171,7 @@ describe("OSM change previews", () => {
         ...newAedInput,
         assessmentKind: "candidate-review",
         searchCandidates: candidates,
-        confirmedDifferentCandidateIds: [candidates[0]!.id],
+        confirmedDifferentCandidateIds: [nodeCandidate.id],
       }),
     ).toEqual({ kind: "blocked", reason: "search-found-candidate" });
   });

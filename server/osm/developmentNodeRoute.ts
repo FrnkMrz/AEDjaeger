@@ -46,7 +46,7 @@ export async function handleDevelopmentNodeRead(
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
-  if (!session || session.environment !== "development")
+  if (session?.environment !== "development")
     return jsonResponse({ error: "development_session_required" }, 403);
 
   const id = url.searchParams.get("id");
