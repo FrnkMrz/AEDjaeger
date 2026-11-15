@@ -5,6 +5,7 @@ import {
   enablePhotoCheck,
   takeFreshCameraPhotoWithoutGps,
   setUpFailingFirstSearch,
+  requireValue,
 } from "./support";
 
 test.beforeEach(async ({ page }) => {
@@ -26,7 +27,7 @@ test("serves the app with security headers while photo preview and service worke
 }) => {
   const response = await page.goto("/");
   expect(response).not.toBeNull();
-  const headers = response!.headers();
+  const headers = requireValue(response, "The app navigation response").headers();
   expect(headers["content-security-policy"]).toContain("default-src 'self'");
   expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
   expect(headers["strict-transport-security"]).toContain("max-age=31536000");
@@ -82,7 +83,8 @@ test("a fresh camera photo without EXIF date skips the observation-date question
     );
     const transfer = new DataTransfer();
     transfer.items.add(file);
-    const input = document.querySelector<HTMLInputElement>("#camera-input")!;
+    const input = document.querySelector<HTMLInputElement>("#camera-input");
+    if (!input) throw new Error("The camera input should be rendered.");
     input.files = transfer.files;
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
@@ -108,7 +110,8 @@ test("a fresh file chosen from the gallery without EXIF date still asks for the 
     );
     const transfer = new DataTransfer();
     transfer.items.add(file);
-    const input = document.querySelector<HTMLInputElement>("#file-input")!;
+    const input = document.querySelector<HTMLInputElement>("#file-input");
+    if (!input) throw new Error("The file input should be rendered.");
     input.files = transfer.files;
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { languageCodes, beginNearbySearch } from "./support";
+import { languageCodes, beginNearbySearch, requireValue } from "./support";
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/auth/session", (route) =>
@@ -330,7 +330,9 @@ test("the lamp label and the logout section exist in all six languages", async (
     const dialog = page.getByRole("dialog");
     await expect(dialog.locator("#osm-sign-out")).toBeVisible();
     // Lampe und Abschnitt im Info-Dialog nennen denselben Status in derselben Sprache.
-    expect(label).toBe((await dialog.locator(".account-section h3").innerText()).trim());
+    expect(label).toBe(
+      requireValue(await dialog.locator(".account-section h3").textContent(), "The account status heading").trim(),
+    );
     await page.keyboard.press("Escape");
   }
 });
@@ -341,16 +343,18 @@ test("the connection lamp sits in the header next to the name, on every screen",
   await expect(lamp).toBeVisible();
   // Ganz oben und neben dem Namen, nicht in der Fußzeile.
   const box = await lamp.boundingBox();
-  expect(box!.y).toBeLessThan(80);
+  expect(requireValue(box, "The header status lamp bounding box").y).toBeLessThan(80);
   await expect(page.locator("footer .connection-lamp")).toHaveCount(0);
   const brandBox = await page.locator(".brand").boundingBox();
-  expect(box!.x).toBeGreaterThan(brandBox!.x + brandBox!.width - 1);
+  const headerBox = requireValue(box, "The header status lamp bounding box");
+  const brandBoundingBox = requireValue(brandBox, "The brand bounding box");
+  expect(headerBox.x).toBeGreaterThan(brandBoundingBox.x + brandBoundingBox.width - 1);
 
   // Auch auf einer längeren Seite bleibt sie an derselben Stelle der Kopfzeile.
   await page.locator("#file-input").setInputFiles("tests/fixtures/photo-with-gps.jpg");
   await expect(page.locator('[data-action="confirm-sighting"]')).toBeVisible();
   await expect(lamp).toBeVisible();
-  expect((await lamp.boundingBox())!.y).toBeLessThan(80);
+  expect(requireValue(await lamp.boundingBox(), "The header status lamp bounding box").y).toBeLessThan(80);
 });
 
 test("the header with the lamp fits a narrow phone screen in all six languages", async ({ page }) => {
@@ -359,14 +363,16 @@ test("the header with the lamp fits a narrow phone screen in all six languages",
   for (const code of languageCodes) {
     await page.locator("#language").selectOption(code);
     const box = await page.locator("header .connection-lamp").boundingBox();
-    expect(box!.x + box!.width, `Lampe in ${code} im Bild`).toBeLessThanOrEqual(320);
+    const lampBox = requireValue(box, `Die Lampe in ${code}`);
+    expect(lampBox.x + lampBox.width, `Lampe in ${code} im Bild`).toBeLessThanOrEqual(320);
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `Überlauf in ${code}`).toBeLessThanOrEqual(
       320,
     );
     // Die Lampe überlappt weder den Namen noch die Info-Schaltfläche.
     const infoBox = await page.locator("#open-info").boundingBox();
     // Mindestens 12 px Luft: Die Schrift eines echten Geräts kann breiter sein als die der Testumgebung.
-    expect(box!.x + box!.width + 12, `Abstand Lampe zu Info in ${code}`).toBeLessThanOrEqual(infoBox!.x);
+    const infoBoundingBox = requireValue(infoBox, `Die Info-Schaltfläche in ${code}`);
+    expect(lampBox.x + lampBox.width + 12, `Abstand Lampe zu Info in ${code}`).toBeLessThanOrEqual(infoBoundingBox.x);
   }
 });
 
@@ -458,10 +464,12 @@ test("the lamp tap area is large enough for a finger but does not push the heade
   await page.goto("/");
   const button = await page.locator("#connection-lamp").boundingBox();
   const dot = await page.locator("header .connection-lamp").boundingBox();
-  expect(button!.width).toBeGreaterThanOrEqual(44);
-  expect(button!.height).toBeGreaterThanOrEqual(44);
+  const buttonBox = requireValue(button, "The connection lamp button");
+  const dotBox = requireValue(dot, "The visible connection lamp");
+  expect(buttonBox.width).toBeGreaterThanOrEqual(44);
+  expect(buttonBox.height).toBeGreaterThanOrEqual(44);
   // Die Tippfläche liegt mittig um den sichtbaren Punkt.
-  expect(Math.abs(button!.x + button!.width / 2 - (dot!.x + dot!.width / 2))).toBeLessThan(1);
+  expect(Math.abs(buttonBox.x + buttonBox.width / 2 - (dotBox.x + dotBox.width / 2))).toBeLessThan(1);
 });
 
 test("signing out really signs out: if the server still reports a session, the app shows an error instead of staying signed in", async ({

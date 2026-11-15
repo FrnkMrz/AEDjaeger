@@ -8,6 +8,7 @@ import {
   knownNode,
   correctButton,
   detailsFromList,
+  requireValue,
 } from "./support";
 
 test.beforeEach(async ({ page }) => {
@@ -211,7 +212,8 @@ test("the detail form fits a 320 px phone in all six languages with the main but
     await page.evaluate(() => window.scrollTo(0, 0));
     const footerBox = await page.locator("#detail-continue").boundingBox();
     expect(footerBox, `main button visible in ${language}`).not.toBeNull();
-    expect(footerBox!.y + footerBox!.height, `main button inside the viewport in ${language}`).toBeLessThanOrEqual(640);
+    const buttonBox = requireValue(footerBox, `Der Hauptknopf in ${language}`);
+    expect(buttonBox.y + buttonBox.height, `main button inside the viewport in ${language}`).toBeLessThanOrEqual(640);
   }
 });
 
@@ -368,7 +370,8 @@ test("with corrections allowed the form is prefilled, shows the old value of eve
   const save = page.getByRole("button", { name: "Testserver: Änderungen speichern" });
   await expect(save).toBeDisabled();
   await page.evaluate(() => {
-    const button = document.querySelector<HTMLButtonElement>('[data-action="save-development-check"]')!;
+    const button = document.querySelector<HTMLButtonElement>('[data-action="save-development-check"]');
+    if (!button) throw new Error("The save action should be rendered.");
     button.disabled = false;
     button.click();
   });
@@ -550,8 +553,9 @@ test("the tag button in the list fits a 320 px phone in all six languages", asyn
     const buttons = page.locator('.candidate-item [data-action="open-candidate-details"]');
     await expect(buttons).toHaveCount(1);
     const box = await buttons.boundingBox();
-    expect(box!.x + box!.width, `button beyond the screen in ${language}`).toBeLessThanOrEqual(320);
-    expect(box!.height, `touch target in ${language}`).toBeGreaterThanOrEqual(44);
+    const buttonBox = requireValue(box, `The candidate-details button in ${language}`);
+    expect(buttonBox.x + buttonBox.width, `button beyond the screen in ${language}`).toBeLessThanOrEqual(320);
+    expect(buttonBox.height, `touch target in ${language}`).toBeGreaterThanOrEqual(44);
   }
 });
 

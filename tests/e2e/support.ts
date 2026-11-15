@@ -5,6 +5,11 @@ export const languageCodes = ["de", "en", "pl", "ja", "fr", "es"];
 
 export const testDevelopmentOwnerHash = "a".repeat(64);
 
+export function requireValue<T>(value: T | null | undefined, description: string): T {
+  if (value === null || value === undefined) throw new Error(`${description} was not available`);
+  return value;
+}
+
 export async function beginNearbySearch(page: import("@playwright/test").Page): Promise<void> {
   const sighting = page.locator('[data-action="confirm-sighting"]');
   if (await sighting.isVisible()) await sighting.click();
@@ -58,7 +63,8 @@ export async function takeFreshCameraPhotoWithoutGps(page: import("@playwright/t
     );
     const transfer = new DataTransfer();
     transfer.items.add(file);
-    const input = document.querySelector<HTMLInputElement>("#camera-input")!;
+    const input = document.querySelector<HTMLInputElement>("#camera-input");
+    if (!input) throw new Error("The camera input should be rendered.");
     input.files = transfer.files;
     input.dispatchEvent(new Event("change", { bubbles: true }));
   }, ageMs);

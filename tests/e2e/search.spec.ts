@@ -6,6 +6,7 @@ import {
   takeFreshCameraPhotoWithoutGps,
   setUpFailingFirstSearch,
   openCandidateList,
+  requireValue,
 } from "./support";
 
 test.beforeEach(async ({ page }) => {
@@ -90,7 +91,7 @@ test("a user-confirmed location search shows nearby candidates without writing t
   const readMapZoom = async () => {
     const source = await page.locator("#candidate-overview-map .position-map-tiles img").first().getAttribute("src");
     expect(source).not.toBeNull();
-    return Number(new URL(source!).pathname.split("/")[1]);
+    return Number(new URL(requireValue(source, "The candidate map tile source")).pathname.split("/")[1]);
   };
   const zoomBeforeKey = await readMapZoom();
   await page.keyboard.press("-");
@@ -150,7 +151,7 @@ test("retry keeps an explicitly chosen map location instead of silently switchin
   for (let zoom = 0; zoom < 9; zoom += 1) await page.getByRole("button", { name: "Karte vergrößern" }).click();
   await map.focus();
   await page.keyboard.press("ArrowRight");
-  const selectedCoordinates = await page.locator("#search-location-coordinates").innerText();
+  const selectedCoordinates = await page.locator("#search-location-coordinates").textContent();
   await page.locator('[data-action="confirm-map-location"]').click();
   await expect(page.getByRole("heading", { name: "AED-Suche in der Umgebung" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Standort und AEDs erneut suchen" })).toBeVisible();
@@ -160,7 +161,7 @@ test("retry keeps an explicitly chosen map location instead of silently switchin
   expect(requests).toHaveLength(2);
   expect(requests[0]).toEqual(requests[1]);
   expect(`${requests[0].latitude.toFixed(5)}, ${requests[0].longitude.toFixed(5)}`).toBe(
-    selectedCoordinates.match(/-?\d+\.\d{5}, -?\d+\.\d{5}/u)?.[0],
+    requireValue(selectedCoordinates, "The selected map coordinates").match(/-?\d+\.\d{5}, -?\d+\.\d{5}/u)?.[0],
   );
 });
 
@@ -292,7 +293,7 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
     .first()
     .getAttribute("src");
   expect(zoomAfterPinch).not.toBeNull();
-  expect(Number(new URL(zoomAfterPinch!).pathname.split("/")[1])).toBeLessThan(19);
+  expect(Number(new URL(requireValue(zoomAfterPinch, "The new-entry map tile source")).pathname.split("/")[1])).toBeLessThan(19);
   await expect(page.locator("#new-aed-position-confirmed")).toBeChecked();
 
   await page.locator("#new-aed-position-map").evaluate((element) => {
@@ -347,7 +348,8 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   await expect(createButton).toBeDisabled();
   // Auch ein erzwungener Klick ohne Haken darf nichts senden.
   await page.evaluate(() => {
-    const button = document.querySelector<HTMLButtonElement>('[data-action="create-development-node"]')!;
+    const button = document.querySelector<HTMLButtonElement>('[data-action="create-development-node"]');
+    if (!button) throw new Error("The development-node action should be rendered.");
     button.disabled = false;
     button.click();
   });

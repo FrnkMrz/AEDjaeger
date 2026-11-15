@@ -10,6 +10,7 @@ import {
   knownNode,
   correctButton,
   detailsFromList,
+  requireValue,
 } from "./support";
 
 test.beforeEach(async ({ page }) => {
@@ -183,7 +184,8 @@ test("service worker activation removes obsolete AEDjaeger shell caches", async 
 test("the muted text and version footer use the accessible contrast colors", async ({ page }) => {
   await page.goto("/");
   const styles = await page.evaluate(() => {
-    const version = document.querySelector(".build-mark")!;
+    const version = document.querySelector(".build-mark");
+    if (!version) throw new Error("The build version label should be rendered.");
     return {
       muted: getComputedStyle(document.documentElement).getPropertyValue("--muted").trim(),
       versionColor: getComputedStyle(version).color,
@@ -351,7 +353,9 @@ test("the header keeps clear of the iPhone status bar and Dynamic Island", async
   await page.evaluate(() => document.documentElement.style.setProperty("--safe-top", "59px"));
   for (const selector of [".brand", "header .connection-lamp", "#open-info"]) {
     const box = await page.locator(selector).boundingBox();
-    expect(box!.y, `${selector} unter der Statusleiste`).toBeGreaterThanOrEqual(59);
+    expect(requireValue(box, `Das Element ${selector}`).y, `${selector} unter der Statusleiste`).toBeGreaterThanOrEqual(
+      59,
+    );
   }
 });
 
@@ -409,8 +413,9 @@ test("the footer with the build number fits a narrow phone screen in all six lan
   for (const code of languageCodes) {
     await page.locator("#language").selectOption(code);
     const mark = await page.locator("footer #build-mark").boundingBox();
-    expect(mark!.x, `Nummer links im Bild (${code})`).toBeGreaterThanOrEqual(0);
-    expect(mark!.x + mark!.width, `Nummer rechts im Bild (${code})`).toBeLessThanOrEqual(320);
+    const markBox = requireValue(mark, `Die Versionsnummer in ${code}`);
+    expect(markBox.x, `Nummer links im Bild (${code})`).toBeGreaterThanOrEqual(0);
+    expect(markBox.x + markBox.width, `Nummer rechts im Bild (${code})`).toBeLessThanOrEqual(320);
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `Überlauf in ${code}`).toBeLessThanOrEqual(
       320,
     );
