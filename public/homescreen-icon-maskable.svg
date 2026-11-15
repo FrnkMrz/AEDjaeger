@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
   <title id="title">AEDjaeger Homescreen-Symbol</title>
   <!-- Maki defibrillator by Mapbox, CC0 1.0: https://github.com/mapbox/maki/blob/main/icons/defibrillator.svg; Fadenkreuz-Ergänzung für AEDjaeger. -->
-  <rect width="512" height="512" fill="#176b4b"/>
+  <rect width="512" height="512" fill="#008E5E"/>
   <defs>
     <filter id="reticleGlow" x="-35%" y="-35%" width="170%" height="170%">
       <feGaussianBlur stdDeviation="5" result="softGlow"/>
@@ -26,5 +26,7 @@
     <circle cx="112" cy="400" r="3.5"/><circle cx="400" cy="400" r="3.5"/>
   </g>
 
+  <!-- Distinct medical plus in the upper-right, inside the maskable safe area. -->
+    <path d="M365 83h18v18h18v18h-18v18h-18v-18h-18v-18h18Z" fill="#fff"/>
   </g>
 </svg>
