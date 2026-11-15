@@ -37,8 +37,8 @@ describe("account search cooldown", () => {
       reserved: true,
       nextAllowedAt: 31_000,
     });
-    expect(calls[0].query).toContain("DELETE FROM static_search_cooldowns WHERE next_allowed_at <= ?");
-    expect(calls[1].query).toContain("INSERT INTO static_search_cooldowns");
+    expect(calls[0].query).toContain("DELETE FROM overpass_search_cooldowns WHERE next_allowed_at <= ?");
+    expect(calls[1].query).toContain("INSERT INTO overpass_search_cooldowns");
     expect(calls[1].query).toContain("osm_subject_hash");
     expect(calls[1].query).toContain("next_allowed_at <= ?");
     expect(calls[1].values).toEqual([expect.stringMatching(/^[a-f0-9]{64}$/u), 31_000, 1_000]);

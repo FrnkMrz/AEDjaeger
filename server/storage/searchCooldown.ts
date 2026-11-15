@@ -18,23 +18,23 @@ export async function reserveSearchSlot(
     throw new Error("Search cooldown cannot be prepared safely.");
   const hash = await hashSubject(userId);
   const cleanup = await database
-    .prepare("DELETE FROM static_search_cooldowns WHERE next_allowed_at <= ?")
+    .prepare("DELETE FROM overpass_search_cooldowns WHERE next_allowed_at <= ?")
     .bind(now)
     .run();
   if (!cleanup.success) throw new Error("Search cooldown cleanup failed");
   const result: D1Result<unknown> = await database
     .prepare(
-      `INSERT INTO static_search_cooldowns (osm_subject_hash, next_allowed_at)
+      `INSERT INTO overpass_search_cooldowns (osm_subject_hash, next_allowed_at)
      VALUES (?, ?)
      ON CONFLICT (osm_subject_hash) DO UPDATE SET next_allowed_at = excluded.next_allowed_at
-     WHERE static_search_cooldowns.next_allowed_at <= ?`,
+     WHERE overpass_search_cooldowns.next_allowed_at <= ?`,
     )
     .bind(hash, now + SEARCH_INTERVAL_MS, now)
     .run();
   if (!result.success) throw new Error("Search cooldown reservation failed");
   if ((result.meta?.changes ?? 0) === 1) return { reserved: true, nextAllowedAt: now + SEARCH_INTERVAL_MS };
   const existing = await database
-    .prepare("SELECT next_allowed_at FROM static_search_cooldowns WHERE osm_subject_hash = ?")
+    .prepare("SELECT next_allowed_at FROM overpass_search_cooldowns WHERE osm_subject_hash = ?")
     .bind(hash)
     .first<{ next_allowed_at: number }>();
   if (!existing || !Number.isSafeInteger(existing.next_allowed_at)) return { reserved: false, retryAfterSeconds: 0 };
