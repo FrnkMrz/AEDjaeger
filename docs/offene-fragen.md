@@ -4,6 +4,10 @@ Stand: **15.11.2026**. Gemergt sind der Detailweg (P0 bis P5, PR #77), die Detai
 
 **Nächste Abnahmen, in Reihenfolge:** (1) den historischen unklaren Testserver-Vorgang `725093` / Node `4365809370` abgleichen, bevor eine weitere Neuanlage versucht wird; (2) die noch offenen iPhone-Abläufe aus Abschnitt A und B5 (zweite Koordinate) erledigen, damit die Voraussetzungen aus Abschnitt C erfüllt sind; (3) C0.6–C0.8 abschließen und danach den bereits freigegebenen kontrollierten OSM-Dev-Schreibtest C1–C6 durchführen (den Schalter setzt und entfernt ausschließlich der Projektinhaber); (4) den Detailweg-Test D1–D7 ausführen; (5) Rate-Limit-Regel, übrige PWA-/Sprach- und Screenreader-Prüfungen abschließen. Für `v0.1.0` gelten zusätzlich die Android-Anforderung und alle Kriterien aus Abschnitt E der Pilot-Abnahme.
 
+## D1-Migrationsnamen und Suchbremse
+
+Die historischen Präfixe `0002` und `0003` kommen jeweils zweimal vor. Die vollständigen Dateinamen sind unterschiedlich und stehen bereits im D1-Migrationsjournal; sie dürfen nicht umbenannt oder neu nummeriert werden, weil der Deploy-Schutz Dateinamen exakt vergleicht. Neue Migrationen beginnen deshalb mit der eindeutigen Nummer `0012`. Die Migration `0012_static_search_cooldown.sql` benennt die Tabelle für Suchdrosselungen in `static_search_cooldowns` um und erhält dabei Konto-Hashes sowie Ablaufzeiten. Sie muss vor dem zugehörigen Deploy manuell angewendet werden; der Workflow führt Migrationen nicht selbst aus.
+
 ## Produktions-Schreibweg (P9)
 
 Der ausführliche Entwurf steht in [Produktion-OSM](produktion-osm.md); die Dokumentation ist mit PR #100 gemergt. **P9 ist als Entwurf abgeschlossen, Produktionsschreiben ist weder implementiert noch freigegeben.** Vor jeder Implementierung bleiben die zehn Entscheidungen in Abschnitt 13 von `produktion-osm.md` offen, insbesondere Suchvollständigkeit, Community-Rückmeldung zu Changeset-Metadaten/`source=survey`, Limits, Aufbewahrung, Pilotumfang und Freigabekriterien. Produktionsschreibzugriffe und echte OSM-Schreibtests bleiben deaktiviert.
