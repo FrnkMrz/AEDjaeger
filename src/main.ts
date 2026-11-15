@@ -48,6 +48,7 @@ import { ExistingNodeError, requestExistingNode } from "./osm/existingNode";
 import { sendDevelopmentWrite } from "./net/developmentWrite";
 import { createPhotoSessionState } from "./state/photoSession";
 import { handleCandidateAction } from "./ui/actions/candidateActions";
+import { handleDevelopmentWriteAction } from "./ui/actions/developmentWriteActions";
 import { handleExistingDetailsAction } from "./ui/actions/existingDetailsActions";
 import { handleNewEntryAction } from "./ui/actions/newEntryActions";
 import { dispatchPhotoLocationAction } from "./ui/actions/photoLocationActions";
@@ -1899,149 +1900,43 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     return;
   }
 
-  if (action === "continue-recovery" && pendingDevelopmentWrite && accountState !== "signed-in") {
-    // A pending write can only be reconciled under the same test-server session that created it.
-    // Continue starts that OAuth flow directly, even if session status has not finished loading yet.
-    window.location.assign("/api/auth/osm/development/start");
+  const developmentWriteActionResult = await handleDevelopmentWriteAction(action, {
+    state,
+    setState: (nextState) => {
+      state = nextState;
+    },
+    developmentSession,
+    developmentWriteAvailable,
+    developmentWriteOwnerHash,
+    accountSignedIn: accountState === "signed-in",
+    pendingDevelopmentWrite,
+    ...(crypto.randomUUID ? { createOperationId: () => crypto.randomUUID() } : {}),
+    prepareSuccessSound: () => successSound.prepare(),
+    hasUnresolvedSave,
+    clearTimers,
+    releasePhoto,
+    redirectToDevelopmentLogin: () => window.location.assign("/api/auth/osm/development/start"),
+    confirmNewNode: () => app!.querySelector<HTMLInputElement>("#new-aed-absence-confirmed")?.checked === true,
+    confirmCorrections: () => app!.querySelector<HTMLInputElement>("#correction-confirmed")?.checked === true,
+    persistPendingWrite: (request) => persistPendingDevelopmentWrite(request),
+    render,
+    submit: (request) => {
+      void submitDevelopmentWrite(request);
+    },
+    isRecoveryOwnerMismatch,
+    openAccount: openAccountFromLamp,
+    focusRecoveryLogin: () => {
+      const target = app!.querySelector<HTMLElement>("#osm-dev-sign-in, #osm-session-retry, #login-title");
+      // Defer until the click's default focus handling has finished.
+      window.requestAnimationFrame(() => target?.focus());
+    },
+    refreshAccountState: () => refreshAccountState(),
+    readPendingWrite: readPendingDevelopmentWrite,
+  });
+  if (developmentWriteActionResult === "stop") return;
+  if (developmentWriteActionResult === "handled") {
+    render(true);
     return;
-  }
-  if (action === "retake") {
-    if (hasUnresolvedSave(state)) return;
-    clearTimers();
-    releasePhoto();
-    state = pendingDevelopmentWrite
-      ? { kind: "development-write-recovery", request: pendingDevelopmentWrite, writeStatus: "uncertain" }
-      : { kind: "ready" };
-  } else if (action === "create-development-node" && state.kind === "new-aed-preview") {
-    successSound.prepare(); // Beim Tippen: Ton freischalten, er erklingt erst bei bestätigtem Erfolg.
-    if (
-      !developmentSession ||
-      !developmentWriteAvailable ||
-      !developmentWriteOwnerHash ||
-      !crypto.randomUUID ||
-      state.result.kind !== "ready" ||
-      state.writeStatus
-    )
-      return;
-    // Zweite Bestätigung: Ohne gesetzten Haken „vor Ort geprüft“ wird nichts gesendet,
-    // auch wenn der Knopf (z. B. per Tastatur oder Skript) trotzdem ausgelöst wurde.
-    if (app!.querySelector<HTMLInputElement>("#new-aed-absence-confirmed")?.checked !== true) return;
-    const preview = state;
-    if (preview.result.kind !== "ready") return;
-    const operationId = crypto.randomUUID();
-    const request: DevelopmentWriteRequest = {
-      kind: "create-node",
-      operationId,
-      candidateLabel: `${preview.result.position.latitude.toFixed(5)}, ${preview.result.position.longitude.toFixed(5)}`,
-      latitude: preview.result.position.latitude,
-      longitude: preview.result.position.longitude,
-      observedOn: preview.result.tags.check_date,
-      // Nur die Detailtags gehen als `details` an den Server. `emergency` und `check_date` setzt der Server selbst.
-      details: Object.fromEntries(
-        Object.entries(preview.result.tags).filter(([key]) => isDetailKey(key)),
-      ) as DetailTags,
-      confirmedDifferentCandidateIds: preview.result.confirmedDifferentCandidateIds,
-    };
-    try {
-      // Persist the exact confirmed proposal before network I/O so an interrupted request can be reconciled.
-      persistPendingDevelopmentWrite(request);
-    } catch {
-      state = { ...preview, operationId, writeStatus: "failed" };
-      render(true);
-      return;
-    }
-    state = { ...preview, operationId, writeStatus: "sending" };
-    render(true);
-    void submitDevelopmentWrite(request);
-  } else if (action === "back-to-candidates" && state.kind === "osm-preview") {
-    if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
-    state = state.returnState;
-  } else if (action === "save-development-check" && state.kind === "osm-preview") {
-    successSound.prepare(); // Beim Tippen: Ton freischalten, er erklingt erst bei bestätigtem Erfolg.
-    if (
-      !developmentSession ||
-      !developmentWriteAvailable ||
-      !developmentWriteOwnerHash ||
-      !crypto.randomUUID ||
-      state.writeStatus === "sending" ||
-      state.writeStatus === "complete" ||
-      state.writeStatus === "unchanged"
-    )
-      return;
-    const preview = state;
-    const candidateId = preview.candidateId;
-    const candidate = preview.returnState.search.candidates.find((item) => item.id === candidateId);
-    if (!candidate || candidate.osmType !== "node" || candidate.source === "archive" || preview.result.kind !== "ready")
-      return;
-    // Korrekturen brauchen die zweite, ausdrückliche Bestätigung. Ohne Haken wird nichts gesendet, auch wenn der Knopf
-    // (zum Beispiel per Tastatur oder Skript) trotzdem ausgelöst wurde.
-    const corrections = preview.corrections ?? [];
-    if (corrections.length > 0 && app!.querySelector<HTMLInputElement>("#correction-confirmed")?.checked !== true)
-      return;
-    const operationId = preview.operationId ?? crypto.randomUUID();
-    const change = preview.result.changes[0];
-    const request: DevelopmentWriteRequest = {
-      kind: "check-date",
-      operationId,
-      target: candidate.id,
-      candidateLabel: preview.candidateLabel,
-      // Kommt die Vorschau aus dem Ergänzen-Formular, zählt die Version, die die Person frisch gesehen hat.
-      ...(preview.node
-        ? { expectedVersion: preview.node.version }
-        : candidate.version === undefined
-          ? {}
-          : { expectedVersion: candidate.version }),
-      expectedCheckDate: change.before,
-      observedOn: change.after,
-      ...(preview.details && Object.keys(preview.details).length > 0 ? { details: preview.details } : {}),
-      // Korrekturen: die alten Werte, genau wie die Person sie gesehen hat. Der Server schreibt nur, wenn sie noch so dastehen.
-      ...(corrections.length > 0
-        ? {
-            expectedBefore: Object.fromEntries(corrections.map((correction) => [correction.key, correction.before])),
-            confirmedCorrections: true as const,
-          }
-        : {}),
-    };
-    try {
-      // Save the exact confirmed proposal before sending so a reload can safely check the same operation.
-      persistPendingDevelopmentWrite(request);
-    } catch {
-      state = { ...preview, operationId, writeStatus: "failed" };
-      render(true);
-      return;
-    }
-    state = { ...preview, operationId, writeStatus: "sending" };
-    render(true);
-    void submitDevelopmentWrite(request);
-  } else if (
-    (action === "continue-recovery" || action === "retry-development-write") &&
-    (state.kind === "development-write-recovery" || state.kind === "new-aed-preview" || state.kind === "osm-preview")
-  ) {
-    if (state.writeStatus !== "uncertain") return;
-    if (isRecoveryOwnerMismatch()) return;
-    if (!developmentSession) {
-      if (accountState === "signed-in") {
-        // The pending request belongs to the test-server session; a production login cannot reconcile it.
-        openAccountFromLamp();
-      } else {
-        const target = app!.querySelector<HTMLElement>("#osm-dev-sign-in, #osm-session-retry, #login-title");
-        // Defer until the click's default focus handling has finished.
-        window.requestAnimationFrame(() => target?.focus());
-      }
-      return;
-    }
-    if (!developmentWriteAvailable || !developmentWriteOwnerHash) {
-      // Recheck the server switch so the same button works after an operator enables writes.
-      await refreshAccountState();
-      return;
-    }
-    successSound.prepare();
-    const request =
-      state.kind === "development-write-recovery" ? state.request : readPendingDevelopmentWrite(state.operationId);
-    if (!request) return;
-    state = { ...state, writeStatus: "sending" };
-    render(true);
-    void submitDevelopmentWrite(request);
   }
   render(true);
 }
