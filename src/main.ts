@@ -47,6 +47,7 @@ import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } fr
 import { ExistingNodeError, requestExistingNode } from "./osm/existingNode";
 import { sendDevelopmentWrite } from "./net/developmentWrite";
 import { createPhotoSessionState } from "./state/photoSession";
+import { handleCandidateAction } from "./ui/actions/candidateActions";
 import { dispatchPhotoLocationAction } from "./ui/actions/photoLocationActions";
 import { renderPhotoState } from "./ui/views/photoStates";
 import {
@@ -1832,6 +1833,23 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     return;
   }
 
+  const candidateActionResult = handleCandidateAction(action, {
+    state,
+    source,
+    observedOn: photoSession.observedOn,
+    setState: (nextState) => {
+      state = nextState;
+    },
+    setNewAedPositionOverride: (position) => {
+      newAedPositionOverride = position;
+    },
+  });
+  if (candidateActionResult === "stop") return;
+  if (candidateActionResult === "handled") {
+    render(true);
+    return;
+  }
+
   if (action === "continue-recovery" && pendingDevelopmentWrite && accountState !== "signed-in") {
     // A pending write can only be reconciled under the same test-server session that created it.
     // Continue starts that OAuth flow directly, even if session status has not finished loading yet.
@@ -1845,35 +1863,6 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     state = pendingDevelopmentWrite
       ? { kind: "development-write-recovery", request: pendingDevelopmentWrite, writeStatus: "uncertain" }
       : { kind: "ready" };
-  } else if (action === "preview-candidate" && state.kind === "candidate-result") {
-    const candidateId = source?.dataset.candidateId;
-    const candidate = state.search.candidates.find((item) => item.id === candidateId);
-    if (!candidate || !candidateId) return;
-    const result = previewExistingAedCheck(candidate, true, photoSession.observedOn);
-    // Ohne Name und Ortsangabe bleibt die Bezeichnung leer. Beim Anzeigen steht dann "AED (ohne Namen)" da (siehe
-    // displayCandidateLabel), in der gerade gewählten Sprache und nie die technische Kennung (node/123…).
-    const candidateLabel = candidate.tags.name || candidate.tags["defibrillator:location"] || "";
-    state = { kind: "osm-preview", photoUrl: state.photoUrl, candidateId, candidateLabel, result, returnState: state };
-  } else if (
-    action === "none-of-these" &&
-    state.kind === "candidate-result" &&
-    state.search.status === "complete" &&
-    state.assessment.kind === "candidate-review"
-  ) {
-    // The person explicitly rejects each displayed nearby AED as the photographed device.
-    // A corrected map point and a fresh server-side OSM check are still required before upload.
-    newAedPositionOverride = undefined;
-    state = { ...state, noneOfTheseConfirmed: true };
-  } else if (
-    action === "start-new-entry" &&
-    state.kind === "candidate-result" &&
-    state.search.status === "complete" &&
-    state.assessment.kind === "new-entry-eligible"
-  ) {
-    // Erste Bestätigung bei einer Suche ohne Treffer: Die Person sagt ausdrücklich,
-    // dass hier ein AED fehlt. Erst danach erscheinen Karte und Positionsbestätigung.
-    newAedPositionOverride = undefined;
-    state = { ...state, newEntryRequested: true };
   } else if (action === "preview-new-aed" && state.kind === "candidate-result") {
     if (!newEntryPanelOpen(state)) return;
     const positionConfirmed = app!.querySelector<HTMLInputElement>("#new-aed-position-confirmed")?.checked === true;
