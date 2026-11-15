@@ -1,6 +1,6 @@
 # Pilot-Abnahme: Checklisten für Handy, Datenquelle, OSM-Test und Release
 
-Stand: **15.11.2026**. Diese Checkliste ist die maßgebliche Abnahme für den Pilot. Die Codeänderungen aus P10 sind auf `main` gemergt und unter dem aktuellen Commit `936c9c4` mit CI und Deploy erfolgreich geprüft ([Lauf #387](https://github.com/FrnkMrz/AEDjaeger/actions/runs/43694419824)). Das ersetzt keine manuelle Geräte- oder Schreibtest-Abnahme.
+Stand: **15.11.2026**. Diese Checkliste ist die maßgebliche Abnahme für den Pilot. P10 ist gemergt; die PWA-Symbolkorrekturen aus PR #107 sind ebenfalls auf `main`. Aktueller Commit: `1695930`; die CI dafür läuft noch ([Lauf #43701600670](https://github.com/FrnkMrz/AEDjaeger/actions/runs/43701600670)). Der letzte erfolgreiche CI- und Deploy-Lauf ist [#43700608053](https://github.com/FrnkMrz/AEDjaeger/actions/runs/43700608053) auf Commit `062d34e`. Das ersetzt keine manuelle Geräte- oder Schreibtest-Abnahme.
 
 **Aktueller Abnahmestand:** A ist nur teilweise manuell geprüft; Android ist nicht getestet. B1–B4 sind bestanden, B5 (zweite Koordinate) bleibt offen. C0.1–C0.5 sind laut den Einträgen vom 13.11. vorbereitet, C0.6–C0.8 fehlen. Beim ersten Dev-Schreibversuch am 13.11. wurde Node `4365809370` im Changeset `725093` angelegt, während die App „Ergebnis unklar“ meldete. Der Fehler wurde behoben und auf `main` deployed; die manuelle Wiederaufnahme und Verifikation dieses bestehenden Vorgangs ist **noch nicht bestätigt**. Vor einem neuen Create muss er abgeglichen werden, damit kein Duplikat entsteht.
 

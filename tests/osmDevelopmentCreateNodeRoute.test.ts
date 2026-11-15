@@ -161,7 +161,7 @@ class MemoryD1 implements D1Database {
       }
       const [time, hash, id, staleBefore, expires] = values as [number, string, string, number, number];
       const row = this.operations.get(`${hash}:${id}`);
-      if (!row || row.state !== "started" || row.updated_at > staleBefore || row.expires_at <= expires)
+      if (row?.state !== "started" || row.updated_at > staleBefore || row.expires_at <= expires)
         return { success: true, meta: { changes: 0 } };
       row.state = "failed";
       row.updated_at = time;
@@ -174,7 +174,7 @@ class MemoryD1 implements D1Database {
         this.failChangesetRecord = false;
         return { success: true, meta: { changes: 0 } };
       }
-      if (!row || row.state !== "started" || row.expires_at <= expires) return { success: true, meta: { changes: 0 } };
+      if (row?.state !== "started" || row.expires_at <= expires) return { success: true, meta: { changes: 0 } };
       row.state = "changeset-created";
       row.changeset_id = changeset;
       row.updated_at = time;
@@ -183,7 +183,7 @@ class MemoryD1 implements D1Database {
     if (sql.includes("SET state = ?, updated_at = ?")) {
       const [state, time, hash, id, expires] = values as [string, number, string, string, number];
       const row = this.operations.get(`${hash}:${id}`);
-      if (!row || row.state !== "started" || row.expires_at <= expires) return { success: true, meta: { changes: 0 } };
+      if (row?.state !== "started" || row.expires_at <= expires) return { success: true, meta: { changes: 0 } };
       row.state = state;
       row.updated_at = time;
       return { success: true, meta: { changes: 1 } };
@@ -191,14 +191,14 @@ class MemoryD1 implements D1Database {
     if (sql.includes("SET updated_at = ?")) {
       const [time, hash, id, expires] = values as [number, string, string, number];
       const row = this.operations.get(`${hash}:${id}`);
-      if (!row || row.state !== "started" || row.expires_at <= expires) return { success: true, meta: { changes: 0 } };
+      if (row?.state !== "started" || row.expires_at <= expires) return { success: true, meta: { changes: 0 } };
       row.updated_at = time;
       return { success: true, meta: { changes: 1 } };
     }
     if (sql.includes("SET state = 'uploading'")) {
       const [_time, hash, id, expires] = values as [number, string, string, number];
       const row = this.operations.get(`${hash}:${id}`);
-      if (!row || row.state !== "changeset-created" || row.expires_at <= expires)
+      if (row?.state !== "changeset-created" || row.expires_at <= expires)
         return { success: true, meta: { changes: 0 } };
       row.state = "uploading";
       return { success: true, meta: { changes: 1 } };

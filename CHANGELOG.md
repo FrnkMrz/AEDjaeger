@@ -13,9 +13,11 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 - Automatisierte axe-Prüfungen für Start-, Foto-, Karten-, Such-, Vorschau- und Fehlerzustände sowie ein WebKit/iPhone-14-Projekt in der E2E-Suite. Die manuelle VoiceOver-/TalkBack-Abnahme ist dokumentiert und bleibt offen.
 
 ### Changed
+- Erklärt in allen sechs Sprachen, dass Schreibtests nur nach Freigabe auf dem OSM-Testserver stattfinden und produktive Änderungen nicht freigegeben sind. Pinnt die GitHub-Actions in CI und Live-Check auf geprüfte Release-Commits und teilt die Runtime-Prüfung für JSON-Objekte zwischen Browser und Worker.
 - PWA-Homescreen-Symbole für iOS und Android zeigen das weiße medizinische Plus mit Abstand zum Herz. Herz und Plus liegen auf derselben Ebene; Fadenkreuz und Ringe sind darüber angeordnet. Die Fadenkreuzachsen lassen die Mitte frei und überlappen den inneren Ring leicht; Ringstärken außen/mitte/innen: 9/5/9 px. Leuchteffekt und unterschiedliche Ring-Deckkräfte sind entfernt, damit das Grün gleichmäßig wirkt (digitale Annäherung an RAL 6032, `#008E5E`).
 - Kartenbedienung per Zwei-Finger-Zoom sowie Plus-/Minus-Tasten ergänzt; Kartenrollen nennen jetzt zugängliche Kurzhinweise. Kleine Texte nutzen skalierbare `rem`-Größen mit mindestens 12 px.
 - Verbindungsstatus zeigt Haken oder Strich zusätzlich zur Farbe. Info-, Schließen-, Konto- und Kartenzoom-Schaltflächen bieten mindestens 44 px Tippfläche.
+- Verkleinert optionale Fotoprüfungsbilder auf höchstens 1.024 px Kantenlänge und sendet das JPEG nach ausdrücklicher Bestätigung als Binärdaten an den Worker statt es in Base64-JSON einzubetten.
 
 ### Security
 - Entfernt JPEG-APP1-Metadatensegmente zusätzlich zur lokalen Neucodierung ausdrücklich vor dem optionalen Foto-Upload, damit EXIF/GPS auch bei abweichendem Canvas-Verhalten eines Browsers nicht mitgesendet werden.

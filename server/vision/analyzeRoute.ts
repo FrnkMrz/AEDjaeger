@@ -22,8 +22,6 @@ import {
 } from "../http/requestGuards";
 import { sha256Hex } from "../crypto/hash";
 
-// JSON base64 encoding adds about one third to the original image size.
-const MAX_REQUEST_BYTES = Math.ceil(MAX_VISION_IMAGE_BYTES / 3) * 4 + 1_024;
 const ALLOWED_IMAGE_TYPES: readonly SupportedImageType[] = ["image/jpeg", "image/png", "image/webp"];
 
 export type VisionRouteEnvironment = {
@@ -76,13 +74,18 @@ export async function handleVisionAnalysis(
     return jsonResponse({ error: "analysis_not_allowed" }, 403);
   }
 
-  if (request.headers.get("Content-Type")?.split(";", 1)[0]?.trim().toLowerCase() !== "application/json") {
+  const contentType = request.headers.get("Content-Type")?.split(";", 1)[0]?.trim().toLowerCase();
+  if (!contentType || !ALLOWED_IMAGE_TYPES.includes(contentType as SupportedImageType)) {
     return jsonResponse({ error: "unsupported_media_type" }, 415);
+  }
+  const requestId = request.headers.get("X-Request-Id");
+  if (!requestId || !/^[A-Za-z0-9_-]{16,128}$/u.test(requestId)) {
+    return jsonResponse({ error: "invalid_request" }, 400);
   }
 
   let body: Uint8Array;
   try {
-    body = await readLimitedBody(request, MAX_REQUEST_BYTES);
+    body = await readLimitedBody(request, MAX_VISION_IMAGE_BYTES);
   } catch (error) {
     return jsonResponse(
       { error: error instanceof BodyTooLargeError ? "request_too_large" : "invalid_request" },
@@ -90,8 +93,11 @@ export async function handleVisionAnalysis(
     );
   }
 
-  const payload = parseRequestBody(body);
-  if (!payload) return jsonResponse({ error: "invalid_request" }, 400);
+  const payload = {
+    requestId,
+    contentType: contentType as SupportedImageType,
+    imageBytes: body,
+  };
   try {
     // Reject spoofed MIME types and malformed image bytes before reserving budget.
     validateAedImage({ bytes: payload.imageBytes, contentType: payload.contentType });
@@ -231,47 +237,6 @@ export function isPhotoCheckAvailable(
   const limits = getAnalysisLimits(environment);
   if (!limits || !environment.DB || !environment.OPENAI_API_KEY?.trim()) return false;
   return limits.allowedSubjects.includes(`${session.environment}:${session.subject}`);
-}
-
-function parseRequestBody(
-  bytes: Uint8Array,
-): { requestId: string; contentType: SupportedImageType; imageBytes: Uint8Array } | null {
-  let decoded: unknown;
-  try {
-    decoded = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-  } catch {
-    return null;
-  }
-  if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) return null;
-  const record = decoded as Record<string, unknown>;
-  if (
-    Object.keys(record).length !== 3 ||
-    typeof record.request_id !== "string" ||
-    !/^[A-Za-z0-9_-]{16,128}$/u.test(record.request_id)
-  )
-    return null;
-  if (
-    typeof record.content_type !== "string" ||
-    !ALLOWED_IMAGE_TYPES.includes(record.content_type as SupportedImageType)
-  )
-    return null;
-  if (
-    typeof record.image_base64 !== "string" ||
-    record.image_base64.length === 0 ||
-    record.image_base64.length > Math.ceil(MAX_VISION_IMAGE_BYTES / 3) * 4
-  )
-    return null;
-  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(record.image_base64)) return null;
-
-  let binary: string;
-  try {
-    binary = atob(record.image_base64);
-  } catch {
-    return null;
-  }
-  if (binary.length === 0 || binary.length > MAX_VISION_IMAGE_BYTES) return null;
-  const imageBytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-  return { requestId: record.request_id, contentType: record.content_type as SupportedImageType, imageBytes };
 }
 
 function getAnalysisLimits(

@@ -154,14 +154,14 @@ class MemoryD1 implements D1Database {
         if (sql.includes("SET state = 'uploading'")) {
           const [_updated, hash, id, time] = params as [number, string, string, number];
           const row = this.operations.get(`${hash}:${id}`);
-          if (!row || row.state !== "changeset-created" || row.expires_at <= time)
+          if (row?.state !== "changeset-created" || row.expires_at <= time)
             return { success: true, meta: { changes: 0 } };
           row.state = "uploading";
           return { success: true, meta: { changes: 1 } };
         }
         if (sql.includes("state IN ('uploading', 'uncertain')")) {
           const [updated, hash, id, changeset, time] = params as [number, string, string, string, number];
-          const row = this.operations.get(hash + ":" + id);
+        const row = this.operations.get(`${hash}:${id}`);
           if (
             !row ||
             row.changeset_id !== changeset ||
@@ -283,14 +283,14 @@ class MemoryD1 implements D1Database {
     if (sql.includes("SET state = 'uploading'")) {
       const [_updated, hash, id, time] = params as [number, string, string, number];
       const row = this.operations.get(`${hash}:${id}`);
-      if (!row || row.state !== "changeset-created" || row.expires_at <= time)
+      if (row?.state !== "changeset-created" || row.expires_at <= time)
         return { success: true, meta: { changes: 0 } };
       row.state = "uploading";
       return { success: true, meta: { changes: 1 } };
     }
     if (sql.includes("state IN ('uploading', 'uncertain')")) {
       const [updated, hash, id, changeset, time] = params as [number, string, string, string, number];
-      const row = this.operations.get(hash + ":" + id);
+      const row = this.operations.get(`${hash}:${id}`);
       if (
         !row ||
         row.changeset_id !== changeset ||
@@ -629,7 +629,8 @@ describe("OSM development check-date writer", () => {
     const legacyOperation = DB.operations.get(`${ownerHash}:${operationId}`);
     expect(legacyOperation).toBeDefined();
     // This is the payload hash persisted by the release before recovery_identity existed.
-    legacyOperation!.request_hash = oldPayloadHash;
+    if (!legacyOperation) throw new Error("The legacy write operation should have been stored.");
+    legacyOperation.request_hash = oldPayloadHash;
 
     const retry = await handleDevelopmentCheckDate(
       makeRequest(requestBody, rotatedSessionToken),
@@ -847,7 +848,7 @@ function makeStatefulFetch(
       if (!uploadApplied)
         return new Response('<osmChange version="0.6"><create/><modify/><delete/></osmChange>', { status: 200 });
       const tags = Object.entries(state.tags)
-        .map(([key, value]) => '<tag k="' + key + '" v="' + value + '"/>')
+        .map(([key, value]) => `<tag k="${key}" v="${value}"/>`)
         .join("");
       const download =
         '<osmChange version="0.6"><modify><node id="42" changeset="77" version="' +

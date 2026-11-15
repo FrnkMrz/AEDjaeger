@@ -1,6 +1,6 @@
 # Entscheidungen und nächste Schritte
 
-Stand: **15.11.2026**. Gemergt sind der Detailweg (P0 bis P5, PR #77), die Detail-Angaben aus der Trefferliste (PR #80), die Entfernung der Demo „Vorschau testen“ (PR #81), die Code-Härtung P6 (PR #95), Barrierefreiheit/WebKit P7 (PR #96), die Betriebsergänzungen P8 (PR #97), die Migration-/Deploy-Prüfung (PR #99), der Produktions-Schreibweg-Entwurf (P9, PR #100) und die verhaltensneutrale Aufteilung von `src/main.ts` (P10, PRs #101 bis #106). Der aktuelle `main`-Commit ist `936c9c4`; der zugehörige [CI- und Deploy-Lauf #387](https://github.com/FrnkMrz/AEDjaeger/actions/runs/43694419824) war erfolgreich. Die Migrationen `0010` und `0011` wurden auf der Produktions-D1 geprüft und angewendet. **Produktive OSM-Schreibzugriffe bleiben aus.**
+Stand: **15.11.2026**. Gemergt sind der Detailweg (P0 bis P5, PR #77), die Detail-Angaben aus der Trefferliste (PR #80), die Entfernung der Demo „Vorschau testen“ (PR #81), die Code-Härtung P6 (PR #95), Barrierefreiheit/WebKit P7 (PR #96), die Betriebsergänzungen P8 (PR #97), die Migration-/Deploy-Prüfung (PR #99), der Produktions-Schreibweg-Entwurf (P9, PR #100), die verhaltensneutrale Aufteilung von `src/main.ts` (P10, PRs #101 bis #106), die PWA-Symbolkorrekturen (PR #107) und dieser Statusabgleich (PR #108). `main` steht auf `1695930`; der [CI-Lauf #43701600670](https://github.com/FrnkMrz/AEDjaeger/actions/runs/43701600670) für diesen Merge läuft noch. Der letzte erfolgreiche CI- und Deploy-Lauf ist [#43700608053](https://github.com/FrnkMrz/AEDjaeger/actions/runs/43700608053) auf Commit `062d34e`. Die Migrationen `0010` und `0011` wurden auf der Produktions-D1 geprüft und angewendet. **Produktive OSM-Schreibzugriffe bleiben aus.**
 
 **Nächste Abnahmen, in Reihenfolge:** (1) den historischen unklaren Testserver-Vorgang `725093` / Node `4365809370` abgleichen, bevor eine weitere Neuanlage versucht wird; (2) die noch offenen iPhone-Abläufe aus Abschnitt A und B5 (zweite Koordinate) erledigen, damit die Voraussetzungen aus Abschnitt C erfüllt sind; (3) C0.6–C0.8 abschließen und danach den bereits freigegebenen kontrollierten OSM-Dev-Schreibtest C1–C6 durchführen (den Schalter setzt und entfernt ausschließlich der Projektinhaber); (4) den Detailweg-Test D1–D7 ausführen; (5) Rate-Limit-Regel, übrige PWA-/Sprach- und Screenreader-Prüfungen abschließen. Für `v0.1.0` gelten zusätzlich die Android-Anforderung und alle Kriterien aus Abschnitt E der Pilot-Abnahme.
 
@@ -172,6 +172,12 @@ Für eine leere Suche im OSM-Dev-Test bestätigt ein begrenzter, authentifiziert
 - Gamification bleibt im Pilot unsichtbar; keine öffentliche Teil- oder Ranglistenfunktion.
 - Cloudflare Workers Free; keine zusätzlichen Kosten ohne Auftrag. Domain: `aedjaeger.de` ist seit dem 13.11.2026 bei united domains für 12 Monate gesichert. Bis zum Umzug bleibt die workers.dev-Adresse die Pilotadresse ([Domain](domain.md)).
 - `check_date` ist das Prüfdatum. Bei einem vorhandenen AED dürfen andere Tags nicht überschrieben werden.
+
+## Fotoprüfung: CPU-Messung und Entlastung (15.11.2026)
+
+Der Projektinhaber hat die Produktionsmetriken des Workers `aedjaeger` für die letzten 24 Stunden abgelesen: 51 Aufrufe insgesamt, CPU P50 3,63 ms, P90 15,07 ms, P99/P999 18,33 ms, Durchschnitt 3 ms. Wandzeit: P50 82,54 ms, P90 736 ms, P99 ungefähr 1 s. Speicher: P50 2,7 MB, P99 5,64 MB. Es gab keine Fehler oder CPU-/Speicherlimit-Überschreitungen. Zwei Fotoprüfungsaufrufe warteten jeweils rund 3,4 s auf `api.openai.com`; diese Netzwerkwartezeit zählt nicht als Worker-CPU.
+
+Die Werte gelten für den ganzen Worker, nicht einzeln für `/api/vision/analyze` und `/api/osm/candidates/search`; 51 Aufrufe sind zudem eine kleine Stichprobe. Deshalb folgt daraus keine route-spezifische P95-Angabe. Q4 senkt die Bildkante auf 1.024 px und ersetzt den Browser-zu-Worker-Transport mit Base64-JSON durch Binärdaten. Nach einem freigegebenen Deployment die Workerwerte über sieben Tage vergleichen und die Fehler-/Limitanzeige mitprüfen. Invocation-Logs bleiben deaktiviert; Route-Filter im Query Builder stehen daher derzeit nicht zur Verfügung.
 
 ## Weiterführende Unterlagen
 

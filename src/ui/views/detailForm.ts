@@ -18,7 +18,7 @@ export type DetailFormViewContext = {
 };
 
 export function detailHas(context: DetailFormViewContext, key: DetailKey): boolean {
-  return context.existingTags !== undefined && Object.prototype.hasOwnProperty.call(context.existingTags, key);
+  return context.existingTags !== undefined && Object.hasOwn(context.existingTags, key);
 }
 
 function detailLocked(context: DetailFormViewContext, key: DetailKey): boolean {

@@ -94,11 +94,9 @@ export async function consumeOSMOAuthTransaction(
   try {
     const stateHash = await sha256Hex(state, cryptoApi);
     const bindingHash = await sha256Hex(browserBinding, cryptoApi);
-    let encryptedPayload: EncryptedPayload | null;
-
     // DELETE ... RETURNING ist ein SQLite-Schritt: Zwei parallele Rücksprünge
     // können den Verifier nicht beide abrufen. D1 first() liefert die Ergebniszeile.
-    encryptedPayload = await database
+    const encryptedPayload = await database
       .prepare(
         `DELETE FROM osm_oauth_transactions
          WHERE state_hash = ? AND browser_binding_hash = ? AND expires_at > ?
