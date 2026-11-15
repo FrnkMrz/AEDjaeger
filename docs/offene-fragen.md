@@ -12,12 +12,12 @@ Der Review empfiehlt vier bis fünf PRs mit klaren Bereichen und ohne Verhaltens
 
 | PR | abgegrenzter Bereich | Status |
 | --- | --- | --- |
-| [#101](https://github.com/FrnkMrz/AEDjaeger/pull/101) | Gemeinsame Markup-Helfer | offen; Code Review ohne Findings |
-| [#102](https://github.com/FrnkMrz/AEDjaeger/pull/102) | Konto- und Anmeldeansichten | offen; Code Review ohne Findings |
-| [#103](https://github.com/FrnkMrz/AEDjaeger/pull/103) | Foto-, Standort- und Suchstatusansichten | offen; Code Review ohne Findings |
-| [#104](https://github.com/FrnkMrz/AEDjaeger/pull/104) | AED-Detailformularansicht | offen; Code Review ohne Findings |
-| [#105](https://github.com/FrnkMrz/AEDjaeger/pull/105) | HTTP-Transport für bestätigte OSM-Entwicklungs-Schreibvorschläge | offen; Code Review ohne Findings, CI läuft |
-| [#106](https://github.com/FrnkMrz/AEDjaeger/pull/106) | Flüchtiger Foto-/Standortzustand und dessen Aktionen | in Vorbereitung |
+| [#101](https://github.com/FrnkMrz/AEDjaeger/pull/101) | Gemeinsame Markup-Helfer | offen; CI und Code Review bestanden, keine Findings |
+| [#102](https://github.com/FrnkMrz/AEDjaeger/pull/102) | Konto- und Anmeldeansichten | offen; CI und Code Review bestanden, keine Findings |
+| [#103](https://github.com/FrnkMrz/AEDjaeger/pull/103) | Foto-, Standort- und Suchstatusansichten | offen; CI und Code Review bestanden, keine Findings |
+| [#104](https://github.com/FrnkMrz/AEDjaeger/pull/104) | AED-Detailformularansicht | offen; CI und Code Review bestanden, keine Findings |
+| [#105](https://github.com/FrnkMrz/AEDjaeger/pull/105) | HTTP-Transport für bestätigte OSM-Entwicklungs-Schreibvorschläge | offen; CI bestanden, Code Review ohne Findings |
+| [#106](https://github.com/FrnkMrz/AEDjaeger/pull/106) | Flüchtiger Foto-/Standortzustand und dessen Aktionen | offen; CI und Code Review bestanden, keine Findings |
 
 Die Ansichten und der reine Schreibtransport erhalten ihre Eingaben über explizite Parameter. Foto, Herkunft, Datum, lokale Foto-Ortsangabe, Suchposition und Kartenauswahl werden als eine flüchtige Sitzung zusammengefasst; die Foto-/Standortaktionen arbeiten mit einem injizierten Zustands- und Effektkontext. Daten, Fotos, Koordinaten und Entwürfe werden dadurch nicht zusätzlich gespeichert. Die übrigen Kandidaten-, Vorschau- und Schreibbestätigungsaktionen bleiben zunächst in `main.ts`, weil sie mehrere Sicherheitsprüfungen und Wiederherstellungszustände koordinieren. Sie werden nicht in einer pauschalen Aktionstabelle umgeschrieben; falls `main.ts` nach diesen PRs weiter verkleinert werden soll, ist das ein separater, ebenso verhaltensneutraler Schritt.
 
