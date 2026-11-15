@@ -34,7 +34,11 @@ export function readStoredValue(key: string, storage: StorageLike | undefined = 
 }
 
 /** Schreibt einen Wert. Gibt true zurück, wenn er gespeichert wurde, sonst false. Wirft nie. */
-export function writeStoredValue(key: string, value: string, storage: StorageLike | undefined = browserStorage()): boolean {
+export function writeStoredValue(
+  key: string,
+  value: string,
+  storage: StorageLike | undefined = browserStorage(),
+): boolean {
   try {
     if (!storage) return false;
     storage.setItem(key, value);
@@ -45,7 +49,10 @@ export function writeStoredValue(key: string, value: string, storage: StorageLik
 }
 
 /** Entfernt einen Wert. Meldet false, wenn der Zugriff nicht möglich war. */
-export function removeStoredValue(key: string, storage: Pick<Storage, "removeItem"> | undefined = browserStorage()): boolean {
+export function removeStoredValue(
+  key: string,
+  storage: Pick<Storage, "removeItem"> | undefined = browserStorage(),
+): boolean {
   try {
     if (!storage) return false;
     storage.removeItem(key);

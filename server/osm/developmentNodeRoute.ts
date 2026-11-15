@@ -4,9 +4,7 @@ import { findOSMOAuthToken } from "../storage/osmOAuthTokens";
 import type { D1Database } from "../storage/d1";
 import { DETAIL_KEYS } from "../../src/contracts/aedDetails";
 import { isCrossOrigin, jsonResponse, readOSMSessionCookie } from "../http/requestGuards";
-import {
-  TargetNotFoundError, VersionConflictError, readDevelopmentNode,
-} from "./developmentWriteRoute";
+import { TargetNotFoundError, VersionConflictError, readDevelopmentNode } from "./developmentWriteRoute";
 
 type Environment = { DB?: D1Database; OSM_DEV_WRITES_ENABLED?: string; OSM_OAUTH_ENCRYPTION_KEY?: string };
 type Dependencies = { fetch?: typeof fetch; now?: () => number; crypto?: Crypto };
@@ -48,7 +46,8 @@ export async function handleDevelopmentNodeRead(
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
-  if (!session || session.environment !== "development") return jsonResponse({ error: "development_session_required" }, 403);
+  if (!session || session.environment !== "development")
+    return jsonResponse({ error: "development_session_required" }, 403);
 
   const id = url.searchParams.get("id");
   if (id === null || !/^node\/[1-9]\d{0,15}$/u.test(id)) return jsonResponse({ error: "invalid_request" }, 400);
@@ -73,7 +72,8 @@ export async function handleDevelopmentNodeRead(
   } catch (error) {
     // Gelöscht, verschoben, kein AED mehr oder auf dem Testserver nicht vorhanden (zum Beispiel ein AED aus dem Archiv des
     // echten OSM): Die Person soll neu suchen. Alles andere ist ein Fehler beim Testserver.
-    if (error instanceof VersionConflictError || error instanceof TargetNotFoundError) return jsonResponse({ error: "node_unavailable" }, 404);
+    if (error instanceof VersionConflictError || error instanceof TargetNotFoundError)
+      return jsonResponse({ error: "node_unavailable" }, 404);
     return jsonResponse({ error: "development_api_unavailable" }, 502);
   }
 }

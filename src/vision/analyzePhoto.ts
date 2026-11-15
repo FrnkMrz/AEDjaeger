@@ -26,7 +26,10 @@ export class VisionClientError extends Error {
    * invalid_api_key“). Er enthält nie Fehlertexte, Fotos oder Schlüssel und dient nur der Anzeige
    * im Fehlerfall, damit sich ein Ausfall im Pilot eingrenzen lässt.
    */
-  constructor(readonly code: VisionClientErrorCode, readonly detail?: string) {
+  constructor(
+    readonly code: VisionClientErrorCode,
+    readonly detail?: string,
+  ) {
     super(code);
     this.name = "VisionClientError";
   }
@@ -39,8 +42,15 @@ function describeServerDetail(payload: unknown, httpStatus: number): string {
   const parts = [`HTTP ${httpStatus}`];
   if (isRecord(payload)) {
     const providerStatus = payload.detail_status;
-    if (typeof providerStatus === "number" && Number.isInteger(providerStatus) && providerStatus >= 100 && providerStatus <= 599) parts.push(`OpenAI ${providerStatus}`);
-    if (typeof payload.detail_code === "string" && SAFE_TOKEN.test(payload.detail_code)) parts.push(payload.detail_code);
+    if (
+      typeof providerStatus === "number" &&
+      Number.isInteger(providerStatus) &&
+      providerStatus >= 100 &&
+      providerStatus <= 599
+    )
+      parts.push(`OpenAI ${providerStatus}`);
+    if (typeof payload.detail_code === "string" && SAFE_TOKEN.test(payload.detail_code))
+      parts.push(payload.detail_code);
   }
   return parts.join(", ");
 }
@@ -157,7 +167,10 @@ export async function requestVisionObservation(
     // The server may already have reserved a request; callers must not blindly resubmit it.
     if (error instanceof VisionClientError) throw error;
     // Zeitlimit der App (Abbruch) oder Verbindungsfehler; mehr weiß der Browser hier nicht.
-    throw new VisionClientError("analysis_failed", error instanceof DOMException && error.name === "AbortError" ? "client_timeout" : "client_network");
+    throw new VisionClientError(
+      "analysis_failed",
+      error instanceof DOMException && error.name === "AbortError" ? "client_timeout" : "client_network",
+    );
   } finally {
     globalThis.clearTimeout(timeout);
   }
@@ -165,21 +178,31 @@ export async function requestVisionObservation(
     const errorCode = isRecord(payload) && typeof payload.error === "string" ? payload.error : "";
     const detail = describeServerDetail(payload, response.status);
     switch (errorCode) {
-      case "authentication_required": throw new VisionClientError("authentication_required", detail);
-      case "analysis_not_allowed": throw new VisionClientError("analysis_not_allowed", detail);
-      case "analysis_unavailable": throw new VisionClientError("analysis_unavailable", detail);
+      case "authentication_required":
+        throw new VisionClientError("authentication_required", detail);
+      case "analysis_not_allowed":
+        throw new VisionClientError("analysis_not_allowed", detail);
+      case "analysis_unavailable":
+        throw new VisionClientError("analysis_unavailable", detail);
       // Budget reservation happens before the provider call, so this exact error is safe to retry.
-      case "analysis_budget_unavailable": throw new VisionClientError("analysis_budget_unavailable", detail);
-      case "analysis_claim_uncertain": throw new VisionClientError("analysis_claim_uncertain", detail);
-      case "session_unavailable": throw new VisionClientError("session_unavailable", detail);
-      case "analysis_budget_exceeded": throw new VisionClientError("analysis_budget_exceeded", detail);
-      case "invalid_image": throw new VisionClientError("invalid_image", detail);
-      default: throw new VisionClientError("analysis_failed", detail);
+      case "analysis_budget_unavailable":
+        throw new VisionClientError("analysis_budget_unavailable", detail);
+      case "analysis_claim_uncertain":
+        throw new VisionClientError("analysis_claim_uncertain", detail);
+      case "session_unavailable":
+        throw new VisionClientError("session_unavailable", detail);
+      case "analysis_budget_exceeded":
+        throw new VisionClientError("analysis_budget_exceeded", detail);
+      case "invalid_image":
+        throw new VisionClientError("invalid_image", detail);
+      default:
+        throw new VisionClientError("analysis_failed", detail);
     }
   }
 
   // Die Antwort ist HTTP-seitig in Ordnung, aber ihr Inhalt passt nicht: Der Hinweis nennt, was nicht passt.
-  if (!isRecord(payload) || Object.keys(payload).length !== 3) throw new VisionClientError("invalid_response", "unexpected_shape");
+  if (!isRecord(payload) || Object.keys(payload).length !== 3)
+    throw new VisionClientError("invalid_response", "unexpected_shape");
   if (payload.request_id !== requestId) throw new VisionClientError("invalid_response", "request_id_mismatch");
   if (payload.model !== VISION_MODEL) {
     const reported = typeof payload.model === "string" && SAFE_TOKEN.test(payload.model) ? `:${payload.model}` : "";
@@ -199,7 +222,11 @@ export function createVisionRequestId(): string {
 
 function canvasToJpeg(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => blob ? resolve(blob) : reject(new VisionClientError("image_processing_failed")), "image/jpeg", quality);
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new VisionClientError("image_processing_failed"))),
+      "image/jpeg",
+      quality,
+    );
   });
 }
 

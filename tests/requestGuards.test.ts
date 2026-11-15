@@ -10,10 +10,16 @@ describe("OSM session cookie migration", () => {
   });
 
   it("prefers the __Host cookie when both names are present", () => {
-    expect(readOSMSessionCookie(`aedjaeger_osm_session=${legacyToken}; __Host-aedjaeger_osm_session=${currentToken}`)).toBe(currentToken);
+    expect(
+      readOSMSessionCookie(`aedjaeger_osm_session=${legacyToken}; __Host-aedjaeger_osm_session=${currentToken}`),
+    ).toBe(currentToken);
   });
 
   it("does not fall back to the legacy name when the new cookie is ambiguous", () => {
-    expect(readOSMSessionCookie(`__Host-aedjaeger_osm_session=${currentToken}; __Host-aedjaeger_osm_session=${legacyToken}; aedjaeger_osm_session=${legacyToken}`)).toBeNull();
+    expect(
+      readOSMSessionCookie(
+        `__Host-aedjaeger_osm_session=${currentToken}; __Host-aedjaeger_osm_session=${legacyToken}; aedjaeger_osm_session=${legacyToken}`,
+      ),
+    ).toBeNull();
   });
 });

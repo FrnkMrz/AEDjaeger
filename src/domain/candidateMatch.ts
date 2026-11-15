@@ -64,11 +64,7 @@ function isNonNegativeFinite(value: number): boolean {
   return Number.isFinite(value) && value >= 0;
 }
 
-function isValidInput(
-  location: LocationEstimate,
-  search: SearchResult,
-  policy: MatchPolicy,
-): boolean {
+function isValidInput(location: LocationEstimate, search: SearchResult, policy: MatchPolicy): boolean {
   if (!isRecord(location) || !isRecord(search) || !isRecord(policy)) return false;
   if (!isValidCoordinate(location) || !isNonNegativeFinite(location.accuracyMeters as number)) return false;
   if (!isNonNegativeFinite(policy.nearbyRadiusMeters as number) || policy.nearbyRadiusMeters === 0) return false;
@@ -140,7 +136,10 @@ export function assessCandidates(
     // Keep approximate centers even when their calculated distance is large: the
     // underlying way or relation may still overlap the searched area. Manual review
     // prevents that approximate coordinate from hiding a possible existing AED.
-    .filter((candidate) => candidate.coordinateQuality === "approximate-center" || candidate.distanceMeters <= policy.nearbyRadiusMeters)
+    .filter(
+      (candidate) =>
+        candidate.coordinateQuality === "approximate-center" || candidate.distanceMeters <= policy.nearbyRadiusMeters,
+    )
     .sort((left, right) => {
       if (left.distanceMeters !== right.distanceMeters) return left.distanceMeters - right.distanceMeters;
       return left.id < right.id ? -1 : left.id > right.id ? 1 : 0;

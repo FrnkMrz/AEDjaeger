@@ -48,12 +48,14 @@ function isValidDate(value: string): boolean {
 }
 
 function isValidPosition(value: Coordinate): boolean {
-  return Number.isFinite(value.latitude)
-    && value.latitude >= -90
-    && value.latitude <= 90
-    && Number.isFinite(value.longitude)
-    && value.longitude >= -180
-    && value.longitude <= 180;
+  return (
+    Number.isFinite(value.latitude) &&
+    value.latitude >= -90 &&
+    value.latitude <= 90 &&
+    Number.isFinite(value.longitude) &&
+    value.longitude >= -180 &&
+    value.longitude <= 180
+  );
 }
 
 /**
@@ -68,11 +70,11 @@ export function previewExistingAedCheck(
   if (!confirmedPresent) return { kind: "blocked", reason: "confirmation-required" };
   if (!isValidDate(observedOn)) return { kind: "blocked", reason: "invalid-date" };
   if (
-    !candidate
-    || typeof candidate.id !== "string"
-    || !["node", "way", "relation"].includes(candidate.osmType)
-    || typeof candidate.tags !== "object"
-    || candidate.tags === null
+    !candidate ||
+    typeof candidate.id !== "string" ||
+    !["node", "way", "relation"].includes(candidate.osmType) ||
+    typeof candidate.tags !== "object" ||
+    candidate.tags === null
   ) {
     return { kind: "blocked", reason: "invalid-candidate" };
   }
@@ -106,34 +108,40 @@ export function previewExistingAedCheck(
  * no candidate was eligible, and the person confirmed the proposed map point.
  * Only current search data and the person's explicit confirmations are accepted here.
  */
-export function previewNewAed(
-  input: {
-    searchStatus: "complete" | "partial" | "failed";
-    assessmentKind: "new-entry-eligible" | "candidate-review" | "search-incomplete" | "search-failed" | "location-too-uncertain" | "invalid-input";
-    position: Coordinate;
-    searchCenter: Coordinate;
-    coverageRadiusMeters: number;
-    nearbyRadiusMeters: number;
-    searchCandidates: ReadonlyArray<NearbyAedCandidate>;
-    /** IDs the person explicitly reviewed and rejected as a match to the photographed AED. */
-    confirmedDifferentCandidateIds?: ReadonlyArray<string>;
-    positionConfirmed: boolean;
-    observedOn: string;
-    /**
-     * Freiwillige Detailangaben der Person (Zugang, Zeiten, Lage …). Sie werden hier erneut gegen den
-     * Vertrag geprüft: Nur Schlüssel der festen Liste kommen durch, `emergency` und `check_date` setzt
-     * allein diese Funktion.
-     */
-    details?: DetailTags;
-  },
-): ProposalResult<NewAedPreview> {
+export function previewNewAed(input: {
+  searchStatus: "complete" | "partial" | "failed";
+  assessmentKind:
+    | "new-entry-eligible"
+    | "candidate-review"
+    | "search-incomplete"
+    | "search-failed"
+    | "location-too-uncertain"
+    | "invalid-input";
+  position: Coordinate;
+  searchCenter: Coordinate;
+  coverageRadiusMeters: number;
+  nearbyRadiusMeters: number;
+  searchCandidates: ReadonlyArray<NearbyAedCandidate>;
+  /** IDs the person explicitly reviewed and rejected as a match to the photographed AED. */
+  confirmedDifferentCandidateIds?: ReadonlyArray<string>;
+  positionConfirmed: boolean;
+  observedOn: string;
+  /**
+   * Freiwillige Detailangaben der Person (Zugang, Zeiten, Lage …). Sie werden hier erneut gegen den
+   * Vertrag geprüft: Nur Schlüssel der festen Liste kommen durch, `emergency` und `check_date` setzt
+   * allein diese Funktion.
+   */
+  details?: DetailTags;
+}): ProposalResult<NewAedPreview> {
   const confirmedDifferentIds = new Set(input.confirmedDifferentCandidateIds ?? []);
   // Only IDs from the visible candidate-review list should be passed here. Keep
   // every other search result in the duplicate check in case the map point moves.
-  const confirmedIdsAreValid = confirmedDifferentIds.size === (input.confirmedDifferentCandidateIds ?? []).length
-    && [...confirmedDifferentIds].every((id) => input.searchCandidates.some((candidate) => candidate.id === id));
-  const allowedAssessment = input.assessmentKind === "new-entry-eligible"
-    || input.assessmentKind === "candidate-review" && confirmedDifferentIds.size > 0 && confirmedIdsAreValid;
+  const confirmedIdsAreValid =
+    confirmedDifferentIds.size === (input.confirmedDifferentCandidateIds ?? []).length &&
+    [...confirmedDifferentIds].every((id) => input.searchCandidates.some((candidate) => candidate.id === id));
+  const allowedAssessment =
+    input.assessmentKind === "new-entry-eligible" ||
+    (input.assessmentKind === "candidate-review" && confirmedDifferentIds.size > 0 && confirmedIdsAreValid);
   if (input.searchStatus !== "complete" || !allowedAssessment) {
     return { kind: "blocked", reason: "search-not-clear" };
   }
@@ -141,11 +149,11 @@ export function previewNewAed(
   if (!isValidPosition(input.position)) return { kind: "blocked", reason: "invalid-position" };
   if (!input.positionConfirmed) return { kind: "blocked", reason: "position-not-confirmed" };
   if (
-    !isValidPosition(input.searchCenter)
-    || !Number.isFinite(input.coverageRadiusMeters)
-    || input.coverageRadiusMeters <= 0
-    || !Number.isFinite(input.nearbyRadiusMeters)
-    || input.nearbyRadiusMeters <= 0
+    !isValidPosition(input.searchCenter) ||
+    !Number.isFinite(input.coverageRadiusMeters) ||
+    input.coverageRadiusMeters <= 0 ||
+    !Number.isFinite(input.nearbyRadiusMeters) ||
+    input.nearbyRadiusMeters <= 0
   ) {
     return { kind: "blocked", reason: "invalid-search-coverage" };
   }

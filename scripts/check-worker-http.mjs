@@ -21,7 +21,9 @@ const upstream = createServer(async (request, response) => {
   if (request.url === "/ok") {
     response.writeHead(200).end("accepted");
   } else if (/^\/redirect\/(301|302|303|307|308)$/u.test(request.url ?? "")) {
-    response.writeHead(Number(request.url.split("/").at(-1)), { Location: "/forbidden" }).end("private fixture response");
+    response
+      .writeHead(Number(request.url.split("/").at(-1)), { Location: "/forbidden" })
+      .end("private fixture response");
   } else {
     response.writeHead(500).end("unexpected request");
   }
@@ -49,11 +51,23 @@ try {
     assert.equal(rejected.status, 502);
     assert.deepEqual(await rejected.json(), { rejected: true });
   }
-  assert.deepEqual(calls.map((call) => call.path), ["/ok", ...[301, 302, 303, 307, 308].map((status) => `/redirect/${status}`)]);
-  assert(calls.every((call) => call.method === "POST" && call.authorization === "Bearer local-fixture-token" && call.body === "local-fixture-body"));
-  console.log("Worker-HTTP-Prüfung bestanden: erfolgreicher Abruf, fünf Weiterleitungen abgelehnt, keine Folgeanfrage.");
+  assert.deepEqual(
+    calls.map((call) => call.path),
+    ["/ok", ...[301, 302, 303, 307, 308].map((status) => `/redirect/${status}`)],
+  );
+  assert(
+    calls.every(
+      (call) =>
+        call.method === "POST" &&
+        call.authorization === "Bearer local-fixture-token" &&
+        call.body === "local-fixture-body",
+    ),
+  );
+  console.log(
+    "Worker-HTTP-Prüfung bestanden: erfolgreicher Abruf, fünf Weiterleitungen abgelehnt, keine Folgeanfrage.",
+  );
 } finally {
   await worker?.stop();
   upstream.closeAllConnections();
-  await new Promise((resolve, reject) => upstream.close((error) => error ? reject(error) : resolve()));
+  await new Promise((resolve, reject) => upstream.close((error) => (error ? reject(error) : resolve())));
 }

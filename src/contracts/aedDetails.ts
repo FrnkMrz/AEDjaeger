@@ -99,18 +99,10 @@ export const EMPTY_DETAIL_FORM: Readonly<AedDetailForm> = Object.freeze({
 });
 
 /** Warum ein Wert abgelehnt wurde. Die Oberfläche kann daraus eine verständliche Meldung machen. */
-export type DetailProblem =
-  | "unknown-key"
-  | "not-text"
-  | "empty"
-  | "too-long"
-  | "invalid-characters"
-  | "invalid-value";
+export type DetailProblem = "unknown-key" | "not-text" | "empty" | "too-long" | "invalid-characters" | "invalid-value";
 
 /** Ergebnis der Prüfung: entweder saubere Tags oder genau ein Fehler mit Schlüssel und Grund. */
-export type DetailResult =
-  | { ok: true; tags: DetailTags }
-  | { ok: false; key: string; problem: DetailProblem };
+export type DetailResult = { ok: true; tags: DetailTags } | { ok: false; key: string; problem: DetailProblem };
 
 /**
  * Zeichen, die in einem Freitext nichts verloren haben:
@@ -236,7 +228,10 @@ function inDetailOrder(tags: DetailTags): DetailTags {
  *                  schon `indoor=yes`, darf die Ebene auch dann entstehen, wenn die Person „drinnen“ nicht erneut wählt.
  * @returns         Die Tags (in fester Reihenfolge) oder ein Fehler mit Schlüssel und Grund.
  */
-export function buildDetailTags(form: Readonly<AedDetailForm>, existing?: Readonly<Record<string, string>>): DetailResult {
+export function buildDetailTags(
+  form: Readonly<AedDetailForm>,
+  existing?: Readonly<Record<string, string>>,
+): DetailResult {
   // Zum Schluss laufen die Tags durch dieselbe Prüfung wie beim Server.
   return validateDetailTags(collectFormTags(form, existing));
 }
@@ -247,7 +242,10 @@ export function buildDetailTags(form: Readonly<AedDetailForm>, existing?: Readon
  * Das Prüfen übernehmen die Aufrufer, damit sie entscheiden können, WELCHE Werte geprüft werden (beim Korrigieren
  * nur die geänderten, nicht die unveränderten Werte aus OSM).
  */
-function collectFormTags(form: Readonly<AedDetailForm>, existing?: Readonly<Record<string, string>>): Record<string, string> {
+function collectFormTags(
+  form: Readonly<AedDetailForm>,
+  existing?: Readonly<Record<string, string>>,
+): Record<string, string> {
   const candidate: Record<string, string> = {};
 
   // Hilfsfunktion: Text übernehmen, wenn nach dem Trimmen etwas drinsteht.
@@ -384,7 +382,10 @@ export function planDetailChanges(
  *
  * @param existing  Die frisch gelesenen OSM-Tags des Objekts.
  */
-export function formFromExistingTags(existing: Readonly<Record<string, string>>): { form: AedDetailForm; locked: ReadonlySet<DetailKey> } {
+export function formFromExistingTags(existing: Readonly<Record<string, string>>): {
+  form: AedDetailForm;
+  locked: ReadonlySet<DetailKey>;
+} {
   const form: AedDetailForm = { ...EMPTY_DETAIL_FORM };
   const locked = new Set<DetailKey>();
   const valid = (key: DetailKey, value: string): boolean => validateDetailTags({ [key]: value }).ok;
@@ -395,26 +396,47 @@ export function formFromExistingTags(existing: Readonly<Record<string, string>>)
     let representable = false;
     switch (key) {
       case "defibrillator:location":
-        if (valid(key, value)) { form.location = value; representable = true; }
+        if (valid(key, value)) {
+          form.location = value;
+          representable = true;
+        }
         break;
       case "access":
-        if ((ACCESS_VALUES as readonly string[]).includes(value)) { form.access = value as AccessValue; representable = true; }
+        if ((ACCESS_VALUES as readonly string[]).includes(value)) {
+          form.access = value as AccessValue;
+          representable = true;
+        }
         break;
       case "opening_hours":
-        if (value === "24/7") { form.hoursMode = "always"; representable = true; }
-        else if (valid(key, value)) { form.hoursMode = "times"; form.hoursText = value; representable = true; }
+        if (value === "24/7") {
+          form.hoursMode = "always";
+          representable = true;
+        } else if (valid(key, value)) {
+          form.hoursMode = "times";
+          form.hoursText = value;
+          representable = true;
+        }
         break;
       case "indoor":
-        if ((INDOOR_VALUES as readonly string[]).includes(value)) { form.indoor = value as IndoorValue; representable = true; }
+        if ((INDOOR_VALUES as readonly string[]).includes(value)) {
+          form.indoor = value as IndoorValue;
+          representable = true;
+        }
         break;
       case "level":
-        if (valid(key, value)) { form.level = Number(value); representable = true; }
+        if (valid(key, value)) {
+          form.level = Number(value);
+          representable = true;
+        }
         break;
       case "operator":
       case "phone":
       case "description":
       case "ref":
-        if (valid(key, value)) { form[key] = value; representable = true; }
+        if (valid(key, value)) {
+          form[key] = value;
+          representable = true;
+        }
         break;
     }
     if (!representable) locked.add(key);

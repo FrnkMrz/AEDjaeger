@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { createSuccessSound, isSuccessSoundEnabled, setSuccessSoundEnabled, SUCCESS_SOUND_PREFERENCE_KEY, type AudioContextLike } from "../src/sound/successSound";
+import {
+  createSuccessSound,
+  isSuccessSoundEnabled,
+  setSuccessSoundEnabled,
+  SUCCESS_SOUND_PREFERENCE_KEY,
+  type AudioContextLike,
+} from "../src/sound/successSound";
 
 /** Eine Attrappe des Audio-Bausteins, die nur mitschreibt, was passiert. Es klingt nichts. */
 function fakeAudio(state = "running") {
@@ -8,14 +14,39 @@ function fakeAudio(state = "running") {
     currentTime: 10,
     state,
     destination: {},
-    resume: () => { log.resumes += 1; return Promise.resolve(); },
+    resume: () => {
+      log.resumes += 1;
+      return Promise.resolve();
+    },
     createOscillator: () => {
       log.oscillators += 1;
-      return { type: "sine", frequency: { value: 0 }, connect: () => { log.connected += 1; }, start: () => { log.started += 1; }, stop: () => { log.stopped += 1; } };
+      return {
+        type: "sine",
+        frequency: { value: 0 },
+        connect: () => {
+          log.connected += 1;
+        },
+        start: () => {
+          log.started += 1;
+        },
+        stop: () => {
+          log.stopped += 1;
+        },
+      };
     },
     createGain: () => {
       log.gains += 1;
-      return { gain: { setValueAtTime: () => undefined, exponentialRampToValueAtTime: () => { log.ramps += 1; } }, connect: () => { log.connected += 1; } };
+      return {
+        gain: {
+          setValueAtTime: () => undefined,
+          exponentialRampToValueAtTime: () => {
+            log.ramps += 1;
+          },
+        },
+        connect: () => {
+          log.connected += 1;
+        },
+      };
     },
   };
   return { context, log };
@@ -23,7 +54,13 @@ function fakeAudio(state = "running") {
 
 function memoryStorage(initial: Record<string, string> = {}) {
   const values = new Map(Object.entries(initial));
-  return { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); }, values };
+  return {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      values.set(key, value);
+    },
+    values,
+  };
 }
 
 describe("success sound", () => {
@@ -67,7 +104,10 @@ describe("success sound", () => {
   it("stays completely silent, and creates no audio, when the person switched the sound off", () => {
     const { context, log } = fakeAudio();
     const factory = vi.fn(() => context);
-    const sound = createSuccessSound({ storage: memoryStorage({ [SUCCESS_SOUND_PREFERENCE_KEY]: "off" }), createContext: factory });
+    const sound = createSuccessSound({
+      storage: memoryStorage({ [SUCCESS_SOUND_PREFERENCE_KEY]: "off" }),
+      createContext: factory,
+    });
     sound.prepare();
     expect(sound.play()).toBe(false);
     expect(factory).not.toHaveBeenCalled();
@@ -81,7 +121,12 @@ describe("success sound", () => {
   });
 
   it("does nothing, and does not throw, when creating the audio fails", () => {
-    const sound = createSuccessSound({ storage: memoryStorage(), createContext: () => { throw new Error("blocked"); } });
+    const sound = createSuccessSound({
+      storage: memoryStorage(),
+      createContext: () => {
+        throw new Error("blocked");
+      },
+    });
     expect(() => sound.prepare()).not.toThrow();
     expect(sound.play()).toBe(false);
   });
@@ -91,13 +136,22 @@ describe("success sound", () => {
     context.resume = () => Promise.reject(new Error("not allowed"));
     const sound = createSuccessSound({ storage: memoryStorage(), createContext: () => context });
     expect(() => sound.prepare()).not.toThrow();
-    context.createOscillator = () => { throw new Error("broken"); };
+    context.createOscillator = () => {
+      throw new Error("broken");
+    };
     expect(sound.play()).toBe(false);
   });
 });
 
 describe("success sound choice during the session", () => {
-  const blockedStorage = { getItem: () => { throw new Error("denied"); }, setItem: () => { throw new Error("denied"); } };
+  const blockedStorage = {
+    getItem: () => {
+      throw new Error("denied");
+    },
+    setItem: () => {
+      throw new Error("denied");
+    },
+  };
 
   it("can be switched off for the open page even when the browser storage is blocked", () => {
     const { context, log } = fakeAudio();
@@ -158,7 +212,14 @@ describe("success sound preference", () => {
   });
 
   it("falls back to on when the storage cannot be read or written", () => {
-    const broken = { getItem: () => { throw new Error("denied"); }, setItem: () => { throw new Error("denied"); } };
+    const broken = {
+      getItem: () => {
+        throw new Error("denied");
+      },
+      setItem: () => {
+        throw new Error("denied");
+      },
+    };
     expect(isSuccessSoundEnabled(broken)).toBe(true);
     expect(() => setSuccessSoundEnabled(false, broken)).not.toThrow();
     expect(isSuccessSoundEnabled(undefined)).toBe(true);

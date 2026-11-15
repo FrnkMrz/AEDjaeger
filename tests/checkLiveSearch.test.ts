@@ -40,17 +40,25 @@ const header = { tileType: 1, minZoom: 0, maxZoom: 14, minLon: 5, minLat: 45, ma
 function encodeTile(layers: Record<string, number>): ArrayBuffer {
   const writer = new PbfWriter();
   for (const [name, count] of Object.entries(layers)) {
-    writer.writeMessage(3, (layer: { name: string; count: number }, pbf: PbfWriter) => {
-      pbf.writeVarintField(15, 2);
-      pbf.writeStringField(1, layer.name);
-      for (let index = 0; index < layer.count; index += 1) {
-        pbf.writeMessage(2, (_unused: unknown, feature: PbfWriter) => {
-          feature.writeVarintField(3, 1); // Typ POINT
-          feature.writePackedVarint(4, [9, 50, 34]); // MoveTo, Koordinaten (25, 17)
-        }, undefined);
-      }
-      pbf.writeVarintField(5, 4096);
-    }, { name, count });
+    writer.writeMessage(
+      3,
+      (layer: { name: string; count: number }, pbf: PbfWriter) => {
+        pbf.writeVarintField(15, 2);
+        pbf.writeStringField(1, layer.name);
+        for (let index = 0; index < layer.count; index += 1) {
+          pbf.writeMessage(
+            2,
+            (_unused: unknown, feature: PbfWriter) => {
+              feature.writeVarintField(3, 1); // Typ POINT
+              feature.writePackedVarint(4, [9, 50, 34]); // MoveTo, Koordinaten (25, 17)
+            },
+            undefined,
+          );
+        }
+        pbf.writeVarintField(5, 4096);
+      },
+      { name, count },
+    );
   }
   const bytes = writer.finish();
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
@@ -89,18 +97,26 @@ describe("Metadaten-Prüfung", () => {
   });
 
   it("lehnt veraltete OSM-Daten ab (älter als 5 Tage = 120 Stunden)", () => {
-    expect(() => validateMetadata(metadata({ osm_data_until: "2026-11-05T11:59:00Z" }), NOW))
-      .toThrow("120 Stunden");
+    expect(() => validateMetadata(metadata({ osm_data_until: "2026-11-05T11:59:00Z" }), NOW)).toThrow("120 Stunden");
   });
 
   it("akzeptiert vier Tage alte OSM-Daten, weil die Grenze bei 5 Tagen liegt", () => {
     // Die Länderextrakte müssen dieselbe Grenze einhalten; hier sind sie ebenfalls vier Tage alt.
     const fourDaysOld = "2026-11-06T12:00:00Z";
     const extract = { status: "downloaded", osm_data_timestamp: fourDaysOld };
-    const result = validateMetadata(metadata({
-      osm_data_until: fourDaysOld,
-      extracts: { germany: extract, austria: extract, switzerland: extract, luxembourg: extract, liechtenstein: extract },
-    }), NOW);
+    const result = validateMetadata(
+      metadata({
+        osm_data_until: fourDaysOld,
+        extracts: {
+          germany: extract,
+          austria: extract,
+          switzerland: extract,
+          luxembourg: extract,
+          liechtenstein: extract,
+        },
+      }),
+      NOW,
+    );
     expect(result.ageHours).toBeCloseTo(96, 5);
   });
 
@@ -146,7 +162,10 @@ describe("Gesamtablauf mit Fakes", () => {
       if (url.endsWith("/metadata.json")) {
         return new Response(JSON.stringify(options.body ?? metadata()), { status: options.metadataStatus ?? 200 });
       }
-      return new Response(new Uint8Array(127), { status: options.rangeStatus ?? 206, headers: { "Content-Range": "bytes 0-126/9999" } });
+      return new Response(new Uint8Array(127), {
+        status: options.rangeStatus ?? 206,
+        headers: { "Content-Range": "bytes 0-126/9999" },
+      });
     }) as typeof fetch;
   }
 
@@ -179,24 +198,39 @@ describe("Gesamtablauf mit Fakes", () => {
   });
 
   it("meldet eine fehlende Kachel als Fehler, nicht als Befund ohne AED", async () => {
-    await expect(runLiveSearchCheck({
-      latitude: 49.4456, longitude: 11.0825, nowMs: NOW,
-      fetchImpl: fakeFetch(), openArchive: fakeArchive(undefined),
-    })).rejects.toThrow("Keine Daten in dieser Kachel");
+    await expect(
+      runLiveSearchCheck({
+        latitude: 49.4456,
+        longitude: 11.0825,
+        nowMs: NOW,
+        fetchImpl: fakeFetch(),
+        openArchive: fakeArchive(undefined),
+      }),
+    ).rejects.toThrow("Keine Daten in dieser Kachel");
   });
 
   it("bricht ab, wenn der Server Range-Anfragen nicht mit 206 beantwortet", async () => {
-    await expect(runLiveSearchCheck({
-      latitude: 49.4456, longitude: 11.0825, nowMs: NOW,
-      fetchImpl: fakeFetch({ rangeStatus: 200 }), openArchive: fakeArchive(encodeTile({ defibrillators: 1 })),
-    })).rejects.toThrow("Range-Anfrage");
+    await expect(
+      runLiveSearchCheck({
+        latitude: 49.4456,
+        longitude: 11.0825,
+        nowMs: NOW,
+        fetchImpl: fakeFetch({ rangeStatus: 200 }),
+        openArchive: fakeArchive(encodeTile({ defibrillators: 1 })),
+      }),
+    ).rejects.toThrow("Range-Anfrage");
   });
 
   it("meldet einen HTTP-Fehler der Metadaten klar", async () => {
-    await expect(runLiveSearchCheck({
-      latitude: 49.4456, longitude: 11.0825, nowMs: NOW,
-      fetchImpl: fakeFetch({ metadataStatus: 503 }), openArchive: fakeArchive(encodeTile({ defibrillators: 1 })),
-    })).rejects.toThrow("HTTP 503");
+    await expect(
+      runLiveSearchCheck({
+        latitude: 49.4456,
+        longitude: 11.0825,
+        nowMs: NOW,
+        fetchImpl: fakeFetch({ metadataStatus: 503 }),
+        openArchive: fakeArchive(encodeTile({ defibrillators: 1 })),
+      }),
+    ).rejects.toThrow("HTTP 503");
   });
 });
 
@@ -212,8 +246,13 @@ describe("readLimited (Größenbegrenzung beim Lesen)", () => {
     let delivered = 0;
     let cancelled = false;
     const endless = new ReadableStream<Uint8Array>({
-      pull(controller) { delivered += 1; controller.enqueue(new Uint8Array(1_024)); },
-      cancel() { cancelled = true; },
+      pull(controller) {
+        delivered += 1;
+        controller.enqueue(new Uint8Array(1_024));
+      },
+      cancel() {
+        cancelled = true;
+      },
     });
     await expect(readLimited(new Response(endless), 4_096)).rejects.toThrow("größer als erlaubt");
     expect(cancelled).toBe(true);
@@ -258,8 +297,12 @@ describe("Konstanten des Live-Checks stimmen mit der Worker-Route überein", () 
 
   it("die DACH-Grenzen des Skripts entsprechen der Prüfung in der Route", () => {
     // Route: bounds.minLat >= 45 && bounds.maxLat <= 56 ...; Skript: COVERAGE_BOUNDS.
-    const routeBounds = routeSource.match(/bounds\.minLat >= (\d+)\s*&&\s*bounds\.maxLat <= (\d+)\s*&&\s*bounds\.minLon >= (\d+)\s*&&\s*bounds\.maxLon <= (\d+)/);
-    const scriptBounds = scriptSource.match(/COVERAGE_BOUNDS = \{ minLat: (\d+), maxLat: (\d+), minLon: (\d+), maxLon: (\d+) \}/);
+    const routeBounds = routeSource.match(
+      /bounds\.minLat >= (\d+)\s*&&\s*bounds\.maxLat <= (\d+)\s*&&\s*bounds\.minLon >= (\d+)\s*&&\s*bounds\.maxLon <= (\d+)/,
+    );
+    const scriptBounds = scriptSource.match(
+      /COVERAGE_BOUNDS = \{ minLat: (\d+), maxLat: (\d+), minLon: (\d+), maxLon: (\d+) \}/,
+    );
     expect(routeBounds, "Prüfung in der Route nicht gefunden").not.toBeNull();
     expect(scriptBounds, "COVERAGE_BOUNDS im Skript nicht gefunden").not.toBeNull();
     expect(scriptBounds!.slice(1)).toEqual(routeBounds!.slice(1));

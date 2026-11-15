@@ -9,7 +9,13 @@ const MAX_CHANGESET_STATUS_BYTES = 8_192;
 export async function createChangeset(token: string, comment: string, fetcher: typeof fetch): Promise<string> {
   const createdBy = escapeXml(`AEDjaeger ${APP_VERSION}`);
   const body = `<osm><changeset><tag k="created_by" v="${createdBy}"/><tag k="comment" v="${escapeXml(comment)}"/></changeset></osm>`;
-  const response = await requestOSMDevelopmentApi("development", "/api/0.6/changeset/create", token, { method: "PUT", body }, fetcher);
+  const response = await requestOSMDevelopmentApi(
+    "development",
+    "/api/0.6/changeset/create",
+    token,
+    { method: "PUT", body },
+    fetcher,
+  );
   if (!response.ok) throw new Error("OSM changeset could not be opened");
   const id = (await readLimitedText(response, 64)).trim();
   if (!/^[1-9]\d{0,15}$/u.test(id)) throw new Error("Invalid OSM changeset ID");
@@ -20,10 +26,22 @@ export async function createChangeset(token: string, comment: string, fetcher: t
 export async function closeChangeset(token: string, changesetId: string, fetcher: typeof fetch): Promise<boolean> {
   if (!/^[1-9]\d{0,15}$/u.test(changesetId)) return false;
   try {
-    const response = await requestOSMDevelopmentApi("development", `/api/0.6/changeset/${changesetId}/close`, token, { method: "PUT" }, fetcher);
+    const response = await requestOSMDevelopmentApi(
+      "development",
+      `/api/0.6/changeset/${changesetId}/close`,
+      token,
+      { method: "PUT" },
+      fetcher,
+    );
     if (response.ok) return true;
     if (response.status !== 409) return false;
-    const status = await requestOSMDevelopmentApi("development", `/api/0.6/changeset/${changesetId}`, token, { method: "GET" }, fetcher);
+    const status = await requestOSMDevelopmentApi(
+      "development",
+      `/api/0.6/changeset/${changesetId}`,
+      token,
+      { method: "GET" },
+      fetcher,
+    );
     if (!status.ok) return false;
     return isChangesetClosed(await readLimitedText(status, MAX_CHANGESET_STATUS_BYTES), changesetId);
   } catch {
@@ -39,5 +57,8 @@ function isChangesetClosed(body: string, changesetId: string): boolean {
   } catch {
     // The OSM API may return XML instead of JSON.
   }
-  return new RegExp(`<changeset\\b(?=[^>]*\\bid="${changesetId}"(?=[\\s>]))(?=[^>]*\\bopen="false"(?=[\\s>]))[^>]*\\/?\\s*>`, "u").test(body);
+  return new RegExp(
+    `<changeset\\b(?=[^>]*\\bid="${changesetId}"(?=[\\s>]))(?=[^>]*\\bopen="false"(?=[\\s>]))[^>]*\\/?\\s*>`,
+    "u",
+  ).test(body);
 }

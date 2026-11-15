@@ -1,6 +1,16 @@
 import { readCookie, readOSMSessionCookie } from "./http/requestGuards";
-import { buildOSMAuthorizationUrl, createOAuthSecret, createPkceTransaction, importOAuthEncryptionKey, validateOSMAuthorizationCallback } from "./auth/osmOAuth";
-import { exchangeOSMCodeForIdentity, exchangeOSMDevelopmentCodeForAccess, OSMOAuthDiagnosticError } from "./auth/osmOidc";
+import {
+  buildOSMAuthorizationUrl,
+  createOAuthSecret,
+  createPkceTransaction,
+  importOAuthEncryptionKey,
+  validateOSMAuthorizationCallback,
+} from "./auth/osmOAuth";
+import {
+  exchangeOSMCodeForIdentity,
+  exchangeOSMDevelopmentCodeForAccess,
+  OSMOAuthDiagnosticError,
+} from "./auth/osmOidc";
 import { getOSMProviderEndpoints, type OSMEnvironment } from "./auth/osmProvider";
 import { fetchWithoutRedirects } from "./http/fetchWithoutRedirects";
 import type { D1Database } from "./storage/d1";
@@ -41,10 +51,7 @@ type OSMAuthConfiguration = {
   clientId: string;
   redirectUri: string;
   encryptionKey: string;
-} & (
-  | { provider: "production" }
-  | { provider: "development"; clientSecret: string }
-);
+} & ({ provider: "production" } | { provider: "development"; clientSecret: string });
 
 const AUTH_COOKIE = "__Host-aedjaeger_osm_auth";
 const LEGACY_AUTH_COOKIE = "aedjaeger_osm_auth";
@@ -99,17 +106,26 @@ const worker = {
   },
 };
 
-async function startOSMLogin(request: Request, environment: WorkerEnvironment, osmEnvironment: OSMEnvironment = "production"): Promise<Response> {
+async function startOSMLogin(
+  request: Request,
+  environment: WorkerEnvironment,
+  osmEnvironment: OSMEnvironment = "production",
+): Promise<Response> {
   const configuration = getAuthConfiguration(environment, osmEnvironment);
   if (!configuration || !environment.DB) return authUnavailable();
   const requestUrl = new URL(request.url);
-  if (requestUrl.origin !== new URL(configuration.redirectUri).origin) return jsonResponse({ error: "invalid_origin" }, 400);
+  if (requestUrl.origin !== new URL(configuration.redirectUri).origin)
+    return jsonResponse({ error: "invalid_origin" }, 400);
 
   try {
     const transaction = await createPkceTransaction();
     const browserBinding = createOAuthSecret();
     const key = await importOAuthEncryptionKey(configuration.encryptionKey);
-    await storeOSMOAuthTransaction(environment.DB, { ...transaction, browserBinding, createdAt: Date.now(), environment: osmEnvironment }, key);
+    await storeOSMOAuthTransaction(
+      environment.DB,
+      { ...transaction, browserBinding, createdAt: Date.now(), environment: osmEnvironment },
+      key,
+    );
     const authorizationUrl = buildOSMAuthorizationUrl({
       clientId: configuration.clientId,
       redirectUri: configuration.redirectUri,
@@ -122,7 +138,12 @@ async function startOSMLogin(request: Request, environment: WorkerEnvironment, o
         Location: authorizationUrl.toString(),
         "Cache-Control": "no-store",
         "Referrer-Policy": "no-referrer",
-        "Set-Cookie": buildCookie(cookieName(AUTH_COOKIE, LEGACY_AUTH_COOKIE, requestUrl.protocol === "https:"), browserBinding, 10 * 60, requestUrl.protocol === "https:"),
+        "Set-Cookie": buildCookie(
+          cookieName(AUTH_COOKIE, LEGACY_AUTH_COOKIE, requestUrl.protocol === "https:"),
+          browserBinding,
+          10 * 60,
+          requestUrl.protocol === "https:",
+        ),
       },
     });
   } catch {
@@ -130,11 +151,16 @@ async function startOSMLogin(request: Request, environment: WorkerEnvironment, o
   }
 }
 
-async function finishOSMLogin(request: Request, environment: WorkerEnvironment, osmEnvironment: OSMEnvironment = "production"): Promise<Response> {
+async function finishOSMLogin(
+  request: Request,
+  environment: WorkerEnvironment,
+  osmEnvironment: OSMEnvironment = "production",
+): Promise<Response> {
   const configuration = getAuthConfiguration(environment, osmEnvironment);
   if (!configuration || !environment.DB) return authUnavailable();
   const callbackUrl = new URL(request.url);
-  if (callbackUrl.origin !== new URL(configuration.redirectUri).origin) return loginFailure(callbackUrl.protocol === "https:");
+  if (callbackUrl.origin !== new URL(configuration.redirectUri).origin)
+    return loginFailure(callbackUrl.protocol === "https:");
   const states = callbackUrl.searchParams.getAll("state");
   const browserBinding = readMigratingCookie(request.headers.get("Cookie"), AUTH_COOKIE, LEGACY_AUTH_COOKIE);
   if (states.length !== 1 || !browserBinding) return loginFailure(callbackUrl.protocol === "https:");
@@ -144,7 +170,8 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment, 
     const key = await importOAuthEncryptionKey(configuration.encryptionKey);
     // Löschen vor dem Codeaustausch macht den Callback auch bei parallelen Requests einmalig.
     const transaction = await consumeOSMOAuthTransaction(environment.DB, states[0], browserBinding, Date.now(), key);
-    if (!transaction || transaction.environment !== osmEnvironment) return loginFailure(callbackUrl.protocol === "https:");
+    if (!transaction || transaction.environment !== osmEnvironment)
+      return loginFailure(callbackUrl.protocol === "https:");
     stage = "validate_callback";
     const callback = validateOSMAuthorizationCallback(callbackUrl, states[0]);
     if (!callback.ok) {
@@ -160,12 +187,16 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment, 
       clientId: configuration.clientId,
       redirectUri: configuration.redirectUri,
     };
-    const exchanged = configuration.provider === "development"
-      ? {
-          environment: "development" as const,
-          identity: await exchangeOSMDevelopmentCodeForAccess({ ...exchangeInput, clientSecret: configuration.clientSecret }),
-        }
-      : { environment: "production" as const, identity: await exchangeOSMCodeForIdentity(exchangeInput) };
+    const exchanged =
+      configuration.provider === "development"
+        ? {
+            environment: "development" as const,
+            identity: await exchangeOSMDevelopmentCodeForAccess({
+              ...exchangeInput,
+              clientSecret: configuration.clientSecret,
+            }),
+          }
+        : { environment: "production" as const, identity: await exchangeOSMCodeForIdentity(exchangeInput) };
     stage = "rotate_session";
     const sessionToken = createOAuthSecret();
     // Die alte Sitzung wird widerrufen, bevor der neue Sitzungstoken ausgegeben wird.
@@ -194,10 +225,27 @@ async function finishOSMLogin(request: Request, environment: WorkerEnvironment, 
       "Cache-Control": "no-store",
       "Referrer-Policy": "no-referrer",
     });
-    headers.append("Set-Cookie", buildCookie(cookieName(AUTH_COOKIE, LEGACY_AUTH_COOKIE, callbackUrl.protocol === "https:"), "", 0, callbackUrl.protocol === "https:"));
+    headers.append(
+      "Set-Cookie",
+      buildCookie(
+        cookieName(AUTH_COOKIE, LEGACY_AUTH_COOKIE, callbackUrl.protocol === "https:"),
+        "",
+        0,
+        callbackUrl.protocol === "https:",
+      ),
+    );
     if (callbackUrl.protocol === "https:") headers.append("Set-Cookie", buildCookie(LEGACY_AUTH_COOKIE, "", 0, false));
-    headers.append("Set-Cookie", buildCookie(cookieName(SESSION_COOKIE, LEGACY_SESSION_COOKIE, callbackUrl.protocol === "https:"), sessionToken, 12 * 60 * 60, callbackUrl.protocol === "https:"));
-    if (callbackUrl.protocol === "https:") headers.append("Set-Cookie", buildCookie(LEGACY_SESSION_COOKIE, "", 0, false));
+    headers.append(
+      "Set-Cookie",
+      buildCookie(
+        cookieName(SESSION_COOKIE, LEGACY_SESSION_COOKIE, callbackUrl.protocol === "https:"),
+        sessionToken,
+        12 * 60 * 60,
+        callbackUrl.protocol === "https:",
+      ),
+    );
+    if (callbackUrl.protocol === "https:")
+      headers.append("Set-Cookie", buildCookie(LEGACY_SESSION_COOKIE, "", 0, false));
     return new Response(null, {
       status: 303,
       headers,
@@ -219,16 +267,39 @@ async function getSession(request: Request, environment: WorkerEnvironment): Pro
   // „developmentCorrectionsAvailable“ erscheint nur, wenn der Betreiber Korrekturen freigegeben hat UND das Schreiben auf dem
   // Testserver an ist. Fehlt das Feld, gilt für die App „aus“.
   const correctionsAvailable = developmentWriteAvailable && environment.OSM_DETAIL_CORRECTIONS_ENABLED === "true";
-  if (!token || !environment.DB) return jsonResponse({ authenticated: false, loginAvailable, developmentLoginAvailable, developmentSession: false, developmentWriteAvailable }, 200);
+  if (!token || !environment.DB)
+    return jsonResponse(
+      {
+        authenticated: false,
+        loginAvailable,
+        developmentLoginAvailable,
+        developmentSession: false,
+        developmentWriteAvailable,
+      },
+      200,
+    );
   try {
     const session = await findOSMSession(environment.DB, token, Date.now());
     // „photoCheckAvailable“ erscheint nur, wenn die Fotoprüfung für dieses Konto aktiv ist.
     // Fehlt das Feld, gilt für die App „aus“ – so ändert sich für alle anderen nichts.
     const photoCheckAvailable = session !== null && isPhotoCheckAvailable(environment, session);
-    const developmentWriteOwnerHash = session?.environment === "development" && environment.OSM_OAUTH_ENCRYPTION_KEY
-      ? await hashOSMDevelopmentWriteOwner(session, environment.OSM_OAUTH_ENCRYPTION_KEY)
-      : undefined;
-    return jsonResponse({ authenticated: session !== null, loginAvailable, developmentLoginAvailable, developmentSession: session?.environment === "development", developmentWriteAvailable, ...(developmentWriteOwnerHash ? { developmentWriteOwnerHash } : {}), ...(correctionsAvailable ? { developmentCorrectionsAvailable: true } : {}), ...(photoCheckAvailable ? { photoCheckAvailable: true } : {}) }, 200);
+    const developmentWriteOwnerHash =
+      session?.environment === "development" && environment.OSM_OAUTH_ENCRYPTION_KEY
+        ? await hashOSMDevelopmentWriteOwner(session, environment.OSM_OAUTH_ENCRYPTION_KEY)
+        : undefined;
+    return jsonResponse(
+      {
+        authenticated: session !== null,
+        loginAvailable,
+        developmentLoginAvailable,
+        developmentSession: session?.environment === "development",
+        developmentWriteAvailable,
+        ...(developmentWriteOwnerHash ? { developmentWriteOwnerHash } : {}),
+        ...(correctionsAvailable ? { developmentCorrectionsAvailable: true } : {}),
+        ...(photoCheckAvailable ? { photoCheckAvailable: true } : {}),
+      },
+      200,
+    );
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
@@ -238,7 +309,8 @@ async function logout(request: Request, environment: WorkerEnvironment): Promise
   const requestUrl = new URL(request.url);
   const origin = request.headers.get("Origin");
   const fetchSite = request.headers.get("Sec-Fetch-Site");
-  if ((origin !== null && origin !== requestUrl.origin) || fetchSite === "cross-site") return jsonResponse({ error: "invalid_origin" }, 403);
+  if ((origin !== null && origin !== requestUrl.origin) || fetchSite === "cross-site")
+    return jsonResponse({ error: "invalid_origin" }, 403);
   const token = readOSMSessionCookie(request.headers.get("Cookie"));
   if (token && !environment.DB) return jsonResponse({ error: "logout_unavailable" }, 503);
   if (token && environment.DB) {
@@ -265,7 +337,12 @@ async function logout(request: Request, environment: WorkerEnvironment): Promise
   });
 }
 
-export async function revokeOSMToken(token: string, osmEnvironment: OSMEnvironment, environment: WorkerEnvironment, fetcher: typeof fetch = fetch): Promise<void> {
+export async function revokeOSMToken(
+  token: string,
+  osmEnvironment: OSMEnvironment,
+  environment: WorkerEnvironment,
+  fetcher: typeof fetch = fetch,
+): Promise<void> {
   const configuration = getAuthConfiguration(environment, osmEnvironment);
   if (!configuration) return;
   const body = new URLSearchParams({ token, token_type_hint: "access_token" });
@@ -278,9 +355,16 @@ export async function revokeOSMToken(token: string, osmEnvironment: OSMEnvironme
     body.set("client_id", configuration.clientId);
   }
   try {
-    await fetchWithoutRedirects(getOSMProviderEndpoints(osmEnvironment).revocation, {
-      method: "POST", headers, body, signal: AbortSignal.timeout(5_000),
-    }, fetcher);
+    await fetchWithoutRedirects(
+      getOSMProviderEndpoints(osmEnvironment).revocation,
+      {
+        method: "POST",
+        headers,
+        body,
+        signal: AbortSignal.timeout(5_000),
+      },
+      fetcher,
+    );
   } catch {
     // Local logout already succeeded; provider revocation is best effort and
     // must never re-create a usable local session or expose provider details.
@@ -304,8 +388,20 @@ function getAuthConfiguration(
     const secureRedirect = redirectUri.protocol === "https:";
     const localRedirect = redirectUri.protocol === "http:" && redirectUri.hostname === "127.0.0.1";
     const expectedPath = development ? "/api/auth/osm/development/callback" : "/api/auth/osm/callback";
-    if ((!secureRedirect && !localRedirect) || redirectUri.username || redirectUri.password || redirectUri.pathname !== expectedPath || redirectUri.search || redirectUri.hash) return null;
-    const common = { clientId, redirectUri: redirectUri.toString(), encryptionKey: environment.OSM_OAUTH_ENCRYPTION_KEY };
+    if (
+      (!secureRedirect && !localRedirect) ||
+      redirectUri.username ||
+      redirectUri.password ||
+      redirectUri.pathname !== expectedPath ||
+      redirectUri.search ||
+      redirectUri.hash
+    )
+      return null;
+    const common = {
+      clientId,
+      redirectUri: redirectUri.toString(),
+      encryptionKey: environment.OSM_OAUTH_ENCRYPTION_KEY,
+    };
     return development
       ? { ...common, provider: "development", clientSecret: clientSecret! }
       : { ...common, provider: "production" };
@@ -329,7 +425,6 @@ async function isOSMLoginAvailable(
     return false;
   }
 }
-
 
 function buildCookie(name: string, value: string, maxAge: number, secure: boolean): string {
   return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? "; Secure" : ""}`;
@@ -366,9 +461,12 @@ function loginFailure(secure: boolean): Response {
 }
 
 function logOSMOAuthCallbackFailure(environment: OSMEnvironment, stage: string, error?: unknown): void {
-  const diagnostic = error instanceof OSMOAuthDiagnosticError
-    ? { diagnosticCode: error.diagnosticCode, ...(error.httpStatus ? { httpStatus: error.httpStatus } : {}) }
-    : error === undefined ? {} : { diagnosticCode: "unexpected_error" };
+  const diagnostic =
+    error instanceof OSMOAuthDiagnosticError
+      ? { diagnosticCode: error.diagnosticCode, ...(error.httpStatus ? { httpStatus: error.httpStatus } : {}) }
+      : error === undefined
+        ? {}
+        : { diagnosticCode: "unexpected_error" };
   console.error("OSM OAuth callback failed", {
     event: "osm_oauth_callback_failed",
     provider: environment,
@@ -377,10 +475,19 @@ function logOSMOAuthCallbackFailure(environment: OSMEnvironment, stage: string, 
   });
 }
 
-function jsonResponse(body: Record<string, string | boolean>, status: number, extraHeaders: Record<string, string> = {}): Response {
+function jsonResponse(
+  body: Record<string, string | boolean>,
+  status: number,
+  extraHeaders: Record<string, string> = {},
+): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", ...extraHeaders },
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+      ...extraHeaders,
+    },
   });
 }
 

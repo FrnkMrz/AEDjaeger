@@ -13,10 +13,13 @@ export const flowTranslations = {
     developmentSending: "Testserver: Änderung wird gesendet…",
     developmentComplete: "Testserver: Vor-Ort-Prüfung gespeichert.",
     developmentUnchanged: "Testserver: Schon aktuell. Es wurde nichts geändert.",
-    developmentNotFound: "Testserver: Dieser AED stammt aus dem echten OSM und existiert auf dem Testserver nicht. Es wurde nichts geändert.",
+    developmentNotFound:
+      "Testserver: Dieser AED stammt aus dem echten OSM und existiert auf dem Testserver nicht. Es wurde nichts geändert.",
     developmentCreated: "Testserver: Neuer AED wurde eingetragen.",
-    developmentUncertain: "Testserver: Ergebnis unklar. Mit derselben Anfrage erneut prüfen; keine neue Änderung wird blind gesendet.",
-    developmentConflict: "Testserver: Nichts wurde geändert. In der Nähe gibt es einen AED, den du noch nicht geprüft hast, oder der Eintrag hat sich geändert. Bitte suche erneut.",
+    developmentUncertain:
+      "Testserver: Ergebnis unklar. Mit derselben Anfrage erneut prüfen; keine neue Änderung wird blind gesendet.",
+    developmentConflict:
+      "Testserver: Nichts wurde geändert. In der Nähe gibt es einen AED, den du noch nicht geprüft hast, oder der Eintrag hat sich geändert. Bitte suche erneut.",
     developmentFailed: "Testserver: Änderung fehlgeschlagen. Bitte Eintrag erneut prüfen.",
     sightingConfirm: "AED oder Gehäuse gesehen – weiter",
     photoDateTitle: "Wann hast du den AED gesehen?",
@@ -31,26 +34,31 @@ export const flowTranslations = {
     photoRejectedBody: "Fotografiere das Gerät oder sein Gehäuse direkt. Ein Schild allein reicht nicht.",
     photoUnclearTitle: "Nicht eindeutig",
     photoUnclearBody: "Fotografiere Gerät oder Gehäuse bitte näher und schärfer.",
-    photoCheckUnavailable: "Die Prüfung ist gerade nicht möglich. Bestätige selbst, dass AED oder Gehäuse zu sehen ist.",
+    photoCheckUnavailable:
+      "Die Prüfung ist gerade nicht möglich. Bestätige selbst, dass AED oder Gehäuse zu sehen ist.",
     connectionOff: "Nicht verbunden",
     photoCheckCode: "Fehlercode: {code}",
     photoOverrideAction: "Trotzdem: Hier ist ein AED",
     photoOverrideTitle: "Wirklich ein AED?",
-    photoOverrideBody: "Die Prüfung hat keinen AED erkannt. Bestätige nur, wenn AED oder Gehäuse auf dem Foto zu sehen ist.",
+    photoOverrideBody:
+      "Die Prüfung hat keinen AED erkannt. Bestätige nur, wenn AED oder Gehäuse auf dem Foto zu sehen ist.",
     photoOverrideConfirm: "Ja, AED oder Gehäuse ist zu sehen – weiter",
     updateAvailable: "Neue Version verfügbar.",
     updateReload: "Neu laden",
     nextAed: "Nächsten AED fotografieren",
     recoveryContinue: "Weiter",
     recoveryNeedSignIn: "Melde dich beim OSM-Testserver an, um den offenen Speichervorgang zu prüfen.",
-    recoveryWritesDisabled: "Schreiben auf dem Testserver ist abgeschaltet. Der Vorgang bleibt gespeichert; versuche es später erneut.",
-    recoveryWrongAccount: "Du bist mit einem anderen OSM-Testserver-Konto angemeldet. Melde dich mit dem Konto an, das den Vorgang gestartet hat.",
+    recoveryWritesDisabled:
+      "Schreiben auf dem Testserver ist abgeschaltet. Der Vorgang bleibt gespeichert; versuche es später erneut.",
+    recoveryWrongAccount:
+      "Du bist mit einem anderen OSM-Testserver-Konto angemeldet. Melde dich mit dem Konto an, das den Vorgang gestartet hat.",
     buildVersion: "Version {revision}",
     soundToggle: "Ton, wenn das Speichern gelingt",
     unnamedAed: "AED (ohne Namen)",
     previewArchiveNotice: "Dieser AED stammt aus dem echten OSM. Auf dem Testserver lässt er sich nicht ändern.",
     candidateTooFar: "Zu weit weg zum Bestätigen (über {meters} m). Vor einer Neuanlage prüfen.",
-    previewNewerDate: "In OpenStreetMap steht schon ein neueres Prüfdatum ({date}). Dein Foto ist älter. Es wird nichts geändert.",
+    previewNewerDate:
+      "In OpenStreetMap steht schon ein neueres Prüfdatum ({date}). Dein Foto ist älter. Es wird nichts geändert.",
     updateLosesPhoto: "Das aktuelle Foto geht dabei verloren.",
     updateWaitSave: "Neu laden geht, sobald das Speichern abgeschlossen ist.",
     locationTitle: "Standort für die Suche wählen",
@@ -58,7 +66,8 @@ export const flowTranslations = {
     usePhoneLocation: "Aktuellen Handy-Standort verwenden",
     chooseMapLocation: "Standort auf Karte wählen",
     mapLocationHelp: "Verschiebe die Karte zum AED und zoome bis zur Straße.",
-    mapNavigationHelp: "Karte verschieben: Pfeiltasten. Zoomen: Plus- und Minustaste, die Schaltflächen oder zwei Finger.",
+    mapNavigationHelp:
+      "Karte verschieben: Pfeiltasten. Zoomen: Plus- und Minustaste, die Schaltflächen oder zwei Finger.",
     mapLocationInitial: "Noch kein Standort gewählt.",
     mapLocationCoordinates: "Ausgewählter Punkt: {latitude}, {longitude}",
     locationSourcePhoto: "Standort aus dem Foto verwendet",
@@ -74,10 +83,12 @@ export const flowTranslations = {
     distance: "Ungefähr {distance} m entfernt",
     locationUnavailable: "Der Standort ist gerade nicht verfügbar. Prüfe die Standortfreigabe und versuche es erneut.",
     locationDenied: "Standortzugriff wurde abgelehnt. Erlaube den Zugriff in den Browser-Einstellungen.",
-    locationUncertain: "Der Standort ist zu ungenau. Wähle einen Punkt auf der Karte oder versuche es mit besserem GPS erneut.",
+    locationUncertain:
+      "Der Standort ist zu ungenau. Wähle einen Punkt auf der Karte oder versuche es mit besserem GPS erneut.",
     searchRateLimited: "Die Suche ist vorübergehend begrenzt. Warte kurz und versuche es dann erneut.",
     searchUnavailable: "Die Umgebungssuche ist vorübergehend nicht erreichbar. Dein Standort wurde nicht gespeichert.",
-    outsideCoverage: "Dieser Standort liegt außerhalb der AED-Datenabdeckung. In der Pilotversion sind Deutschland, Österreich, die Schweiz, Luxemburg und Liechtenstein enthalten.",
+    outsideCoverage:
+      "Dieser Standort liegt außerhalb der AED-Datenabdeckung. In der Pilotversion sind Deutschland, Österreich, die Schweiz, Luxemburg und Liechtenstein enthalten.",
     searchFailed: "Die Umgebungssuche ist fehlgeschlagen. Bitte versuche es später erneut.",
     errorInvalidResponse: "Die Suchantwort konnte nicht sicher geprüft werden.",
     errorSignIn: "Die OpenStreetMap-Anmeldung fehlt oder ist abgelaufen. Bitte melde dich erneut an.",
@@ -90,7 +101,8 @@ export const flowTranslations = {
     previewTitle: "Änderungsvorschau",
     previewOldDate: "Bisher: {date}",
     previewNewDate: "Prüfdatum: {date}",
-    previewUnsupported: "Dieser OSM-Eintrag ist kein einzelner AED-Knoten. Für Ways und Relationen steht diese vereinfachte Vorschau nicht zur Verfügung.",
+    previewUnsupported:
+      "Dieser OSM-Eintrag ist kein einzelner AED-Knoten. Für Ways und Relationen steht diese vereinfachte Vorschau nicht zur Verfügung.",
     previewUnsupportedShort: "Vorschau nur für einzelne AED-Knoten",
     previewNoWrite: "Nur eine Vorschau. Nichts wurde gespeichert.",
     previewBack: "Zurück",
@@ -100,14 +112,17 @@ export const flowTranslations = {
     newPositionRequired: "Bestätige zuerst, dass der AED genau an diesem GPS-Punkt steht.",
     newPreviewCoordinates: "Vorgeschlagene Position: {latitude}, {longitude}",
     newPreviewTags: "Vorgeschlagene Angaben",
-    newPreviewReviewedCandidates: "Die angezeigten nahen AED-Einträge wurden als andere Geräte bestätigt. Vor dem Speichern prüft der Testserver die Umgebung erneut.",
+    newPreviewReviewedCandidates:
+      "Die angezeigten nahen AED-Einträge wurden als andere Geräte bestätigt. Vor dem Speichern prüft der Testserver die Umgebung erneut.",
     newPreviewCaution: "Prüfe Position und Umgebung genau.",
     newPreviewFoundCandidate: "Ein möglicher AED liegt nahe diesem Punkt. Prüfe zuerst wieder die Suchtreffer.",
-    newPreviewSearchInvalid: "Die Suche deckt diese Position nicht zuverlässig ab. Eine Neuanlage kann nicht vorbereitet werden.",
+    newPreviewSearchInvalid:
+      "Die Suche deckt diese Position nicht zuverlässig ab. Eine Neuanlage kann nicht vorbereitet werden.",
     newPositionMapLabel: "Position des AEDs auf der Karte prüfen",
     newPositionMapHelp: "Verschiebe die Karte, bis der AED unter dem roten Mittelpunkt liegt.",
     newPositionMapPrivacy: "Die Karte lädt Ausschnitte von OpenStreetMap.",
-    newPositionMapTileError: "Kartenausschnitte konnten nicht geladen werden. Die Position lässt sich trotzdem verschieben.",
+    newPositionMapTileError:
+      "Kartenausschnitte konnten nicht geladen werden. Die Position lässt sich trotzdem verschieben.",
     newPositionMapZoomIn: "Karte vergrößern",
     newPositionMapZoomOut: "Karte verkleinern",
     searchRetry: "Standort und AEDs erneut suchen",
@@ -165,10 +180,12 @@ export const flowTranslations = {
     detailsAddedTitle: "Neu eingetragen werden:",
     detailsAllPresent: "Zu diesem AED ist schon alles eingetragen, was die App erfasst.",
     detailsCorrectTitle: "Angaben ergänzen oder korrigieren",
-    detailsCorrectIntro: "Du kannst Fehlendes ergänzen und falsche Angaben ändern. Jede Änderung siehst du vorher als alt → neu. Gelöscht wird nichts.",
+    detailsCorrectIntro:
+      "Du kannst Fehlendes ergänzen und falsche Angaben ändern. Jede Änderung siehst du vorher als alt → neu. Gelöscht wird nichts.",
     detailsCorrectAction: "Angaben ergänzen oder korrigieren",
     detailWas: "Vorher: {value}",
-    detailLevelStays: "Die Ebene „{level}“ bleibt in OSM stehen, obwohl der AED draußen ist. AEDjaeger löscht nichts; entferne sie bei Bedarf selbst in OSM.",
+    detailLevelStays:
+      "Die Ebene „{level}“ bleibt in OSM stehen, obwohl der AED draußen ist. AEDjaeger löscht nichts; entferne sie bei Bedarf selbst in OSM.",
     detailsChangedTitle: "Wird geändert:",
     detailsCorrectionConfirm: "Ich habe vor Ort gesehen, dass der alte Wert nicht stimmt.",
     detailNotEditable: "Dieser Wert lässt sich hier nicht ändern.",
@@ -187,10 +204,13 @@ export const flowTranslations = {
     developmentSending: "Test server: Sending update…",
     developmentComplete: "Test server: Visit confirmation saved.",
     developmentUnchanged: "Test server: Already up to date. Nothing was changed.",
-    developmentNotFound: "Test server: This AED comes from the real OSM and does not exist on the test server. Nothing was changed.",
+    developmentNotFound:
+      "Test server: This AED comes from the real OSM and does not exist on the test server. Nothing was changed.",
     developmentCreated: "Test server: New AED added.",
-    developmentUncertain: "Test server: Result is unclear. Check again using the same request; no new edit will be sent blindly.",
-    developmentConflict: "Test server: Nothing was changed. There is an AED nearby that you have not reviewed yet, or the entry has changed. Please search again.",
+    developmentUncertain:
+      "Test server: Result is unclear. Check again using the same request; no new edit will be sent blindly.",
+    developmentConflict:
+      "Test server: Nothing was changed. There is an AED nearby that you have not reviewed yet, or the entry has changed. Please search again.",
     developmentFailed: "Test server: Update failed. Please check the entry again.",
     sightingConfirm: "I see an AED or its cabinet — continue",
     photoDateTitle: "When did you see the AED?",
@@ -205,12 +225,14 @@ export const flowTranslations = {
     photoRejectedBody: "Photograph the device or its cabinet directly. A sign alone is not enough.",
     photoUnclearTitle: "Not clear",
     photoUnclearBody: "Please take a closer, sharper photo of the device or cabinet.",
-    photoCheckUnavailable: "The check is not available right now. Confirm yourself that an AED or its cabinet is visible.",
+    photoCheckUnavailable:
+      "The check is not available right now. Confirm yourself that an AED or its cabinet is visible.",
     connectionOff: "Not connected",
     photoCheckCode: "Error code: {code}",
     photoOverrideAction: "Still: this is an AED",
     photoOverrideTitle: "Really an AED?",
-    photoOverrideBody: "The check did not recognize an AED. Confirm only if an AED or its cabinet is visible in the photo.",
+    photoOverrideBody:
+      "The check did not recognize an AED. Confirm only if an AED or its cabinet is visible in the photo.",
     photoOverrideConfirm: "Yes, an AED or cabinet is visible — continue",
     updateAvailable: "A new version is available.",
     updateReload: "Reload",
@@ -218,13 +240,15 @@ export const flowTranslations = {
     recoveryContinue: "Continue",
     recoveryNeedSignIn: "Sign in to the OSM test server to check the pending save.",
     recoveryWritesDisabled: "Writing to the test server is disabled. The operation stays saved; try again later.",
-    recoveryWrongAccount: "You are signed in to a different OSM test-server account. Use the account that started this operation.",
+    recoveryWrongAccount:
+      "You are signed in to a different OSM test-server account. Use the account that started this operation.",
     buildVersion: "Version {revision}",
     soundToggle: "Sound when saving succeeds",
     unnamedAed: "AED (no name)",
     previewArchiveNotice: "This AED comes from the real OSM. It cannot be changed on the test server.",
     candidateTooFar: "Too far away to confirm (over {meters} m). Check it before adding a new one.",
-    previewNewerDate: "OpenStreetMap already has a newer check date ({date}). Your photo is older. Nothing will be changed.",
+    previewNewerDate:
+      "OpenStreetMap already has a newer check date ({date}). Your photo is older. Nothing will be changed.",
     updateLosesPhoto: "The current photo will be lost.",
     updateWaitSave: "You can reload once saving has finished.",
     locationTitle: "Choose a location for the search",
@@ -251,7 +275,8 @@ export const flowTranslations = {
     locationUncertain: "Location is too imprecise. Choose a point on the map or try again with better GPS.",
     searchRateLimited: "Search is temporarily limited. Wait a little and try again.",
     searchUnavailable: "Nearby search is temporarily unavailable. Your location was not stored.",
-    outsideCoverage: "This location is outside the AED data coverage. The pilot includes Germany, Austria, Switzerland, Luxembourg, and Liechtenstein.",
+    outsideCoverage:
+      "This location is outside the AED data coverage. The pilot includes Germany, Austria, Switzerland, Luxembourg, and Liechtenstein.",
     searchFailed: "Nearby search failed. Please try again later.",
     errorInvalidResponse: "The search response could not be safely checked.",
     errorSignIn: "Your OpenStreetMap sign-in is missing or expired. Please sign in again.",
@@ -264,7 +289,8 @@ export const flowTranslations = {
     previewTitle: "Change preview",
     previewOldDate: "Current: {date}",
     previewNewDate: "Check date: {date}",
-    previewUnsupported: "This OSM entry is not a standalone AED node. This simple preview does not support ways or relations.",
+    previewUnsupported:
+      "This OSM entry is not a standalone AED node. This simple preview does not support ways or relations.",
     previewUnsupportedShort: "Preview supports AED nodes only",
     previewNoWrite: "Preview only. Nothing was saved.",
     previewBack: "Back",
@@ -274,7 +300,8 @@ export const flowTranslations = {
     newPositionRequired: "First confirm that the AED is at this exact GPS point.",
     newPreviewCoordinates: "Proposed location: {latitude}, {longitude}",
     newPreviewTags: "Proposed details",
-    newPreviewReviewedCandidates: "You confirmed the nearby entries shown are other devices. The test server will check the area again before saving.",
+    newPreviewReviewedCandidates:
+      "You confirmed the nearby entries shown are other devices. The test server will check the area again before saving.",
     newPreviewCaution: "Check the position and surroundings carefully.",
     newPreviewFoundCandidate: "A possible AED is close to this point. Check the search results again first.",
     newPreviewSearchInvalid: "The search does not reliably cover this point. A new entry cannot be prepared.",
@@ -339,10 +366,12 @@ export const flowTranslations = {
     detailsAddedTitle: "Will be added:",
     detailsAllPresent: "Everything this app records is already entered for this AED.",
     detailsCorrectTitle: "Add or correct details",
-    detailsCorrectIntro: "You can add what is missing and change wrong details. You see every change as old → new first. Nothing is deleted.",
+    detailsCorrectIntro:
+      "You can add what is missing and change wrong details. You see every change as old → new first. Nothing is deleted.",
     detailsCorrectAction: "Add or correct details",
     detailWas: "Before: {value}",
-    detailLevelStays: "The level “{level}” stays in OSM although the AED is outdoors. AEDjaeger never deletes anything; remove it in OSM yourself if needed.",
+    detailLevelStays:
+      "The level “{level}” stays in OSM although the AED is outdoors. AEDjaeger never deletes anything; remove it in OSM yourself if needed.",
     detailsChangedTitle: "Will change:",
     detailsCorrectionConfirm: "I saw on site that the old value is wrong.",
     detailNotEditable: "This value cannot be changed here.",
@@ -361,10 +390,13 @@ export const flowTranslations = {
     developmentSending: "Serwer testowy: wysyłanie zmiany…",
     developmentComplete: "Serwer testowy: zapisano potwierdzenie kontroli.",
     developmentUnchanged: "Serwer testowy: Już aktualne. Nic nie zmieniono.",
-    developmentNotFound: "Serwer testowy: Ten AED pochodzi z prawdziwego OSM i nie istnieje na serwerze testowym. Nic nie zmieniono.",
+    developmentNotFound:
+      "Serwer testowy: Ten AED pochodzi z prawdziwego OSM i nie istnieje na serwerze testowym. Nic nie zmieniono.",
     developmentCreated: "Serwer testowy: dodano nowy AED.",
-    developmentUncertain: "Serwer testowy: wynik jest niepewny. Sprawdź ponownie to samo żądanie; nie wyślemy w ciemno nowej zmiany.",
-    developmentConflict: "Serwer testowy: Nic nie zmieniono. W pobliżu jest AED, którego jeszcze nie sprawdzono, albo wpis się zmienił. Wyszukaj ponownie.",
+    developmentUncertain:
+      "Serwer testowy: wynik jest niepewny. Sprawdź ponownie to samo żądanie; nie wyślemy w ciemno nowej zmiany.",
+    developmentConflict:
+      "Serwer testowy: Nic nie zmieniono. W pobliżu jest AED, którego jeszcze nie sprawdzono, albo wpis się zmienił. Wyszukaj ponownie.",
     developmentFailed: "Serwer testowy: nie udało się zapisać zmiany. Sprawdź ponownie wpis.",
     sightingConfirm: "Widzę AED lub jego obudowę — dalej",
     photoDateTitle: "Kiedy widziano AED?",
@@ -384,7 +416,8 @@ export const flowTranslations = {
     photoCheckCode: "Kod błędu: {code}",
     photoOverrideAction: "Mimo to: to jest AED",
     photoOverrideTitle: "Na pewno AED?",
-    photoOverrideBody: "Sprawdzenie nie rozpoznało AED. Potwierdź tylko wtedy, gdy na zdjęciu widać AED lub jego obudowę.",
+    photoOverrideBody:
+      "Sprawdzenie nie rozpoznało AED. Potwierdź tylko wtedy, gdy na zdjęciu widać AED lub jego obudowę.",
     photoOverrideConfirm: "Tak, widać AED lub obudowę — dalej",
     updateAvailable: "Dostępna jest nowa wersja.",
     updateReload: "Odśwież",
@@ -398,7 +431,8 @@ export const flowTranslations = {
     unnamedAed: "AED (bez nazwy)",
     previewArchiveNotice: "Ten AED pochodzi z prawdziwego OSM. Nie można go zmienić na serwerze testowym.",
     candidateTooFar: "Za daleko, by potwierdzić (ponad {meters} m). Sprawdź przed dodaniem nowego.",
-    previewNewerDate: "W OpenStreetMap jest już nowsza data kontroli ({date}). Twoje zdjęcie jest starsze. Nic nie zostanie zmienione.",
+    previewNewerDate:
+      "W OpenStreetMap jest już nowsza data kontroli ({date}). Twoje zdjęcie jest starsze. Nic nie zostanie zmienione.",
     updateLosesPhoto: "Bieżące zdjęcie zostanie utracone.",
     updateWaitSave: "Odświeżenie będzie możliwe po zakończeniu zapisu.",
     locationTitle: "Wybierz lokalizację do wyszukiwania",
@@ -406,7 +440,8 @@ export const flowTranslations = {
     usePhoneLocation: "Użyj bieżącej lokalizacji telefonu",
     chooseMapLocation: "Wybierz lokalizację na mapie",
     mapLocationHelp: "Przesuń mapę do AED i przybliż do poziomu ulicy.",
-    mapNavigationHelp: "Przesuwaj mapę klawiszami strzałek. Powiększaj klawiszami plus i minus, przyciskami lub dwoma palcami.",
+    mapNavigationHelp:
+      "Przesuwaj mapę klawiszami strzałek. Powiększaj klawiszami plus i minus, przyciskami lub dwoma palcami.",
     mapLocationInitial: "Nie wybrano jeszcze lokalizacji.",
     mapLocationCoordinates: "Wybrany punkt: {latitude}, {longitude}",
     locationSourcePhoto: "Użyto lokalizacji ze zdjęcia",
@@ -425,7 +460,8 @@ export const flowTranslations = {
     locationUncertain: "Lokalizacja jest zbyt niedokładna. Wybierz punkt na mapie lub spróbuj ponownie z lepszym GPS.",
     searchRateLimited: "Wyszukiwanie jest tymczasowo ograniczone. Poczekaj chwilę i spróbuj ponownie.",
     searchUnavailable: "Wyszukiwanie w pobliżu jest chwilowo niedostępne. Lokalizacja nie została zapisana.",
-    outsideCoverage: "Ta lokalizacja leży poza zasięgiem danych AED. Wersja pilotażowa obejmuje Niemcy, Austrię, Szwajcarię, Luksemburg i Liechtenstein.",
+    outsideCoverage:
+      "Ta lokalizacja leży poza zasięgiem danych AED. Wersja pilotażowa obejmuje Niemcy, Austrię, Szwajcarię, Luksemburg i Liechtenstein.",
     searchFailed: "Wyszukiwanie w pobliżu nie powiodło się. Spróbuj ponownie później.",
     errorInvalidResponse: "Nie można bezpiecznie sprawdzić odpowiedzi wyszukiwania.",
     errorSignIn: "Brakuje logowania do OpenStreetMap lub wygasło. Zaloguj się ponownie.",
@@ -438,7 +474,8 @@ export const flowTranslations = {
     previewTitle: "Podgląd zmiany",
     previewOldDate: "Obecnie: {date}",
     previewNewDate: "Data kontroli: {date}",
-    previewUnsupported: "Ten wpis OSM nie jest pojedynczym węzłem AED. Ten prosty podgląd nie obsługuje dróg ani relacji.",
+    previewUnsupported:
+      "Ten wpis OSM nie jest pojedynczym węzłem AED. Ten prosty podgląd nie obsługuje dróg ani relacji.",
     previewUnsupportedShort: "Podgląd obsługuje tylko węzły AED",
     previewNoWrite: "Tylko podgląd. Nic nie zapisano.",
     previewBack: "Wstecz",
@@ -448,7 +485,8 @@ export const flowTranslations = {
     newPositionRequired: "Najpierw potwierdź, że AED znajduje się w tym punkcie GPS.",
     newPreviewCoordinates: "Proponowana lokalizacja: {latitude}, {longitude}",
     newPreviewTags: "Proponowane dane",
-    newPreviewReviewedCandidates: "Potwierdzono, że pokazane pobliskie wpisy dotyczą innych urządzeń. Serwer testowy ponownie sprawdzi obszar przed zapisem.",
+    newPreviewReviewedCandidates:
+      "Potwierdzono, że pokazane pobliskie wpisy dotyczą innych urządzeń. Serwer testowy ponownie sprawdzi obszar przed zapisem.",
     newPreviewCaution: "Sprawdź dokładnie pozycję i okolicę.",
     newPreviewFoundCandidate: "Możliwy AED znajduje się blisko tego punktu. Najpierw ponownie sprawdź wyniki.",
     newPreviewSearchInvalid: "Wyszukiwanie nie obejmuje pewnie tego punktu. Nie można przygotować nowego wpisu.",
@@ -503,7 +541,8 @@ export const flowTranslations = {
     detailsBackToForm: "Wróć do danych",
     detailsBackToMap: "Wróć do mapy",
     detailsExistingTitle: "Uzupełnij dane",
-    detailsExistingIntro: "Dodajesz tylko to, czego brakuje. Wszystko, co jest już w OpenStreetMap, pozostaje bez zmian.",
+    detailsExistingIntro:
+      "Dodajesz tylko to, czego brakuje. Wszystko, co jest już w OpenStreetMap, pozostaje bez zmian.",
     detailExistingValue: "Już wpisano: {value}",
     detailLoading: "Wczytywanie aktualnych danych …",
     detailLoadFailed: "Nie udało się wczytać aktualnych danych. Spróbuj ponownie.",
@@ -513,10 +552,12 @@ export const flowTranslations = {
     detailsAddedTitle: "Zostanie dodane:",
     detailsAllPresent: "Wszystko, co zapisuje aplikacja, jest już wpisane dla tego AED.",
     detailsCorrectTitle: "Uzupełnij lub popraw dane",
-    detailsCorrectIntro: "Możesz uzupełnić brakujące dane i zmienić błędne. Każdą zmianę zobaczysz najpierw jako stare → nowe. Nic nie jest usuwane.",
+    detailsCorrectIntro:
+      "Możesz uzupełnić brakujące dane i zmienić błędne. Każdą zmianę zobaczysz najpierw jako stare → nowe. Nic nie jest usuwane.",
     detailsCorrectAction: "Uzupełnij lub popraw dane",
     detailWas: "Wcześniej: {value}",
-    detailLevelStays: "Poziom „{level}” pozostaje w OSM, chociaż AED jest na zewnątrz. AEDjaeger niczego nie usuwa; w razie potrzeby usuń go samodzielnie w OSM.",
+    detailLevelStays:
+      "Poziom „{level}” pozostaje w OSM, chociaż AED jest na zewnątrz. AEDjaeger niczego nie usuwa; w razie potrzeby usuń go samodzielnie w OSM.",
     detailsChangedTitle: "Zostanie zmienione:",
     detailsCorrectionConfirm: "Widziałem(-am) na miejscu, że stara wartość jest błędna.",
     detailNotEditable: "Tej wartości nie można tu zmienić.",
@@ -535,10 +576,13 @@ export const flowTranslations = {
     developmentSending: "テストサーバー：変更を送信中…",
     developmentComplete: "テストサーバー：現地確認を保存しました。",
     developmentUnchanged: "テストサーバー：すでに最新です。変更はありません。",
-    developmentNotFound: "テストサーバー：このAEDは本番のOSMのもので、テストサーバーには存在しません。変更はありません。",
+    developmentNotFound:
+      "テストサーバー：このAEDは本番のOSMのもので、テストサーバーには存在しません。変更はありません。",
     developmentCreated: "テストサーバー：新しいAEDを登録しました。",
-    developmentUncertain: "テストサーバー：結果を確認できません。同じリクエストで再確認してください。新しい変更を無確認で送信しません。",
-    developmentConflict: "テストサーバー：変更はありません。近くに未確認のAEDがあるか、登録内容が変わりました。もう一度検索してください。",
+    developmentUncertain:
+      "テストサーバー：結果を確認できません。同じリクエストで再確認してください。新しい変更を無確認で送信しません。",
+    developmentConflict:
+      "テストサーバー：変更はありません。近くに未確認のAEDがあるか、登録内容が変わりました。もう一度検索してください。",
     developmentFailed: "テストサーバー：変更に失敗しました。項目を再確認してください。",
     sightingConfirm: "AEDまたは収納ケースを確認しました — 続行",
     photoDateTitle: "AEDを確認したのはいつですか？",
@@ -558,21 +602,25 @@ export const flowTranslations = {
     photoCheckCode: "エラーコード: {code}",
     photoOverrideAction: "それでも確認: AEDです",
     photoOverrideTitle: "本当にAEDですか？",
-    photoOverrideBody: "確認ではAEDを認識できませんでした。写真にAEDまたは収納ケースが写っている場合のみ確認してください。",
+    photoOverrideBody:
+      "確認ではAEDを認識できませんでした。写真にAEDまたは収納ケースが写っている場合のみ確認してください。",
     photoOverrideConfirm: "はい、AEDまたは収納ケースが見えます — 続行",
     updateAvailable: "新しいバージョンがあります。",
     updateReload: "再読み込み",
     nextAed: "次のAEDを撮影",
     recoveryContinue: "続行",
     recoveryNeedSignIn: "保留中の保存を確認するには、OSMテストサーバーにログインしてください。",
-    recoveryWritesDisabled: "テストサーバーへの書き込みは無効です。操作は保存されています。後でもう一度お試しください。",
-    recoveryWrongAccount: "別のOSMテストサーバーアカウントにログインしています。この操作を開始したアカウントでログインしてください。",
+    recoveryWritesDisabled:
+      "テストサーバーへの書き込みは無効です。操作は保存されています。後でもう一度お試しください。",
+    recoveryWrongAccount:
+      "別のOSMテストサーバーアカウントにログインしています。この操作を開始したアカウントでログインしてください。",
     buildVersion: "バージョン {revision}",
     soundToggle: "保存に成功したら音を鳴らす",
     unnamedAed: "AED（名称なし）",
     previewArchiveNotice: "このAEDは本番のOSMのものです。テストサーバーでは変更できません。",
     candidateTooFar: "確認するには遠すぎます（{meters} m超）。新規登録の前に確認してください。",
-    previewNewerDate: "OpenStreetMapにはすでに新しい確認日（{date}）があります。写真のほうが古いため、何も変更されません。",
+    previewNewerDate:
+      "OpenStreetMapにはすでに新しい確認日（{date}）があります。写真のほうが古いため、何も変更されません。",
     updateLosesPhoto: "現在の写真は失われます。",
     updateWaitSave: "保存が完了すると再読み込みできます。",
     locationTitle: "検索する位置を選択",
@@ -599,7 +647,8 @@ export const flowTranslations = {
     locationUncertain: "位置情報の精度が不十分です。地図で地点を選ぶか、GPSの良い場所で再試行してください。",
     searchRateLimited: "検索は一時的に制限されています。少し待ってからもう一度お試しください。",
     searchUnavailable: "周辺検索は一時的に利用できません。位置情報は保存されていません。",
-    outsideCoverage: "この場所はAEDデータの対象地域外です。試験版の対象はドイツ、オーストリア、スイス、ルクセンブルク、リヒテンシュタインです。",
+    outsideCoverage:
+      "この場所はAEDデータの対象地域外です。試験版の対象はドイツ、オーストリア、スイス、ルクセンブルク、リヒテンシュタインです。",
     searchFailed: "周辺検索に失敗しました。後でもう一度お試しください。",
     errorInvalidResponse: "検索応答を安全に確認できませんでした。",
     errorSignIn: "OpenStreetMapのログインがないか期限切れです。もう一度ログインしてください。",
@@ -612,7 +661,8 @@ export const flowTranslations = {
     previewTitle: "変更のプレビュー",
     previewOldDate: "現在: {date}",
     previewNewDate: "確認日: {date}",
-    previewUnsupported: "このOSM項目は単独のAEDノードではありません。この簡易プレビューはウェイやリレーションに対応していません。",
+    previewUnsupported:
+      "このOSM項目は単独のAEDノードではありません。この簡易プレビューはウェイやリレーションに対応していません。",
     previewUnsupportedShort: "プレビューはAEDノードのみ対応",
     previewNoWrite: "プレビューのみです。何も保存されていません。",
     previewBack: "戻る",
@@ -622,7 +672,8 @@ export const flowTranslations = {
     newPositionRequired: "まずAEDがこのGPS地点にあることを確認してください。",
     newPreviewCoordinates: "提案する位置: {latitude}, {longitude}",
     newPreviewTags: "提案する情報",
-    newPreviewReviewedCandidates: "表示された近くのAEDは別の機器であると確認しました。保存前にテストサーバーが周辺を再確認します。",
+    newPreviewReviewedCandidates:
+      "表示された近くのAEDは別の機器であると確認しました。保存前にテストサーバーが周辺を再確認します。",
     newPreviewCaution: "位置と周辺をよく確認してください。",
     newPreviewFoundCandidate: "この地点の近くにAED候補があります。先に検索結果を再確認してください。",
     newPreviewSearchInvalid: "検索範囲がこの位置を確実にカバーしていません。新規登録を準備できません。",
@@ -687,10 +738,12 @@ export const flowTranslations = {
     detailsAddedTitle: "追加される内容：",
     detailsAllPresent: "このAEDには、アプリが扱う情報がすべて登録済みです。",
     detailsCorrectTitle: "情報を追加・修正",
-    detailsCorrectIntro: "足りない情報の追加と、誤った情報の修正ができます。変更は事前に「変更前→変更後」で確認できます。削除はされません。",
+    detailsCorrectIntro:
+      "足りない情報の追加と、誤った情報の修正ができます。変更は事前に「変更前→変更後」で確認できます。削除はされません。",
     detailsCorrectAction: "情報を追加・修正",
     detailWas: "変更前：{value}",
-    detailLevelStays: "AEDは屋外ですが、階「{level}」はOSMに残ります。AEDjaegerは何も削除しません。必要ならOSMで自分で削除してください。",
+    detailLevelStays:
+      "AEDは屋外ですが、階「{level}」はOSMに残ります。AEDjaegerは何も削除しません。必要ならOSMで自分で削除してください。",
     detailsChangedTitle: "変更される内容：",
     detailsCorrectionConfirm: "古い値が間違っていることを現地で確認しました。",
     detailNotEditable: "この値はここでは変更できません。",
@@ -709,10 +762,13 @@ export const flowTranslations = {
     developmentSending: "Serveur de test : envoi de la modification…",
     developmentComplete: "Serveur de test : visite confirmée.",
     developmentUnchanged: "Serveur de test : déjà à jour. Rien n'a été modifié.",
-    developmentNotFound: "Serveur de test : ce DAE provient du vrai OSM et n'existe pas sur le serveur de test. Rien n'a été modifié.",
+    developmentNotFound:
+      "Serveur de test : ce DAE provient du vrai OSM et n'existe pas sur le serveur de test. Rien n'a été modifié.",
     developmentCreated: "Serveur de test : nouveau DAE ajouté.",
-    developmentUncertain: "Serveur de test : résultat incertain. Vérifiez à nouveau avec la même requête ; aucune nouvelle modification ne sera envoyée à l’aveugle.",
-    developmentConflict: "Serveur de test : rien n'a été modifié. Un DAE à proximité n'a pas encore été vérifié, ou l'entrée a changé. Veuillez relancer la recherche.",
+    developmentUncertain:
+      "Serveur de test : résultat incertain. Vérifiez à nouveau avec la même requête ; aucune nouvelle modification ne sera envoyée à l’aveugle.",
+    developmentConflict:
+      "Serveur de test : rien n'a été modifié. Un DAE à proximité n'a pas encore été vérifié, ou l'entrée a changé. Veuillez relancer la recherche.",
     developmentFailed: "Serveur de test : échec de la modification. Vérifiez à nouveau la fiche.",
     sightingConfirm: "Je vois un DAE ou son boîtier — continuer",
     photoDateTitle: "Quand avez-vous vu le DAE ?",
@@ -727,26 +783,31 @@ export const flowTranslations = {
     photoRejectedBody: "Photographiez directement l’appareil ou son boîtier. Un panneau seul ne suffit pas.",
     photoUnclearTitle: "Pas assez clair",
     photoUnclearBody: "Prenez l’appareil ou le boîtier de plus près et plus net.",
-    photoCheckUnavailable: "La vérification n’est pas disponible pour le moment. Confirmez par vous-même qu’un DAE ou son boîtier est visible.",
+    photoCheckUnavailable:
+      "La vérification n’est pas disponible pour le moment. Confirmez par vous-même qu’un DAE ou son boîtier est visible.",
     connectionOff: "Non connecté",
     photoCheckCode: "Code d’erreur : {code}",
     photoOverrideAction: "Malgré tout : c’est un DAE",
     photoOverrideTitle: "Vraiment un DAE ?",
-    photoOverrideBody: "La vérification n’a pas reconnu de DAE. Ne confirmez que si un DAE ou son boîtier est visible sur la photo.",
+    photoOverrideBody:
+      "La vérification n’a pas reconnu de DAE. Ne confirmez que si un DAE ou son boîtier est visible sur la photo.",
     photoOverrideConfirm: "Oui, un DAE ou son boîtier est visible — continuer",
     updateAvailable: "Une nouvelle version est disponible.",
     updateReload: "Recharger",
     nextAed: "Photographier le DAE suivant",
     recoveryContinue: "Continuer",
     recoveryNeedSignIn: "Connectez-vous au serveur de test OSM pour vérifier l’enregistrement en attente.",
-    recoveryWritesDisabled: "Les écritures sur le serveur de test sont désactivées. L’opération reste enregistrée ; réessayez plus tard.",
-    recoveryWrongAccount: "Vous êtes connecté à un autre compte du serveur de test OSM. Reconnectez-vous avec le compte qui a commencé cette opération.",
+    recoveryWritesDisabled:
+      "Les écritures sur le serveur de test sont désactivées. L’opération reste enregistrée ; réessayez plus tard.",
+    recoveryWrongAccount:
+      "Vous êtes connecté à un autre compte du serveur de test OSM. Reconnectez-vous avec le compte qui a commencé cette opération.",
     buildVersion: "Version {revision}",
     soundToggle: "Son lorsque l'enregistrement réussit",
     unnamedAed: "DAE (sans nom)",
     previewArchiveNotice: "Ce DAE provient du vrai OSM. Il ne peut pas être modifié sur le serveur de test.",
     candidateTooFar: "Trop loin pour confirmer (plus de {meters} m). À vérifier avant d'en ajouter un nouveau.",
-    previewNewerDate: "OpenStreetMap contient déjà une date de vérification plus récente ({date}). Votre photo est plus ancienne. Rien ne sera modifié.",
+    previewNewerDate:
+      "OpenStreetMap contient déjà une date de vérification plus récente ({date}). Votre photo est plus ancienne. Rien ne sera modifié.",
     updateLosesPhoto: "La photo actuelle sera perdue.",
     updateWaitSave: "Vous pourrez recharger une fois l’enregistrement terminé.",
     locationTitle: "Choisir le lieu de recherche",
@@ -754,7 +815,8 @@ export const flowTranslations = {
     usePhoneLocation: "Utiliser la position actuelle du téléphone",
     chooseMapLocation: "Choisir le lieu sur la carte",
     mapLocationHelp: "Déplacez la carte jusqu’au DAE et zoomez jusqu’à la rue.",
-    mapNavigationHelp: "Déplacez la carte avec les flèches. Zoomez avec les touches plus et moins, les boutons ou deux doigts.",
+    mapNavigationHelp:
+      "Déplacez la carte avec les flèches. Zoomez avec les touches plus et moins, les boutons ou deux doigts.",
     mapLocationInitial: "Aucun emplacement choisi pour l’instant.",
     mapLocationCoordinates: "Point choisi : {latitude}, {longitude}",
     locationSourcePhoto: "Position de la photo utilisée",
@@ -770,10 +832,13 @@ export const flowTranslations = {
     distance: "À environ {distance} m",
     locationUnavailable: "Position indisponible. Vérifiez l’accès à la localisation et réessayez.",
     locationDenied: "L’accès à la position a été refusé. Autorisez-le dans les réglages du navigateur.",
-    locationUncertain: "La position est trop imprécise. Choisissez un point sur la carte ou réessayez avec un meilleur GPS.",
+    locationUncertain:
+      "La position est trop imprécise. Choisissez un point sur la carte ou réessayez avec un meilleur GPS.",
     searchRateLimited: "La recherche est temporairement limitée. Attendez un peu et réessayez.",
-    searchUnavailable: "La recherche à proximité est temporairement indisponible. Votre position n’a pas été enregistrée.",
-    outsideCoverage: "Cette position se trouve hors de la couverture des données AED. La version pilote couvre l’Allemagne, l’Autriche, la Suisse, le Luxembourg et le Liechtenstein.",
+    searchUnavailable:
+      "La recherche à proximité est temporairement indisponible. Votre position n’a pas été enregistrée.",
+    outsideCoverage:
+      "Cette position se trouve hors de la couverture des données AED. La version pilote couvre l’Allemagne, l’Autriche, la Suisse, le Luxembourg et le Liechtenstein.",
     searchFailed: "La recherche à proximité a échoué. Réessayez plus tard.",
     errorInvalidResponse: "La réponse de recherche n’a pas pu être vérifiée correctement.",
     errorSignIn: "Votre connexion OpenStreetMap est absente ou expirée. Veuillez vous reconnecter.",
@@ -786,7 +851,8 @@ export const flowTranslations = {
     previewTitle: "Aperçu de la modification",
     previewOldDate: "Actuelle : {date}",
     previewNewDate: "Date de vérification : {date}",
-    previewUnsupported: "Cette entrée OSM n’est pas un nœud DAE isolé. Cet aperçu simple ne prend pas en charge les chemins ni les relations.",
+    previewUnsupported:
+      "Cette entrée OSM n’est pas un nœud DAE isolé. Cet aperçu simple ne prend pas en charge les chemins ni les relations.",
     previewUnsupportedShort: "Aperçu disponible uniquement pour les nœuds DAE",
     previewNoWrite: "Aperçu uniquement. Rien n’a été enregistré.",
     previewBack: "Retour",
@@ -796,10 +862,12 @@ export const flowTranslations = {
     newPositionRequired: "Confirmez d’abord que le DAE se trouve exactement à ce point GPS.",
     newPreviewCoordinates: "Position proposée : {latitude}, {longitude}",
     newPreviewTags: "Informations proposées",
-    newPreviewReviewedCandidates: "Vous avez confirmé que les entrées proches affichées concernent d’autres appareils. Le serveur de test vérifiera à nouveau la zone avant l’enregistrement.",
+    newPreviewReviewedCandidates:
+      "Vous avez confirmé que les entrées proches affichées concernent d’autres appareils. Le serveur de test vérifiera à nouveau la zone avant l’enregistrement.",
     newPreviewCaution: "Vérifiez bien la position et les environs.",
     newPreviewFoundCandidate: "Un DAE possible se trouve près de ce point. Vérifiez d’abord à nouveau les résultats.",
-    newPreviewSearchInvalid: "La recherche ne couvre pas ce point de manière fiable. Impossible de préparer une nouvelle fiche.",
+    newPreviewSearchInvalid:
+      "La recherche ne couvre pas ce point de manière fiable. Impossible de préparer une nouvelle fiche.",
     newPositionMapLabel: "Vérifier l’emplacement du DAE sur la carte",
     newPositionMapHelp: "Déplacez la carte pour placer le DAE sous le repère rouge central.",
     newPositionMapPrivacy: "La carte charge des tuiles depuis OpenStreetMap.",
@@ -861,10 +929,12 @@ export const flowTranslations = {
     detailsAddedTitle: "Sera ajouté :",
     detailsAllPresent: "Tout ce que l’appli enregistre est déjà renseigné pour ce DAE.",
     detailsCorrectTitle: "Compléter ou corriger les informations",
-    detailsCorrectIntro: "Vous pouvez compléter ce qui manque et corriger les informations erronées. Chaque modification s’affiche d’abord sous la forme ancien → nouveau. Rien n’est supprimé.",
+    detailsCorrectIntro:
+      "Vous pouvez compléter ce qui manque et corriger les informations erronées. Chaque modification s’affiche d’abord sous la forme ancien → nouveau. Rien n’est supprimé.",
     detailsCorrectAction: "Compléter ou corriger les informations",
     detailWas: "Avant : {value}",
-    detailLevelStays: "Le niveau « {level} » reste dans OSM alors que le DAE est à l’extérieur. AEDjaeger ne supprime rien ; retirez-le vous-même dans OSM si besoin.",
+    detailLevelStays:
+      "Le niveau « {level} » reste dans OSM alors que le DAE est à l’extérieur. AEDjaeger ne supprime rien ; retirez-le vous-même dans OSM si besoin.",
     detailsChangedTitle: "Sera modifié :",
     detailsCorrectionConfirm: "J’ai constaté sur place que l’ancienne valeur est fausse.",
     detailNotEditable: "Cette valeur ne peut pas être modifiée ici.",
@@ -883,10 +953,13 @@ export const flowTranslations = {
     developmentSending: "Servidor de pruebas: enviando cambio…",
     developmentComplete: "Servidor de pruebas: visita confirmada.",
     developmentUnchanged: "Servidor de pruebas: ya está actualizado. No se cambió nada.",
-    developmentNotFound: "Servidor de pruebas: este DEA procede del OSM real y no existe en el servidor de pruebas. No se cambió nada.",
+    developmentNotFound:
+      "Servidor de pruebas: este DEA procede del OSM real y no existe en el servidor de pruebas. No se cambió nada.",
     developmentCreated: "Servidor de pruebas: se añadió un DEA.",
-    developmentUncertain: "Servidor de pruebas: resultado incierto. Comprueba de nuevo con la misma solicitud; no enviaremos otro cambio a ciegas.",
-    developmentConflict: "Servidor de pruebas: no se cambió nada. Hay un DEA cercano que aún no se ha revisado, o la entrada cambió. Busca de nuevo.",
+    developmentUncertain:
+      "Servidor de pruebas: resultado incierto. Comprueba de nuevo con la misma solicitud; no enviaremos otro cambio a ciegas.",
+    developmentConflict:
+      "Servidor de pruebas: no se cambió nada. Hay un DEA cercano que aún no se ha revisado, o la entrada cambió. Busca de nuevo.",
     developmentFailed: "Servidor de pruebas: no se pudo guardar. Comprueba de nuevo la ficha.",
     sightingConfirm: "Veo un DEA o su armario — continuar",
     photoDateTitle: "¿Cuándo viste el DEA?",
@@ -901,26 +974,31 @@ export const flowTranslations = {
     photoRejectedBody: "Fotografía directamente el aparato o su armario. Un cartel solo no basta.",
     photoUnclearTitle: "No está claro",
     photoUnclearBody: "Haz la foto más cerca y más nítida del aparato o del armario.",
-    photoCheckUnavailable: "La comprobación no está disponible ahora. Confirma por tu cuenta que se ve un DEA o su armario.",
+    photoCheckUnavailable:
+      "La comprobación no está disponible ahora. Confirma por tu cuenta que se ve un DEA o su armario.",
     connectionOff: "No conectado",
     photoCheckCode: "Código de error: {code}",
     photoOverrideAction: "Aun así: esto es un DEA",
     photoOverrideTitle: "¿Seguro que es un DEA?",
-    photoOverrideBody: "La comprobación no reconoció ningún DEA. Confirma solo si se ve un DEA o su armario en la foto.",
+    photoOverrideBody:
+      "La comprobación no reconoció ningún DEA. Confirma solo si se ve un DEA o su armario en la foto.",
     photoOverrideConfirm: "Sí, se ve un DEA o su armario — continuar",
     updateAvailable: "Hay una nueva versión disponible.",
     updateReload: "Recargar",
     nextAed: "Fotografiar el siguiente DEA",
     recoveryContinue: "Continuar",
     recoveryNeedSignIn: "Inicia sesión en el servidor de pruebas de OSM para comprobar el guardado pendiente.",
-    recoveryWritesDisabled: "La escritura en el servidor de pruebas está desactivada. La operación sigue guardada; inténtalo más tarde.",
-    recoveryWrongAccount: "Has iniciado sesión con otra cuenta del servidor de pruebas de OSM. Usa la cuenta que inició esta operación.",
+    recoveryWritesDisabled:
+      "La escritura en el servidor de pruebas está desactivada. La operación sigue guardada; inténtalo más tarde.",
+    recoveryWrongAccount:
+      "Has iniciado sesión con otra cuenta del servidor de pruebas de OSM. Usa la cuenta que inició esta operación.",
     buildVersion: "Versión {revision}",
     soundToggle: "Sonido cuando el guardado se completa",
     unnamedAed: "DEA (sin nombre)",
     previewArchiveNotice: "Este DEA procede del OSM real. No se puede cambiar en el servidor de pruebas.",
     candidateTooFar: "Demasiado lejos para confirmar (más de {meters} m). Revísalo antes de añadir uno nuevo.",
-    previewNewerDate: "OpenStreetMap ya tiene una fecha de comprobación más reciente ({date}). Tu foto es más antigua. No se cambiará nada.",
+    previewNewerDate:
+      "OpenStreetMap ya tiene una fecha de comprobación más reciente ({date}). Tu foto es más antigua. No se cambiará nada.",
     updateLosesPhoto: "La foto actual se perderá.",
     updateWaitSave: "Podrás recargar cuando termine el guardado.",
     locationTitle: "Elige la ubicación de búsqueda",
@@ -928,7 +1006,8 @@ export const flowTranslations = {
     usePhoneLocation: "Usar la ubicación actual del teléfono",
     chooseMapLocation: "Elegir ubicación en el mapa",
     mapLocationHelp: "Mueve el mapa hasta el DEA y acerca hasta ver la calle.",
-    mapNavigationHelp: "Mueve el mapa con las flechas. Acerca y aleja con las teclas más y menos, los botones o dos dedos.",
+    mapNavigationHelp:
+      "Mueve el mapa con las flechas. Acerca y aleja con las teclas más y menos, los botones o dos dedos.",
     mapLocationInitial: "Aún no se ha elegido una ubicación.",
     mapLocationCoordinates: "Punto elegido: {latitude}, {longitude}",
     locationSourcePhoto: "Se usó la ubicación de la foto",
@@ -944,10 +1023,12 @@ export const flowTranslations = {
     distance: "A unos {distance} m",
     locationUnavailable: "La ubicación no está disponible. Comprueba el acceso e inténtalo de nuevo.",
     locationDenied: "Se denegó el acceso a la ubicación. Permítelo en los ajustes del navegador.",
-    locationUncertain: "La ubicación es demasiado imprecisa. Elige un punto en el mapa o vuelve a intentarlo con mejor GPS.",
+    locationUncertain:
+      "La ubicación es demasiado imprecisa. Elige un punto en el mapa o vuelve a intentarlo con mejor GPS.",
     searchRateLimited: "La búsqueda está limitada temporalmente. Espera un poco e inténtalo de nuevo.",
     searchUnavailable: "La búsqueda cercana no está disponible temporalmente. No se guardó tu ubicación.",
-    outsideCoverage: "Esta ubicación está fuera de la cobertura de datos de DEA. La versión piloto incluye Alemania, Austria, Suiza, Luxemburgo y Liechtenstein.",
+    outsideCoverage:
+      "Esta ubicación está fuera de la cobertura de datos de DEA. La versión piloto incluye Alemania, Austria, Suiza, Luxemburgo y Liechtenstein.",
     searchFailed: "La búsqueda cercana falló. Inténtalo de nuevo más tarde.",
     errorInvalidResponse: "No se pudo comprobar la respuesta de búsqueda de forma segura.",
     errorSignIn: "Falta tu inicio de sesión de OpenStreetMap o ha caducado. Vuelve a iniciar sesión.",
@@ -960,7 +1041,8 @@ export const flowTranslations = {
     previewTitle: "Vista previa del cambio",
     previewOldDate: "Actual: {date}",
     previewNewDate: "Fecha de comprobación: {date}",
-    previewUnsupported: "Esta entrada OSM no es un nodo DEA individual. Esta vista simple no admite vías ni relaciones.",
+    previewUnsupported:
+      "Esta entrada OSM no es un nodo DEA individual. Esta vista simple no admite vías ni relaciones.",
     previewUnsupportedShort: "Vista previa solo para nodos DEA",
     previewNoWrite: "Solo una vista previa. No se guardó nada.",
     previewBack: "Atrás",
@@ -970,10 +1052,12 @@ export const flowTranslations = {
     newPositionRequired: "Confirma primero que el DEA está exactamente en este punto GPS.",
     newPreviewCoordinates: "Ubicación propuesta: {latitude}, {longitude}",
     newPreviewTags: "Datos propuestos",
-    newPreviewReviewedCandidates: "Has confirmado que las fichas cercanas mostradas son otros dispositivos. El servidor de pruebas volverá a comprobar la zona antes de guardar.",
+    newPreviewReviewedCandidates:
+      "Has confirmado que las fichas cercanas mostradas son otros dispositivos. El servidor de pruebas volverá a comprobar la zona antes de guardar.",
     newPreviewCaution: "Comprueba bien la posición y el entorno.",
     newPreviewFoundCandidate: "Hay un posible DEA cerca de este punto. Comprueba otra vez los resultados primero.",
-    newPreviewSearchInvalid: "La búsqueda no cubre esta ubicación de forma fiable. No se puede preparar una ficha nueva.",
+    newPreviewSearchInvalid:
+      "La búsqueda no cubre esta ubicación de forma fiable. No se puede preparar una ficha nueva.",
     newPositionMapLabel: "Comprobar la ubicación del DEA en el mapa",
     newPositionMapHelp: "Mueve el mapa hasta que el DEA quede bajo el marcador rojo central.",
     newPositionMapPrivacy: "El mapa carga teselas de OpenStreetMap.",
@@ -1035,10 +1119,12 @@ export const flowTranslations = {
     detailsAddedTitle: "Se añadirá:",
     detailsAllPresent: "Todo lo que registra la app ya está indicado para este DEA.",
     detailsCorrectTitle: "Completar o corregir datos",
-    detailsCorrectIntro: "Puedes completar lo que falta y corregir datos erróneos. Verás cada cambio antes como antiguo → nuevo. No se borra nada.",
+    detailsCorrectIntro:
+      "Puedes completar lo que falta y corregir datos erróneos. Verás cada cambio antes como antiguo → nuevo. No se borra nada.",
     detailsCorrectAction: "Completar o corregir datos",
     detailWas: "Antes: {value}",
-    detailLevelStays: "El nivel «{level}» sigue en OSM aunque el DEA está en el exterior. AEDjaeger no borra nada; quítalo tú mismo en OSM si hace falta.",
+    detailLevelStays:
+      "El nivel «{level}» sigue en OSM aunque el DEA está en el exterior. AEDjaeger no borra nada; quítalo tú mismo en OSM si hace falta.",
     detailsChangedTitle: "Se cambiará:",
     detailsCorrectionConfirm: "He comprobado en el lugar que el valor antiguo es incorrecto.",
     detailNotEditable: "Este valor no se puede cambiar aquí.",
@@ -1050,7 +1136,11 @@ export const flowTranslations = {
 
 export type FlowMessageKey = keyof (typeof flowTranslations)["de"];
 
-export function translateFlow(language: Language, key: FlowMessageKey, values?: Record<string, number | string>): string {
+export function translateFlow(
+  language: Language,
+  key: FlowMessageKey,
+  values?: Record<string, number | string>,
+): string {
   const translated = flowTranslations[language][key];
   return values ? translated.replace(/\{(\w+)\}/gu, (_, name: string) => String(values[name] ?? "")) : translated;
 }

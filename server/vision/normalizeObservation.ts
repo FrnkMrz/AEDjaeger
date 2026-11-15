@@ -1,5 +1,10 @@
 import { isRecord } from "../http/requestGuards";
-import { IMAGE_ISSUES, OBSERVATION_KEYS, OBSERVATION_LIMITS, VISION_SCENES } from "../../src/contracts/visionObservation";
+import {
+  IMAGE_ISSUES,
+  OBSERVATION_KEYS,
+  OBSERVATION_LIMITS,
+  VISION_SCENES,
+} from "../../src/contracts/visionObservation";
 
 /**
  * Bereitet die Antwort des Bildmodells auf, bevor die strenge Prüfung sie sieht.
@@ -18,15 +23,27 @@ import { IMAGE_ISSUES, OBSERVATION_KEYS, OBSERVATION_LIMITS, VISION_SCENES } fro
 export function normalizeProviderObservation(input: unknown): unknown {
   if (!isRecord(input)) return input;
   const keys = Object.keys(input);
-  if (keys.length !== OBSERVATION_KEYS.length || keys.some((key) => !(OBSERVATION_KEYS as readonly string[]).includes(key))) return input;
+  if (
+    keys.length !== OBSERVATION_KEYS.length ||
+    keys.some((key) => !(OBSERVATION_KEYS as readonly string[]).includes(key))
+  )
+    return input;
 
   const normalized: Record<string, unknown> = {
     scene: input.scene,
     device_count: normalizeDeviceCount(input.device_count),
-    readable_text: normalizeTextList(input.readable_text, OBSERVATION_LIMITS.readableTextItems, OBSERVATION_LIMITS.textLength),
+    readable_text: normalizeTextList(
+      input.readable_text,
+      OBSERVATION_LIMITS.readableTextItems,
+      OBSERVATION_LIMITS.textLength,
+    ),
     manufacturer: normalizeLabel(input.manufacturer),
     model: normalizeLabel(input.model),
-    location_clues: normalizeTextList(input.location_clues, OBSERVATION_LIMITS.locationClues, OBSERVATION_LIMITS.textLength),
+    location_clues: normalizeTextList(
+      input.location_clues,
+      OBSERVATION_LIMITS.locationClues,
+      OBSERVATION_LIMITS.textLength,
+    ),
     image_issues: normalizeImageIssues(input.image_issues),
   };
   reconcileSceneAndCount(normalized);
@@ -35,7 +52,12 @@ export function normalizeProviderObservation(input: unknown): unknown {
 
 /** Wandelt Steuerzeichen und Zeilenumbrüche in Leerzeichen um und kürzt auf die erlaubte Länge. */
 function cleanText(value: string, maximumLength: number): string {
-  return value.replace(/[\u0000-\u001f\u007f]+/gu, " ").replace(/\s+/gu, " ").trim().slice(0, maximumLength).trim();
+  return value
+    .replace(/[\u0000-\u001f\u007f]+/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .slice(0, maximumLength)
+    .trim();
 }
 
 function normalizeTextList(value: unknown, maximumItems: number, maximumLength: number): unknown {
@@ -57,12 +79,17 @@ function normalizeLabel(value: unknown): unknown {
 
 function normalizeImageIssues(value: unknown): unknown {
   if (!Array.isArray(value)) return value;
-  const allowed = value.filter((issue): issue is (typeof IMAGE_ISSUES)[number] => typeof issue === "string" && (IMAGE_ISSUES as readonly string[]).includes(issue));
+  const allowed = value.filter(
+    (issue): issue is (typeof IMAGE_ISSUES)[number] =>
+      typeof issue === "string" && (IMAGE_ISSUES as readonly string[]).includes(issue),
+  );
   return [...new Set(allowed)].slice(0, OBSERVATION_LIMITS.imageIssues);
 }
 
 function normalizeDeviceCount(value: unknown): unknown {
-  return typeof value === "number" && Number.isInteger(value) ? Math.min(Math.max(value, 0), OBSERVATION_LIMITS.deviceCount) : value;
+  return typeof value === "number" && Number.isInteger(value)
+    ? Math.min(Math.max(value, 0), OBSERVATION_LIMITS.deviceCount)
+    : value;
 }
 
 /**
@@ -73,7 +100,13 @@ function normalizeDeviceCount(value: unknown): unknown {
 function reconcileSceneAndCount(observation: Record<string, unknown>): void {
   const scene = observation.scene;
   const count = observation.device_count;
-  if (typeof count !== "number" || !Number.isInteger(count) || typeof scene !== "string" || !(VISION_SCENES as readonly string[]).includes(scene)) return;
+  if (
+    typeof count !== "number" ||
+    !Number.isInteger(count) ||
+    typeof scene !== "string" ||
+    !(VISION_SCENES as readonly string[]).includes(scene)
+  )
+    return;
 
   if (scene === "device_visible" || scene === "multiple_devices") {
     if (count >= 2) observation.scene = "multiple_devices";
@@ -91,11 +124,20 @@ function reconcileSceneAndCount(observation: Record<string, unknown>): void {
 export function explainObservationMismatch(input: unknown): string {
   if (!isRecord(input)) return "schema_not_an_object";
   const keys = Object.keys(input);
-  if (keys.length !== OBSERVATION_KEYS.length || keys.some((key) => !(OBSERVATION_KEYS as readonly string[]).includes(key))) return "schema_unexpected_keys";
-  if (typeof input.scene !== "string" || !(VISION_SCENES as readonly string[]).includes(input.scene)) return "schema_invalid_scene";
+  if (
+    keys.length !== OBSERVATION_KEYS.length ||
+    keys.some((key) => !(OBSERVATION_KEYS as readonly string[]).includes(key))
+  )
+    return "schema_unexpected_keys";
+  if (typeof input.scene !== "string" || !(VISION_SCENES as readonly string[]).includes(input.scene))
+    return "schema_invalid_scene";
   if (typeof input.device_count !== "number" || !Number.isInteger(input.device_count)) return "schema_invalid_count";
   if (!Array.isArray(input.readable_text)) return "schema_invalid_text_list";
-  if (!(input.manufacturer === null || typeof input.manufacturer === "string") || !(input.model === null || typeof input.model === "string")) return "schema_invalid_label";
+  if (
+    !(input.manufacturer === null || typeof input.manufacturer === "string") ||
+    !(input.model === null || typeof input.model === "string")
+  )
+    return "schema_invalid_label";
   if (!Array.isArray(input.location_clues)) return "schema_invalid_clues";
   if (!Array.isArray(input.image_issues)) return "schema_invalid_issues";
   return "schema_mismatch";

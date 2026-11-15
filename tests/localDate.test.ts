@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { formatCalendarDate, isFreshCapture, isValidObservedDate, localCalendarDate, photoDateNeedsConfirmation } from "../src/domain/localDate";
+import {
+  formatCalendarDate,
+  isFreshCapture,
+  isValidObservedDate,
+  localCalendarDate,
+  photoDateNeedsConfirmation,
+} from "../src/domain/localDate";
 
 describe("local calendar dates", () => {
   afterEach(() => vi.unstubAllEnvs());

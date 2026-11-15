@@ -19,7 +19,15 @@ export function validateMetadata(
 ): { buildTime: string; osmDataUntil: string; ageHours: number; featureCount: number };
 
 export function validateHeader(
-  header: { tileType: number; minZoom: number; maxZoom: number; minLon: number; minLat: number; maxLon: number; maxLat: number },
+  header: {
+    tileType: number;
+    minZoom: number;
+    maxZoom: number;
+    minLon: number;
+    minLat: number;
+    maxLon: number;
+    maxLat: number;
+  },
   longitude: number,
   latitude: number,
 ): void;

@@ -15,7 +15,10 @@ export type OSMSessionStatus = {
 
 /** Fail closed when the Worker is unreachable or returns an unexpected response. */
 export async function loadOSMSession(fetcher: typeof fetch = fetch): Promise<OSMSessionStatus> {
-  const response = await fetcher("/api/auth/session", { credentials: "same-origin", headers: { Accept: "application/json" } });
+  const response = await fetcher("/api/auth/session", {
+    credentials: "same-origin",
+    headers: { Accept: "application/json" },
+  });
   if (!response.ok) throw new Error("OSM session status is unavailable.");
 
   const payload: unknown = await response.json();
@@ -46,10 +49,17 @@ export async function endOSMSession(fetcher: typeof fetch = fetch): Promise<void
 function isSessionStatus(value: unknown): value is OSMSessionStatus {
   if (typeof value !== "object" || value === null) return false;
   const status = value as Record<string, unknown>;
-  return typeof status.authenticated === "boolean" && typeof status.loginAvailable === "boolean" && typeof status.developmentLoginAvailable === "boolean"
-    && typeof status.developmentSession === "boolean"
-    && (status.developmentWriteAvailable === undefined || typeof status.developmentWriteAvailable === "boolean")
-    && (status.developmentWriteOwnerHash === undefined || typeof status.developmentWriteOwnerHash === "string" && /^[a-f0-9]{64}$/u.test(status.developmentWriteOwnerHash))
-    && (status.developmentCorrectionsAvailable === undefined || typeof status.developmentCorrectionsAvailable === "boolean")
-    && (status.photoCheckAvailable === undefined || typeof status.photoCheckAvailable === "boolean");
+  return (
+    typeof status.authenticated === "boolean" &&
+    typeof status.loginAvailable === "boolean" &&
+    typeof status.developmentLoginAvailable === "boolean" &&
+    typeof status.developmentSession === "boolean" &&
+    (status.developmentWriteAvailable === undefined || typeof status.developmentWriteAvailable === "boolean") &&
+    (status.developmentWriteOwnerHash === undefined ||
+      (typeof status.developmentWriteOwnerHash === "string" &&
+        /^[a-f0-9]{64}$/u.test(status.developmentWriteOwnerHash))) &&
+    (status.developmentCorrectionsAvailable === undefined ||
+      typeof status.developmentCorrectionsAvailable === "boolean") &&
+    (status.photoCheckAvailable === undefined || typeof status.photoCheckAvailable === "boolean")
+  );
 }

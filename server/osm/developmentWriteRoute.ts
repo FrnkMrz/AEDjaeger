@@ -15,7 +15,16 @@ import type { D1Database } from "../storage/d1";
 import { requestOSMDevelopmentApi } from "./developmentApi";
 import { escapeXml, withoutXmlDeclaration } from "./xmlText";
 import { createChangeset, closeChangeset } from "./changeset";
-import { BodyTooLargeError, isCrossOrigin, isRecord, jsonResponse, readCookie, readOSMSessionCookie, readLimitedBody, readLimitedText } from "../http/requestGuards";
+import {
+  BodyTooLargeError,
+  isCrossOrigin,
+  isRecord,
+  jsonResponse,
+  readCookie,
+  readOSMSessionCookie,
+  readLimitedBody,
+  readLimitedText,
+} from "../http/requestGuards";
 import { isAcceptableObservationDate } from "./observationDate";
 import { validateDetailTags, type DetailTags } from "../../src/contracts/aedDetails";
 
@@ -100,7 +109,8 @@ export async function handleDevelopmentCheckDate(
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
-  if (!session || session.environment !== "development") return jsonResponse({ error: "development_session_required" }, 403);
+  if (!session || session.environment !== "development")
+    return jsonResponse({ error: "development_session_required" }, 403);
 
   let input: ConfirmedCheckDate;
   let ownerHash: string;
@@ -108,9 +118,13 @@ export async function handleDevelopmentCheckDate(
     ownerHash = await hashOSMDevelopmentWriteOwner(session, environment.OSM_OAUTH_ENCRYPTION_KEY, dependencies.crypto);
     input = parseRequest(await readLimitedBody(request, MAX_BODY_BYTES), now);
   } catch (error) {
-    return jsonResponse({ error: error instanceof BodyTooLargeError ? "request_too_large" : "invalid_request" }, error instanceof BodyTooLargeError ? 413 : 400);
+    return jsonResponse(
+      { error: error instanceof BodyTooLargeError ? "request_too_large" : "invalid_request" },
+      error instanceof BodyTooLargeError ? 413 : 400,
+    );
   }
-  if (input.recovery_identity && input.recovery_identity !== ownerHash) return jsonResponse({ error: "recovery_identity_mismatch" }, 403);
+  if (input.recovery_identity && input.recovery_identity !== ownerHash)
+    return jsonResponse({ error: "recovery_identity_mismatch" }, 403);
   input.recovery_identity = ownerHash;
 
   // Korrekturen (bestehende Werte ersetzen) erlaubt nur der Betreiber-Schalter. Ohne ihn geschieht nichts: weder eine
@@ -128,7 +142,10 @@ export async function handleDevelopmentCheckDate(
     token = storedToken;
     // The account is already the storage partition and is verified above. Keep it out of the
     // payload hash so operations created before account-bound recovery remain replayable.
-    requestHash = await hashOSMDevelopmentWriteValue(JSON.stringify({ ...input, recovery_identity: undefined }), dependencies.crypto);
+    requestHash = await hashOSMDevelopmentWriteValue(
+      JSON.stringify({ ...input, recovery_identity: undefined }),
+      dependencies.crypto,
+    );
     const legacySessionHash = await hashOSMDevelopmentWriteValue(sessionToken, dependencies.crypto);
     await migrateLegacyOSMDevelopmentWriteOwner(environment.DB, legacySessionHash, ownerHash);
   } catch {
@@ -148,12 +165,18 @@ export async function handleDevelopmentCheckDate(
   if (operation.state === "failed") return jsonResponse({ error: "write_failed" }, 502);
 
   if (!reserved.created) {
-    if (operation.state === "uploaded") return finishChangeset(environment.DB, ownerHash, input.operation_id, operation, token, dependencies);
+    if (operation.state === "uploaded")
+      return finishChangeset(environment.DB, ownerHash, input.operation_id, operation, token, dependencies);
     if (operation.state === "uploading" || operation.state === "uncertain") {
       return reconcileUncertainWrite(environment.DB, ownerHash, input, operation, token, dependencies);
     }
     if (operation.state === "changeset-created") {
-      const claimed = await safelyClaimUpload(environment.DB, ownerHash, input.operation_id, (dependencies.now ?? Date.now)());
+      const claimed = await safelyClaimUpload(
+        environment.DB,
+        ownerHash,
+        input.operation_id,
+        (dependencies.now ?? Date.now)(),
+      );
       if (!claimed) return jsonResponse({ status: "pending" }, 202);
       return uploadNodeChange(environment.DB, ownerHash, input, operation, token, dependencies);
     }
@@ -167,53 +190,93 @@ export async function handleDevelopmentCheckDate(
     currentNode = await readDevelopmentNode(input.target, token, dependencies.fetch ?? fetch);
   } catch (error) {
     const state = error instanceof VersionConflictError ? "conflict" : "failed";
-    await safelyUpdate(environment.DB, { ownerHash, operationId: input.operation_id, state, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(environment.DB, {
+      ownerHash,
+      operationId: input.operation_id,
+      state,
+      now: (dependencies.now ?? Date.now)(),
+    });
     if (error instanceof TargetNotFoundError) return jsonResponse({ error: "target_not_found" }, 404);
     return error instanceof VersionConflictError
       ? jsonResponse({ error: "version_conflict" }, 409)
       : jsonResponse({ error: "development_api_unavailable" }, 502);
   }
 
-  if ((input.expected_version !== undefined && currentNode.version !== input.expected_version)
-    || (currentNode.tags.check_date ?? null) !== input.expected_check_date
-    || currentNode.tags.emergency !== "defibrillator"
-    || detailsConflict(currentNode, input)) {
-    await safelyUpdate(environment.DB, { ownerHash, operationId: input.operation_id, state: "conflict", now: (dependencies.now ?? Date.now)() });
+  if (
+    (input.expected_version !== undefined && currentNode.version !== input.expected_version) ||
+    (currentNode.tags.check_date ?? null) !== input.expected_check_date ||
+    currentNode.tags.emergency !== "defibrillator" ||
+    detailsConflict(currentNode, input)
+  ) {
+    await safelyUpdate(environment.DB, {
+      ownerHash,
+      operationId: input.operation_id,
+      state: "conflict",
+      now: (dependencies.now ?? Date.now)(),
+    });
     return jsonResponse({ error: "version_conflict" }, 409);
   }
   if (input.expected_check_date && input.expected_check_date > input.observed_on) {
-    await safelyUpdate(environment.DB, { ownerHash, operationId: input.operation_id, state: "conflict", now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(environment.DB, {
+      ownerHash,
+      operationId: input.operation_id,
+      state: "conflict",
+      now: (dependencies.now ?? Date.now)(),
+    });
     return jsonResponse({ error: "newer_check_date_exists" }, 409);
   }
   // „Schon aktuell“ gilt nur, wenn es auch keine Detailtags zu schreiben gibt.
   if (currentNode.tags.check_date === input.observed_on && !hasDetails(input)) {
-    await safelyUpdate(environment.DB, { ownerHash, operationId: input.operation_id, state: "complete", resultVersion: currentNode.version, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(environment.DB, {
+      ownerHash,
+      operationId: input.operation_id,
+      state: "complete",
+      resultVersion: currentNode.version,
+      now: (dependencies.now ?? Date.now)(),
+    });
     return jsonResponse({ status: "complete", version: currentNode.version, already_current: true }, 200);
   }
 
   let changesetId: string;
   try {
     const kind = hasCorrections(input) ? "corrections" : hasDetails(input) ? "details" : "none";
-    const comment = kind === "corrections" ? "AEDjaeger: AED checked on site, details added and corrected"
-      : kind === "details" ? "AEDjaeger: AED checked on site, missing details added"
-        : "AEDjaeger: AED presence checked on site";
+    const comment =
+      kind === "corrections"
+        ? "AEDjaeger: AED checked on site, details added and corrected"
+        : kind === "details"
+          ? "AEDjaeger: AED checked on site, missing details added"
+          : "AEDjaeger: AED presence checked on site";
     changesetId = await createChangeset(token, comment, dependencies.fetch ?? fetch);
   } catch {
     // Without a changeset ID this request cannot upload a map object. Retire it
     // as failed so the same operation ID cannot remain uncertain for a week.
-    await safelyUpdate(environment.DB, { ownerHash, operationId: input.operation_id, state: "failed", now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(environment.DB, {
+      ownerHash,
+      operationId: input.operation_id,
+      state: "failed",
+      now: (dependencies.now ?? Date.now)(),
+    });
     return jsonResponse({ error: "write_failed" }, 502);
   }
   try {
     await updateOSMDevelopmentWrite(environment.DB, {
-      ownerHash, operationId: input.operation_id, state: "changeset-created", changesetId, now: (dependencies.now ?? Date.now)(),
+      ownerHash,
+      operationId: input.operation_id,
+      state: "changeset-created",
+      changesetId,
+      now: (dependencies.now ?? Date.now)(),
     });
   } catch {
     // An empty changeset may remain open, but no map object has been sent.
     return jsonResponse({ error: "write_status_unavailable" }, 503);
   }
 
-  const claimed = await safelyClaimUpload(environment.DB, ownerHash, input.operation_id, (dependencies.now ?? Date.now)());
+  const claimed = await safelyClaimUpload(
+    environment.DB,
+    ownerHash,
+    input.operation_id,
+    (dependencies.now ?? Date.now)(),
+  );
   if (!claimed) return jsonResponse({ status: "pending" }, 202);
   const changeset = { ...operation, state: "changeset-created" as const, changeset_id: changesetId };
   return uploadNodeChange(environment.DB, ownerHash, input, changeset, token, dependencies, currentNode);
@@ -234,11 +297,30 @@ async function uploadNodeChange(
     node ??= await readDevelopmentNode(input.target, token, dependencies.fetch ?? fetch);
   } catch (error) {
     const state = error instanceof VersionConflictError ? "conflict" : "failed";
-    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state, changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
-    return error instanceof VersionConflictError ? jsonResponse({ error: "version_conflict" }, 409) : jsonResponse({ error: "development_api_unavailable" }, 502);
+    await safelyUpdate(database, {
+      ownerHash,
+      operationId: input.operation_id,
+      state,
+      changesetId: operation.changeset_id,
+      now: (dependencies.now ?? Date.now)(),
+    });
+    return error instanceof VersionConflictError
+      ? jsonResponse({ error: "version_conflict" }, 409)
+      : jsonResponse({ error: "development_api_unavailable" }, 502);
   }
-  if ((input.expected_version !== undefined && node.version !== input.expected_version) || (node.tags.check_date ?? null) !== input.expected_check_date || node.tags.emergency !== "defibrillator" || detailsConflict(node, input)) {
-    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "conflict", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
+  if (
+    (input.expected_version !== undefined && node.version !== input.expected_version) ||
+    (node.tags.check_date ?? null) !== input.expected_check_date ||
+    node.tags.emergency !== "defibrillator" ||
+    detailsConflict(node, input)
+  ) {
+    await safelyUpdate(database, {
+      ownerHash,
+      operationId: input.operation_id,
+      state: "conflict",
+      changesetId: operation.changeset_id,
+      now: (dependencies.now ?? Date.now)(),
+    });
     return jsonResponse({ error: "version_conflict" }, 409);
   }
 
@@ -249,23 +331,50 @@ async function uploadNodeChange(
   let response: Response;
   try {
     const xml = buildNodeUpdateChange(node, updatedTags, operation.changeset_id);
-    response = await requestOSMDevelopmentApi("development", `/api/0.6/changeset/${operation.changeset_id}/upload`, token, {
-      method: "POST", body: xml,
-    }, dependencies.fetch ?? fetch);
+    response = await requestOSMDevelopmentApi(
+      "development",
+      `/api/0.6/changeset/${operation.changeset_id}/upload`,
+      token,
+      {
+        method: "POST",
+        body: xml,
+      },
+      dependencies.fetch ?? fetch,
+    );
   } catch {
-    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "uncertain", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(database, {
+      ownerHash,
+      operationId: input.operation_id,
+      state: "uncertain",
+      changesetId: operation.changeset_id,
+      now: (dependencies.now ?? Date.now)(),
+    });
     return jsonResponse({ status: "uncertain" }, 202);
   }
 
   if (response.status === 409) {
-    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "conflict", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(database, {
+      ownerHash,
+      operationId: input.operation_id,
+      state: "conflict",
+      changesetId: operation.changeset_id,
+      now: (dependencies.now ?? Date.now)(),
+    });
     await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch);
     return jsonResponse({ error: "version_conflict" }, 409);
   }
   if (!response.ok) {
-    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: response.status >= 500 ? "uncertain" : "failed", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(database, {
+      ownerHash,
+      operationId: input.operation_id,
+      state: response.status >= 500 ? "uncertain" : "failed",
+      changesetId: operation.changeset_id,
+      now: (dependencies.now ?? Date.now)(),
+    });
     if (response.status < 500) await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch);
-    return response.status >= 500 ? jsonResponse({ status: "uncertain" }, 202) : jsonResponse({ error: "write_failed" }, 502);
+    return response.status >= 500
+      ? jsonResponse({ status: "uncertain" }, 202)
+      : jsonResponse({ error: "write_failed" }, 502);
   }
 
   let version: number | null;
@@ -275,14 +384,34 @@ async function uploadNodeChange(
     version = null;
   }
   if (version === null) {
-    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "uncertain", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(database, {
+      ownerHash,
+      operationId: input.operation_id,
+      state: "uncertain",
+      changesetId: operation.changeset_id,
+      now: (dependencies.now ?? Date.now)(),
+    });
     return jsonResponse({ status: "uncertain" }, 202);
   }
 
   // Save the acknowledged object version before closing. A close failure may
   // never cause the edit upload to be repeated.
-  await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "uploaded", changesetId: operation.changeset_id, resultVersion: version, now: (dependencies.now ?? Date.now)() });
-  return finishChangeset(database, ownerHash, input.operation_id, { ...operation, state: "uploaded", result_version: version }, token, dependencies);
+  await safelyUpdate(database, {
+    ownerHash,
+    operationId: input.operation_id,
+    state: "uploaded",
+    changesetId: operation.changeset_id,
+    resultVersion: version,
+    now: (dependencies.now ?? Date.now)(),
+  });
+  return finishChangeset(
+    database,
+    ownerHash,
+    input.operation_id,
+    { ...operation, state: "uploaded", result_version: version },
+    token,
+    dependencies,
+  );
 }
 
 async function reconcileUncertainWrite(
@@ -296,17 +425,28 @@ async function reconcileUncertainWrite(
   if (!operation.changeset_id) {
     // Older deployments recorded a failed changeset-open request as uncertain.
     // No upload can have been sent without its changeset ID.
-    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "failed", now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(database, {
+      ownerHash,
+      operationId: input.operation_id,
+      state: "failed",
+      now: (dependencies.now ?? Date.now)(),
+    });
     return jsonResponse({ error: "write_failed" }, 502);
   }
   try {
     // Closing is a barrier: once confirmed, a late upload cannot change the
     // node after the following changeset download has been inspected.
-    if (!await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch)) {
+    if (!(await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch))) {
       return jsonResponse({ status: "uncertain" }, 202);
     }
 
-    const response = await requestOSMDevelopmentApi("development", `/api/0.6/changeset/${operation.changeset_id}/download`, token, { method: "GET" }, dependencies.fetch ?? fetch);
+    const response = await requestOSMDevelopmentApi(
+      "development",
+      `/api/0.6/changeset/${operation.changeset_id}/download`,
+      token,
+      { method: "GET" },
+      dependencies.fetch ?? fetch,
+    );
     if (!response.ok) return jsonResponse({ status: "uncertain" }, 202);
     const body = await readLimitedText(response, MAX_CHANGESET_DOWNLOAD_BYTES);
     const changeset = parseChangesetDownload(body, operation.changeset_id, input.target);
@@ -316,8 +456,22 @@ async function reconcileUncertainWrite(
 
     if (changeset.updatedNode && writeAppearsApplied(changeset.updatedNode, input)) {
       const updatedNode = changeset.updatedNode;
-      await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "uploaded", changesetId: operation.changeset_id, resultVersion: updatedNode.version, now: (dependencies.now ?? Date.now)() });
-      return finishChangeset(database, ownerHash, input.operation_id, { ...operation, state: "uploaded", result_version: updatedNode.version }, token, dependencies);
+      await safelyUpdate(database, {
+        ownerHash,
+        operationId: input.operation_id,
+        state: "uploaded",
+        changesetId: operation.changeset_id,
+        resultVersion: updatedNode.version,
+        now: (dependencies.now ?? Date.now)(),
+      });
+      return finishChangeset(
+        database,
+        ownerHash,
+        input.operation_id,
+        { ...operation, state: "uploaded", result_version: updatedNode.version },
+        token,
+        dependencies,
+      );
     }
 
     if (changeset.empty) {
@@ -327,14 +481,18 @@ async function reconcileUncertainWrite(
         changesetId: operation.changeset_id,
         now: (dependencies.now ?? Date.now)(),
       });
-      return failed
-        ? jsonResponse({ error: "write_failed" }, 502)
-        : jsonResponse({ status: "pending" }, 202);
+      return failed ? jsonResponse({ error: "write_failed" }, 502) : jsonResponse({ status: "pending" }, 202);
     }
 
     // The closed changeset contains a different or conflicting edit. Keep it
     // terminally blocked instead of inviting another upload with stale data.
-    await safelyUpdate(database, { ownerHash, operationId: input.operation_id, state: "conflict", changesetId: operation.changeset_id, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(database, {
+      ownerHash,
+      operationId: input.operation_id,
+      state: "conflict",
+      changesetId: operation.changeset_id,
+      now: (dependencies.now ?? Date.now)(),
+    });
     return jsonResponse({ error: "version_conflict" }, 409);
   } catch {
     // A lost connection or malformed upstream response keeps the operation blocked.
@@ -352,7 +510,14 @@ async function finishChangeset(
 ): Promise<Response> {
   if (!operation.changeset_id) return jsonResponse({ status: "uncertain" }, 202);
   if (await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch)) {
-    await safelyUpdate(database, { ownerHash, operationId, state: "complete", changesetId: operation.changeset_id, resultVersion: operation.result_version ?? undefined, now: (dependencies.now ?? Date.now)() });
+    await safelyUpdate(database, {
+      ownerHash,
+      operationId,
+      state: "complete",
+      changesetId: operation.changeset_id,
+      resultVersion: operation.result_version ?? undefined,
+      now: (dependencies.now ?? Date.now)(),
+    });
     return completeResponse({ ...operation, state: "complete" });
   }
   return jsonResponse({ status: "uploaded", close_pending: true, version: operation.result_version }, 202);
@@ -394,16 +559,27 @@ function hasCorrections(input: ConfirmedCheckDate): boolean {
 function writeAppearsApplied(node: Pick<OSMNode, "version" | "tags">, input: ConfirmedCheckDate): boolean {
   if (node.tags.emergency !== "defibrillator" || node.tags.check_date !== input.observed_on) return false;
   if (hasDetails(input)) {
-    return input.expected_version !== undefined && node.version === input.expected_version + 1
-      && Object.entries(input.details ?? {}).every(([key, value]) => node.tags[key] === value);
+    return (
+      input.expected_version !== undefined &&
+      node.version === input.expected_version + 1 &&
+      Object.entries(input.details ?? {}).every(([key, value]) => node.tags[key] === value)
+    );
   }
-  return input.expected_check_date !== input.observed_on
-    && (input.expected_version === undefined || node.version === input.expected_version + 1);
+  return (
+    input.expected_check_date !== input.observed_on &&
+    (input.expected_version === undefined || node.version === input.expected_version + 1)
+  );
 }
 
 export async function readDevelopmentNode(path: string, token: string, fetcher: typeof fetch): Promise<OSMNode> {
   const id = Number(path.slice("node/".length));
-  const response = await requestOSMDevelopmentApi("development", `/api/0.6/node/${id}.json`, token, { method: "GET" }, fetcher);
+  const response = await requestOSMDevelopmentApi(
+    "development",
+    `/api/0.6/node/${id}.json`,
+    token,
+    { method: "GET" },
+    fetcher,
+  );
   if (response.status === 409 || response.status === 410) throw new VersionConflictError();
   // 404: Diesen Knoten gibt es auf dem Testserver nicht. Typisch bei einem AED aus dem Archiv des echten OSM: Die
   // Entwicklungsinstanz hat eine eigene, getrennte Datenbank. Das ist ein eindeutiges Ergebnis (nichts wurde geschrieben),
@@ -416,12 +592,25 @@ export async function readDevelopmentNode(path: string, token: string, fetcher: 
   } catch {
     throw new Error("Invalid OSM node response");
   }
-  if (!isRecord(payload) || !Array.isArray(payload.elements) || payload.elements.length !== 1) throw new Error("Invalid OSM node response");
+  if (!isRecord(payload) || !Array.isArray(payload.elements) || payload.elements.length !== 1)
+    throw new Error("Invalid OSM node response");
   const element = payload.elements[0];
-  if (!isRecord(element) || element.type !== "node" || element.id !== id || !isPositiveInteger(element.version)
-    || typeof element.lat !== "number" || !Number.isFinite(element.lat) || element.lat < -90 || element.lat > 90
-    || typeof element.lon !== "number" || !Number.isFinite(element.lon) || element.lon < -180 || element.lon > 180
-    || !isStringRecord(element.tags) || element.tags.emergency !== "defibrillator") {
+  if (
+    !isRecord(element) ||
+    element.type !== "node" ||
+    element.id !== id ||
+    !isPositiveInteger(element.version) ||
+    typeof element.lat !== "number" ||
+    !Number.isFinite(element.lat) ||
+    element.lat < -90 ||
+    element.lat > 90 ||
+    typeof element.lon !== "number" ||
+    !Number.isFinite(element.lon) ||
+    element.lon < -180 ||
+    element.lon > 180 ||
+    !isStringRecord(element.tags) ||
+    element.tags.emergency !== "defibrillator"
+  ) {
     throw new Error("Invalid or unsupported OSM node response");
   }
   return { id, version: element.version, latitude: element.lat, longitude: element.lon, tags: element.tags };
@@ -433,11 +622,7 @@ type ParsedChangesetDownload = {
 };
 
 /** Parse only the OSM Change XML shape we need, rejecting incomplete XML. */
-function parseChangesetDownload(
-  value: string,
-  changesetId: string,
-  target: string,
-): ParsedChangesetDownload | null {
+function parseChangesetDownload(value: string, changesetId: string, target: string): ParsedChangesetDownload | null {
   const stack: string[] = [];
   let cursor = 0;
   let sawRoot = false;
@@ -468,7 +653,15 @@ function parseChangesetDownload(
     if (value.startsWith("<?", cursor)) {
       const end = value.indexOf("?>", cursor + 2);
       const declaration = end < 0 ? "" : value.slice(cursor, end + 2);
-      if (cursor !== 0 || sawRoot || declarationSeen || !/^<\?xml\s+version=(?:"1\.0"|'1\.0')(?:\s+encoding=(?:"UTF-8"|'UTF-8'))?(?:\s+standalone=(?:"(?:yes|no)"|'(?:yes|no)'))?\s*\?>$/u.test(declaration)) return null;
+      if (
+        cursor !== 0 ||
+        sawRoot ||
+        declarationSeen ||
+        !/^<\?xml\s+version=(?:"1\.0"|'1\.0')(?:\s+encoding=(?:"UTF-8"|'UTF-8'))?(?:\s+standalone=(?:"(?:yes|no)"|'(?:yes|no)'))?\s*\?>$/u.test(
+          declaration,
+        )
+      )
+        return null;
       declarationSeen = true;
       cursor = end + 2;
       continue;
@@ -502,13 +695,21 @@ function parseChangesetDownload(
         if (!["node", "way", "relation"].includes(parsed.name)) return null;
         hasObjects = true;
         const version = Number(parsed.attributes.version);
-        if (parent === "modify" && parsed.name === "node" && parsed.attributes.id === targetId
-          && parsed.attributes.changeset === changesetId && /^[1-9]\d{0,15}$/u.test(parsed.attributes.version ?? "")
-          && Number.isSafeInteger(version)) {
+        if (
+          parent === "modify" &&
+          parsed.name === "node" &&
+          parsed.attributes.id === targetId &&
+          parsed.attributes.changeset === changesetId &&
+          /^[1-9]\d{0,15}$/u.test(parsed.attributes.version ?? "") &&
+          Number.isSafeInteger(version)
+        ) {
           capture = { version, tags: {} };
         }
       } else if (["node", "way", "relation"].includes(parent)) {
-        const allowed = parsed.name === "tag" || (parent === "way" && parsed.name === "nd") || (parent === "relation" && parsed.name === "member");
+        const allowed =
+          parsed.name === "tag" ||
+          (parent === "way" && parsed.name === "nd") ||
+          (parent === "relation" && parsed.name === "member");
         if (!allowed) return null;
         if (parsed.name === "tag" && (!parsed.attributes.k || parsed.attributes.v === undefined)) return null;
         if (parsed.name === "tag" && capture && parent === "node") {
@@ -533,12 +734,12 @@ function parseChangesetDownload(
 }
 
 function findXmlTagEnd(value: string, cursor: number): number {
-  let quote: "\"" | "'" | null = null;
+  let quote: '"' | "'" | null = null;
   for (let index = cursor; index < value.length; index += 1) {
     const character = value[index];
     if (quote) {
       if (character === quote) quote = null;
-    } else if (character === "\"" || character === "'") {
+    } else if (character === '"' || character === "'") {
       quote = character;
     } else if (character === ">") {
       return index;
@@ -547,7 +748,9 @@ function findXmlTagEnd(value: string, cursor: number): number {
   return -1;
 }
 
-function parseXmlStartTag(value: string): { name: string; attributes: Record<string, string>; selfClosing: boolean } | null {
+function parseXmlStartTag(
+  value: string,
+): { name: string; attributes: Record<string, string>; selfClosing: boolean } | null {
   const match = /^([A-Za-z_][\w:.-]*)([\s\S]*)$/u.exec(value);
   if (!match) return null;
   const name = match[1];
@@ -574,10 +777,14 @@ function parseXmlStartTag(value: string): { name: string; attributes: Record<str
 function decodeXmlAttribute(value: string): string | null {
   const validXmlCharacters = Array.from(value).every((character) => {
     const codePoint = character.codePointAt(0)!;
-    return codePoint === 0x9 || codePoint === 0xa || codePoint === 0xd
-      || (codePoint >= 0x20 && codePoint <= 0xd7ff)
-      || (codePoint >= 0xe000 && codePoint <= 0xfffd)
-      || (codePoint >= 0x10000 && codePoint <= 0x10ffff);
+    return (
+      codePoint === 0x9 ||
+      codePoint === 0xa ||
+      codePoint === 0xd ||
+      (codePoint >= 0x20 && codePoint <= 0xd7ff) ||
+      (codePoint >= 0xe000 && codePoint <= 0xfffd) ||
+      (codePoint >= 0x10000 && codePoint <= 0x10ffff)
+    );
   });
   if (!validXmlCharacters) return null;
   let invalid = false;
@@ -588,12 +795,18 @@ function decodeXmlAttribute(value: string): string | null {
     if (name === "lt") return "<";
     if (name === "gt") return ">";
     const numeric = /^#(?:x([\da-f]+)|(\d+))$/iu.exec(name);
-    if (!numeric) { invalid = true; return ""; }
+    if (!numeric) {
+      invalid = true;
+      return "";
+    }
     const codePoint = numeric[1] ? Number.parseInt(numeric[1], 16) : Number.parseInt(numeric[2], 10);
-    const validCodePoint = codePoint === 0x9 || codePoint === 0xa || codePoint === 0xd
-      || (codePoint >= 0x20 && codePoint <= 0xd7ff)
-      || (codePoint >= 0xe000 && codePoint <= 0xfffd)
-      || (codePoint >= 0x10000 && codePoint <= 0x10ffff);
+    const validCodePoint =
+      codePoint === 0x9 ||
+      codePoint === 0xa ||
+      codePoint === 0xd ||
+      (codePoint >= 0x20 && codePoint <= 0xd7ff) ||
+      (codePoint >= 0xe000 && codePoint <= 0xfffd) ||
+      (codePoint >= 0x10000 && codePoint <= 0x10ffff);
     if (!Number.isInteger(codePoint) || !validCodePoint) {
       invalid = true;
       return "";
@@ -605,14 +818,19 @@ function decodeXmlAttribute(value: string): string | null {
 }
 
 function buildNodeUpdateChange(node: OSMNode, tags: Record<string, string>, changesetId: string): string {
-  const tagXml = Object.entries(tags).sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, value]) => `<tag k="${escapeXml(key)}" v="${escapeXml(value)}"/>`).join("");
+  const tagXml = Object.entries(tags)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `<tag k="${escapeXml(key)}" v="${escapeXml(value)}"/>`)
+    .join("");
   return `<osmChange version="0.6" generator="AEDjaeger"><modify><node id="${node.id}" changeset="${changesetId}" version="${node.version}" lat="${node.latitude}" lon="${node.longitude}">${tagXml}</node></modify></osmChange>`;
 }
 
 function parseDiffResult(rawValue: string, expectedNodeId: number): number | null {
   const value = withoutXmlDeclaration(rawValue);
-  const match = /^\s*<diffResult\b[^>]*>\s*<node\s+old_id="(\d+)"\s+new_id="(\d+)"\s+new_version="(\d+)"\s*\/>\s*<\/diffResult>\s*$/u.exec(value);
+  const match =
+    /^\s*<diffResult\b[^>]*>\s*<node\s+old_id="(\d+)"\s+new_id="(\d+)"\s+new_version="(\d+)"\s*\/>\s*<\/diffResult>\s*$/u.exec(
+      value,
+    );
   if (!match || Number(match[1]) !== expectedNodeId || Number(match[2]) !== expectedNodeId) return null;
   const version = Number(match[3]);
   return isPositiveInteger(version) ? version : null;
@@ -626,15 +844,35 @@ function parseRequest(bytes: Uint8Array, now: number): ConfirmedCheckDate {
     throw new Error("Invalid JSON");
   }
   // `details` ist ein optionales zusätzliches Feld. Alle übrigen Felder müssen genau einer der beiden bekannten Formen entsprechen.
-  const keysWithoutDetails = isRecord(value) ? Object.keys(value).filter((key) => key !== "details" && key !== "expected_before" && key !== "confirmed_corrections" && key !== "recovery_identity").sort().join(",") : "";
-  if (!isRecord(value) || !["confirmed,expected_check_date,expected_version,observed_on,operation_id,target", "confirmed,expected_check_date,observed_on,operation_id,target"].includes(keysWithoutDetails)
-    || value.confirmed !== true || typeof value.operation_id !== "string"
-    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value.operation_id)
-    || typeof value.target !== "string" || !/^node\/[1-9]\d{0,15}$/u.test(value.target)
-    || (value.expected_version !== undefined && !isPositiveInteger(value.expected_version))
-    || !(value.expected_check_date === null || isCalendarDate(value.expected_check_date))
-    || value.recovery_identity !== undefined && (typeof value.recovery_identity !== "string" || !/^[a-f0-9]{64}$/u.test(value.recovery_identity))
-    || !isAcceptableObservationDate(value.observed_on, now)) {
+  const keysWithoutDetails = isRecord(value)
+    ? Object.keys(value)
+        .filter(
+          (key) =>
+            key !== "details" &&
+            key !== "expected_before" &&
+            key !== "confirmed_corrections" &&
+            key !== "recovery_identity",
+        )
+        .sort()
+        .join(",")
+    : "";
+  if (
+    !isRecord(value) ||
+    ![
+      "confirmed,expected_check_date,expected_version,observed_on,operation_id,target",
+      "confirmed,expected_check_date,observed_on,operation_id,target",
+    ].includes(keysWithoutDetails) ||
+    value.confirmed !== true ||
+    typeof value.operation_id !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value.operation_id) ||
+    typeof value.target !== "string" ||
+    !/^node\/[1-9]\d{0,15}$/u.test(value.target) ||
+    (value.expected_version !== undefined && !isPositiveInteger(value.expected_version)) ||
+    !(value.expected_check_date === null || isCalendarDate(value.expected_check_date)) ||
+    (value.recovery_identity !== undefined &&
+      (typeof value.recovery_identity !== "string" || !/^[a-f0-9]{64}$/u.test(value.recovery_identity))) ||
+    !isAcceptableObservationDate(value.observed_on, now)
+  ) {
     throw new Error("Invalid request");
   }
   const hasCorrectionFields = "expected_before" in value || "confirmed_corrections" in value;
@@ -643,15 +881,26 @@ function parseRequest(bytes: Uint8Array, now: number): ConfirmedCheckDate {
     // Details brauchen die Version, die die Person gesehen hat, und mindestens ein gültiges Detailtag. Ein leeres
     // Objekt ist ein Fehler: Die App lässt das Feld in diesem Fall einfach weg.
     const checked = validateDetailTags(value.details);
-    if (!checked.ok || Object.keys(checked.tags).length === 0 || !isPositiveInteger(value.expected_version)) throw new Error("Invalid request");
+    if (!checked.ok || Object.keys(checked.tags).length === 0 || !isPositiveInteger(value.expected_version))
+      throw new Error("Invalid request");
     if (hasCorrectionFields) {
       // Korrekturen: beide Felder gehören zusammen. Die Person hat ausdrücklich bestätigt (confirmed_corrections), und die
       // alten Werte gehören zu Schlüsseln, die auch in `details` stehen. Die alten Werte stammen aus OSM und müssen
       // nicht unserem Vertrag entsprechen (zum Beispiel access=permissive); sie dienen nur dem Vergleich und sind darum
       // nur auf Länge und Zeichen geprüft. Ein „Korrektur“ ohne tatsächlichen Unterschied ist ein Fehler.
       const before = value.expected_before;
-      if (value.confirmed_corrections !== true || !isStringRecord(before) || Object.keys(before).length === 0
-        || Object.entries(before).some(([key, old]) => !(key in checked.tags) || old.length === 0 || /[\x00-\x1f\x7f]/u.test(old) || old.trim() === checked.tags[key as keyof typeof checked.tags])) {
+      if (
+        value.confirmed_corrections !== true ||
+        !isStringRecord(before) ||
+        Object.keys(before).length === 0 ||
+        Object.entries(before).some(
+          ([key, old]) =>
+            !(key in checked.tags) ||
+            old.length === 0 ||
+            /[\x00-\x1f\x7f]/u.test(old) ||
+            old.trim() === checked.tags[key as keyof typeof checked.tags],
+        )
+      ) {
         throw new Error("Invalid request");
       }
       return { ...value, details: checked.tags, expected_before: before } as ConfirmedCheckDate;
@@ -663,8 +912,14 @@ function parseRequest(bytes: Uint8Array, now: number): ConfirmedCheckDate {
 
 function isStringRecord(value: unknown): value is Record<string, string> {
   if (!isRecord(value) || Object.keys(value).length > 512) return false;
-  return Object.entries(value).every(([key, text]) => key.length > 0 && [...key].length <= 255
-    && typeof text === "string" && [...text].length <= 255 && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(key + text));
+  return Object.entries(value).every(
+    ([key, text]) =>
+      key.length > 0 &&
+      [...key].length <= 255 &&
+      typeof text === "string" &&
+      [...text].length <= 255 &&
+      !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(key + text),
+  );
 }
 
 function isPositiveInteger(value: unknown): value is number {
@@ -677,12 +932,28 @@ function isCalendarDate(value: unknown): value is string {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
-async function safelyClaimUpload(database: D1Database, ownerHash: string, operationId: string, now: number): Promise<boolean> {
-  try { return await claimOSMDevelopmentUpload(database, ownerHash, operationId, now); } catch { return false; }
+async function safelyClaimUpload(
+  database: D1Database,
+  ownerHash: string,
+  operationId: string,
+  now: number,
+): Promise<boolean> {
+  try {
+    return await claimOSMDevelopmentUpload(database, ownerHash, operationId, now);
+  } catch {
+    return false;
+  }
 }
 
-async function safelyUpdate(database: D1Database, input: Parameters<typeof updateOSMDevelopmentWrite>[1]): Promise<void> {
-  try { await updateOSMDevelopmentWrite(database, input); } catch { /* Keep upstream and storage details out of the HTTP error. */ }
+async function safelyUpdate(
+  database: D1Database,
+  input: Parameters<typeof updateOSMDevelopmentWrite>[1],
+): Promise<void> {
+  try {
+    await updateOSMDevelopmentWrite(database, input);
+  } catch {
+    /* Keep upstream and storage details out of the HTTP error. */
+  }
 }
 
 function completeResponse(operation: OSMDevelopmentWriteOperation): Response {

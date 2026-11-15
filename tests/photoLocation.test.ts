@@ -22,6 +22,10 @@ describe("photo GPS extraction", () => {
 
   it("rejects invalid coordinates and ignores parser errors", async () => {
     await expect(readPhotoLocation(photo, async () => ({ latitude: 91, longitude: 13.405 }))).resolves.toBeUndefined();
-    await expect(readPhotoLocation(photo, async () => { throw new Error("malformed EXIF"); })).resolves.toBeUndefined();
+    await expect(
+      readPhotoLocation(photo, async () => {
+        throw new Error("malformed EXIF");
+      }),
+    ).resolves.toBeUndefined();
   });
 });

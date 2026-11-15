@@ -14,9 +14,7 @@ export type AnalysisBudgetRequest = {
   createdAt: number;
 };
 
-export type AnalysisBudgetResult =
-  | { reserved: true }
-  | { reserved: false; reason: "budget_exceeded" | "duplicate" };
+export type AnalysisBudgetResult = { reserved: true } | { reserved: false; reason: "budget_exceeded" | "duplicate" };
 
 type ExistingReservation = {
   id: string;
@@ -144,7 +142,12 @@ export async function markAnalysisProviderStarted(
   requestId: string,
   startedAt: number,
 ): Promise<boolean> {
-  if (!isShortIdentifier(userId) || !isShortIdentifier(requestId) || !Number.isSafeInteger(startedAt) || startedAt < 0) {
+  if (
+    !isShortIdentifier(userId) ||
+    !isShortIdentifier(requestId) ||
+    !Number.isSafeInteger(startedAt) ||
+    startedAt < 0
+  ) {
     throw new Error("Ungültige Kennung für den Analyseaufruf.");
   }
 
@@ -174,13 +177,19 @@ function isResumableReservation(existing: ExistingReservation | null, request: A
   // A reservation is tied to the day and amount checked by the original INSERT.
   // Reusing yesterday's row would bypass today's limits; a changed server-side
   // estimate must also go through a fresh budget check instead of reusing it.
-  return existing?.status === "reserved"
-    && existing.provider_started_at === null
-    && existing.utc_day === request.utcDay
-    && existing.cost_micros === request.costMicros;
+  return (
+    existing?.status === "reserved" &&
+    existing.provider_started_at === null &&
+    existing.utc_day === request.utcDay &&
+    existing.cost_micros === request.costMicros
+  );
 }
 
-async function findExistingReservation(database: D1Database, userId: string, requestId: string): Promise<ExistingReservation | null> {
+async function findExistingReservation(
+  database: D1Database,
+  userId: string,
+  requestId: string,
+): Promise<ExistingReservation | null> {
   try {
     return await database
       .prepare(
@@ -200,7 +209,11 @@ function validateRequest(request: AnalysisBudgetRequest): void {
     throw new Error("Ungültige Analyse-Reservierung.");
   }
 
-  if (!isShortIdentifier(request.reservationId) || !isShortIdentifier(request.userId) || !isShortIdentifier(request.requestId)) {
+  if (
+    !isShortIdentifier(request.reservationId) ||
+    !isShortIdentifier(request.userId) ||
+    !isShortIdentifier(request.requestId)
+  ) {
     throw new Error("Ungültige Kennung für die Analyse-Reservierung.");
   }
 

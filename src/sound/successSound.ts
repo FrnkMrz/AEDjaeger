@@ -75,8 +75,9 @@ const NOTES: readonly Note[] = [
 function createBrowserAudioContext(): AudioContextLike | null {
   try {
     // Safari kannte lange nur "webkitAudioContext".
-    const Constructor = (globalThis as { AudioContext?: new () => AudioContextLike; webkitAudioContext?: new () => AudioContextLike }).AudioContext
-      ?? (globalThis as { webkitAudioContext?: new () => AudioContextLike }).webkitAudioContext;
+    const Constructor =
+      (globalThis as { AudioContext?: new () => AudioContextLike; webkitAudioContext?: new () => AudioContextLike })
+        .AudioContext ?? (globalThis as { webkitAudioContext?: new () => AudioContextLike }).webkitAudioContext;
     return Constructor ? new Constructor() : null;
   } catch {
     return null;

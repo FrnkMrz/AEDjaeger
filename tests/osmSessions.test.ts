@@ -1,26 +1,42 @@
 import { describe, expect, it } from "vitest";
 import type { D1Database, D1Result, D1Statement } from "../server/storage/d1";
-import { createOSMSession, deleteOSMSession, findOSMSession, OSM_SESSION_LIFETIME_MS, rotateOSMSession } from "../server/storage/osmSessions";
+import {
+  createOSMSession,
+  deleteOSMSession,
+  findOSMSession,
+  OSM_SESSION_LIFETIME_MS,
+  rotateOSMSession,
+} from "../server/storage/osmSessions";
 import { sha256Hex } from "../server/crypto/hash";
 import { hashOSMDevelopmentWriteOwner } from "../server/storage/osmDevelopmentWriteOperations";
 const recoverySecret = "k".repeat(43);
 
 function createSessionDatabase() {
-  const rows = new Map<string, { osm_subject: string; osm_environment: "production" | "development"; created_at: number; expires_at: number }>();
+  const rows = new Map<
+    string,
+    { osm_subject: string; osm_environment: "production" | "development"; created_at: number; expires_at: number }
+  >();
   const operations = new Map<string, string>();
   const database: D1Database = {
     prepare(query: string): D1Statement {
       let values: unknown[] = [];
       return {
-        bind(...bound: unknown[]) { values = bound; return this; },
+        bind(...bound: unknown[]) {
+          values = bound;
+          return this;
+        },
         async run<T>() {
           if (query.includes("UPDATE osm_development_write_operations SET owner_hash")) {
             const [ownerHash, legacyHash] = values as [string, string];
             const operation = operations.get(legacyHash);
-            if (operation) { operations.delete(legacyHash); operations.set(ownerHash, operation); }
+            if (operation) {
+              operations.delete(legacyHash);
+              operations.set(ownerHash, operation);
+            }
             return { success: true, meta: { changes: operation ? 1 : 0 } } as D1Result<T>;
           }
-          if (query.includes("UPDATE osm_development_write_operations SET owner_hash")) return { success: true, meta: { changes: 0 } } as D1Result<T>;
+          if (query.includes("UPDATE osm_development_write_operations SET owner_hash"))
+            return { success: true, meta: { changes: 0 } } as D1Result<T>;
           if (query.includes("DELETE FROM osm_sessions WHERE expires_at")) {
             for (const [key, value] of rows) if (value.expires_at <= Number(values[0])) rows.delete(key);
             return { success: true, meta: { changes: 1 } } as D1Result<T>;
@@ -42,9 +58,10 @@ function createSessionDatabase() {
         },
         async first<T>() {
           const row = rows.get(String(values[0]));
-          if (query.includes("SELECT osm_subject, osm_environment") && !query.includes("expires_at >")) return row ? { osm_subject: row.osm_subject, osm_environment: row.osm_environment } as T : null;
+          if (query.includes("SELECT osm_subject, osm_environment") && !query.includes("expires_at >"))
+            return row ? ({ osm_subject: row.osm_subject, osm_environment: row.osm_environment } as T) : null;
           return row && row.expires_at > Number(values[1])
-            ? { osm_subject: row.osm_subject, osm_environment: row.osm_environment } as T
+            ? ({ osm_subject: row.osm_subject, osm_environment: row.osm_environment } as T)
             : null;
         },
       };
@@ -68,7 +85,10 @@ describe("OSM session storage", () => {
       created_at: now,
       expires_at: now + OSM_SESSION_LIFETIME_MS,
     });
-    await expect(findOSMSession(database, token, now + 1)).resolves.toEqual({ subject: "osm-user-42", environment: "production" });
+    await expect(findOSMSession(database, token, now + 1)).resolves.toEqual({
+      subject: "osm-user-42",
+      environment: "production",
+    });
     await expect(findOSMSession(database, token, now + OSM_SESSION_LIFETIME_MS)).resolves.toBeNull();
   });
 
@@ -81,8 +101,14 @@ describe("OSM session storage", () => {
     await createOSMSession(database, productionToken, "same-osm-subject", now, "production");
     await createOSMSession(database, developmentToken, "same-osm-subject", now, "development");
 
-    await expect(findOSMSession(database, productionToken, now + 1)).resolves.toEqual({ subject: "same-osm-subject", environment: "production" });
-    await expect(findOSMSession(database, developmentToken, now + 1)).resolves.toEqual({ subject: "same-osm-subject", environment: "development" });
+    await expect(findOSMSession(database, productionToken, now + 1)).resolves.toEqual({
+      subject: "same-osm-subject",
+      environment: "production",
+    });
+    await expect(findOSMSession(database, developmentToken, now + 1)).resolves.toEqual({
+      subject: "same-osm-subject",
+      environment: "development",
+    });
   });
 
   it("revokes a valid session without storing or returning the raw token", async () => {
@@ -123,14 +149,23 @@ describe("OSM session storage", () => {
 
     expect(rows.size).toBe(1);
     await expect(findOSMSession(database, oldToken, now)).resolves.toBeNull();
-    await expect(findOSMSession(database, newToken, now)).resolves.toEqual({ subject: "new-osm-user", environment: "development" });
+    await expect(findOSMSession(database, newToken, now)).resolves.toEqual({
+      subject: "new-osm-user",
+      environment: "development",
+    });
   });
 
   it("rejects malformed tokens, subjects, and environments before database access", async () => {
-    const database: D1Database = { prepare: () => { throw new Error("database should not be used"); } };
+    const database: D1Database = {
+      prepare: () => {
+        throw new Error("database should not be used");
+      },
+    };
     await expect(createOSMSession(database, "short", "subject", 1)).rejects.toThrow("Ungültige");
     await expect(findOSMSession(database, "short", 1)).resolves.toBeNull();
     await expect(createOSMSession(database, "a".repeat(43), "", 1)).rejects.toThrow("Ungültige");
-    await expect(createOSMSession(database, "a".repeat(43), "subject", 1, "other" as unknown as "production" | "development")).rejects.toThrow("Ungültige");
+    await expect(
+      createOSMSession(database, "a".repeat(43), "subject", 1, "other" as unknown as "production" | "development"),
+    ).rejects.toThrow("Ungültige");
   });
 });

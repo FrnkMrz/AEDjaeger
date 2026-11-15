@@ -1,5 +1,11 @@
 import { isRecord } from "../http/requestGuards";
-import { IMAGE_ISSUES, parseVisionObservation, VISION_MODEL, VISION_SCENES, type VisionObservation } from "../../src/contracts/visionObservation";
+import {
+  IMAGE_ISSUES,
+  parseVisionObservation,
+  VISION_MODEL,
+  VISION_SCENES,
+  type VisionObservation,
+} from "../../src/contracts/visionObservation";
 import { explainObservationMismatch, normalizeProviderObservation } from "./normalizeObservation";
 
 export const OPENAI_VISION_MODEL = VISION_MODEL;
@@ -60,15 +66,7 @@ export type AedPhotoInput = {
 const observationSchema = {
   type: "object",
   additionalProperties: false,
-  required: [
-    "scene",
-    "device_count",
-    "readable_text",
-    "manufacturer",
-    "model",
-    "location_clues",
-    "image_issues",
-  ],
+  required: ["scene", "device_count", "readable_text", "manufacturer", "model", "location_clues", "image_issues"],
   properties: {
     scene: {
       type: "string",
@@ -163,7 +161,9 @@ export async function analyzeAedPhoto(
     // Network errors are normalized so callers do not accidentally log secret-bearing requests.
     // Nur die Art des Fehlers (Zeitlimit oder Netz) wird weitergegeben, nie seine Meldung.
     const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
-    throw new VisionAnalysisError("provider_error", "Die Bildanalyse ist vorübergehend fehlgeschlagen.", { providerCode: timedOut ? "timeout" : "network_error" });
+    throw new VisionAnalysisError("provider_error", "Die Bildanalyse ist vorübergehend fehlgeschlagen.", {
+      providerCode: timedOut ? "timeout" : "network_error",
+    });
   }
 
   if (!response.ok) {
@@ -179,26 +179,39 @@ export async function analyzeAedPhoto(
   try {
     providerResponse = await response.json();
   } catch {
-    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte keine lesbare Antwort.", { providerCode: "unreadable_response" });
+    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte keine lesbare Antwort.", {
+      providerCode: "unreadable_response",
+    });
   }
 
   // A syntactically valid JSON fragment is not usable if generation was interrupted.
   if (!isRecord(providerResponse) || providerResponse.status !== "completed") {
-    const reason = isRecord(providerResponse) && isRecord(providerResponse.incomplete_details) ? safeProviderToken(providerResponse.incomplete_details.reason) : undefined;
-    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse wurde nicht vollständig abgeschlossen.", { providerCode: reason ? `incomplete_${reason}` : "incomplete" });
+    const reason =
+      isRecord(providerResponse) && isRecord(providerResponse.incomplete_details)
+        ? safeProviderToken(providerResponse.incomplete_details.reason)
+        : undefined;
+    throw new VisionAnalysisError(
+      "invalid_provider_response",
+      "Die Bildanalyse wurde nicht vollständig abgeschlossen.",
+      { providerCode: reason ? `incomplete_${reason}` : "incomplete" },
+    );
   }
 
   const outputText = extractOutputText(providerResponse);
 
   if (!outputText) {
-    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte keine Beobachtung.", { providerCode: "no_output" });
+    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte keine Beobachtung.", {
+      providerCode: "no_output",
+    });
   }
 
   let decoded: unknown;
   try {
     decoded = JSON.parse(outputText);
   } catch {
-    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte ein ungültiges Format.", { providerCode: "invalid_json" });
+    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte ein ungültiges Format.", {
+      providerCode: "invalid_json",
+    });
   }
 
   // Nebenfelder werden zuerst aufbereitet (Zeilenumbrüche, Längen, Zählung). Für den Filter zählt nur die
@@ -206,7 +219,9 @@ export async function analyzeAedPhoto(
   const normalized = normalizeProviderObservation(decoded);
   const observation = parseVisionObservation(normalized);
   if (!observation.ok) {
-    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte ungültige Beobachtungen.", { providerCode: explainObservationMismatch(normalized) });
+    throw new VisionAnalysisError("invalid_provider_response", "Die Bildanalyse lieferte ungültige Beobachtungen.", {
+      providerCode: explainObservationMismatch(normalized),
+    });
   }
   return observation.value;
 }
@@ -251,7 +266,14 @@ function hasValidJpegContainer(bytes: Uint8Array): boolean {
     while (bytes[offset] === 0xff) offset += 1;
     const marker = bytes[offset];
     offset += 1;
-    if (marker === undefined || marker === 0x00 || marker === 0xd8 || marker === 0xd9 || (marker >= 0xd0 && marker <= 0xd7) || marker === 0x01) {
+    if (
+      marker === undefined ||
+      marker === 0x00 ||
+      marker === 0xd8 ||
+      marker === 0xd9 ||
+      (marker >= 0xd0 && marker <= 0xd7) ||
+      marker === 0x01
+    ) {
       return false;
     }
     if (offset + 2 > bytes.length - 2) return false;
@@ -345,7 +367,13 @@ function hasValidWebpContainer(bytes: Uint8Array): boolean {
       if (hasExtendedHeader || length !== 10 || (bytes[dataStart] & 0x02) !== 0) return false;
       hasExtendedHeader = true;
     } else if (type === "VP8 ") {
-      if (length < 10 || bytes[dataStart + 3] !== 0x9d || bytes[dataStart + 4] !== 0x01 || bytes[dataStart + 5] !== 0x2a) return false;
+      if (
+        length < 10 ||
+        bytes[dataStart + 3] !== 0x9d ||
+        bytes[dataStart + 4] !== 0x01 ||
+        bytes[dataStart + 5] !== 0x2a
+      )
+        return false;
       const width = ((bytes[dataStart + 7] & 0x3f) << 8) | bytes[dataStart + 6];
       const height = ((bytes[dataStart + 9] & 0x3f) << 8) | bytes[dataStart + 8];
       if (!width || !height) return false;
@@ -362,7 +390,7 @@ function hasValidWebpContainer(bytes: Uint8Array): boolean {
 }
 
 function readUint32BigEndian(bytes: Uint8Array, offset: number): number {
-  return ((bytes[offset] * 0x1000000) + (bytes[offset + 1] << 16) + (bytes[offset + 2] << 8) + bytes[offset + 3]) >>> 0;
+  return (bytes[offset] * 0x1000000 + (bytes[offset + 1] << 16) + (bytes[offset + 2] << 8) + bytes[offset + 3]) >>> 0;
 }
 
 function readUint32LittleEndian(bytes: Uint8Array, offset: number): number {
@@ -385,7 +413,7 @@ function createPngCrcTable(): Uint32Array {
   const table = new Uint32Array(256);
   for (let value = 0; value < table.length; value += 1) {
     let remainder = value;
-    for (let bit = 0; bit < 8; bit += 1) remainder = (remainder >>> 1) ^ ((remainder & 1) ? 0xedb88320 : 0);
+    for (let bit = 0; bit < 8; bit += 1) remainder = (remainder >>> 1) ^ (remainder & 1 ? 0xedb88320 : 0);
     table[value] = remainder >>> 0;
   }
   return table;

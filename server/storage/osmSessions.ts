@@ -16,21 +16,32 @@ export async function createOSMSession(
   osmEnvironment: OSMEnvironment = "production",
   cryptoApi: Crypto = crypto,
 ): Promise<void> {
-  if (!isSecret(sessionToken) || !isSubject(osmSubject) || !isOSMEnvironment(osmEnvironment) || !Number.isSafeInteger(now) || now < 0) {
+  if (
+    !isSecret(sessionToken) ||
+    !isSubject(osmSubject) ||
+    !isOSMEnvironment(osmEnvironment) ||
+    !Number.isSafeInteger(now) ||
+    now < 0
+  ) {
     throw new Error("Ungültige OSM-Sitzung.");
   }
 
   try {
     const sessionHash = await sha256Hex(sessionToken, cryptoApi);
-    const cleanup = await database.prepare(
-      `DELETE FROM osm_sessions WHERE expires_at <= ? AND session_hash NOT IN (
+    const cleanup = await database
+      .prepare(
+        `DELETE FROM osm_sessions WHERE expires_at <= ? AND session_hash NOT IN (
          SELECT legacy_session_hash FROM osm_development_write_operations
          WHERE legacy_session_hash IS NOT NULL AND expires_at > ?
        )`,
-    ).bind(now, now).run();
+      )
+      .bind(now, now)
+      .run();
     if (!cleanup.success) throw new Error("D1 cleanup failed");
     const result = await database
-      .prepare("INSERT INTO osm_sessions (session_hash, osm_subject, osm_environment, created_at, expires_at) VALUES (?, ?, ?, ?, ?)")
+      .prepare(
+        "INSERT INTO osm_sessions (session_hash, osm_subject, osm_environment, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
+      )
       .bind(sessionHash, osmSubject, osmEnvironment, now, now + OSM_SESSION_LIFETIME_MS)
       .run();
     if (!result.success || result.meta?.changes !== 1) throw new Error("D1 insert failed");
@@ -70,13 +81,18 @@ export async function deleteOSMSession(
   if (!isSecret(sessionToken)) return;
   try {
     const sessionHash = await sha256Hex(sessionToken, cryptoApi);
-    const session = await database.prepare(
-      "SELECT osm_subject, osm_environment FROM osm_sessions WHERE session_hash = ?",
-    ).bind(sessionHash).first<StoredOSMSession>();
+    const session = await database
+      .prepare("SELECT osm_subject, osm_environment FROM osm_sessions WHERE session_hash = ?")
+      .bind(sessionHash)
+      .first<StoredOSMSession>();
     if (session && isSubject(session.osm_subject) && isOSMEnvironment(session.osm_environment)) {
       if (session.osm_environment === "development" && !recoverySecret) throw new Error("Missing recovery secret");
       if (recoverySecret) {
-        const ownerHash = await hashOSMDevelopmentWriteOwner({ subject: session.osm_subject, environment: session.osm_environment }, recoverySecret, cryptoApi);
+        const ownerHash = await hashOSMDevelopmentWriteOwner(
+          { subject: session.osm_subject, environment: session.osm_environment },
+          recoverySecret,
+          cryptoApi,
+        );
         await migrateLegacyOSMDevelopmentWriteOwner(database, sessionHash, ownerHash);
       }
     }

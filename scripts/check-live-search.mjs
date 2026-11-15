@@ -75,8 +75,10 @@ function parseCoordinate(latitude, longitude, raw) {
   if (!/^-?\d+(\.\d+)?$/u.test(raw.lat) || !/^-?\d+(\.\d+)?$/u.test(raw.lon)) {
     throw new LiveCheckError("Breite und Länge müssen einfache Dezimalzahlen sein, zum Beispiel 49.4456.");
   }
-  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) throw new LiveCheckError("Die Breite muss zwischen -90 und 90 liegen.");
-  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) throw new LiveCheckError("Die Länge muss zwischen -180 und 180 liegen.");
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90)
+    throw new LiveCheckError("Die Breite muss zwischen -90 und 90 liegen.");
+  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180)
+    throw new LiveCheckError("Die Länge muss zwischen -180 und 180 liegen.");
   return { latitude, longitude };
 }
 
@@ -85,11 +87,11 @@ export function tileForCoordinate(longitude, latitude, zoom) {
   const size = 2 ** zoom;
   // Web-Mercator ist oberhalb von etwa ±85,05 Grad nicht definiert; wir klemmen die Breite.
   const clampedLatitude = Math.max(-85.05112878, Math.min(85.05112878, latitude));
-  const radians = clampedLatitude * Math.PI / 180;
+  const radians = (clampedLatitude * Math.PI) / 180;
   return {
     z: zoom,
-    x: Math.max(0, Math.min(size - 1, Math.floor((longitude + 180) / 360 * size))),
-    y: Math.max(0, Math.min(size - 1, Math.floor((1 - Math.asinh(Math.tan(radians)) / Math.PI) / 2 * size))),
+    x: Math.max(0, Math.min(size - 1, Math.floor(((longitude + 180) / 360) * size))),
+    y: Math.max(0, Math.min(size - 1, Math.floor(((1 - Math.asinh(Math.tan(radians)) / Math.PI) / 2) * size))),
   };
 }
 
@@ -98,13 +100,22 @@ export function tileForCoordinate(longitude, latitude, zoom) {
  * Länderextrakte. Veraltete oder unvollständige Metadaten sind ein Fehler, keine Warnung.
  */
 export function validateMetadata(value, nowMs) {
-  if (!isRecord(value) || value.status !== "ok" || value.region !== "dachlilu"
-    || typeof value.generated_at !== "string" || typeof value.osm_data_until !== "string"
-    || !isRecord(value.pmtiles) || value.pmtiles.file !== PMTILES_PATH
-    || !Number.isSafeInteger(value.pmtiles.size_bytes) || value.pmtiles.size_bytes < 127
-    || !isRecord(value.features) || !isRecord(value.features.defibrillators)
-    || !Number.isSafeInteger(value.features.defibrillators.count) || value.features.defibrillators.count < 0
-    || !isRecord(value.extracts)) {
+  if (
+    !isRecord(value) ||
+    value.status !== "ok" ||
+    value.region !== "dachlilu" ||
+    typeof value.generated_at !== "string" ||
+    typeof value.osm_data_until !== "string" ||
+    !isRecord(value.pmtiles) ||
+    value.pmtiles.file !== PMTILES_PATH ||
+    !Number.isSafeInteger(value.pmtiles.size_bytes) ||
+    value.pmtiles.size_bytes < 127 ||
+    !isRecord(value.features) ||
+    !isRecord(value.features.defibrillators) ||
+    !Number.isSafeInteger(value.features.defibrillators.count) ||
+    value.features.defibrillators.count < 0 ||
+    !isRecord(value.extracts)
+  ) {
     throw new LiveCheckError("metadata.json ist unvollständig oder hat nicht das erwartete Format.");
   }
   const generatedAt = parseTimestamp(value.generated_at);
@@ -115,13 +126,20 @@ export function validateMetadata(value, nowMs) {
   if (osmDataUntil > nowMs + FUTURE_TOLERANCE_MS) throw new LiveCheckError("osm_data_until liegt in der Zukunft.");
   const ageHours = ageInHours(osmDataUntil, nowMs);
   if (ageHours > MAX_SOURCE_AGE_HOURS) {
-    throw new LiveCheckError(`Der OSM-Datenstand ist ${formatHours(ageHours)} Stunden alt (Grenze ${MAX_SOURCE_AGE_HOURS} Stunden). Die App würde die Suche deshalb sperren.`);
+    throw new LiveCheckError(
+      `Der OSM-Datenstand ist ${formatHours(ageHours)} Stunden alt (Grenze ${MAX_SOURCE_AGE_HOURS} Stunden). Die App würde die Suche deshalb sperren.`,
+    );
   }
   for (const country of REQUIRED_EXTRACTS) {
     const extract = value.extracts[country];
     const sourceDate = isRecord(extract) ? parseTimestamp(extract.osm_data_timestamp) : null;
-    if (!isRecord(extract) || !EXTRACT_STATUSES.has(String(extract.status)) || sourceDate === null
-      || sourceDate > nowMs + FUTURE_TOLERANCE_MS || ageInHours(sourceDate, nowMs) > MAX_SOURCE_AGE_HOURS) {
+    if (
+      !isRecord(extract) ||
+      !EXTRACT_STATUSES.has(String(extract.status)) ||
+      sourceDate === null ||
+      sourceDate > nowMs + FUTURE_TOLERANCE_MS ||
+      ageInHours(sourceDate, nowMs) > MAX_SOURCE_AGE_HOURS
+    ) {
       throw new LiveCheckError(`Länderextrakt „${country}“ fehlt, ist unvollständig oder veraltet.`);
     }
   }
@@ -137,14 +155,21 @@ export function validateMetadata(value, nowMs) {
 export function validateHeader(header, longitude, latitude) {
   if (header.tileType !== 1) throw new LiveCheckError("Das Archiv enthält keine Vektorkacheln (MVT).");
   if (header.minZoom > AED_ZOOM || header.maxZoom < AED_ZOOM) {
-    throw new LiveCheckError(`Das Archiv deckt Zoom ${AED_ZOOM} nicht ab (Bereich ${header.minZoom}–${header.maxZoom}).`);
+    throw new LiveCheckError(
+      `Das Archiv deckt Zoom ${AED_ZOOM} nicht ab (Bereich ${header.minZoom}–${header.maxZoom}).`,
+    );
   }
-  const insideArchive = longitude >= header.minLon && longitude <= header.maxLon
-    && latitude >= header.minLat && latitude <= header.maxLat;
-  const insideCoverage = longitude >= COVERAGE_BOUNDS.minLon && longitude <= COVERAGE_BOUNDS.maxLon
-    && latitude >= COVERAGE_BOUNDS.minLat && latitude <= COVERAGE_BOUNDS.maxLat;
+  const insideArchive =
+    longitude >= header.minLon && longitude <= header.maxLon && latitude >= header.minLat && latitude <= header.maxLat;
+  const insideCoverage =
+    longitude >= COVERAGE_BOUNDS.minLon &&
+    longitude <= COVERAGE_BOUNDS.maxLon &&
+    latitude >= COVERAGE_BOUNDS.minLat &&
+    latitude <= COVERAGE_BOUNDS.maxLat;
   if (!insideArchive || !insideCoverage) {
-    throw new LiveCheckError("Die Testkoordinate liegt außerhalb des abgedeckten Gebiets (DACH). Die App würde hier keine Suche starten.");
+    throw new LiveCheckError(
+      "Die Testkoordinate liegt außerhalb des abgedeckten Gebiets (DACH). Die App würde hier keine Suche starten.",
+    );
   }
 }
 
@@ -173,9 +198,16 @@ export async function runLiveSearchCheck({
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const metadataUrl = new URL("metadata.json", DATA_ORIGIN);
-    const metadataResponse = await requestOrFail(fetchImpl, metadataUrl, { Accept: "application/json" }, controller.signal);
+    const metadataResponse = await requestOrFail(
+      fetchImpl,
+      metadataUrl,
+      { Accept: "application/json" },
+      controller.signal,
+    );
     if (!metadataResponse.ok) throw new LiveCheckError(`metadata.json antwortete mit HTTP ${metadataResponse.status}.`);
-    const metadataText = new TextDecoder("utf-8", { fatal: true }).decode(await readLimited(metadataResponse, MAX_METADATA_BYTES));
+    const metadataText = new TextDecoder("utf-8", { fatal: true }).decode(
+      await readLimited(metadataResponse, MAX_METADATA_BYTES),
+    );
     const metadata = validateMetadata(JSON.parse(metadataText), nowMs);
 
     // Wie in der Route: Der Build-Zeitstempel als Parameter verhindert Mischungen alter Kacheln.
@@ -190,18 +222,24 @@ export async function runLiveSearchCheck({
     const tile = tileForCoordinate(longitude, latitude, AED_ZOOM);
     const content = await archive.getZxy(tile.z, tile.x, tile.y, controller.signal);
     if (!content) {
-      throw new LiveCheckError(`Keine Daten in dieser Kachel (Zoom ${tile.z}, ${tile.x}/${tile.y}). Das beweist nicht, dass hier kein AED existiert.`);
+      throw new LiveCheckError(
+        `Keine Daten in dieser Kachel (Zoom ${tile.z}, ${tile.x}/${tile.y}). Das beweist nicht, dass hier kein AED existiert.`,
+      );
     }
     if (content.data.byteLength > MAX_TILE_BYTES) throw new LiveCheckError("Die Kachel ist größer als erlaubt.");
     const featureCount = countLayerFeatures(content.data);
     if (featureCount === null) {
-      throw new LiveCheckError(`Die Ebene „${AED_LAYER}“ fehlt in dieser Kachel. Das beweist nicht, dass hier kein AED existiert.`);
+      throw new LiveCheckError(
+        `Die Ebene „${AED_LAYER}“ fehlt in dieser Kachel. Das beweist nicht, dass hier kein AED existiert.`,
+      );
     }
     return { metadata, tile, featureCount };
   } catch (error) {
     if (error instanceof LiveCheckError) throw error;
     if (controller.signal.aborted) throw new LiveCheckError(`Zeitüberschreitung nach ${TIMEOUT_MS / 1_000} Sekunden.`);
-    throw new LiveCheckError(`Netzwerk- oder Lesefehler (${error?.cause?.code ?? error?.message ?? "unbekannt"}). Das ist kein Befund über vorhandene oder fehlende AEDs.`);
+    throw new LiveCheckError(
+      `Netzwerk- oder Lesefehler (${error?.cause?.code ?? error?.message ?? "unbekannt"}). Das ist kein Befund über vorhandene oder fehlende AEDs.`,
+    );
   } finally {
     clearTimeout(timeout);
   }
@@ -218,14 +256,25 @@ class RangeSource {
     this.signal = signal;
   }
 
-  getKey() { return this.archiveUrl.href; }
+  getKey() {
+    return this.archiveUrl.href;
+  }
 
   async getBytes(offset, length, signal) {
     const end = offset + length - 1;
-    const response = await requestOrFail(this.fetchImpl, this.archiveUrl, {
-      Accept: "application/octet-stream", Range: `bytes=${offset}-${end}`,
-    }, signal ?? this.signal);
-    if (response.status !== 206 || response.headers.get("Content-Range")?.startsWith(`bytes ${offset}-${end}/`) !== true) {
+    const response = await requestOrFail(
+      this.fetchImpl,
+      this.archiveUrl,
+      {
+        Accept: "application/octet-stream",
+        Range: `bytes=${offset}-${end}`,
+      },
+      signal ?? this.signal,
+    );
+    if (
+      response.status !== 206 ||
+      response.headers.get("Content-Range")?.startsWith(`bytes ${offset}-${end}/`) !== true
+    ) {
       throw new LiveCheckError(`Range-Anfrage wurde nicht korrekt beantwortet (HTTP ${response.status}).`);
     }
     const bytes = await readLimited(response, length);
@@ -307,7 +356,9 @@ function isRecord(value) {
 function printSuccess({ metadata, tile, featureCount }) {
   console.log("Live-Check bestanden (nur lesend).");
   console.log(`Build: ${metadata.buildTime}`);
-  console.log(`OSM-Datenstand bis: ${metadata.osmDataUntil} (Alter ${formatHours(metadata.ageHours)} Stunden, Grenze ${MAX_SOURCE_AGE_HOURS} Stunden)`);
+  console.log(
+    `OSM-Datenstand bis: ${metadata.osmDataUntil} (Alter ${formatHours(metadata.ageHours)} Stunden, Grenze ${MAX_SOURCE_AGE_HOURS} Stunden)`,
+  );
   console.log(`Kachel Zoom ${tile.z}, ${tile.x}/${tile.y}: ${featureCount} Features in der Ebene „${AED_LAYER}“.`);
   console.log("Hinweis: Das ist eine Stichprobe an einer einzelnen Koordinate, kein Nachweis für die ganze Region.");
 }
