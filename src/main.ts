@@ -70,8 +70,11 @@ import {
 } from "./domain/localDate";
 import { defibrillatorMark, escapeHtml, icon } from "./ui/markup";
 
-const app = document.querySelector<HTMLDivElement>("#app");
-if (!app) throw new Error("App root element was not found.");
+const app = (() => {
+  const root = document.querySelector<HTMLDivElement>("#app");
+  if (!root) throw new Error("App root element was not found.");
+  return root;
+})();
 
 const languageNames: Record<Language, string> = {
   de: "Deutsch",
@@ -434,7 +437,7 @@ function openAccountFromLamp(): void {
   // Die Reihenfolge der Auswahl ist Absicht: Ein Selektor mit Komma würde das erste Element im Dokument nehmen, also die Überschrift.
   let target: HTMLElement | null = null;
   for (const selector of ["#osm-sign-in", "#osm-dev-sign-in", "#osm-session-retry", "#osm-sign-out", "#login-title"]) {
-    target = app!.querySelector<HTMLElement>(selector);
+    target = app.querySelector<HTMLElement>(selector);
     if (target) break;
   }
   target?.scrollIntoView({ block: "center" });
@@ -649,21 +652,21 @@ function detailFooterMarkup(): string {
  */
 function updateDetailFooter(): void {
   const built = currentDetailPlan();
-  const button = app!.querySelector<HTMLButtonElement>("#detail-continue");
+  const button = app.querySelector<HTMLButtonElement>("#detail-continue");
   if (button) {
     button.disabled = !built.ok;
     button.textContent = detailContinueLabel(built.ok ? Object.keys(built.tags).length : 0);
   }
   const failingGroup = !built.ok && isDetailKey(built.key) ? DETAIL_GROUP_OF_KEY[built.key] : undefined;
-  app!.querySelectorAll<HTMLElement>("[data-detail-error]").forEach((slot) => {
+  app.querySelectorAll<HTMLElement>("[data-detail-error]").forEach((slot) => {
     slot.hidden = slot.dataset.detailError !== failingGroup;
   });
   // Steckt der Fehler in „Mehr Angaben“, muss der Abschnitt offen sein, sonst sieht ihn niemand.
   if (failingGroup === "more") {
-    const details = app!.querySelector<HTMLDetailsElement>("#detail-more");
+    const details = app.querySelector<HTMLDetailsElement>("#detail-more");
     if (details) details.open = true;
   }
-  const moreCount = app!.querySelector<HTMLElement>("#detail-more-count");
+  const moreCount = app.querySelector<HTMLElement>("#detail-more-count");
   if (moreCount) moreCount.textContent = detailMoreCountText();
   showDetailChanges(built.ok ? built.corrections : [], built.ok ? staleLevelNote(built.tags) : "");
 }
@@ -704,7 +707,7 @@ function showDetailChanges(corrections: readonly DetailCorrection[], levelNote =
     });
     linesByGroup.set(group, [...(linesByGroup.get(group) ?? []), label ? `${tv(label)}: ${was}` : was]);
   }
-  app!.querySelectorAll<HTMLElement>("[data-detail-was]").forEach((slot) => {
+  app.querySelectorAll<HTMLElement>("[data-detail-was]").forEach((slot) => {
     const lines = linesByGroup.get(slot.dataset.detailWas ?? "");
     slot.hidden = lines === undefined;
     slot.textContent = lines ? lines.join(" · ") : "";
@@ -717,7 +720,7 @@ function showDetailChanges(corrections: readonly DetailCorrection[], levelNote =
  * Person gerade bedient hat. So bleibt die Bedienung per Tastatur und Screenreader zusammenhängend.
  */
 function refreshDetailForm(focusId?: string): void {
-  const host = app!.querySelector<HTMLElement>("#detail-form");
+  const host = app.querySelector<HTMLElement>("#detail-form");
   if (!host) return;
   host.innerHTML = detailFormMarkup();
   updateDetailFooter();
@@ -726,7 +729,7 @@ function refreshDetailForm(focusId?: string): void {
 
 /** Setzt den Wert des Ebenen-Zählers in der Anzeige (ohne Neuzeichnen). */
 function showDetailLevel(): void {
-  const output = app!.querySelector<HTMLOutputElement>("#detail-level-value");
+  const output = app.querySelector<HTMLOutputElement>("#detail-level-value");
   if (output) output.textContent = detailForm.level === null ? "–" : String(detailForm.level);
 }
 
@@ -736,7 +739,7 @@ function showDetailLevel(): void {
  * Wird von render() aufgerufen, nachdem die Seite neu geschrieben wurde.
  */
 function bindDetailForm(): void {
-  bindDetailFormInput(app!, {
+  bindDetailFormInput(app, {
     getForm: () => detailForm,
     refreshDetailForm,
     showDetailLevel,
@@ -788,7 +791,7 @@ function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void 
   const isReady = state.kind === "ready";
   document.documentElement.lang = language;
   document.title = `${t("appName")} · ${t("tagline")}`;
-  app!.innerHTML = `
+  app.innerHTML = `
     <div class="page-shell">
       <header class="topbar"><div class="brand-group"><a class="brand" href="/" aria-label="${t("appName")}" ${hasUnresolvedSave(state) ? 'aria-disabled="true"' : ""}><span>${t("appName")}</span></a>${connectionLamp()}</div><div class="topbar-actions"><button class="info-link" id="open-info" type="button"><span class="info-mark" aria-hidden="true">i</span><span>${t("aboutButton")}</span></button><label class="language-picker"><span class="sr-only">${t("language")}</span><select id="language" aria-label="${t("language")}">${supportedLanguages.map((code) => `<option value="${code}" ${language === code ? "selected" : ""}>${languageNames[code]}</option>`).join("")}</select><span class="language-globe" aria-hidden="true">◎</span></label></div></header>
       ${
@@ -819,7 +822,7 @@ function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void 
   if (infoDialogWasOpen) document.querySelector<HTMLDialogElement>("#info-dialog")?.showModal();
 
   if (state.kind === "location-map") {
-    const mapContainer = app!.querySelector<HTMLDivElement>("#search-location-map");
+    const mapContainer = app.querySelector<HTMLDivElement>("#search-location-map");
     if (mapContainer) {
       activePositionPicker = createPositionPicker(mapContainer, photoSession.mapLocationOverride ?? state.center, {
         mapLabel: tv("chooseMapLocation"),
@@ -829,7 +832,7 @@ function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void 
         initialZoom: state.initialZoom,
         onPositionChange(position) {
           photoSession.mapLocationOverride = position;
-          const coordinates = app!.querySelector<HTMLParagraphElement>("#search-location-coordinates");
+          const coordinates = app.querySelector<HTMLParagraphElement>("#search-location-coordinates");
           if (coordinates)
             coordinates.textContent = tv("mapLocationCoordinates", {
               latitude: position.latitude.toFixed(5),
@@ -844,7 +847,7 @@ function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void 
       });
 
       function updateMapSearchButton(): void {
-        const confirmButton = app!.querySelector<HTMLButtonElement>('[data-action="confirm-map-location"]');
+        const confirmButton = app.querySelector<HTMLButtonElement>('[data-action="confirm-map-location"]');
         if (confirmButton)
           confirmButton.disabled =
             photoSession.mapLocationOverride === undefined ||
@@ -856,7 +859,7 @@ function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void 
   if (state.kind === "candidate-result" && !newEntryPanelOpen(state)) {
     // Übersichtskarte bei Treffern: nur zum Ansehen. Verschieben ändert keine Auswahl,
     // deshalb macht onPositionChange hier bewusst nichts.
-    const overviewContainer = app!.querySelector<HTMLDivElement>("#candidate-overview-map");
+    const overviewContainer = app.querySelector<HTMLDivElement>("#candidate-overview-map");
     if (overviewContainer) {
       const markers = reviewedCandidateMarkers(state);
       const bounds = overviewContainer.getBoundingClientRect();
@@ -877,7 +880,7 @@ function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void 
   }
 
   if (newEntryPanelOpen(state) && state.kind === "candidate-result") {
-    const mapContainer = app!.querySelector<HTMLDivElement>("#new-aed-position-map");
+    const mapContainer = app.querySelector<HTMLDivElement>("#new-aed-position-map");
     if (mapContainer) {
       activePositionPicker = createPositionPicker(mapContainer, newAedPositionOverride ?? state.location, {
         // Bereits eingetragene AEDs bleiben beim Setzen des neuen Punkts sichtbar.
@@ -888,15 +891,15 @@ function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void 
         tileErrorLabel: tv("newPositionMapTileError"),
         onPositionChange(position) {
           newAedPositionOverride = position;
-          const confirmation = app!.querySelector<HTMLInputElement>("#new-aed-position-confirmed");
+          const confirmation = app.querySelector<HTMLInputElement>("#new-aed-position-confirmed");
           if (confirmation) confirmation.checked = false;
-          const coordinates = app!.querySelector<HTMLParagraphElement>("#new-aed-position-coordinates");
+          const coordinates = app.querySelector<HTMLParagraphElement>("#new-aed-position-coordinates");
           if (coordinates)
             coordinates.textContent = tv("newPreviewCoordinates", {
               latitude: position.latitude.toFixed(5),
               longitude: position.longitude.toFixed(5),
             });
-          const label = app!.querySelector<HTMLSpanElement>("#new-aed-position-label");
+          const label = app.querySelector<HTMLSpanElement>("#new-aed-position-label");
           if (label)
             label.textContent = tv("newPositionConfirm", {
               latitude: position.latitude.toFixed(5),
@@ -912,17 +915,17 @@ function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void 
     bindDetailForm();
 
   // Zweite Bestätigung bei Korrekturen: Der Speichern-Knopf wird erst aktiv, wenn „alter Wert stimmt nicht“ angehakt ist.
-  const correctionConfirmation = app!.querySelector<HTMLInputElement>("#correction-confirmed");
+  const correctionConfirmation = app.querySelector<HTMLInputElement>("#correction-confirmed");
   correctionConfirmation?.addEventListener("change", () => {
-    const saveButton = app!.querySelector<HTMLButtonElement>('[data-action="save-development-check"]');
+    const saveButton = app.querySelector<HTMLButtonElement>('[data-action="save-development-check"]');
     if (saveButton) saveButton.disabled = !correctionConfirmation.checked;
   });
 
   // Zweite Bestätigung in der Neuanlage-Vorschau: Der Speichern-Knopf wird erst aktiv,
   // wenn der Haken „vor Ort geprüft“ gesetzt ist, und wieder gesperrt, wenn er entfernt wird.
-  const absenceConfirmation = app!.querySelector<HTMLInputElement>("#new-aed-absence-confirmed");
+  const absenceConfirmation = app.querySelector<HTMLInputElement>("#new-aed-absence-confirmed");
   absenceConfirmation?.addEventListener("change", () => {
-    const createButton = app!.querySelector<HTMLButtonElement>('[data-action="create-development-node"]');
+    const createButton = app.querySelector<HTMLButtonElement>('[data-action="create-development-node"]');
     if (createButton) createButton.disabled = !absenceConfirmation.checked;
   });
 
@@ -952,7 +955,7 @@ function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void 
     writeStoredValue("aedjaeger-language", language);
     render();
     // Rendering replaces the select node, so return keyboard focus to its translated replacement.
-    app!.querySelector<HTMLSelectElement>("#language")?.focus();
+    app.querySelector<HTMLSelectElement>("#language")?.focus();
   });
   document.querySelector<HTMLInputElement>("#camera-input")?.addEventListener("change", onPhotoSelected);
   document.querySelector<HTMLInputElement>("#file-input")?.addEventListener("change", onPhotoSelected);
@@ -1006,7 +1009,7 @@ function renderUpdateBanner(): void {
       // Der Zustand wird beim Klick erneut geprüft: Er kann sich seit dem Zeichnen geändert haben.
       if ((event.target as HTMLElement).closest(".update-banner-button") && !reloadBlocked()) window.location.reload();
     });
-    app!.before(banner);
+    app.before(banner);
     renderedUpdateBanner = "";
   }
   const blocked = reloadBlocked();
@@ -1020,16 +1023,16 @@ function renderUpdateBanner(): void {
 }
 
 function bindAccountPanel(): void {
-  app!.querySelector<HTMLButtonElement>("#osm-sign-out")?.addEventListener("click", () => {
+  app.querySelector<HTMLButtonElement>("#osm-sign-out")?.addEventListener("click", () => {
     void signOutFromOSM();
   });
-  app!.querySelector<HTMLButtonElement>("#osm-session-retry")?.addEventListener("click", () => {
+  app.querySelector<HTMLButtonElement>("#osm-session-retry")?.addEventListener("click", () => {
     void retryOSMSessionStatus();
   });
 }
 
 function updateAccountPanel(focusSelector?: string): void {
-  const currentPanel = app!.querySelector(".account-panel");
+  const currentPanel = app.querySelector(".account-panel");
   if (!currentPanel) return;
   const replacement = document.createElement("div");
   replacement.innerHTML = accountPanel();
@@ -1103,7 +1106,7 @@ async function refreshAccountState(focusSelector?: string, afterLogout = false):
   render();
   if (pendingDevelopmentWrite && accountState === "signed-out") {
     // The restored request needs the test-server session to reconcile safely; point directly at that login.
-    app!.querySelector<HTMLElement>("#osm-dev-sign-in")?.focus();
+    app.querySelector<HTMLElement>("#osm-dev-sign-in")?.focus();
   } else if (focusSelector === "next-action") {
     const nextActionSelector =
       accountState === "connection-error"
@@ -1113,9 +1116,9 @@ async function refreshAccountState(focusSelector?: string, afterLogout = false):
           : accountState === "signed-out" || accountState === "login-error"
             ? "#osm-sign-in"
             : "#login-title";
-    app!.querySelector<HTMLElement>(nextActionSelector)?.focus();
+    app.querySelector<HTMLElement>(nextActionSelector)?.focus();
   } else if (focusSelector) {
-    app!.querySelector<HTMLElement>(focusSelector)?.focus();
+    app.querySelector<HTMLElement>(focusSelector)?.focus();
   }
 }
 
@@ -1128,7 +1131,7 @@ async function signOutFromOSM(): Promise<void> {
   } catch {
     accountState = "logout-error";
     render();
-    app!.querySelector<HTMLElement>("#login-title")?.focus();
+    app.querySelector<HTMLElement>("#login-title")?.focus();
   }
 }
 
@@ -1232,7 +1235,7 @@ function isRecoveryOwnerMismatch(): boolean {
 
 function focusCurrentState(): void {
   if (accountState !== "signed-in") {
-    const loginControl = app!.querySelector<HTMLElement>(
+    const loginControl = app.querySelector<HTMLElement>(
       "#osm-dev-sign-in, #osm-session-retry, #osm-sign-in, #login-title",
     );
     loginControl?.focus();
@@ -1255,7 +1258,7 @@ function focusCurrentState(): void {
     "existing-aed-details": ".result-message h2",
     "candidate-error": ".result-message h2",
   };
-  const target = app!.querySelector<HTMLElement>(focusTargets[state.kind]);
+  const target = app.querySelector<HTMLElement>(focusTargets[state.kind]);
   if (!target) return;
 
   // Newly rendered headings and status messages are not normally tabbable; temporary focus lets
@@ -1357,7 +1360,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     phoneLocationPermission,
     phoneLocationFitsPhoto: () =>
       phoneLocationFitsPhoto({ fromCamera: photoSession.fromCamera, capturedAtMs: photoSession.capturedAtMs }),
-    readObservedDate: () => app!.querySelector<HTMLInputElement>("#photo-observed-on")?.value,
+    readObservedDate: () => app.querySelector<HTMLInputElement>("#photo-observed-on")?.value,
     isValidObservedDate,
     runPhotoCheck: (photoUrl) => {
       void runPhotoCheck(photoUrl);
@@ -1423,7 +1426,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     state = { ...state, newEntryRequested: true };
   } else if (action === "preview-new-aed" && state.kind === "candidate-result") {
     if (!newEntryPanelOpen(state)) return;
-    const positionConfirmed = app!.querySelector<HTMLInputElement>("#new-aed-position-confirmed")?.checked === true;
+    const positionConfirmed = app.querySelector<HTMLInputElement>("#new-aed-position-confirmed")?.checked === true;
     if (positionConfirmed) {
       // Ein eventuell übrig gebliebener Stand eines bestehenden AED darf das Neuanlage-Formular nie sperren.
       detailExistingTags = undefined;
@@ -1483,7 +1486,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
       return;
     // Zweite Bestätigung: Ohne gesetzten Haken „vor Ort geprüft“ wird nichts gesendet,
     // auch wenn der Knopf (z. B. per Tastatur oder Skript) trotzdem ausgelöst wurde.
-    if (app!.querySelector<HTMLInputElement>("#new-aed-absence-confirmed")?.checked !== true) return;
+    if (app.querySelector<HTMLInputElement>("#new-aed-absence-confirmed")?.checked !== true) return;
     const preview = state;
     if (preview.result.kind !== "ready") return;
     const operationId = crypto.randomUUID();
@@ -1647,12 +1650,16 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
     const preview = state;
     const candidateId = preview.candidateId;
     const candidate = preview.returnState.search.candidates.find((item) => item.id === candidateId);
-    if (!candidate || candidate.osmType !== "node" || candidate.source === "archive" || preview.result.kind !== "ready")
+    if (
+      candidate?.osmType !== "node" ||
+      candidate.source === "archive" ||
+      preview.result.kind !== "ready"
+    )
       return;
     // Korrekturen brauchen die zweite, ausdrückliche Bestätigung. Ohne Haken wird nichts gesendet, auch wenn der Knopf
     // (zum Beispiel per Tastatur oder Skript) trotzdem ausgelöst wurde.
     const corrections = preview.corrections ?? [];
-    if (corrections.length > 0 && app!.querySelector<HTMLInputElement>("#correction-confirmed")?.checked !== true)
+    if (corrections.length > 0 && app.querySelector<HTMLInputElement>("#correction-confirmed")?.checked !== true)
       return;
     const operationId = preview.operationId ?? crypto.randomUUID();
     const change = preview.result.changes[0];
@@ -1700,7 +1707,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
         // The pending request belongs to the test-server session; a production login cannot reconcile it.
         openAccountFromLamp();
       } else {
-        const target = app!.querySelector<HTMLElement>("#osm-dev-sign-in, #osm-session-retry, #login-title");
+        const target = app.querySelector<HTMLElement>("#osm-dev-sign-in, #osm-session-retry, #login-title");
         // Defer until the click's default focus handling has finished.
         window.requestAnimationFrame(() => target?.focus());
       }
@@ -1801,7 +1808,7 @@ function scheduleSearchRetryCountdown(retryAvailableAt: number): void {
     render(true);
     return;
   }
-  const waitText = app!.querySelector<HTMLElement>(".search-wait");
+  const waitText = app.querySelector<HTMLElement>(".search-wait");
   if (waitText) waitText.textContent = tv("searchWait", { seconds: remainingSeconds });
   searchRetryTimer = window.setTimeout(
     () => scheduleSearchRetryCountdown(retryAvailableAt),

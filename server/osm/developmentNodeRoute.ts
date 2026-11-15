@@ -46,7 +46,7 @@ export async function handleDevelopmentNodeRead(
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
-  if (!session || session.environment !== "development")
+  if (session?.environment !== "development")
     return jsonResponse({ error: "development_session_required" }, 403);
 
   const id = url.searchParams.get("id");
@@ -66,7 +66,7 @@ export async function handleDevelopmentNodeRead(
     const node = await readDevelopmentNode(id, token, dependencies.fetch ?? fetch);
     const tags: Record<string, string> = {};
     for (const key of VISIBLE_KEYS) {
-      if (Object.prototype.hasOwnProperty.call(node.tags, key)) tags[key] = node.tags[key];
+      if (Object.hasOwn(node.tags, key)) tags[key] = node.tags[key];
     }
     return jsonResponse({ status: "ok", id, version: node.version, tags }, 200);
   } catch (error) {

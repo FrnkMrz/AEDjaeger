@@ -402,9 +402,11 @@ function getAuthConfiguration(
       redirectUri: redirectUri.toString(),
       encryptionKey: environment.OSM_OAUTH_ENCRYPTION_KEY,
     };
-    return development
-      ? { ...common, provider: "development", clientSecret: clientSecret! }
-      : { ...common, provider: "production" };
+    if (development) {
+      if (!clientSecret) return null;
+      return { ...common, provider: "development", clientSecret };
+    }
+    return { ...common, provider: "production" };
   } catch {
     return null;
   }

@@ -305,6 +305,7 @@ describe("Konstanten des Live-Checks stimmen mit der Worker-Route überein", () 
     );
     expect(routeBounds, "Prüfung in der Route nicht gefunden").not.toBeNull();
     expect(scriptBounds, "COVERAGE_BOUNDS im Skript nicht gefunden").not.toBeNull();
-    expect(scriptBounds!.slice(1)).toEqual(routeBounds!.slice(1));
+    if (!scriptBounds || !routeBounds) throw new Error("Die DACH-Grenzen müssen in Route und Skript stehen.");
+    expect(scriptBounds.slice(1)).toEqual(routeBounds.slice(1));
   });
 });

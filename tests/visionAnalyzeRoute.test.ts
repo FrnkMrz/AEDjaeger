@@ -202,7 +202,7 @@ describe("protected image analysis route", () => {
     expect(analyze).not.toHaveBeenCalled();
   });
 
-  it("does not let a same-subject test-server account inherit production AI access", async () => {
+  it("does not reserve budget for a same-subject test-server account", async () => {
     const { database, calls } = createDatabase({ environment: "development" });
     const analyze = successfulAnalysis();
     const response = await handleVisionAnalysis(analysisRequest(), environment(database), { analyze });

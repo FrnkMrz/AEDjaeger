@@ -17,7 +17,7 @@
     "check:live-search": "node scripts/check-live-search.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "lint": "biome lint .",
+    "lint": "biome lint --error-on-warnings .",
     "format": "biome format --write .",
     "preview": "vite preview"
   },

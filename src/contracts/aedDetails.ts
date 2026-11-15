@@ -304,7 +304,7 @@ export function diffTags(before: Readonly<Record<string, string>>, after: Readon
   for (const key of DETAIL_KEYS) {
     const newValue = after[key];
     if (newValue === undefined) continue; // nicht beantwortet: nichts tun, nie löschen
-    const oldValue = Object.prototype.hasOwnProperty.call(before, key) ? before[key] : undefined;
+    const oldValue = Object.hasOwn(before, key) ? before[key] : undefined;
     if (oldValue === undefined) changes.push({ key, kind: "add", after: newValue });
     else if (oldValue !== newValue) changes.push({ key, kind: "change", before: oldValue, after: newValue });
   }
@@ -353,7 +353,7 @@ export function planDetailChanges(
   for (const key of DETAIL_KEYS) {
     const value = candidate[key];
     if (value === undefined) continue;
-    const old = Object.prototype.hasOwnProperty.call(existing, key) ? existing[key] : undefined;
+    const old = Object.hasOwn(existing, key) ? existing[key] : undefined;
     if (old === undefined) {
       wanted[key] = value; // Ergänzung
     } else if (mode === "correct" && value !== old.trim()) {
@@ -369,7 +369,7 @@ export function planDetailChanges(
   for (const key of DETAIL_KEYS) {
     const after = checked.tags[key];
     if (after === undefined) continue;
-    if (Object.prototype.hasOwnProperty.call(before, key)) corrections.push({ key, before: before[key], after });
+    if (Object.hasOwn(before, key)) corrections.push({ key, before: before[key], after });
     else additions[key] = after;
   }
   return { ok: true, additions, corrections, tags: checked.tags };
@@ -390,7 +390,7 @@ export function formFromExistingTags(existing: Readonly<Record<string, string>>)
   const locked = new Set<DetailKey>();
   const valid = (key: DetailKey, value: string): boolean => validateDetailTags({ [key]: value }).ok;
   for (const key of DETAIL_KEYS) {
-    if (!Object.prototype.hasOwnProperty.call(existing, key)) continue;
+    if (!Object.hasOwn(existing, key)) continue;
     const raw = existing[key];
     const value = raw.trim();
     let representable = false;
@@ -460,6 +460,6 @@ export function levelLeftBehindByIndoorChange(
 ): string | null {
   if (tags.indoor !== "no") return null; // nur wenn jetzt „draußen“ geschrieben wird
   if (tags.level !== undefined) return null; // eine neue Ebene würde ohnehin gezeigt
-  const old = Object.prototype.hasOwnProperty.call(existing, "level") ? existing.level.trim() : "";
+  const old = Object.hasOwn(existing, "level") ? existing.level.trim() : "";
   return old === "" ? null : old;
 }

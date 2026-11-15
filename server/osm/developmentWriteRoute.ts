@@ -109,7 +109,7 @@ export async function handleDevelopmentCheckDate(
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
-  if (!session || session.environment !== "development")
+  if (session?.environment !== "development")
     return jsonResponse({ error: "development_session_required" }, 403);
 
   let input: ConfirmedCheckDate;
@@ -538,8 +538,8 @@ function hasDetails(input: ConfirmedCheckDate): boolean {
 function detailsConflict(node: OSMNode, input: ConfirmedCheckDate): boolean {
   const before = input.expected_before ?? {};
   return Object.keys(input.details ?? {}).some((key) => {
-    const present = Object.prototype.hasOwnProperty.call(node.tags, key);
-    if (Object.prototype.hasOwnProperty.call(before, key)) return !present || node.tags[key] !== before[key];
+    const present = Object.hasOwn(node.tags, key);
+    if (Object.hasOwn(before, key)) return !present || node.tags[key] !== before[key];
     return present;
   });
 }
@@ -713,8 +713,10 @@ function parseChangesetDownload(value: string, changesetId: string, target: stri
         if (!allowed) return null;
         if (parsed.name === "tag" && (!parsed.attributes.k || parsed.attributes.v === undefined)) return null;
         if (parsed.name === "tag" && capture && parent === "node") {
-          if (Object.hasOwn(capture.tags, parsed.attributes.k!)) return null;
-          capture.tags[parsed.attributes.k!] = parsed.attributes.v!;
+          const key = parsed.attributes.k;
+          const value = parsed.attributes.v;
+          if (!key || value === undefined || Object.hasOwn(capture.tags, key)) return null;
+          capture.tags[key] = value;
         }
       } else {
         return null;
@@ -776,7 +778,8 @@ function parseXmlStartTag(
 
 function decodeXmlAttribute(value: string): string | null {
   const validXmlCharacters = Array.from(value).every((character) => {
-    const codePoint = character.codePointAt(0)!;
+    const codePoint = character.codePointAt(0);
+    if (codePoint === undefined) return false;
     return (
       codePoint === 0x9 ||
       codePoint === 0xa ||
