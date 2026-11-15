@@ -3,7 +3,7 @@ import { isRecord } from "../../shared/typeGuards.js";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_SOURCE_BYTES = 40 * 1024 * 1024;
-const MAX_IMAGE_EDGE = 1_600;
+const MAX_IMAGE_EDGE = 1_024;
 const API_PATH = "/api/vision/analyze";
 const REQUEST_TIMEOUT_MS = 35_000;
 
@@ -144,7 +144,6 @@ export async function requestVisionObservation(
     throw new VisionClientError(image.size > MAX_IMAGE_BYTES ? "image_too_large" : "invalid_image");
   }
 
-  const imageBase64 = await blobToBase64(image);
   let response: Response;
   let payload: unknown;
   const controller = new AbortController();
@@ -154,8 +153,9 @@ export async function requestVisionObservation(
     response = await fetcher(API_PATH, {
       method: "POST",
       credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ request_id: requestId, content_type: "image/jpeg", image_base64: imageBase64 }),
+      headers: { "Content-Type": image.type, "X-Request-Id": requestId },
+      // Send the already compressed JPEG bytes directly; JSON/base64 would expand them by about one third.
+      body: image,
       signal: controller.signal,
     });
     try {
@@ -229,17 +229,4 @@ function canvasToJpeg(canvas: HTMLCanvasElement, quality: number): Promise<Blob>
       quality,
     );
   });
-}
-
-async function blobToBase64(blob: Blob): Promise<string> {
-  try {
-    const bytes = new Uint8Array(await blob.arrayBuffer());
-    let binary = "";
-    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-      binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-    }
-    return btoa(binary);
-  } catch {
-    throw new VisionClientError("image_processing_failed");
-  }
 }

@@ -173,6 +173,12 @@ Für eine leere Suche im OSM-Dev-Test bestätigt ein begrenzter, authentifiziert
 - Cloudflare Workers Free; keine zusätzlichen Kosten ohne Auftrag. Domain: `aedjaeger.de` ist seit dem 13.11.2026 bei united domains für 12 Monate gesichert. Bis zum Umzug bleibt die workers.dev-Adresse die Pilotadresse ([Domain](domain.md)).
 - `check_date` ist das Prüfdatum. Bei einem vorhandenen AED dürfen andere Tags nicht überschrieben werden.
 
+## Fotoprüfung: CPU-Messung und Entlastung (15.11.2026)
+
+Der Projektinhaber hat die Produktionsmetriken des Workers `aedjaeger` für die letzten 24 Stunden abgelesen: 51 Aufrufe insgesamt, CPU P50 3,63 ms, P90 15,07 ms, P99/P999 18,33 ms, Durchschnitt 3 ms. Wandzeit: P50 82,54 ms, P90 736 ms, P99 ungefähr 1 s. Speicher: P50 2,7 MB, P99 5,64 MB. Es gab keine Fehler oder CPU-/Speicherlimit-Überschreitungen. Zwei Fotoprüfungsaufrufe warteten jeweils rund 3,4 s auf `api.openai.com`; diese Netzwerkwartezeit zählt nicht als Worker-CPU.
+
+Die Werte gelten für den ganzen Worker, nicht einzeln für `/api/vision/analyze` und `/api/osm/candidates/search`; 51 Aufrufe sind zudem eine kleine Stichprobe. Deshalb folgt daraus keine route-spezifische P95-Angabe. Q4 senkt die Bildkante auf 1.024 px und ersetzt den Browser-zu-Worker-Transport mit Base64-JSON durch Binärdaten. Nach einem freigegebenen Deployment die Workerwerte über sieben Tage vergleichen und die Fehler-/Limitanzeige mitprüfen. Invocation-Logs bleiben deaktiviert; Route-Filter im Query Builder stehen daher derzeit nicht zur Verfügung.
+
 ## Weiterführende Unterlagen
 
 - [Übergabe für neuen Chat oder Agenten](uebergabe.md)
