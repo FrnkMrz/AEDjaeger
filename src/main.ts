@@ -51,6 +51,14 @@ import {
 import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } from "./osm/candidateSearch";
 import { ExistingNodeError, requestExistingNode } from "./osm/existingNode";
 import {
+  detailContinueLabel as renderDetailContinueLabel,
+  detailHas as detailHasValue,
+  detailMoreCountText as renderDetailMoreCountText,
+  existingValueLabel as renderExistingValueLabel,
+  renderDetailForm,
+  type DetailFormViewContext,
+} from "./ui/views/detailForm";
+import {
   formatCalendarDate,
   isCalendarDate,
   isFreshCapture,
@@ -670,95 +678,28 @@ function pickAllowed<T extends string>(allowed: readonly T[], raw: string): T | 
   return (allowed as readonly string[]).includes(raw) ? (raw as T) : null;
 }
 
-/**
- * Eine Auswahl-Kachel. Technisch ein echtes Radio-Feld (versteckt) mit sichtbarem Etikett. Dadurch funktionieren
- * Tastatur (Pfeiltasten), Screenreader und Fokus ohne eigenen Code; die Kachel ist 48 px hoch (siehe styles.css).
- */
-function detailRadio(
-  field: "access" | "hoursMode" | "indoor",
-  value: string,
-  label: string,
-  checked: boolean,
-  isUnknown = false,
-): string {
-  const id = `detail-${field}-${value === "" ? "unknown" : value}`;
-  return `<span class="chip-wrap"><input class="chip-input" type="radio" name="detail-${field}" id="${id}" value="${escapeHtml(value)}" data-detail-radio="${field}"${checked ? " checked" : ""} /><label class="chip${isUnknown ? " chip-unknown" : ""}" for="${id}">${escapeHtml(label)}</label></span>`;
+function detailFormViewContext(): DetailFormViewContext {
+  return {
+    t,
+    tv,
+    escapeHtml,
+    form: detailForm,
+    existingTags: detailExistingTags,
+    correctMode: detailCorrectMode,
+    lockedKeys: detailLockedKeys,
+    moreOpen: detailMoreOpen,
+  };
 }
 
-/** Ein Textfeld des Formulars; Änderungen landen über den `input`-Handler in `detailForm`. */
-function detailTextInput(field: DetailTextField, id: string, maxLength: number, extraAttributes = ""): string {
-  return `<input class="field" id="${id}" type="text" maxlength="${maxLength}" value="${escapeHtml(detailForm[field])}" data-detail-text="${field}" autocomplete="off" ${extraAttributes} />`;
-}
-
-/** Ein Abschnitt: Überschrift, Hinweis, Inhalt und ein (zunächst verborgener) Platz für die Fehlermeldung. */
-function detailGroup(id: string, title: string, hint: string, body: string): string {
-  // Ein <div role="group"> statt <fieldset>: Die Überschrift liegt dann sauber IM Kasten (bei <legend> läuft der Rahmen
-  // durch sie hindurch). Für Screenreader ist die Gruppe über aria-labelledby genauso benannt.
-  return `<div class="detail-group" id="detail-group-${id}" role="group" aria-labelledby="detail-legend-${id}"><p class="detail-legend" id="detail-legend-${id}">${escapeHtml(title)}</p>${hint ? `<p class="detail-hint">${escapeHtml(hint)}</p>` : ""}${body}<p class="detail-was" data-detail-was="${id}" hidden></p><p class="detail-error" role="alert" data-detail-error="${id}" hidden>${tv("detailInvalid")}</p></div>`;
-}
-
-/** Text für den Zähler an „Mehr Angaben“: wie viele der seltenen Angaben schon gesetzt sind. */
 function detailMoreCountText(): string {
-  const set = [detailForm.operator, detailForm.phone, detailForm.description, detailForm.ref].filter(
-    (text) => text.trim() !== "",
-  ).length;
-  return set === 0 ? tv("detailMoreOptional") : tv("detailMoreCount", { count: set });
+  return renderDetailMoreCountText(detailFormViewContext());
 }
 
-/** Beschriftung des Hauptknopfs: nennt, wie viele Angaben mitgehen. */
 function detailContinueLabel(count: number): string {
-  if (count === 0) return tv("detailContinueNone");
-  return count === 1 ? tv("detailContinueOne") : tv("detailContinueMany", { count });
+  return renderDetailContinueLabel(count, tv);
 }
 
-/** Ist dieser Schlüssel am bestehenden AED schon eingetragen? (Nur beim Ergänzen; bei einer Neuanlage immer false.) */
-function detailHas(key: DetailKey): boolean {
-  return detailExistingTags !== undefined && Object.prototype.hasOwnProperty.call(detailExistingTags, key);
-}
-
-/**
- * Ist das Feld zu diesem Schlüssel gesperrt?
- *  - Neuanlage: nie.
- *  - Ergänzen (nur Fehlendes): alles, was in OSM schon steht.
- *  - Korrigieren: nur, was sich im Formular nicht darstellen lässt. Alles andere ist vorbelegt und änderbar.
- */
-function detailLocked(key: DetailKey): boolean {
-  if (detailExistingTags === undefined) return false;
-  return detailCorrectMode ? detailLockedKeys.has(key) : detailHas(key);
-}
-
-/** Zeigt einen bestehenden OSM-Wert in der Sprache der Person, soweit er einer unserer Auswahlwerte ist. */
-function existingValueLabel(key: DetailKey, value: string): string {
-  if (key === "access")
-    return (
-      (
-        {
-          yes: tv("detailAccessYes"),
-          customers: tv("detailAccessCustomers"),
-          private: tv("detailAccessPrivate"),
-        } as Record<string, string>
-      )[value] ?? value
-    );
-  if (key === "indoor")
-    return ({ yes: tv("detailIndoorYes"), no: tv("detailIndoorNo") } as Record<string, string>)[value] ?? value;
-  if (key === "opening_hours" && value === "24/7") return tv("detailHoursAlways");
-  return value;
-}
-
-/** Zeile „Schon eingetragen: …“ für einen gesperrten Wert. Der Wert kommt aus OSM und wird wie jeder fremde Text maskiert. */
-function detailLockedLine(key: DetailKey): string {
-  const value = detailExistingTags?.[key] ?? "";
-  // Im Korrekturmodus ist ein gesperrter Wert einer, den das Formular nicht darstellen kann: Das sagt ein kurzer Hinweis.
-  const note = detailCorrectMode ? `<p class="detail-hint">${tv("detailNotEditable")}</p>` : "";
-  return `<p class="detail-locked">${escapeHtml(tv("detailExistingValue", { value: existingValueLabel(key, value) }))}</p>${note}`;
-}
-
-/**
- * Sind beim bestehenden AED alle Angaben schon eingetragen, die das Formular erfassen kann?
- * Dann gibt es nichts zu ergänzen, und die Oberfläche sagt es.
- */
 function detailEverythingPresent(): boolean {
-  // Im Korrekturmodus gibt es immer etwas zu tun (vorhandene Werte lassen sich ändern).
   if (detailExistingTags === undefined || detailCorrectMode) return false;
   const keys: DetailKey[] = [
     "defibrillator:location",
@@ -770,9 +711,8 @@ function detailEverythingPresent(): boolean {
     "description",
     "ref",
   ];
-  if (!keys.every(detailHas)) return false;
-  // Die Ebene fehlt nur dann nicht, wenn sie schon da ist oder der AED nicht im Gebäude hängt.
-  return detailHas("level") || detailExistingTags.indoor !== "yes";
+  if (!keys.every((key) => detailHasValue(detailFormViewContext(), key))) return false;
+  return detailHasValue(detailFormViewContext(), "level") || detailExistingTags.indoor !== "yes";
 }
 
 /**
@@ -781,99 +721,7 @@ function detailEverythingPresent(): boolean {
  * gesperrte Zeile „Schon eingetragen: …“. Nur Fehlendes lässt sich ausfüllen.
  */
 function detailFormMarkup(): string {
-  const f = detailForm;
-  const unknown = tv("detailUnknown");
-  // Im Korrekturmodus ist bei einem vorhandenen Wert „Weiß ich nicht“ überflüssig: Den alten Wert wählt die Person einfach wieder an.
-  const hasValue = (key: DetailKey): boolean => detailCorrectMode && detailHas(key);
-
-  // 1. Wo genau? Textfeld plus Schnellwahl-Wörter, die ans Ende des Textes angehängt werden.
-  const quickWords = [
-    tv("detailLocEntrance"),
-    tv("detailLocFoyer"),
-    tv("detailLocOutside"),
-    tv("detailLocReception"),
-    tv("detailLocStairs"),
-  ];
-  const location = detailGroup(
-    "location",
-    tv("detailLocationLabel"),
-    detailLocked("defibrillator:location") ? "" : tv("detailLocationHint"),
-    detailLocked("defibrillator:location")
-      ? detailLockedLine("defibrillator:location")
-      : `<input class="field" id="detail-location" type="text" maxlength="${DETAIL_LIMITS.location}" value="${escapeHtml(f.location)}" data-detail-text="location" autocomplete="off" placeholder="${escapeHtml(tv("detailLocationPlaceholder"))}" aria-label="${escapeHtml(tv("detailLocationLabel"))}" />` +
-          `<div class="chip-row">${quickWords.map((word) => `<button type="button" class="chip chip-small" data-detail-addloc="${escapeHtml(word)}">${escapeHtml(word)}</button>`).join("")}</div>`,
-  );
-
-  // 2. Wer kommt ran? Die Frage meint das Gerät, nicht das Gebäude.
-  const access = detailGroup(
-    "access",
-    tv("detailAccessLabel"),
-    detailLocked("access") ? "" : tv("detailAccessHint"),
-    detailLocked("access")
-      ? detailLockedLine("access")
-      : `<div class="chip-row">${detailRadio("access", "yes", tv("detailAccessYes"), f.access === "yes")}${detailRadio("access", "customers", tv("detailAccessCustomers"), f.access === "customers")}${detailRadio("access", "private", tv("detailAccessPrivate"), f.access === "private")}${hasValue("access") ? "" : detailRadio("access", "", unknown, f.access === null, true)}</div>`,
-  );
-
-  // 3. Wann erreichbar? „Rund um die Uhr“ nur nach ausdrücklicher Wahl; das Zeiten-Feld erscheint bei „Zu bestimmten Zeiten“.
-  const timesField =
-    f.hoursMode === "times"
-      ? `<div class="detail-sub"><label class="detail-hint" for="detail-hours-text">${tv("detailHoursTextLabel")}</label>${detailTextInput("hoursText", "detail-hours-text", DETAIL_LIMITS.openingHours, 'placeholder="Mo-Fr 08:00-18:00" autocapitalize="off" spellcheck="false"')}<div class="chip-row"><button type="button" class="chip chip-small" data-detail-hours-preset="Mo-Fr 08:00-18:00">Mo-Fr 08:00-18:00</button><button type="button" class="chip chip-small" data-detail-hours-preset="Mo-Sa 07:00-20:00">Mo-Sa 07:00-20:00</button></div></div>`
-      : "";
-  const hours = detailGroup(
-    "hours",
-    tv("detailHoursLabel"),
-    detailLocked("opening_hours") ? "" : tv("detailHoursHint"),
-    detailLocked("opening_hours")
-      ? detailLockedLine("opening_hours")
-      : `<div class="chip-row">${detailRadio("hoursMode", "always", tv("detailHoursAlways"), f.hoursMode === "always")}${detailRadio("hoursMode", "times", tv("detailHoursTimes"), f.hoursMode === "times")}${hasValue("opening_hours") ? "" : detailRadio("hoursMode", "", unknown, f.hoursMode === null, true)}</div>${timesField}`,
-  );
-
-  // 4. Drinnen oder draußen? Die Ebene erscheint nur bei „Drinnen“ (gewählt oder in OSM schon eingetragen).
-  // Der erste Tipp auf + oder − setzt 0 (Erdgeschoss).
-  const effectiveIndoor = detailLocked("indoor") ? detailExistingTags?.indoor : f.indoor;
-  const levelField =
-    effectiveIndoor === "yes"
-      ? detailLocked("level")
-        ? detailLockedLine("level")
-        : `<div class="detail-sub"><span class="detail-hint" id="detail-level-label">${tv("detailLevelLabel")}</span><div class="stepper" role="group" aria-labelledby="detail-level-label"><button type="button" class="step-button" id="detail-level-down" data-detail-step="-1" aria-label="${escapeHtml(tv("detailLevelLower"))}">−</button><output class="step-value" id="detail-level-value" aria-live="polite">${f.level === null ? "–" : f.level}</output><button type="button" class="step-button" id="detail-level-up" data-detail-step="1" aria-label="${escapeHtml(tv("detailLevelHigher"))}">+</button>${hasValue("level") ? "" : `<button type="button" class="chip chip-small chip-unknown" id="detail-level-clear" data-detail-level-clear="1">${unknown}</button>`}</div></div>`
-      : "";
-  const indoor = detailGroup(
-    "indoor",
-    tv("detailIndoorLabel"),
-    "",
-    (detailLocked("indoor")
-      ? detailLockedLine("indoor")
-      : `<div class="chip-row">${detailRadio("indoor", "yes", tv("detailIndoorYes"), f.indoor === "yes")}${detailRadio("indoor", "no", tv("detailIndoorNo"), f.indoor === "no")}${hasValue("indoor") ? "" : detailRadio("indoor", "", unknown, f.indoor === null, true)}</div>`) +
-      levelField,
-  );
-
-  // 5. Seltene Angaben, eingeklappt. Gehäuse bleibt vorerst draußen (offene Entscheidung, siehe docs/offene-fragen.md).
-  // Jedes Feld ist entweder gesperrt (schon eingetragen) oder ein Eingabefeld.
-  const moreField = (
-    key: "operator" | "phone" | "description" | "ref",
-    label: string,
-    maxLength: number,
-    extra = "",
-    note = "",
-  ): string =>
-    detailLocked(key)
-      ? `<div><span class="detail-hint">${label}</span>${detailLockedLine(key)}</div>`
-      : `<div><label class="detail-hint" for="detail-${key}">${label}</label>${detailTextInput(key, `detail-${key}`, maxLength, extra)}${note}</div>`;
-  const more =
-    `<details class="detail-more" id="detail-more"${detailMoreOpen ? " open" : ""}><summary><span>${tv("detailMoreTitle")}</span><span class="detail-more-count" id="detail-more-count">${detailMoreCountText()}</span></summary><div class="detail-more-body">` +
-    moreField("operator", tv("detailOperatorLabel"), DETAIL_LIMITS.operator) +
-    moreField(
-      "phone",
-      tv("detailPhoneLabel"),
-      DETAIL_LIMITS.phone,
-      'inputmode="tel" autocomplete="off"',
-      `<p class="detail-hint">${tv("detailPhoneHint")}</p>`,
-    ) +
-    moreField("description", tv("detailDescriptionLabel"), DETAIL_LIMITS.description) +
-    moreField("ref", tv("detailRefLabel"), DETAIL_LIMITS.ref) +
-    `<p class="detail-hint">${tv("detailNoCode")}</p><p class="detail-was" data-detail-was="more" hidden></p><p class="detail-error" role="alert" data-detail-error="more" hidden>${tv("detailInvalid")}</p></div></details>`;
-
-  return `${location}${access}${hours}${indoor}${more}`;
+  return renderDetailForm(detailFormViewContext());
 }
 
 /**
@@ -958,7 +806,9 @@ function showDetailChanges(corrections: readonly DetailCorrection[], levelNote =
   for (const correction of corrections) {
     const group = DETAIL_GROUP_OF_KEY[correction.key];
     const label = group === "indoor" || group === "more" ? DETAIL_KEY_LABEL[correction.key] : undefined;
-    const was = tv("detailWas", { value: existingValueLabel(correction.key, correction.before) });
+    const was = tv("detailWas", {
+      value: renderExistingValueLabel(detailFormViewContext(), correction.key, correction.before),
+    });
     linesByGroup.set(group, [...(linesByGroup.get(group) ?? []), label ? `${tv(label)}: ${was}` : was]);
   }
   app!.querySelectorAll<HTMLElement>("[data-detail-was]").forEach((slot) => {
