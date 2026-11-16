@@ -1,6 +1,6 @@
 # AEDjaeger – Übergabe an den nächsten Agenten
 
-Stand: **15. November 2026** (main nach PR #108)
+Stand: **16. November 2026** (Version 0.2.0 vorbereitet, noch nicht getaggt; Changelog-Fassung `[0.2.0]`)
 
 Repository: [FrnkMrz/AEDjaeger](https://github.com/FrnkMrz/AEDjaeger)
 App: [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev)
@@ -104,7 +104,7 @@ OpenStreetMap Devs begrenzter `/api/0.6/map.json`-Endpunkt dient zusätzlich daz
 2. Abschnitt A der [Pilot-Abnahme](pilot-abnahme.md) durchgehen, mit Blick auf die neuen Punkte: Umgebungskarte bei Treffern, zwei Bestätigungen vor einer Neuanlage, keine Datumsabfrage direkt nach dem Fotografieren, keine technischen Zeilen im Suchergebnis, Textmenge.
 3. Android und iPhone prüfen; bisher gibt es nur Rückmeldungen von einem Gerät.
 4. Erst danach und nur mit ausdrücklicher Freigabe: kontrollierter OSM-Dev-Schreibtest nach Abschnitt C der Pilot-Abnahme. Den Schalter `OSM_DEV_WRITES_ENABLED` setzt der Projektinhaber selbst, nie ein Agent.
-5. Wenn A bis C bestanden sind: Entscheidung über `v0.1.0`. Der Tag entsteht nur auf Auftrag und nur auf einem gemergten `main`-Commit.
+5. Wenn A bis C bestanden sind: Entscheidung über `v0.2.0`. Der Tag entsteht nur auf Auftrag und nur auf einem gemergten `main`-Commit.
 
 Bei einem Fehler Zeitpunkt, genaue Meldung und einen Screenshot notieren. Keine Tokens oder Schlüssel teilen.
 ## Arbeitsanweisung für den nächsten Agenten

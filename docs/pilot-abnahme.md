@@ -16,7 +16,7 @@ Legende für die Ergebnisfelder: `[ ]` offen, `[x]` bestanden, `[!]` Fehler (Not
 
 Getestet werden Android Chrome, iPhone Safari und die installierte PWA. Die Testperson meldet Abweichungen mit Gerät, Browserversion, Uhrzeit und genauem Text der Meldung.
 
-**Stand 15.11.2026:** Der Projektinhaber hat kein Android-Gerät. Android ist **nicht getestet**; alle A-Punkte ohne `[x]` bleiben offen. Am 13.11. hat der Projektinhaber den kontrollierten Schreibtest auf dem OSM-Testserver ausdrücklich auch ohne Android-Abnahme freigegeben. Diese eng begrenzte Testfreigabe ersetzt keine Android-Prüfung für `v0.1.0`; die Release-Abnahme bleibt offen (siehe [offene Fragen](offene-fragen.md)).
+**Stand 15.11.2026:** Der Projektinhaber hat kein Android-Gerät. Android ist **nicht getestet**; alle A-Punkte ohne `[x]` bleiben offen. Am 13.11. hat der Projektinhaber den kontrollierten Schreibtest auf dem OSM-Testserver ausdrücklich auch ohne Android-Abnahme freigegeben. Diese eng begrenzte Testfreigabe ersetzt keine Android-Prüfung für `v0.2.0`; die Release-Abnahme bleibt offen (siehe [offene Fragen](offene-fragen.md)).
 
 **Vor jedem Test die Version prüfen:** Eine installierte PWA lädt eine neue Version erst nach einem vollständigen Neustart. Im Info-Dialog (Schaltfläche „Info“) steht ganz unten „Version <Nummer> · <Datum, Uhrzeit>“. Öffne im Browser `https://aedjaeger.aedjaeger.workers.dev/version.json`; dort steht `{"revision":"<Nummer>"}`. **Sind beide Nummern gleich, läuft die neueste Version.** Weichen sie ab, läuft noch die alte: App ganz schließen, neu öffnen, bei „Neue Version verfügbar“ auf „Neu laden“ tippen und erneut vergleichen. Das Datum im Dialog ist der Zeitpunkt des Builds. Der Build läuft im Workflow vor dem Deploy-Schritt, das Datum liegt also immer kurz **vor** der Deploy-Zeit; ein Vergleich mit der Deploy-Zeit taugt nicht. Die Nummer gehört in jede Fehlermeldung.
 
@@ -81,7 +81,7 @@ Bei einem Fehler gilt: Eine Fehlermeldung zu fehlenden Kacheln oder Ebenen ist *
 
 Voraussetzungen (alle erfüllt, bevor der Schalter eingeschaltet wird):
 
-1. Die für den Test verwendeten iPhone-Abläufe aus Abschnitt A und Abschnitt B sind bestanden. Android bleibt mangels Gerät ungetestet; die dokumentierte Freigabe vom 13.11.2026 erlaubt den eng begrenzten Dev-Schreibtest trotzdem. Das ist keine Freigabe oder Abnahme für `v0.1.0`.
+1. Die für den Test verwendeten iPhone-Abläufe aus Abschnitt A und Abschnitt B sind bestanden. Android bleibt mangels Gerät ungetestet; die dokumentierte Freigabe vom 13.11.2026 erlaubt den eng begrenzten Dev-Schreibtest trotzdem. Das ist keine Freigabe oder Abnahme für `v0.2.0`.
 2. Abschnitt B ist bestanden (Exit-Code 0, Datenstand aktuell).
 3. Die Projektinhaberin oder der Projektinhaber hat den Test ausdrücklich freigegeben. **Erteilt am 13.11.2026** für den kontrollierten Schreibtest auf dem OSM-Testserver (nicht für das echte OSM). Diese Freigabe liegt vor. Der Schalter bleibt aus, bis der Projektinhaber ihn selbst für den Test setzt.
 4. Die Zielinstanz ist die OSM-Entwicklungsinstanz (`master.apis.dev.openstreetmap.org`). Die Schreibroute ist fest auf diesen Host begrenzt.
@@ -170,14 +170,14 @@ Wenn der Test auffällig ist:
 3. Eine D1-Wiederherstellung macht **keine** OSM-Änderungen rückgängig. Änderungen auf der Dev-Instanz müssen bei Bedarf dort manuell korrigiert werden.
 4. Den Vorfall mit Uhrzeit und Changeset-Nummer im Abnahmebericht festhalten.
 
-## E. Kriterien für den Release v0.1.0
+## E. Kriterien für den Release v0.2.0
 
-Der Tag `v0.1.0` wird nur gesetzt, wenn alle folgenden Punkte erfüllt sind:
+Version 0.1.0 (17.10.2026) war ein reiner Dokumentationsstand und bekommt keinen Tag. Der Pilotstand trägt seit dem 16.11.2026 die Version 0.2.0. Der Tag `v0.2.0` wird nur gesetzt, wenn alle folgenden Punkte erfüllt sind:
 
 - [ ] Abschnitt A ist bestanden (Android, iPhone, PWA, alle sechs Sprachen).
 - [ ] Abschnitt B ist bestanden.
 - [ ] Abschnitt C ist bestanden und der Schalter ist wieder aus.
-- [ ] `CHANGELOG.md` enthält die Fassung 0.1.0 mit Datum.
+- [ ] `CHANGELOG.md` enthält die Fassung 0.2.0 mit Datum.
 - [ ] Die Änderungen sind über Pull Requests in `main` gemergt und alle erforderlichen Statusprüfungen sind grün. Die Freigabeanforderung richtet sich nach der dann aktuellen Branch-Protection-Regel; Stand 13.11.2026 ist keine Code-Owner-Freigabe erforderlich.
 - [ ] Der Tag zeigt auf genau diesen gemergten `main`-Commit.
 - [ ] Die ausdrückliche Freigabe der Projektinhaberin oder des Projektinhabers liegt vor.

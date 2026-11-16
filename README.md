@@ -2,7 +2,7 @@
 
 Sammlung von Informationen, Links und Ideen für eine sehr einfache mobile App, mit der Menschen Defibrillatoren (AEDs) in OpenStreetMap erfassen und bestehende Einträge verbessern können.
 
-**Stand:** 15. November 2026 · **Phase:** Pilot mit Fotoablauf, AED-Suche und freiwilligem Detailweg · **Sprache:** Deutsch
+**Stand:** 16. November 2026 · **Version:** 0.2.0 (noch nicht getaggt) · **Phase:** Pilot mit Fotoablauf, AED-Suche und freiwilligem Detailweg · **Sprache:** Deutsch
 
 Der maßgebliche Projekt- und Abnahmestatus mit der aktuellen Reihenfolge offener Aufgaben steht in [Entscheidungen und nächste Schritte](docs/offene-fragen.md).
 
