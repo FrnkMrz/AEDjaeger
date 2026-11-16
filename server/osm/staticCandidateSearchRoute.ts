@@ -151,7 +151,7 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
   const now = (deps.now ?? Date.now)();
   let retryAfter = 30;
   try {
-    const slot = await reserveSearchSlot(env.DB, session.environment + ":" + session.subject, now);
+    const slot = await reserveSearchSlot(env.DB, `${session.environment}:${session.subject}`, now);
     if (!slot.reserved)
       return jsonResponse({ error: "search_rate_limited" }, 429, { "Retry-After": String(slot.retryAfterSeconds) });
     retryAfter = Math.max(0, Math.ceil((slot.nextAllowedAt - (deps.now ?? Date.now)()) / 1_000));
@@ -527,7 +527,7 @@ function tileFor(longitude: number, latitude: number, zoom: number): { x: number
 }
 async function snapshotId(metadata: PipelineMetadata): Promise<string> {
   const identity = `${metadata.generated_at}\0${metadata.osm_data_until}\0${metadata.pmtiles.size_bytes}`;
-  return "aed-" + (await sha256Hex(identity)).slice(0, 20);
+  return `aed-${(await sha256Hex(identity)).slice(0, 20)}`;
 }
 function parseLocation(bytes: Uint8Array): Location | null {
   let value: unknown;

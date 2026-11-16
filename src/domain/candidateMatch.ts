@@ -1,3 +1,5 @@
+import { isRecord } from "../../shared/typeGuards.js";
+
 export interface Coordinate {
   latitude: number;
   longitude: number;
@@ -41,10 +43,6 @@ export type CandidateAssessment =
   | { kind: "candidate-review"; candidates: RankedCandidate[] };
 
 const EARTH_RADIUS_METERS = 6_371_000;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 function isValidCoordinate(point: unknown): point is Coordinate {
   if (!isRecord(point)) return false;

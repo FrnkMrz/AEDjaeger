@@ -13,6 +13,21 @@ describe("first-version UI languages", () => {
     }
   });
 
+  it("distinguishes approved OSM test-server writes from production writes", () => {
+    const testServerLabels = {
+      de: "OSM-Testserver",
+      en: "OSM test server",
+      es: "servidor de pruebas de OSM",
+      fr: "serveur de test OSM",
+      ja: "OSMテストサーバー",
+      pl: "serwerze testowym OSM",
+    } as const;
+
+    for (const language of Object.keys(testServerLabels) as Array<keyof typeof testServerLabels>) {
+      expect(translations[language].accountIdentityOnly).toContain(testServerLabels[language]);
+    }
+  });
+
   it("keeps the same flow-message keys and nonempty translations in all six languages", () => {
     const languages = Object.keys(translations) as Array<keyof typeof translations>;
     const expectedKeys = Object.keys(flowTranslations.de).sort();

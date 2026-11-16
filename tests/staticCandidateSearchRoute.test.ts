@@ -51,7 +51,6 @@ vi.mock("@mapbox/vector-tile", () => ({
         feature: () => ({ toGeoJSON: () => fixture.pointFeature }),
       },
     };
-    constructor(_reader: unknown) {}
   },
 }));
 vi.mock("../server/auth/osmOAuth", () => ({ importOAuthEncryptionKey: vi.fn(async () => ({ testKey: true })) }));

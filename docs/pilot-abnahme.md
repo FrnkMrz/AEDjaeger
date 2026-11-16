@@ -1,6 +1,8 @@
 # Pilot-Abnahme: Checklisten für Handy, Datenquelle, OSM-Test und Release
 
-Stand: 10.11.2026. Dieses Dokument beschreibt die Prüfungen, die der Projektinitiator bzw. eine Testperson durchführt. Der Live-Check der Datenquelle (Abschnitt B) lief am 10.11.2026 erfolgreich, mit Ausnahme von B5. Die vollständige Handytest-Abnahme (Abschnitt A), der OSM-Dev-Schreibtest (Abschnitt C) und die Release-Kriterien (Abschnitt E) stehen noch aus.
+Stand: **15.11.2026**. Diese Checkliste ist die maßgebliche Abnahme für den Pilot. P10 ist gemergt; die PWA-Symbolkorrekturen aus PR #107 sind ebenfalls auf `main`. Aktueller Commit: `1695930`; die CI dafür läuft noch ([Lauf #43701600670](https://github.com/FrnkMrz/AEDjaeger/actions/runs/43701600670)). Der letzte erfolgreiche CI- und Deploy-Lauf ist [#43700608053](https://github.com/FrnkMrz/AEDjaeger/actions/runs/43700608053) auf Commit `062d34e`. Das ersetzt keine manuelle Geräte- oder Schreibtest-Abnahme.
+
+**Aktueller Abnahmestand:** A ist nur teilweise manuell geprüft; Android ist nicht getestet. B1–B4 sind bestanden, B5 (zweite Koordinate) bleibt offen. C0.1–C0.5 sind laut den Einträgen vom 13.11. vorbereitet, C0.6–C0.8 fehlen. Beim ersten Dev-Schreibversuch am 13.11. wurde Node `4365809370` im Changeset `725093` angelegt, während die App „Ergebnis unklar“ meldete. Der Fehler wurde behoben und auf `main` deployed; die manuelle Wiederaufnahme und Verifikation dieses bestehenden Vorgangs ist **noch nicht bestätigt**. Vor einem neuen Create muss er abgeglichen werden, damit kein Duplikat entsteht.
 
 Grundregeln für alle Abschnitte:
 
@@ -14,7 +16,7 @@ Legende für die Ergebnisfelder: `[ ]` offen, `[x]` bestanden, `[!]` Fehler (Not
 
 Getestet werden Android Chrome, iPhone Safari und die installierte PWA. Die Testperson meldet Abweichungen mit Gerät, Browserversion, Uhrzeit und genauem Text der Meldung.
 
-**Stand 13.11.2026:** Der Projektinhaber hat kein Android-Gerät. Alle abgehakten Punkte stammen vom iPhone. Android ist **nicht getestet**. Ob das iPhone allein für den Schreibtest und für `v0.1.0` genügt, ist eine offene Entscheidung (siehe [offene Fragen](offene-fragen.md)).
+**Stand 15.11.2026:** Der Projektinhaber hat kein Android-Gerät. Android ist **nicht getestet**; alle A-Punkte ohne `[x]` bleiben offen. Am 13.11. hat der Projektinhaber den kontrollierten Schreibtest auf dem OSM-Testserver ausdrücklich auch ohne Android-Abnahme freigegeben. Diese eng begrenzte Testfreigabe ersetzt keine Android-Prüfung für `v0.1.0`; die Release-Abnahme bleibt offen (siehe [offene Fragen](offene-fragen.md)).
 
 **Vor jedem Test die Version prüfen:** Eine installierte PWA lädt eine neue Version erst nach einem vollständigen Neustart. Im Info-Dialog (Schaltfläche „Info“) steht ganz unten „Version <Nummer> · <Datum, Uhrzeit>“. Öffne im Browser `https://aedjaeger.aedjaeger.workers.dev/version.json`; dort steht `{"revision":"<Nummer>"}`. **Sind beide Nummern gleich, läuft die neueste Version.** Weichen sie ab, läuft noch die alte: App ganz schließen, neu öffnen, bei „Neue Version verfügbar“ auf „Neu laden“ tippen und erneut vergleichen. Das Datum im Dialog ist der Zeitpunkt des Builds. Der Build läuft im Workflow vor dem Deploy-Schritt, das Datum liegt also immer kurz **vor** der Deploy-Zeit; ein Vergleich mit der Deploy-Zeit taugt nicht. Die Nummer gehört in jede Fehlermeldung.
 
@@ -71,7 +73,7 @@ Ausführung entweder
 | B4 | Ebene `defibrillators` | Anzahl an Features in der Testkachel; keine Meldung „Ebene fehlt“ | `[x]` Lauf #2: 28 Features in Kachel Zoom 14, 8696/5595 |
 | B5 | Zweite Koordinate (z. B. Hamburg oder Wien) | Ebenfalls bestanden, sofern die Kachel Daten enthält | `[ ]` offen: bisher nur die Standardkoordinate (Nürnberg Hbf) geprüft |
 
-Belege: [Lauf #2 vom 10.11.2026, 09:20 UTC](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42789878021) (Stand nach der Anhebung des Höchstalters auf 120 Stunden, Commit `ee1dc41`). Lauf [#1](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42784569321) bestand ebenfalls, noch mit der alten Grenze von 48 Stunden. Beide Läufe sind Stichproben zu einem Zeitpunkt und belegen die Verfügbarkeit nicht für später. Für B5 den Workflow oder `npm run check:live-search -- --lat <Breite> --lon <Länge>` mit einer zweiten Koordinate ausführen. Der GitHub-Workflow „Live-Check AED-Datenquelle“ hat dafür die Eingaben `lat` und `lon` (leer = Nürnberg Hbf). Sie stehen erst nach dem Merge dieser Änderung auf `main` im Dialog „Run workflow“ zur Verfügung.
+Belege: [Lauf #2 vom 10.11.2026, 09:20 UTC](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42789878021) (Stand nach der Anhebung des Höchstalters auf 120 Stunden, Commit `ee1dc41`). Lauf [#1](https://github.com/FrnkMrz/AEDjaeger/actions/runs/42784569321) bestand ebenfalls, noch mit der alten Grenze von 48 Stunden. Beide Läufe sind Stichproben zu einem Zeitpunkt und belegen die Verfügbarkeit nicht für später. Für B5 den Workflow oder `npm run check:live-search -- --lat <Breite> --lon <Länge>` mit einer zweiten Koordinate ausführen. Der GitHub-Workflow „Live-Check AED-Datenquelle“ hat dafür die Eingaben `lat` und `lon` (leer = Nürnberg Hbf); die Eingaben stehen im Dialog „Run workflow“ zur Verfügung.
 
 Bei einem Fehler gilt: Eine Fehlermeldung zu fehlenden Kacheln oder Ebenen ist **kein Beleg**, dass an dieser Stelle kein AED existiert. Die App sperrt in diesem Fall korrekt die Suche und den Neuanlagevorschlag.
 
@@ -79,9 +81,9 @@ Bei einem Fehler gilt: Eine Fehlermeldung zu fehlenden Kacheln oder Ebenen ist *
 
 Voraussetzungen (alle erfüllt, bevor der Schalter eingeschaltet wird):
 
-1. Abschnitt A ist bestanden, mindestens auf einem Android-Handy und einem iPhone. **Stand 13.11.2026:** Der Projektinhaber hat kein Android-Gerät und holt den Android-Test später nach. Er hat den Schreibtest trotzdem freigegeben (Punkt 3). Android bleibt „nicht getestet“.
+1. Die für den Test verwendeten iPhone-Abläufe aus Abschnitt A und Abschnitt B sind bestanden. Android bleibt mangels Gerät ungetestet; die dokumentierte Freigabe vom 13.11.2026 erlaubt den eng begrenzten Dev-Schreibtest trotzdem. Das ist keine Freigabe oder Abnahme für `v0.1.0`.
 2. Abschnitt B ist bestanden (Exit-Code 0, Datenstand aktuell).
-3. Die Projektinhaberin oder der Projektinhaber hat den Test ausdrücklich freigegeben. **Erteilt am 13.11.2026** vom Projektinhaber für den kontrollierten Schreibtest auf dem OSM-Testserver (nicht für das echte OSM). Der Schalter bleibt aus, bis der Projektinhaber ihn selbst setzt.
+3. Die Projektinhaberin oder der Projektinhaber hat den Test ausdrücklich freigegeben. **Erteilt am 13.11.2026** für den kontrollierten Schreibtest auf dem OSM-Testserver (nicht für das echte OSM). Diese Freigabe liegt vor. Der Schalter bleibt aus, bis der Projektinhaber ihn selbst für den Test setzt.
 4. Die Zielinstanz ist die OSM-Entwicklungsinstanz (`master.apis.dev.openstreetmap.org`). Die Schreibroute ist fest auf diesen Host begrenzt.
 
 ### Vorbereitung (C0): nur einrichten und prüfen, noch nichts schreiben
@@ -93,23 +95,25 @@ Der Schalter `OSM_DEV_WRITES_ENABLED` bleibt in diesem Teil **aus**. Die Punkte 
 | C0.1 | Eigenes Konto auf der Dev-Instanz anlegen oder anmelden: `https://master.apis.dev.openstreetmap.org`. Die Dev-Instanz hat eigene Konten; die Zugangsdaten des echten OSM gelten dort nicht | Anmeldung auf der Dev-Instanz klappt | `[x]` 13.11.2026, bestätigt vom Projektinhaber (Anmeldung am Testserver klappt) |
 | C0.2 | Auf der Dev-Instanz eine OAuth-2-Anwendung registrieren (vertraulicher Client). Redirect-URI genau: `https://aedjaeger.aedjaeger.workers.dev/api/auth/osm/development/callback`. Berechtigungen: „OpenID“ und „Karte ändern“ (`write_api`). Die Anmeldung der App fragt `openid write_api` an | Client-ID und Client-Secret liegen vor | `[x]` 13.11.2026, bestätigt vom Projektinhaber (aus der funktionierenden Anmeldung abgeleitet) |
 | C0.3 | Im Cloudflare-Dashboard setzen: `OSM_DEV_LOGIN_ENABLED` = `true` (Variable), `OSM_DEV_CLIENT_ID` (Variable), `OSM_DEV_CLIENT_SECRET` (**Secret**), `OSM_DEV_REDIRECT_URI` = die Adresse aus C0.2 (Variable), `OSM_OAUTH_ENCRYPTION_KEY` (**Secret**, falls noch nicht vorhanden). `OSM_DEV_WRITES_ENABLED` bleibt aus | Alle fünf Einträge stehen im Dashboard; der Worker ist danach neu deployt oder die Einstellung ist aktiv | `[x]` 13.11.2026, bestätigt vom Projektinhaber (aus der funktionierenden Anmeldung abgeleitet; Einträge einzeln nicht geprüft) |
-| C0.4 | Prüfen, dass die D1-Migrationen `0006` bis `0009` auf der echten Datenbank eingespielt sind (Der Deploy führt keine Migrationen aus). Auflisten mit `npx wrangler d1 migrations list <Datenbankname> --remote`, fehlende mit `... apply ... --remote` einspielen | Alle vier stehen als eingespielt da | `[x]` 13.11.2026: alle elf Migrationen `0001` bis `0009` stehen in der Datenbank `aedjaeger-pilot` (D1-Abfrage nur lesend) |
+| C0.4 | Migrationsstand der D1-Datenbank `aedjaeger-pilot` vor dem Schreibtest nur lesend prüfen. Der Deploy wendet Migrationen nicht an. `npx wrangler d1 migrations list aedjaeger-pilot --remote` verwenden; fehlende Migrationen nicht im Rahmen dieses Tests spontan anwenden | Alle Migrationen `0001` bis `0011` stehen als angewendet da | `[x]` 15.11.2026: `0010` und `0011` wurden nach PR #99 geprüft und auf der Produktions-D1 angewendet; der aktuelle Deploy-Migrationscheck war erfolgreich ([Lauf #387](https://github.com/FrnkMrz/AEDjaeger/actions/runs/43694419824)). Vor dem Schreibtest Status erneut lesend bestätigen |
 | C0.5 | App öffnen, abgemeldet: „Mit OSM-Testserver anmelden“ ist sichtbar. Anmelden | Nach der Rückkehr ist die Lampe grün; im Info-Dialog steht „Mit OSM-Testserver verbunden“. Es wurde nichts geschrieben | `[x]` 13.11.2026, bestätigt vom Projektinhaber |
-| C0.6 | **Testort wählen.** Die Suche liest AEDs aus dem Archiv des echten OSM; geschrieben wird auf die Dev-Instanz. Ein Treffer aus dem Archiv ist ein echter OSM-Knoten, der auf der Dev-Instanz nicht oder als etwas anderes existiert. Wähle darum einen Ort **ohne AED im Archiv** (aber im abgedeckten Gebiet D, A, CH, LI, LU). Dann fragt die App bei leerem Archiv-Ergebnis die Dev-Instanz direkt ab | Suche am Testort zeigt „keine Treffer nach vollständiger Suche“ | `[ ]` |
-| C0.7 | Zwei Beobachtungsdaten planen: C3 braucht ein Foto mit GPS-Daten vom Testort (oder die Kartenposition dort) und ein Datum, das **mindestens einen Tag vor dem Datum von C2** liegt. Beispiel: C3 mit einem Foto vom Vortag (Datum in der Datumsfrage bestätigen), C2 am nächsten Tag oder mit einem Foto von heute | Beide Daten stehen im Bericht-Entwurf, das Datum von C3 liegt vor dem von C2 | `[ ]` |
+| C0.6 | **Testort wählen.** Die Suche liest AEDs aus dem Archiv des echten OSM; geschrieben wird nur auf die Dev-Instanz. Einen abgedeckten Ort (D, A, CH, LI, LU) ohne AED-Treffer im Archiv wählen. Der frühere Testknoten muss dort über die Dev-Suche auffindbar sein, ohne einen Archivtreffer mit einem echten AED zu verwechseln | App zeigt nach vollständiger Suche den vorgesehenen Testknoten bzw. bestätigt vor einer neuen Neuanlage eine vollständige leere Suche | `[ ]` |
+| C0.7 | Beobachtungsdaten festlegen. Für eine neue C3-Neuanlage muss ihr Datum vor dem C2-Prüfdatum liegen. Ist der Knoten aus dem Vorgang vom 13.11. bereits bestätigt, gilt sein bestehendes `check_date` (`2026-11-13`) als C3-Datum; C2 bekommt ein späteres, nicht zukünftiges Datum | Datum des Testknotens und späteres C2-Datum stehen im Bericht-Entwurf | `[ ]` |
+| C0.8 | **Früheren unklaren Vorgang abgleichen, bevor ein neuer Create begonnen wird.** Während der Schreibschalter aus ist, zuerst lesend mit demselben Dev-Konto Node `4365809370` und Changeset `725093` auf der Dev-Instanz sowie die erwarteten Tags prüfen. Die App-Wiederaufnahme „Status erneut prüfen“ erfolgt unmittelbar nach C1, weil sie den aktivierten Dev-Schreibweg voraussetzt; bis dahin keinen neuen Create starten | Nach der Wiederaufnahme meldet die App den Vorgang als erstellt und die Dev-Instanz bestätigt genau `emergency=defibrillator` und `check_date`; oder es liegt ein eindeutiger Nachweis vor, dass kein Objekt angelegt wurde. Bleibt der Status unklar, Schalter ausschalten und abbrechen; keinen neuen Create senden | `[ ]` |
 
-**Reihenfolge ändern:** Am Testort gibt es zunächst keinen AED auf der Dev-Instanz. Darum zuerst C3 (Neuanlage), danach eine neue Suche am selben Punkt: Sie findet den eben angelegten Knoten über die Dev-Instanz, und daran läuft C2 (`check_date`). Das ergibt sich aus dem Code (`server/osm/staticCandidateSearchRoute.ts`) und ist beim Test zu bestätigen; weicht es ab, gehört das in den Bericht.
+**Ausführungsreihenfolge:** C0.8 zunächst lesend vorbereiten, dann C1 einschalten und als erste Aktion die App-Wiederaufnahme des alten Vorgangs ausführen. Nur wenn eindeutig kein Create stattgefunden hat, C3 neu anlegen; bei unklarem Ergebnis abbrechen und den Schalter ausschalten. Danach am selben Punkt neu suchen und C2 auf demselben Testknoten ausführen. Die Suche soll den Testknoten über die Dev-Instanz finden. Das ergibt sich aus `server/osm/staticCandidateSearchRoute.ts` und ist beim Praxistest zu bestätigen; weicht es ab, stoppen und die Abweichung dokumentieren. C3 ist nicht erneut anzulegen, wenn C0.8 den bereits angelegten Knoten bestätigt.
 
 **Verschiedene Daten für C3 und C2:** Setzt C3 den `check_date` des neuen Knotens auf ein Datum und C2 meldet dasselbe Datum, schreibt die Route nichts (`already_current`, kein Changeset). Das Datum von C2 muss deshalb **später** liegen als das von C3. Ein Datum in der Zukunft ist nicht erlaubt. Darum bekommt C3 ein Datum von mindestens einem Tag früher (Foto vom Vortag), oder C2 läuft am nächsten Tag. Ein Datum, das **älter** ist als das bereits gesetzte, wird als `newer_check_date_exists` abgelehnt; auch das darf beim Test nicht passieren.
 
 **Der Schreibtest in einfachen Worten (iPhone):**
 
 1. **Schalter einschalten (macht der Projektinhaber, nie ein Agent).** Cloudflare-Dashboard, Worker `aedjaeger`, Einstellungen, „Variablen und Secrets“ (die Menünamen können abweichen). Variable `OSM_DEV_WRITES_ENABLED` mit dem Wert `true` anlegen und speichern. Der Wert bleibt bei späteren Deploys erhalten (`keep_vars` in `wrangler.jsonc`). Ob der Schalter wirkt, zeigt `https://aedjaeger.aedjaeger.workers.dev/api/auth/session` im Browser, angemeldet am Testserver: Dort steht `"developmentWriteAvailable":true`. In der App steht dann in der Vorschau nicht mehr „Nur eine Vorschau“, und der Speicher-Knopf erscheint.
-2. **Neuen Test-AED anlegen.** Ein Foto eines echten AED oder Gehäuses wählen, **das keine Ortsangabe enthält**. Hat das Foto GPS-Daten, nimmt die App den Ort aus dem Foto (Foto-GPS hat Vorrang) und die Suche läuft am echten AED, nicht auf dem Feld. Auf dem iPhone entfernt man die Ortsangabe vor dem Auswählen: Fotos, Foto öffnen, Teilen, oben „Optionen“, „Standort“ ausschalten, als Kopie sichern (die Menünamen können abweichen). Dann erscheint die Standortwahl: „Kartenposition“ wählen und einen Punkt **ohne AED im Archiv** setzen, zum Beispiel mitten auf einem Feld. Die Suche muss „keine Treffer nach vollständiger Suche“ zeigen. Dann „Hier fehlt ein AED – neu eintragen“, die Position bestätigen und in der Vorschau das Häkchen setzen. Die Vorschau zeigt nur `emergency=defibrillator` und das Datum. Genau einmal speichern.
-3. **Am nächsten Tag das Prüfdatum erneuern.** Wieder das Foto ohne Ortsangabe, gleiche Kartenposition. Die Suche findet den Test-AED über die Dev-Instanz. „Noch vorhanden“ bestätigen. Das Datum muss **später** sein als beim Anlegen, sonst schreibt die App nichts.
-4. **Ergebnis auf der Dev-Seite ansehen.** Beide Änderungen auf `master.apis.dev.openstreetmap.org` öffnen. Der erste Eintrag hat genau zwei Angaben, beim zweiten hat sich nur das Datum geändert.
-5. **Schalter wieder aus.** Variable entfernen oder auf `false` setzen. Ein neuer Schreibversuch muss abgelehnt werden.
-6. **Echtes OSM ansehen.** Es darf keine Änderung durch den Test geben.
+2. **Den vorhandenen Testvorgang zuerst abgleichen.** C0.8 für Node `4365809370` / Changeset `725093` ausführen. Wird die erfolgreiche Neuanlage bestätigt und stimmen die Tags, gilt C3 als bereits durchgeführt. Keinen zweiten Knoten anlegen.
+3. **Nur falls C0.8 eindeutig belegt, dass keine Neuanlage erfolgte:** Einen Test-AED wie beschrieben an einer vollständigen leeren Suche anlegen und genau einmal speichern. Bleibt die Antwort unklar, stoppen; nicht neu senden.
+4. **Prüfdatum erneuern.** Am selben Testknoten neu suchen. „Noch vorhanden“ bestätigen. Das Datum muss **später** sein als das bereits vorhandene `check_date`, darf aber nicht in der Zukunft liegen.
+5. **Ergebnis auf der Dev-Seite ansehen.** Die Änderungen auf `master.apis.dev.openstreetmap.org` öffnen. Die Neuanlage hat genau `emergency=defibrillator` und `check_date`; beim zweiten Vorgang hat sich nur das Datum geändert.
+6. **Schalter wieder aus.** Variable entfernen oder auf `false` setzen. Ein neuer Schreibversuch muss abgelehnt werden.
+7. **Echtes OSM ansehen.** Es darf keine Änderung durch den Test geben.
 
 Warum die Kartenposition: Die Suche liest die echten AEDs des echten OSM, geschrieben wird nur auf den Testserver. Ein echter AED aus dem Archiv (zum Beispiel der am Feuerwehrhaus) ist auf dem Testserver nicht vorhanden und darf dort nicht „bestätigt“ werden. Der Testpunkt auf dem Feld ist Testdaten auf dem Testserver; im echten OSM würde man immer die echte Position nehmen.
 
@@ -118,15 +122,15 @@ Ablauf:
 | Nr | Schritt | Erwartetes Ergebnis | Ergebnis |
 | --- | --- | --- | --- |
 | C1 | `OSM_DEV_WRITES_ENABLED` als Worker-Variable im Cloudflare-Dashboard auf `true` setzen | Der Schalter ist nur für diesen Testlauf an. Ob dafür eine neue Version nötig ist, ist im Dashboard zu prüfen; das Repository belegt dazu nichts | `[ ]` |
-| C2 | Genau **eine** `check_date`-Bestätigung an einem vorhandenen AED durchführen, mit einem Beobachtungsdatum **nach** dem von C3 (siehe C0.7) | Vorschau zeigt nur `check_date`; nach Bestätigung genau eine Änderung auf der Dev-Instanz (ein neues Changeset, nicht `already_current`) | `[ ]` |
-| C3 | Genau **eine** Neuanlage durchführen (nur nach erfolgreicher, vollständiger Suche im Testgebiet) | Vorschau zeigt nur `emergency=defibrillator` und `check_date`; genau ein neuer Knoten | `[ ]` |
+| C3 | Vorhandene Neuanlage aus C0.8 als C3 bestätigen. Nur wenn zweifelsfrei kein Create stattgefunden hat: genau eine Neuanlage nach erfolgreicher, vollständiger Suche im Testgebiet durchführen | App meldet den alten Vorgang als erstellt und die Dev-Instanz zeigt genau die zwei erwarteten Tags; andernfalls höchstens ein neu erstellter Knoten. Kein Create bei unklarem Status | `[ ]` |
+| C2 | Danach genau **eine** `check_date`-Bestätigung an demselben Testknoten durchführen, mit einem Beobachtungsdatum **nach** dem vorhandenen Datum von C3 (siehe C0.7) | Vorschau zeigt nur `check_date`; nach Bestätigung genau eine Änderung auf der Dev-Instanz (ein neues Changeset, nicht `already_current`) | `[ ]` |
 | C4 | Changeset auf der Dev-Instanz öffnen und prüfen | Bei C2 ist nur `check_date` geändert. Bei C3 sind nur `emergency=defibrillator` und `check_date` gesetzt | `[ ]` |
 | C5 | Schalter wieder ausschalten (`OSM_DEV_WRITES_ENABLED` entfernen oder `false`) | Ein erneuter Schreibversuch wird abgelehnt | `[ ]` |
 | C6 | Produktions-OSM prüfen | Es gibt keine Änderung durch diesen Test | `[ ]` |
 
 **Erster Versuch am 13.11.2026 (iPhone):** Die Neuanlage legte auf dem Testserver den Knoten `4365809370` an (Änderungssatz `725093`, Version 1, genau die zwei Angaben `emergency=defibrillator` und `check_date=2026-11-13`; der Änderungssatz wurde nach etwa 10 Sekunden geschlossen). Die App blieb trotzdem bei „Testserver: Ergebnis unklar“. Ursache: Die Statusprüfung des Änderungssatzes las nur XML, der Testserver antwortete mit JSON. Behoben im Code, mit Tests; ohne Deploy bleibt der Zustand unverändert. Nach dem Deploy bestätigt „Testserver: Status erneut prüfen“ den vorhandenen Vorgang, ohne einen zweiten Knoten anzulegen. Der Test ist erst abgehakt, wenn die App „erstellt“ meldet.
 
-### Zusatztest für den Detailweg (Etappen P2 bis P5)
+### Zusatztest für den Detailweg (Etappen P2 bis P5; Prüfschritte D1–D7)
 
 Erst nach C2 bis C4, am gleichen Testort und mit demselben Schalter `OSM_DEV_WRITES_ENABLED`. Der Schalter `OSM_DETAIL_CORRECTIONS_ENABLED` wird wie der Schreibschalter nur vom Projektinhaber gesetzt, nie von einem Agenten, und nur für D4 bis D6 eingeschaltet.
 
@@ -157,7 +161,7 @@ Abnahmebericht (ausfüllen, ohne Tokens):
 
 Hinweise: Wiederholte Klicks sind zu vermeiden. Bei einem Verbindungsabbruch darf der Vorgang nicht blind wiederholt werden; die App gleicht den Stand über das ursprüngliche Changeset ab. Ergebnisse (Changeset-Nummer, Node-ID, Zeitpunkt) gehören in den Abnahmebericht, aber keine Tokens.
 
-## D. Rückweg
+## Rückweg bei einem Vorfall
 
 Wenn der Test auffällig ist:
 
@@ -174,7 +178,7 @@ Der Tag `v0.1.0` wird nur gesetzt, wenn alle folgenden Punkte erfüllt sind:
 - [ ] Abschnitt B ist bestanden.
 - [ ] Abschnitt C ist bestanden und der Schalter ist wieder aus.
 - [ ] `CHANGELOG.md` enthält die Fassung 0.1.0 mit Datum.
-- [ ] Die Änderungen sind über einen Pull Request in `main` gemergt; die Code-Owner-Freigabe liegt vor.
+- [ ] Die Änderungen sind über Pull Requests in `main` gemergt und alle erforderlichen Statusprüfungen sind grün. Die Freigabeanforderung richtet sich nach der dann aktuellen Branch-Protection-Regel; Stand 13.11.2026 ist keine Code-Owner-Freigabe erforderlich.
 - [ ] Der Tag zeigt auf genau diesen gemergten `main`-Commit.
 - [ ] Die ausdrückliche Freigabe der Projektinhaberin oder des Projektinhabers liegt vor.
 

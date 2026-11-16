@@ -1,4 +1,5 @@
 import "./styles.css";
+import { isRecord } from "../shared/typeGuards.js";
 import { endOSMSession, loadOSMSession } from "./auth/osmSession";
 import type { CandidateResultState, DevelopmentWriteRequest, FlowState } from "./domain/workflow";
 import { translate, translations, type Language, type TranslationKey } from "./i18n/translations";
@@ -12,7 +13,7 @@ import {
 } from "./vision/analyzePhoto";
 import { isAedRecognized } from "./contracts/visionObservation";
 import { formatBuildTime } from "./pwa/buildInfo";
-import { CONFIRM_RADIUS_METERS, MAX_LOCATION_ACCURACY_METERS, NEARBY_RADIUS_METERS } from "./domain/matchPolicy";
+import { MAX_LOCATION_ACCURACY_METERS, NEARBY_RADIUS_METERS } from "./domain/matchPolicy";
 import { successSound } from "./sound/successSound";
 import { readStoredValue, removeStoredValue, writeStoredValue } from "./storage/safeStorage";
 import { startUpdateWatcher } from "./pwa/updateCheck";
@@ -24,13 +25,11 @@ import {
   type LocationPermission,
 } from "./location/phoneLocationPermission";
 import { assessCandidateSearch } from "./domain/assessCandidateSearch";
-import { createPositionPicker, zoomToFitMarkers, type Coordinate, type MapMarker } from "./map/positionPicker";
-import { previewExistingAedCheck, previewNewAed } from "./domain/osmChangeProposal";
+import { getPhotoUrl, hasActivePhotoDraft, hasUnresolvedSave, isNewEntryPanelOpen } from "./domain/workflowSelectors";
+import type { Coordinate } from "./map/positionPicker";
+import { previewNewAed } from "./domain/osmChangeProposal";
 import {
-  ACCESS_VALUES,
-  DETAIL_LIMITS,
   EMPTY_DETAIL_FORM,
-  INDOOR_VALUES,
   buildDetailTags,
   formFromExistingTags,
   isDetailKey,
@@ -47,8 +46,13 @@ import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } fr
 import { ExistingNodeError, requestExistingNode } from "./osm/existingNode";
 import { sendDevelopmentWrite } from "./net/developmentWrite";
 import { createPhotoSessionState } from "./state/photoSession";
+import { dispatchUiAction } from "./ui/actions/actionRouter";
+import { handleCandidateAction } from "./ui/actions/candidateActions";
+import { handleDevelopmentWriteAction } from "./ui/actions/developmentWriteActions";
+import { handleExistingDetailsAction } from "./ui/actions/existingDetailsActions";
+import { handleNewEntryAction } from "./ui/actions/newEntryActions";
 import { dispatchPhotoLocationAction } from "./ui/actions/photoLocationActions";
-import { renderPhotoState } from "./ui/views/photoStates";
+import { renderStatusContent } from "./ui/views/statusContent";
 import {
   accountPanel as renderAccountPanel,
   loginEntry as renderLoginEntry,
@@ -62,18 +66,26 @@ import {
   renderDetailForm,
   type DetailFormViewContext,
 } from "./ui/views/detailForm";
+import { bindDetailForm as bindDetailFormInput } from "./ui/controllers/detailFormBinding";
+import { bindWorkflowMap } from "./ui/controllers/mapBindings";
+import { bindRenderedControls } from "./ui/controllers/renderBindings";
+import { createUpdateBannerRenderer } from "./ui/controllers/updateBanner";
+import { createAccountPanelBindings } from "./ui/controllers/accountPanelBindings";
 import {
-  formatCalendarDate,
   isCalendarDate,
   isFreshCapture,
   isValidObservedDate,
   localCalendarDate,
   photoDateNeedsConfirmation,
 } from "./domain/localDate";
-import { defibrillatorMark, displayCandidateLabel, escapeHtml, icon } from "./ui/markup";
+import { defibrillatorMark, escapeHtml } from "./ui/markup";
+import { renderAppShell } from "./ui/views/appShell";
 
-const app = document.querySelector<HTMLDivElement>("#app");
-if (!app) throw new Error("App root element was not found.");
+const app = (() => {
+  const root = document.querySelector<HTMLDivElement>("#app");
+  if (!root) throw new Error("App root element was not found.");
+  return root;
+})();
 
 const languageNames: Record<Language, string> = {
   de: "Deutsch",
@@ -436,7 +448,7 @@ function openAccountFromLamp(): void {
   // Die Reihenfolge der Auswahl ist Absicht: Ein Selektor mit Komma würde das erste Element im Dokument nehmen, also die Überschrift.
   let target: HTMLElement | null = null;
   for (const selector of ["#osm-sign-in", "#osm-dev-sign-in", "#osm-session-retry", "#osm-sign-out", "#login-title"]) {
-    target = app!.querySelector<HTMLElement>(selector);
+    target = app.querySelector<HTMLElement>(selector);
     if (target) break;
   }
   target?.scrollIntoView({ block: "center" });
@@ -454,54 +466,11 @@ function buildVersionText(): string {
   return time ? `${text} · ${time}` : text;
 }
 
-function getPhotoUrl(current: FlowState): string | undefined {
-  return "photoUrl" in current ? current.photoUrl : undefined;
-}
-
-function hasUnresolvedSave(current: FlowState): boolean {
-  return (
-    current.kind === "candidate-searching" ||
-    (current.kind === "new-aed-preview" &&
-      (current.writeStatus === "sending" || current.writeStatus === "uncertain")) ||
-    (current.kind === "osm-preview" && (current.writeStatus === "sending" || current.writeStatus === "uncertain"))
-  );
-}
-
-function hasActivePhotoDraft(current: FlowState): boolean {
-  return current.kind !== "ready";
-}
-
-/**
- * Sagt, ob der Bereich „neuen AED eintragen“ (Karte + Positionsbestätigung) geöffnet ist.
- *
- * Sicherheitsregel: Eine Neuanlage braucht immer ZWEI getrennte, ausdrückliche Bestätigungen.
- * Diese Funktion prüft die ERSTE davon:
- *  - Suche ohne Treffer: Die Person hat „Hier fehlt ein AED – neu eintragen“ gedrückt.
- *  - Suche mit Treffern: Die Person hat „Keiner davon – neuen AED eintragen“ gedrückt.
- * Die ZWEITE Bestätigung folgt in der Vorschau direkt vor dem Speichern (Haken „vor Ort geprüft“).
- * Eine unvollständige oder fehlgeschlagene Suche öffnet den Bereich nie.
- */
-function newEntryPanelOpen(current: FlowState): boolean {
-  if (current.kind !== "candidate-result" || current.search.status !== "complete") return false;
-  if (current.assessment.kind === "new-entry-eligible") return current.newEntryRequested === true;
-  return current.assessment.kind === "candidate-review" && current.noneOfTheseConfirmed === true;
-}
-
 /**
  * Baut die nummerierten Kartenmarker für die angezeigten Suchtreffer.
  * Die Nummer (1, 2, 3 …) ist dieselbe wie in der Trefferliste, damit man Karte und Liste
  * leicht zuordnen kann. Es werden nur die tatsächlich angezeigten Treffer markiert.
  */
-function reviewedCandidateMarkers(current: FlowState): MapMarker[] {
-  if (current.kind !== "candidate-result" || current.assessment.kind !== "candidate-review") return [];
-  const markers: MapMarker[] = [];
-  current.assessment.candidates.forEach((ranked, index) => {
-    const candidate = current.search.candidates.find((item) => item.id === ranked.id);
-    if (candidate) markers.push({ position: candidate.position, label: String(index + 1) });
-  });
-  return markers;
-}
-
 /**
  * Baut die Vorschau einer Neuanlage aus dem Suchergebnis, der bestätigten Position und den Detailangaben.
  *
@@ -548,22 +517,6 @@ function computeNewAedPreview(current: CandidateResultState, positionConfirmed: 
 // weitere Felder ein- oder ausblenden, wird der Formularteil (#detail-form) neu gezeichnet.
 // ---------------------------------------------------------------------------------------------------------------
 
-/** Die Textfelder des Formulars. Sie entsprechen den gleichnamigen Feldern von AedDetailForm. */
-type DetailTextField = "location" | "hoursText" | "operator" | "phone" | "description" | "ref";
-const DETAIL_TEXT_FIELDS: readonly DetailTextField[] = [
-  "location",
-  "hoursText",
-  "operator",
-  "phone",
-  "description",
-  "ref",
-];
-
-/** Prüft, ob ein Text aus dem DOM der Name eines Textfelds ist (statt einem Attribut blind zu vertrauen). */
-function isDetailTextField(value: string | undefined): value is DetailTextField {
-  return value !== undefined && (DETAIL_TEXT_FIELDS as readonly string[]).includes(value);
-}
-
 /**
  * Abschnitt des Formulars, in dem ein Schlüssel steht. Damit erscheint eine Fehlermeldung direkt beim
  * betroffenen Feld und nicht irgendwo.
@@ -587,11 +540,6 @@ function resetDetailForm(): void {
   detailExistingTags = undefined;
   detailCorrectMode = false;
   detailLockedKeys = new Set();
-}
-
-/** Wählt aus einer festen Werteliste den passenden Wert oder `null` („Weiß ich nicht“). */
-function pickAllowed<T extends string>(allowed: readonly T[], raw: string): T | null {
-  return (allowed as readonly string[]).includes(raw) ? (raw as T) : null;
 }
 
 function detailFormViewContext(): DetailFormViewContext {
@@ -672,21 +620,21 @@ function detailFooterMarkup(): string {
  */
 function updateDetailFooter(): void {
   const built = currentDetailPlan();
-  const button = app!.querySelector<HTMLButtonElement>("#detail-continue");
+  const button = app.querySelector<HTMLButtonElement>("#detail-continue");
   if (button) {
     button.disabled = !built.ok;
     button.textContent = detailContinueLabel(built.ok ? Object.keys(built.tags).length : 0);
   }
   const failingGroup = !built.ok && isDetailKey(built.key) ? DETAIL_GROUP_OF_KEY[built.key] : undefined;
-  app!.querySelectorAll<HTMLElement>("[data-detail-error]").forEach((slot) => {
+  app.querySelectorAll<HTMLElement>("[data-detail-error]").forEach((slot) => {
     slot.hidden = slot.dataset.detailError !== failingGroup;
   });
   // Steckt der Fehler in „Mehr Angaben“, muss der Abschnitt offen sein, sonst sieht ihn niemand.
   if (failingGroup === "more") {
-    const details = app!.querySelector<HTMLDetailsElement>("#detail-more");
+    const details = app.querySelector<HTMLDetailsElement>("#detail-more");
     if (details) details.open = true;
   }
-  const moreCount = app!.querySelector<HTMLElement>("#detail-more-count");
+  const moreCount = app.querySelector<HTMLElement>("#detail-more-count");
   if (moreCount) moreCount.textContent = detailMoreCountText();
   showDetailChanges(built.ok ? built.corrections : [], built.ok ? staleLevelNote(built.tags) : "");
 }
@@ -727,7 +675,7 @@ function showDetailChanges(corrections: readonly DetailCorrection[], levelNote =
     });
     linesByGroup.set(group, [...(linesByGroup.get(group) ?? []), label ? `${tv(label)}: ${was}` : was]);
   }
-  app!.querySelectorAll<HTMLElement>("[data-detail-was]").forEach((slot) => {
+  app.querySelectorAll<HTMLElement>("[data-detail-was]").forEach((slot) => {
     const lines = linesByGroup.get(slot.dataset.detailWas ?? "");
     slot.hidden = lines === undefined;
     slot.textContent = lines ? lines.join(" · ") : "";
@@ -740,7 +688,7 @@ function showDetailChanges(corrections: readonly DetailCorrection[], levelNote =
  * Person gerade bedient hat. So bleibt die Bedienung per Tastatur und Screenreader zusammenhängend.
  */
 function refreshDetailForm(focusId?: string): void {
-  const host = app!.querySelector<HTMLElement>("#detail-form");
+  const host = app.querySelector<HTMLElement>("#detail-form");
   if (!host) return;
   host.innerHTML = detailFormMarkup();
   updateDetailFooter();
@@ -749,7 +697,7 @@ function refreshDetailForm(focusId?: string): void {
 
 /** Setzt den Wert des Ebenen-Zählers in der Anzeige (ohne Neuzeichnen). */
 function showDetailLevel(): void {
-  const output = app!.querySelector<HTMLOutputElement>("#detail-level-value");
+  const output = app.querySelector<HTMLOutputElement>("#detail-level-value");
   if (output) output.textContent = detailForm.level === null ? "–" : String(detailForm.level);
 }
 
@@ -759,84 +707,15 @@ function showDetailLevel(): void {
  * Wird von render() aufgerufen, nachdem die Seite neu geschrieben wurde.
  */
 function bindDetailForm(): void {
-  const host = app!.querySelector<HTMLElement>("#detail-form");
-  if (!host) return;
-
-  // Auswahlfelder (Radio): Wert speichern, bei Bedarf Folgefelder ein- oder ausblenden.
-  host.addEventListener("change", (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement) || target.type !== "radio") return;
-    const field = target.dataset.detailRadio;
-    if (field === "access") {
-      detailForm.access = pickAllowed(ACCESS_VALUES, target.value);
-    } else if (field === "indoor") {
-      detailForm.indoor = pickAllowed(INDOOR_VALUES, target.value);
-      // Die Ebene gehört nur zu einem Gerät im Gebäude.
-      if (detailForm.indoor !== "yes") detailForm.level = null;
-    } else if (field === "hoursMode") {
-      detailForm.hoursMode = pickAllowed(["always", "times"] as const, target.value);
-    } else {
-      return;
-    }
-    refreshDetailForm(target.id);
-  });
-
-  // Textfelder: nur das Modell und die Fußleiste aktualisieren, das Feld selbst bleibt unangetastet.
-  host.addEventListener("input", (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement)) return;
-    const field = target.dataset.detailText;
-    if (!isDetailTextField(field)) return;
-    detailForm[field] = target.value;
-    updateDetailFooter();
-  });
-
-  // Knöpfe im Formular: Schnellwahl für den Standort, Zeiten-Vorlagen, Ebenen-Zähler.
-  host.addEventListener("click", (event) => {
-    const button = (event.target as HTMLElement).closest<HTMLElement>("button");
-    if (!button) return;
-    if (button.dataset.detailAddloc !== undefined) {
-      const base = detailForm.location.trim();
-      const next = base === "" ? button.dataset.detailAddloc : `${base}, ${button.dataset.detailAddloc}`;
-      if (next.length > DETAIL_LIMITS.location) return;
-      detailForm.location = next;
-      const input = host.querySelector<HTMLInputElement>("#detail-location");
-      if (input) input.value = next;
-      updateDetailFooter();
-    } else if (button.dataset.detailHoursPreset !== undefined) {
-      detailForm.hoursText = button.dataset.detailHoursPreset;
-      const input = host.querySelector<HTMLInputElement>("#detail-hours-text");
-      if (input) input.value = detailForm.hoursText;
-      updateDetailFooter();
-    } else if (button.dataset.detailStep !== undefined) {
-      const step = Number(button.dataset.detailStep) < 0 ? -1 : 1;
-      // Der erste Tipp landet auf 0 (Erdgeschoss), egal in welche Richtung: Das ist der häufigste Fall.
-      detailForm.level =
-        detailForm.level === null
-          ? 0
-          : Math.max(DETAIL_LIMITS.levelMin, Math.min(DETAIL_LIMITS.levelMax, detailForm.level + step));
-      showDetailLevel();
-      updateDetailFooter();
-    } else if (button.dataset.detailLevelClear !== undefined) {
-      detailForm.level = null;
-      showDetailLevel();
-      updateDetailFooter();
-    }
-  });
-
-  // Aufklappen merken, damit „Mehr Angaben“ beim Neuzeichnen offen bleibt. Das Ereignis „toggle“ bubbelt nicht,
-  // deshalb wird es in der Aufnahmephase am Behälter abgefangen.
-  host.addEventListener(
-    "toggle",
-    (event) => {
-      if (event.target instanceof HTMLDetailsElement && event.target.id === "detail-more")
-        detailMoreOpen = event.target.open;
+  bindDetailFormInput(app, {
+    getForm: () => detailForm,
+    refreshDetailForm,
+    showDetailLevel,
+    updateDetailFooter,
+    setMoreOpen: (open) => {
+      detailMoreOpen = open;
     },
-    true,
-  );
-
-  // Stand von Knopf, Fehlermeldungen und „Vorher“-Zeilen sofort herstellen (wichtig beim Zurückkehren aus der Vorschau).
-  updateDetailFooter();
+  });
 }
 
 function statusContent(): string {
@@ -844,388 +723,31 @@ function statusContent(): string {
   const photoMarkup = photoUrl
     ? `<img class="photo-preview" src="${escapeHtml(photoUrl)}" alt="${t("photoAlt")}" />`
     : "";
-  if (
-    state.kind === "photo" ||
-    state.kind === "photo-checking" ||
-    state.kind === "photo-rejected" ||
-    state.kind === "photo-date" ||
-    state.kind === "location-choice" ||
-    state.kind === "location-map" ||
-    state.kind === "candidate-searching"
-  )
-    return renderPhotoState(state, {
-      t,
-      tv,
-      escapeHtml,
-      photoMarkup,
-      photoCheckAvailable,
-      selectedPhotoFileAvailable: photoSession.file !== undefined,
-      mapLocationOverride: photoSession.mapLocationOverride,
-      minimumMapSearchZoom,
-    });
-
-  switch (state.kind) {
-    case "ready":
-      return `<div class="empty-illustration" aria-hidden="true"><span class="device-card">${defibrillatorMark(defibrillatorPath)}</span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>`;
-    case "candidate-result": {
-      const { assessment, search } = state;
-      const candidatesToShow: Array<{ candidate: (typeof search.candidates)[number]; distanceMeters?: number }> = [];
-      if (assessment.kind === "candidate-review") {
-        for (const rankedCandidate of assessment.candidates) {
-          const candidate = search.candidates.find((item) => item.id === rankedCandidate.id);
-          if (candidate) candidatesToShow.push({ candidate, distanceMeters: rankedCandidate.distanceMeters });
-        }
-      } else if (assessment.kind === "search-incomplete") {
-        for (const candidate of search.candidates) candidatesToShow.push({ candidate });
-      }
-      // Nur bei einer vollständigen Trefferprüfung gibt es Kartenmarker; dann bekommt jeder
-      // Listeneintrag dieselbe Nummer wie sein Marker auf der Karte.
-      const numbered = assessment.kind === "candidate-review";
-      const candidates = candidatesToShow
-        .map(({ candidate, distanceMeters }, index) => {
-          const name = displayCandidateLabel(
-            candidate.tags.name || candidate.tags["defibrillator:location"] || "",
-            tv("unnamedAed"),
-          );
-          const label = numbered ? `${index + 1}. ${name}` : name;
-          const distance =
-            distanceMeters === undefined
-              ? ""
-              : `<span>${escapeHtml(tv("distance", { distance: Math.round(distanceMeters) }))}</span>`;
-          // Zwei Stufen (siehe src/domain/matchPolicy.ts): Bis 10 m ist es ein Treffer zum Bestätigen. Zwischen 10 und
-          // 50 m steht nur ein Hinweis mit der Entfernung; der AED muss vor einer Neuanlage geprüft werden, lässt sich
-          // aber nicht als "noch vorhanden" bestätigen.
-          const tooFarToConfirm = distanceMeters !== undefined && distanceMeters > CONFIRM_RADIUS_METERS;
-          // Zweiter Weg direkt aus der Liste: Angaben ansehen und ergänzen (bzw. ändern), bevor das Datum bestätigt wird. Das
-          // Datum folgt am Ende mit einem Speichern für alles. Nur für AEDs, die es auf dem Testserver gibt: Ein AED aus dem
-          // Archiv des echten OSM existiert dort nicht und lässt sich nicht bearbeiten.
-          const detailsAction =
-            developmentSession &&
-            developmentWriteAvailable &&
-            developmentWriteOwnerHash &&
-            candidate.source !== "archive"
-              ? `<button class="button button-secondary" data-action="open-candidate-details" data-candidate-id="${escapeHtml(candidate.id)}">${tv(developmentCorrectionsAvailable ? "candidateDetailsChange" : "candidateDetailsView")}</button>`
-              : "";
-          const reviewAction =
-            candidate.osmType !== "node"
-              ? `<span class="supporting-copy">${tv("previewUnsupportedShort")}</span>`
-              : tooFarToConfirm
-                ? `<span class="supporting-copy">${tv("candidateTooFar", { meters: CONFIRM_RADIUS_METERS })}</span>`
-                : `<button class="button button-secondary" data-action="preview-candidate" data-candidate-id="${escapeHtml(candidate.id)}">${tv("selectCandidate")}</button>${detailsAction}`;
-          return `<li class="candidate-item"><strong>${escapeHtml(label)}</strong>${distance}${reviewAction}</li>`;
-        })
-        .join("");
-      let outcome: string;
-      if (search.status === "partial" || assessment.kind === "search-incomplete") outcome = tv("searchPartial");
-      else if (assessment.kind === "candidate-review")
-        outcome = tv("searchFound", { count: assessment.candidates.length });
-      else if (assessment.kind === "new-entry-eligible") outcome = tv("searchNoMatch");
-      else if (assessment.kind === "location-too-uncertain") outcome = tv("locationUncertain");
-      else outcome = tv("searchFailedResult");
-      const selectedPosition = newAedPositionOverride ?? state.location;
-      const mayPrepareNewEntry = newEntryPanelOpen(state);
-      const newEntryAction = mayPrepareNewEntry
-        ? `<section class="position-picker-panel" aria-labelledby="new-aed-position-title"><h3 id="new-aed-position-title">${tv("newPositionMapLabel")}</h3><p class="position-picker-help">${tv("newPositionMapHelp")}</p><div id="new-aed-position-map" class="position-map" role="application" tabindex="0" aria-label="${tv("newPositionMapLabel")}" aria-describedby="new-position-map-instructions"></div><p class="sr-only" id="new-position-map-instructions">${tv("mapNavigationHelp")}</p><p class="position-map-coordinates" id="new-aed-position-coordinates" aria-live="polite">${tv("newPreviewCoordinates", { latitude: selectedPosition.latitude.toFixed(5), longitude: selectedPosition.longitude.toFixed(5) })}</p><div class="position-confirmation"><label for="new-aed-position-confirmed"><input id="new-aed-position-confirmed" type="checkbox" /><span id="new-aed-position-label">${tv("newPositionConfirm", { latitude: selectedPosition.latitude.toFixed(5), longitude: selectedPosition.longitude.toFixed(5) })}</span></label><button class="button button-primary" data-action="preview-new-aed">${tv("newPreviewAction")}</button></div></section>`
-        : "";
-      // Erste von zwei Bestätigungen für eine Neuanlage (siehe newEntryPanelOpen):
-      // Erst dieser bewusste Tastendruck öffnet Karte und Positionsbestätigung.
-      const startNewEntry =
-        search.status !== "complete" || mayPrepareNewEntry
-          ? ""
-          : assessment.kind === "candidate-review"
-            ? `<button class="button button-quiet" data-action="none-of-these">${tv("noneMatchAction")}</button>`
-            : assessment.kind === "new-entry-eligible"
-              ? `<button class="button button-quiet" data-action="start-new-entry">${tv("newEntryStart")}</button>`
-              : "";
-      // Übersichtskarte: zeigt den gesuchten Standort (roter Punkt) und die nummerierten Treffer.
-      // Sie entfällt, sobald der Neuanlage-Bereich offen ist – dessen Karte zeigt dieselben Marker.
-      const overviewMap =
-        numbered && candidatesToShow.length > 0 && !mayPrepareNewEntry
-          ? `<div id="candidate-overview-map" class="position-map" role="application" tabindex="0" aria-label="${tv("overviewMapLabel")}" aria-describedby="overview-map-instructions"></div><p class="sr-only" id="overview-map-instructions">${tv("mapNavigationHelp")}</p><p class="position-map-privacy">${tv("overviewMapLegend")}</p>`
-          : "";
-      const retryWaitSeconds =
-        state.retryAvailableAt === undefined ? 0 : Math.max(0, Math.ceil((state.retryAvailableAt - Date.now()) / 1000));
-      const retry =
-        search.status === "partial" || assessment.kind === "search-incomplete"
-          ? retryWaitSeconds > 0
-            ? `<p class="simulation-note search-wait" aria-live="off">${tv("searchWait", { seconds: retryWaitSeconds })}</p>`
-            : `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`
-          : "";
-      const locationSource =
-        photoSession.searchLocationSource === "photo"
-          ? "locationSourcePhoto"
-          : photoSession.searchLocationSource === "map"
-            ? "locationSourceMap"
-            : "locationSourcePhone";
-      // Bewusst keine technische Zeile mehr zu Datenstand und Snapshot-Kennung: Sie half bei der
-      // Fehlersuche, aber nicht der Person vor Ort. Zu alte Daten sperrt der Server ohnehin.
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">?</span><div><h2>${tv("searchTitle")}</h2><p>${escapeHtml(outcome)}</p><p class="supporting-copy">${tv(locationSource)}</p>${overviewMap}${candidates ? `<ul class="candidate-list">${candidates}</ul>` : ""}</div></div>${newEntryAction}${retry}${startNewEntry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-    }
-    case "new-aed-details": {
-      // Kleines Foto oben, damit das Formular Platz hat. Die eigentliche Arbeit passiert in #detail-form (siehe bindDetailForm).
-      const thumbnail = photoMarkup.replace('class="photo-preview"', 'class="photo-preview photo-thumb"');
-      return `<div class="detail-form-root">${thumbnail}<div class="result-message"><span class="status-icon status-good" aria-hidden="true">✓</span><div><h2>${tv("detailsTitle")}</h2><p>${tv("detailsIntro")}</p></div></div><div id="detail-form">${detailFormMarkup()}</div>${detailFooterMarkup()}</div>`;
-    }
-    case "new-aed-preview": {
-      const point = state.result.kind === "ready" ? state.result.position : state.returnState.location;
-      const latitude = point.latitude.toFixed(5);
-      const longitude = point.longitude.toFixed(5);
-      const content =
-        state.result.kind === "ready"
-          ? `<p>${tv("newPreviewCoordinates", { latitude, longitude })}</p><strong>${tv("newPreviewTags")}</strong><ul>${Object.entries(
-              state.result.tags,
-            )
-              .map(([key, value]) => `<li><code>${escapeHtml(key)}=${escapeHtml(value)}</code></li>`)
-              .join(
-                "",
-              )}</ul><p>${state.result.confirmedDifferentCandidateIds.length > 0 ? tv("newPreviewReviewedCandidates") : tv("newPreviewCaution")}</p>`
-          : `<p>${tv(state.result.reason === "position-not-confirmed" ? "newPositionRequired" : state.result.reason === "search-found-candidate" ? "newPreviewFoundCandidate" : "newPreviewSearchInvalid")}</p>`;
-      const canCreate =
-        developmentSession &&
-        developmentWriteAvailable &&
-        Boolean(developmentWriteOwnerHash) &&
-        state.result.kind === "ready";
-      const statusCopy =
-        state.writeStatus === "complete"
-          ? tv("developmentCreated")
-          : state.writeStatus
-            ? tv(developmentWriteStatusKeys[state.writeStatus])
-            : "";
-      const blockedRecovery =
-        state.writeStatus === "uncertain" &&
-        (isRecoveryOwnerMismatch() || !developmentSession || !developmentWriteAvailable)
-          ? `<p class="simulation-note" role="status">${tv(isRecoveryOwnerMismatch() ? "recoveryWrongAccount" : !developmentSession ? "recoveryNeedSignIn" : "recoveryWritesDisabled")}</p>`
-          : "";
-      const writeStatus = state.writeStatus
-        ? `<p role="status" class="simulation-note ${state.writeStatus === "complete" ? "save-status-success" : ""}">${statusCopy}</p>${blockedRecovery}`
-        : "";
-      // Zweite von zwei Bestätigungen für eine Neuanlage: Ohne diesen Haken bleibt der
-      // Speichern-Knopf gesperrt. Der Klick-Handler prüft den Haken zusätzlich noch einmal.
-      const writeAction =
-        canCreate && !state.writeStatus
-          ? `<div class="position-confirmation"><label for="new-aed-absence-confirmed"><input id="new-aed-absence-confirmed" type="checkbox" /><span>${tv("newAbsenceConfirm")}</span></label></div><button class="button button-primary" data-action="create-development-node" disabled>${tv("developmentCreateAction")}</button>`
-          : state.writeStatus === "uncertain" && state.operationId && !isRecoveryOwnerMismatch()
-            ? `<button class="button button-secondary" data-action="retry-development-write">${developmentSession && developmentWriteAvailable ? tv("developmentRetry") : tv("recoveryContinue")}</button>`
-            : "";
-      // Der Hinweis „nur eine Vorschau“ steht nur, wenn es nichts zu speichern gibt. Mit Speichern-Knopf sagt dessen
-      // Beschriftung („Testserver: AED eintragen“) schon, wohin die Änderung geht.
-      // Der Hinweis „nur eine Vorschau“ gilt nur, wenn gar nichts gespeichert werden kann und kein Vorgang läuft. Nach einem
-      // Speichern (oder währenddessen) wäre er falsch; dann sagt die Statusmeldung, was passiert ist.
-      const noWriteNotice =
-        !canCreate && !state.writeStatus ? `<p class="simulation-note">${tv("previewNoWrite")}</p>` : "";
-      // „Zurück“ bleibt hier immer: Es führt zur Positionsbestätigung bzw. zur Suche, nicht nur zu Treffern.
-      // Kommt die Vorschau aus dem Detailformular, führt „Zurück“ dorthin (die Eingaben bleiben erhalten). Sonst zur Suche.
-      const backButton = state.detailsPosition
-        ? `<button class="button button-quiet" data-action="back-to-details">${tv("detailsBackToForm")}</button>`
-        : `<button class="button button-quiet" data-action="back-to-search">${tv("previewBack")}</button>`;
-      const navigation =
-        state.writeStatus === "sending" || state.writeStatus === "uncertain"
-          ? ""
-          : state.writeStatus === "complete"
-            ? `<button class="button button-primary" data-action="retake">${tv("nextAed")}</button>`
-            : `${backButton}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-      const successful = state.writeStatus === "complete";
-      return `${photoMarkup}<div class="result-message"><span class="status-icon ${successful ? "status-good" : "status-warn"}" aria-hidden="true">${successful ? "✓" : "!"}</span><div><h2>${tv("newPreviewTitle")}</h2>${content}${noWriteNotice}${writeStatus}</div></div>${writeAction}${navigation}`;
-    }
-    case "osm-preview": {
-      const { result } = state;
-      const candidateId = state.candidateId;
-      const candidate = state.returnState.search.candidates.find((item) => item.id === candidateId);
-      // Ein AED aus dem Archiv des echten OSM gibt es auf dem Testserver nicht. Dafür gibt es dort keinen Speichern-Knopf.
-      const archiveOnly = developmentSession && developmentWriteAvailable && candidate?.source === "archive";
-      const canWrite =
-        developmentSession &&
-        developmentWriteAvailable &&
-        Boolean(developmentWriteOwnerHash) &&
-        candidate?.osmType === "node" &&
-        result.kind === "ready" &&
-        !archiveOnly;
-      // Nur das Wesentliche: das neue Prüfdatum. Der bisherige Wert steht nur da, wenn es einen gibt.
-      const content =
-        result.kind === "ready"
-          ? `<p><strong>${tv("previewNewDate", { date: formatCalendarDate(result.changes[0].after, language) })}</strong></p>${result.changes[0].before ? `<p>${tv("previewOldDate", { date: escapeHtml(formatCalendarDate(result.changes[0].before, language)) })}</p>` : ""}`
-          : result.reason === "newer-check-date-exists" && result.existingDate
-            ? `<p>${tv("previewNewerDate", { date: escapeHtml(formatCalendarDate(result.existingDate, language)) })}</p>`
-            : `<p>${tv("previewUnsupported")}</p>`;
-      // Kommt die Vorschau aus dem Ergänzen-Formular, stehen hier die neuen Tags. Sie werden vor dem Speichern genau gezeigt.
-      const corrections = state.corrections ?? [];
-      const correctedKeys = new Set<string>(corrections.map((correction) => correction.key));
-      const addedTags = state.details ? Object.entries(state.details).filter(([key]) => !correctedKeys.has(key)) : [];
-      const addedList =
-        addedTags.length > 0
-          ? `<p><strong>${tv("detailsAddedTitle")}</strong></p><ul>${addedTags.map(([key, value]) => `<li><code>${escapeHtml(key)}=${escapeHtml(value)}</code></li>`).join("")}</ul>`
-          : "";
-      // Korrekturen als „alt → neu“: Der alte Wert steht durchgestrichen davor. Alle Werte stammen aus OSM oder der Eingabe und werden maskiert.
-      const changedList =
-        corrections.length > 0
-          ? `<p><strong>${tv("detailsChangedTitle")}</strong></p><ul>${corrections.map((correction) => `<li><code>${escapeHtml(correction.key)}=<span class="detail-old">${escapeHtml(correction.before)}</span> → ${escapeHtml(correction.after)}</code></li>`).join("")}</ul>`
-          : "";
-      // Bleibt nach „draußen“ eine alte Ebene stehen, sagt die Vorschau es offen (AEDjaeger löscht nie etwas).
-      const levelLeft =
-        state.details && state.node ? levelLeftBehindByIndoorChange(state.node.tags, state.details) : null;
-      const levelLeftNote =
-        levelLeft === null
-          ? ""
-          : `<p class="detail-hint">${escapeHtml(tv("detailLevelStays", { level: levelLeft }))}</p>`;
-      const completeText =
-        corrections.length > 0
-          ? tv("developmentChangesComplete")
-          : addedTags.length > 0
-            ? tv("developmentDetailsComplete")
-            : tv("developmentComplete");
-      const statusText =
-        state.writeStatus === "complete"
-          ? completeText
-          : state.writeStatus
-            ? tv(developmentWriteStatusKeys[state.writeStatus])
-            : "";
-      const blockedRecovery =
-        state.writeStatus === "uncertain" &&
-        (isRecoveryOwnerMismatch() || !developmentSession || !developmentWriteAvailable)
-          ? `<p class="simulation-note" role="status">${tv(isRecoveryOwnerMismatch() ? "recoveryWrongAccount" : !developmentSession ? "recoveryNeedSignIn" : "recoveryWritesDisabled")}</p>`
-          : "";
-      const writeStatus = state.writeStatus
-        ? `<p role="status" class="simulation-note ${state.writeStatus === "complete" ? "save-status-success" : ""}">${statusText}</p>${blockedRecovery}`
-        : "";
-      // Der zweite Weg neben dem Ein-Tipp-Speichern: fehlende Angaben ergänzen. Nur beim einfachen Prüfdatum-Vorschlag.
-      const addDetailsButton =
-        canWrite && !state.writeStatus && !state.node
-          ? `<button class="button button-secondary" data-action="open-existing-details">${tv(developmentCorrectionsAvailable ? "detailsCorrectAction" : "detailsAddAction")}</button>`
-          : "";
-      // Zweite Bestätigung bei Korrekturen: Ohne den Haken „alter Wert stimmt nicht“ bleibt der Speichern-Knopf gesperrt.
-      // Der Klick-Handler prüft den Haken zusätzlich noch einmal.
-      const correctionConfirmation =
-        canWrite && !state.writeStatus && corrections.length > 0
-          ? `<div class="position-confirmation"><label for="correction-confirmed"><input id="correction-confirmed" type="checkbox" /><span>${tv("detailsCorrectionConfirm")}</span></label></div>`
-          : "";
-      const saveLabel =
-        corrections.length > 0
-          ? tv("developmentChangesAction")
-          : addedTags.length > 0
-            ? tv("developmentDetailsAction")
-            : tv("developmentWriteAction");
-      const writeAction =
-        canWrite && !state.writeStatus
-          ? `${correctionConfirmation}<button class="button button-primary" data-action="save-development-check"${corrections.length > 0 ? " disabled" : ""}>${saveLabel}</button>`
-          : state.writeStatus === "uncertain" && state.operationId && !isRecoveryOwnerMismatch()
-            ? `<button class="button button-secondary" data-action="retry-development-write">${developmentSession && developmentWriteAvailable ? tv("developmentRetry") : tv("recoveryContinue")}</button>`
-            : "";
-      // Nur wenn nichts gespeichert werden kann und kein Vorgang läuft; sonst wäre „nur eine Vorschau“ nach einem Speichern falsch.
-      // Bei einem neueren Datum in OSM sagt die Meldung selbst, dass nichts geändert wird; „nur eine Vorschau“ wäre doppelt.
-      const newerDateInOsm = result.kind === "blocked" && result.reason === "newer-check-date-exists";
-      const noWriteNotice =
-        !canWrite && !state.writeStatus && !newerDateInOsm
-          ? `<p class="simulation-note">${archiveOnly ? tv("previewArchiveNotice") : tv("previewNoWrite")}</p>`
-          : "";
-      const recoverableWrite = state.writeStatus === "sending" || state.writeStatus === "uncertain";
-      // „Zurück“ gibt es nur, wenn es mehrere Treffer zur Auswahl gab. Bei einem einzigen Treffer hätte es keine Bedeutung.
-      // Gezählt wird wie in der Trefferliste: Bei „candidate-review“ die bewerteten Treffer, sonst alle Suchtreffer.
-      const shownCandidates =
-        state.returnState.assessment.kind === "candidate-review"
-          ? state.returnState.assessment.candidates.length
-          : state.returnState.search.candidates.length;
-      const hasOtherCandidates = shownCandidates > 1;
-      // Aus dem Ergänzen-Formular führt „Zurück“ dorthin (die Eingaben bleiben), sonst zur Trefferliste.
-      const backButton = state.node
-        ? `<button class="button button-quiet" data-action="back-to-existing-details">${tv("detailsBackToForm")}</button>`
-        : hasOtherCandidates
-          ? `<button class="button button-quiet" data-action="back-to-candidates">${tv("previewBack")}</button>`
-          : "";
-      const navigation = recoverableWrite
-        ? ""
-        : state.writeStatus === "complete"
-          ? `<button class="button button-primary" data-action="retake">${tv("nextAed")}</button>`
-          : `${backButton}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-      const successful = state.writeStatus === "complete";
-      return `${photoMarkup}<div class="result-message"><span class="status-icon ${successful ? "status-good" : "status-warn"}" aria-hidden="true">${successful ? "✓" : "!"}</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.candidateLabel, tv("unnamedAed")))}</strong></p>${content}${changedList}${addedList}${levelLeftNote}${noWriteNotice}${writeStatus}</div></div>${writeAction}${addDetailsButton}${navigation}`;
-    }
-    case "existing-aed-details": {
-      const label = escapeHtml(displayCandidateLabel(state.candidateLabel, tv("unnamedAed")));
-      const header = `<div class="result-message"><span class="status-icon status-good" aria-hidden="true">✓</span><div><h2>${tv(developmentCorrectionsAvailable ? "detailsCorrectTitle" : "detailsExistingTitle")}</h2><p><strong>${label}</strong></p><p>${tv(developmentCorrectionsAvailable ? "detailsCorrectIntro" : "detailsExistingIntro")}</p></div></div>`;
-      if (state.load.status === "loading") {
-        return `${photoMarkup}${header}<div class="loading-row" role="status"><span class="spinner" aria-hidden="true"></span><span>${tv("detailLoading")}</span></div>`;
-      }
-      if (state.load.status === "error") {
-        const message =
-          state.load.code === "node_unavailable"
-            ? tv("detailLoadChanged")
-            : state.load.code === "authentication_required"
-              ? tv("errorSignIn")
-              : tv("detailLoadFailed");
-        // Ist der Eintrag weg, hilft Wiederholen nicht; dann bleibt nur der Rückweg.
-        const retry =
-          state.load.code === "node_unavailable"
-            ? ""
-            : `<button class="button button-secondary" data-action="existing-details-retry">${tv("detailLoadRetry")}</button>`;
-        return `${photoMarkup}${header}<p class="simulation-note" role="alert">${message}</p>${retry}<button class="button button-quiet" data-action="back-from-existing-details">${tv("previewBack")}</button>`;
-      }
-      const thumbnail = photoMarkup.replace('class="photo-preview"', 'class="photo-preview photo-thumb"');
-      const allPresent = detailEverythingPresent() ? `<p class="simulation-note">${tv("detailsAllPresent")}</p>` : "";
-      // Das bisherige Prüfdatum aus OSM, damit die Person sieht, wie aktuell der Eintrag ist, bevor sie etwas ändert.
-      const lastCheck = state.load.node.tags.check_date
-        ? `<p class="supporting-copy">${tv("previewOldDate", { date: escapeHtml(formatCalendarDate(state.load.node.tags.check_date, language)) })}</p>`
-        : "";
-      return `<div class="detail-form-root">${thumbnail}${header}${lastCheck}${allPresent}<div id="detail-form">${detailFormMarkup()}</div>${detailFooterMarkup()}</div>`;
-    }
-    case "development-write-recovery": {
-      const blockedReason =
-        state.writeStatus === "uncertain" &&
-        (isRecoveryOwnerMismatch() || !developmentSession || !developmentWriteAvailable)
-          ? tv(
-              isRecoveryOwnerMismatch()
-                ? "recoveryWrongAccount"
-                : !developmentSession
-                  ? "recoveryNeedSignIn"
-                  : "recoveryWritesDisabled",
-            )
-          : "";
-      // Bei einer Neuanlage steht die Position da; bei einem Prüfdatum genügt die Bezeichnung des AED.
-      const targetLink =
-        state.request.kind === "check-date"
-          ? ""
-          : `<p>${state.request.latitude.toFixed(5)}, ${state.request.longitude.toFixed(5)}</p>`;
-      const recoveryMessage =
-        state.request.kind === "create-node" && state.writeStatus === "complete"
-          ? tv("developmentCreated")
-          : tv(developmentWriteStatusKeys[state.writeStatus]);
-      const action =
-        state.writeStatus === "uncertain" && isRecoveryOwnerMismatch()
-          ? ""
-          : state.writeStatus === "uncertain" || state.writeStatus === "sending"
-            ? `<button class="button button-primary" data-action="continue-recovery"${state.writeStatus === "sending" ? " disabled" : ""}>${state.writeStatus === "sending" ? tv("developmentSending") : developmentSession && developmentWriteAvailable ? tv("developmentRetry") : tv("recoveryContinue")}</button>`
-            : `<button class="button button-primary" data-action="retake">${state.writeStatus === "complete" ? tv("nextAed") : tv("recoveryContinue")}</button>`;
-      const successful = state.writeStatus === "complete";
-      return `<div class="result-message"><span class="status-icon ${successful ? "status-good" : "status-warn"}" aria-hidden="true">${successful ? "✓" : "!"}</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.request.candidateLabel, tv("unnamedAed")))}</strong></p>${targetLink}<p class="simulation-note ${successful ? "save-status-success" : ""}" role="status">${recoveryMessage}</p>${blockedReason ? `<p class="simulation-note" role="status">${blockedReason}</p>` : ""}</div></div>${action}`;
-    }
-    case "candidate-error": {
-      const errorKey: Record<typeof state.reason, FlowMessageKey> = {
-        "location-unavailable": "locationUnavailable",
-        "location-denied": "locationDenied",
-        "location-uncertain": "locationUncertain",
-        "sign-in": "errorSignIn",
-        "rate-limited": "searchRateLimited",
-        "service-unavailable": "searchUnavailable",
-        "outside-coverage": "outsideCoverage",
-        failed: "searchFailed",
-        "invalid-response": "errorInvalidResponse",
-      };
-      const retryWaitSeconds =
-        state.retryAvailableAt === undefined ? 0 : Math.max(0, Math.ceil((state.retryAvailableAt - Date.now()) / 1000));
-      const retry =
-        state.reason === "sign-in" || state.reason === "outside-coverage"
-          ? ""
-          : retryWaitSeconds > 0
-            ? `<p class="simulation-note search-wait" aria-live="off">${tv("searchWait", { seconds: retryWaitSeconds })}</p>`
-            : `<button class="button button-secondary" data-action="retry-search">${tv("searchRetry")}</button>`;
-      const locationSource =
-        photoSession.searchLocationSource === "photo"
-          ? "locationSourcePhoto"
-          : photoSession.searchLocationSource === "map"
-            ? "locationSourceMap"
-            : "locationSourcePhone";
-      return `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("searchTitle")}</h2><p>${tv(errorKey[state.reason])}</p><p class="supporting-copy">${tv(locationSource)}</p></div></div>${retry}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-    }
-  }
+  return renderStatusContent({
+    state,
+    t,
+    tv,
+    escapeHtml,
+    photoMarkup,
+    photoCheckAvailable,
+    selectedPhotoFileAvailable: photoSession.file !== undefined,
+    mapLocationOverride: photoSession.mapLocationOverride,
+    minimumMapSearchZoom,
+    defibrillatorPath,
+    developmentSession,
+    developmentWriteAvailable,
+    developmentWriteOwnerHash,
+    developmentCorrectionsAvailable,
+    newAedPositionOverride,
+    searchLocationSource: photoSession.searchLocationSource,
+    language,
+    developmentWriteStatusKeys,
+    newEntryPanelOpen: isNewEntryPanelOpen,
+    isRecoveryOwnerMismatch,
+    detailEverythingPresent,
+    detailFormMarkup,
+    detailFooterMarkup,
+  });
 }
 
 function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void {
@@ -1233,185 +755,81 @@ function render(restoreFlowFocus = false, preserveOpenInfoDialog = false): void 
     preserveOpenInfoDialog && (document.querySelector<HTMLDialogElement>("#info-dialog")?.open ?? false);
   activePositionPicker?.destroy();
   activePositionPicker = undefined;
-  const authenticated = accountState === "signed-in";
   const isReady = state.kind === "ready";
   document.documentElement.lang = language;
   document.title = `${t("appName")} · ${t("tagline")}`;
-  app!.innerHTML = `
-    <div class="page-shell">
-      <header class="topbar"><div class="brand-group"><a class="brand" href="/" aria-label="${t("appName")}" ${hasUnresolvedSave(state) ? 'aria-disabled="true"' : ""}><span>${t("appName")}</span></a>${connectionLamp()}</div><div class="topbar-actions"><button class="info-link" id="open-info" type="button"><span class="info-mark" aria-hidden="true">i</span><span>${t("aboutButton")}</span></button><label class="language-picker"><span class="sr-only">${t("language")}</span><select id="language" aria-label="${t("language")}">${supportedLanguages.map((code) => `<option value="${code}" ${language === code ? "selected" : ""}>${languageNames[code]}</option>`).join("")}</select><span class="language-globe" aria-hidden="true">◎</span></label></div></header>
-      ${
-        authenticated
-          ? `<main>
-        <section class="hero ${isReady ? "" : "hero-compact"}"><div class="hero-kicker"><span></span>${t("eyebrow")}</div><h1>${isReady ? t("title") : state.kind === "photo-checking" || state.kind === "candidate-searching" ? t("checking") : t("tagline")}</h1>${isReady ? `<p>${t("intro")}</p>` : ""}</section>
-        <section class="capture-card" aria-live="polite" aria-atomic="false">
-          <div class="capture-content">${isReady ? `${photoSession.selectionError ? `<p class="photo-selection-error" role="alert" tabindex="-1">${t("cameraError")}</p>` : ""}<div class="empty-illustration" aria-hidden="true"><span class="device-card">${defibrillatorMark(defibrillatorPath)}</span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>` : statusContent()}</div>
-          ${isReady ? `<div class="capture-actions"><label class="button button-primary camera-label">${icon("camera")}<span>${t("camera")}</span><input id="camera-input" type="file" accept="image/*" capture="environment" /></label><label class="button button-secondary camera-label">${t("choosePhoto")}<input id="file-input" type="file" accept="image/*" /></label><p class="supporting-copy">${photoCheckAvailable ? tv("photoCheckNotice") : t("privacy")}</p></div>` : ""}
-        </section>
-      </main>${accountPanel()}`
-          : `<main class="login-main">${loginEntry()}</main>`
-      }
-      <footer><span>${t("sourceNote")}</span><span class="build-mark" id="build-mark">${escapeHtml(buildVersionText())}</span></footer>
-      <dialog class="info-dialog" id="info-dialog" aria-labelledby="info-title" aria-describedby="info-intro">
-        <div class="info-dialog-content">
-          <div class="info-dialog-header"><div><p class="eyebrow">${t("appName")}</p><h2 id="info-title">${t("aboutTitle")}</h2></div><form method="dialog"><button class="dialog-close" aria-label="${t("closeInfo")}">×</button></form></div>
-          <p class="info-intro" id="info-intro">${t("aboutIntro")}</p>
-          <section class="info-section"><h3>${t("infoHowTitle")}</h3><p>${t("infoHowBody")}</p><h3>${t("infoLimitsTitle")}</h3><p>${t("infoLimitsBody")}</p></section>
-          <section class="info-section icon-credits"><h3>${t("iconCreditsTitle")}</h3><p>${t("iconCreditsBody")} <a href="https://github.com/mapbox/maki/blob/main/icons/defibrillator.svg" target="_blank" rel="noopener noreferrer">${t("iconCreditsSource")}</a> · <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener noreferrer">${t("iconCreditsLicense")}</a>.</p></section>
-          ${authenticated ? `<section class="info-section account-section"><h3>${developmentSession ? t("accountDevSignedIn") : t("accountSignedIn")}</h3><p>${developmentSession ? t("accountDevNotice") : t("accountIdentityOnly")}</p><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>` : ""}
-          <label class="sound-toggle"><input type="checkbox" id="success-sound-toggle" ${successSound.isEnabled() ? "checked" : ""} /><span>${tv("soundToggle")}</span></label>
-          <p class="build-version" id="build-version">${escapeHtml(buildVersionText())}</p>
-        </div>
-      </dialog>
-    </div>`;
+  const authenticated = accountState === "signed-in";
+  const isChecking = state.kind === "photo-checking" || state.kind === "candidate-searching";
+  app.innerHTML = renderAppShell({
+    language,
+    languageNames,
+    supportedLanguages,
+    t,
+    tv,
+    authenticated,
+    isReady,
+    isChecking,
+    photoSelectionError: photoSession.selectionError,
+    photoCheckAvailable,
+    developmentSession,
+    successSoundEnabled: successSound.isEnabled(),
+    brandIsDisabled: hasUnresolvedSave(state),
+    connectionLamp: connectionLamp(),
+    emptyIllustration: () =>
+      `<div class="empty-illustration" aria-hidden="true"><span class="device-card">${defibrillatorMark(defibrillatorPath)}</span><span class="scan-corner corner-a"></span><span class="scan-corner corner-b"></span><span class="scan-corner corner-c"></span><span class="scan-corner corner-d"></span></div>`,
+    statusContent,
+    accountPanel,
+    loginEntry,
+    sourceNote: t("sourceNote"),
+    buildVersion: buildVersionText(),
+    escapeHtml,
+  });
 
   if (infoDialogWasOpen) document.querySelector<HTMLDialogElement>("#info-dialog")?.showModal();
 
-  if (state.kind === "location-map") {
-    const mapContainer = app!.querySelector<HTMLDivElement>("#search-location-map");
-    if (mapContainer) {
-      activePositionPicker = createPositionPicker(mapContainer, photoSession.mapLocationOverride ?? state.center, {
-        mapLabel: tv("chooseMapLocation"),
-        zoomInLabel: tv("newPositionMapZoomIn"),
-        zoomOutLabel: tv("newPositionMapZoomOut"),
-        tileErrorLabel: tv("newPositionMapTileError"),
-        initialZoom: state.initialZoom,
-        onPositionChange(position) {
-          photoSession.mapLocationOverride = position;
-          const coordinates = app!.querySelector<HTMLParagraphElement>("#search-location-coordinates");
-          if (coordinates)
-            coordinates.textContent = tv("mapLocationCoordinates", {
-              latitude: position.latitude.toFixed(5),
-              longitude: position.longitude.toFixed(5),
-            });
-          updateMapSearchButton();
-        },
-        onZoomChange(zoom) {
-          if (state.kind === "location-map") state.initialZoom = zoom;
-          updateMapSearchButton();
-        },
-      });
-
-      function updateMapSearchButton(): void {
-        const confirmButton = app!.querySelector<HTMLButtonElement>('[data-action="confirm-map-location"]');
-        if (confirmButton)
-          confirmButton.disabled =
-            photoSession.mapLocationOverride === undefined ||
-            (state.kind === "location-map" && (state.initialZoom ?? 19) < minimumMapSearchZoom);
-      }
-    }
-  }
-
-  if (state.kind === "candidate-result" && !newEntryPanelOpen(state)) {
-    // Übersichtskarte bei Treffern: nur zum Ansehen. Verschieben ändert keine Auswahl,
-    // deshalb macht onPositionChange hier bewusst nichts.
-    const overviewContainer = app!.querySelector<HTMLDivElement>("#candidate-overview-map");
-    if (overviewContainer) {
-      const markers = reviewedCandidateMarkers(state);
-      const bounds = overviewContainer.getBoundingClientRect();
-      activePositionPicker = createPositionPicker(overviewContainer, state.location, {
-        mapLabel: tv("overviewMapLabel"),
-        zoomInLabel: tv("newPositionMapZoomIn"),
-        zoomOutLabel: tv("newPositionMapZoomOut"),
-        tileErrorLabel: tv("newPositionMapTileError"),
-        // So weit herauszoomen, dass Standort und alle Treffer gleichzeitig sichtbar sind.
-        initialZoom: zoomToFitMarkers(state.location, markers, bounds.width || 300, bounds.height || 225),
-        // Der gesuchte Standort ist hier ein fest verankerter roter Marker und NICHT der
-        // Bildmittelpunkt. So bleibt er beim Verschieben oder Zoomen an der richtigen Stelle.
-        markers: [{ position: state.location, label: "", kind: "origin" }, ...markers],
-        hideCrosshair: true,
-        onPositionChange() {},
-      });
-    }
-  }
-
-  if (newEntryPanelOpen(state) && state.kind === "candidate-result") {
-    const mapContainer = app!.querySelector<HTMLDivElement>("#new-aed-position-map");
-    if (mapContainer) {
-      activePositionPicker = createPositionPicker(mapContainer, newAedPositionOverride ?? state.location, {
-        // Bereits eingetragene AEDs bleiben beim Setzen des neuen Punkts sichtbar.
-        markers: reviewedCandidateMarkers(state),
-        mapLabel: tv("newPositionMapLabel"),
-        zoomInLabel: tv("newPositionMapZoomIn"),
-        zoomOutLabel: tv("newPositionMapZoomOut"),
-        tileErrorLabel: tv("newPositionMapTileError"),
-        onPositionChange(position) {
-          newAedPositionOverride = position;
-          const confirmation = app!.querySelector<HTMLInputElement>("#new-aed-position-confirmed");
-          if (confirmation) confirmation.checked = false;
-          const coordinates = app!.querySelector<HTMLParagraphElement>("#new-aed-position-coordinates");
-          if (coordinates)
-            coordinates.textContent = tv("newPreviewCoordinates", {
-              latitude: position.latitude.toFixed(5),
-              longitude: position.longitude.toFixed(5),
-            });
-          const label = app!.querySelector<HTMLSpanElement>("#new-aed-position-label");
-          if (label)
-            label.textContent = tv("newPositionConfirm", {
-              latitude: position.latitude.toFixed(5),
-              longitude: position.longitude.toFixed(5),
-            });
-        },
-      });
-    }
-  }
+  activePositionPicker = bindWorkflowMap({
+    app,
+    state,
+    photoSession,
+    minimumMapSearchZoom,
+    newEntryPanelOpen: isNewEntryPanelOpen,
+    newAedPositionOverride,
+    setNewAedPositionOverride: (position) => {
+      newAedPositionOverride = position;
+    },
+    tv,
+  });
 
   // Detailformular: Eingaben mit dem gemerkten Formularzustand verbinden.
   if (state.kind === "new-aed-details" || (state.kind === "existing-aed-details" && state.load.status === "ready"))
     bindDetailForm();
 
-  // Zweite Bestätigung bei Korrekturen: Der Speichern-Knopf wird erst aktiv, wenn „alter Wert stimmt nicht“ angehakt ist.
-  const correctionConfirmation = app!.querySelector<HTMLInputElement>("#correction-confirmed");
-  correctionConfirmation?.addEventListener("change", () => {
-    const saveButton = app!.querySelector<HTMLButtonElement>('[data-action="save-development-check"]');
-    if (saveButton) saveButton.disabled = !correctionConfirmation.checked;
+  bindRenderedControls(app, {
+    hasUnresolvedSave: () => hasUnresolvedSave(state),
+    focusCurrentState,
+    openAccountFromLamp,
+    onSoundToggle: (enabled) => {
+      successSound.setEnabled(enabled);
+      // Beim Einschalten einmal vorspielen: So hört die Person sofort, wie es klingt, und der Ton ist freigeschaltet.
+      if (enabled) {
+        successSound.prepare();
+        successSound.play();
+      }
+    },
+    onLanguageChange: (nextLanguage) => {
+      language = nextLanguage;
+      // Scheitert das Merken, gilt die Sprache trotzdem für die offene Seite.
+      writeStoredValue("aedjaeger-language", language);
+      render();
+    },
+    onPhotoSelected,
+    onAction: (action, source) => {
+      void handleAction(action, source);
+    },
+    bindAccountPanel,
+    renderUpdateBanner,
+    restoreFlowFocus,
   });
-
-  // Zweite Bestätigung in der Neuanlage-Vorschau: Der Speichern-Knopf wird erst aktiv,
-  // wenn der Haken „vor Ort geprüft“ gesetzt ist, und wieder gesperrt, wenn er entfernt wird.
-  const absenceConfirmation = app!.querySelector<HTMLInputElement>("#new-aed-absence-confirmed");
-  absenceConfirmation?.addEventListener("change", () => {
-    const createButton = app!.querySelector<HTMLButtonElement>('[data-action="create-development-node"]');
-    if (createButton) createButton.disabled = !absenceConfirmation.checked;
-  });
-
-  document.querySelector<HTMLButtonElement>("#open-info")?.addEventListener("click", () => {
-    document.querySelector<HTMLDialogElement>("#info-dialog")?.showModal();
-  });
-  document.querySelector<HTMLButtonElement>("#connection-lamp")?.addEventListener("click", openAccountFromLamp);
-  document.querySelector<HTMLInputElement>("#success-sound-toggle")?.addEventListener("change", (event) => {
-    const enabled = (event.target as HTMLInputElement).checked;
-    successSound.setEnabled(enabled);
-    // Beim Einschalten einmal vorspielen: So hört die Person sofort, wie es klingt, und der Ton ist freigeschaltet.
-    if (enabled) {
-      successSound.prepare();
-      successSound.play();
-    }
-  });
-  document.querySelector<HTMLAnchorElement>(".brand")?.addEventListener("click", (event) => {
-    if (!hasUnresolvedSave(state)) return;
-
-    // A reload here would erase the only copy of an unresolved draft in this in-memory prototype.
-    event.preventDefault();
-    focusCurrentState();
-  });
-  document.querySelector<HTMLSelectElement>("#language")?.addEventListener("change", (event) => {
-    language = (event.currentTarget as HTMLSelectElement).value as Language;
-    // Scheitert das Merken, gilt die Sprache trotzdem für die offene Seite.
-    writeStoredValue("aedjaeger-language", language);
-    render();
-    // Rendering replaces the select node, so return keyboard focus to its translated replacement.
-    app!.querySelector<HTMLSelectElement>("#language")?.focus();
-  });
-  document.querySelector<HTMLInputElement>("#camera-input")?.addEventListener("change", onPhotoSelected);
-  document.querySelector<HTMLInputElement>("#file-input")?.addEventListener("change", onPhotoSelected);
-  document.querySelectorAll<HTMLElement>("[data-action]").forEach((button) => {
-    button.addEventListener("click", () => handleAction(button.dataset.action, button));
-  });
-  bindAccountPanel();
-  renderUpdateBanner();
-
-  if (restoreFlowFocus) focusCurrentState();
 }
 
 /**
@@ -1438,62 +856,32 @@ function reloadBlocked(): boolean {
  * Neu geladen wird nie automatisch: Ein Neuladen verwirft das aktuelle Foto und den Entwurf. Die Person
  * entscheidet, und das Banner sagt ihr, was dabei verloren geht.
  */
-let renderedUpdateBanner = "";
-function renderUpdateBanner(): void {
-  let banner = document.querySelector<HTMLElement>("#update-banner");
-  if (!updateAvailable) {
-    banner?.remove();
-    renderedUpdateBanner = "";
-    return;
-  }
-  if (!banner) {
-    banner = document.createElement("div");
-    banner.id = "update-banner";
-    banner.className = "update-banner";
-    banner.setAttribute("role", "status");
-    banner.addEventListener("click", (event) => {
-      // Der Zustand wird beim Klick erneut geprüft: Er kann sich seit dem Zeichnen geändert haben.
-      if ((event.target as HTMLElement).closest(".update-banner-button") && !reloadBlocked()) window.location.reload();
-    });
-    app!.before(banner);
-    renderedUpdateBanner = "";
-  }
-  const blocked = reloadBlocked();
-  const note = blocked ? tv("updateWaitSave") : hasActivePhotoDraft(state) ? tv("updateLosesPhoto") : "";
-  const markup = `<span>${tv("updateAvailable")}${note ? ` ${note}` : ""}</span><button class="update-banner-button" type="button" ${blocked ? "disabled" : ""}>${tv("updateReload")}</button>`;
-  // Nur schreiben, wenn sich etwas geändert hat, damit der Fokus auf dem Knopf erhalten bleibt.
-  if (markup !== renderedUpdateBanner) {
-    banner.innerHTML = markup;
-    renderedUpdateBanner = markup;
-  }
-}
+const renderUpdateBanner = createUpdateBannerRenderer({
+  app,
+  isUpdateAvailable: () => updateAvailable,
+  reloadBlocked,
+  hasActivePhotoDraft: () => hasActivePhotoDraft(state),
+  translate: tv,
+  reload: () => window.location.reload(),
+});
+
+const accountPanelBindings = createAccountPanelBindings({
+  app,
+  renderPanel: accountPanel,
+  onSignOut: () => {
+    void signOutFromOSM();
+  },
+  onRetrySession: () => {
+    void retryOSMSessionStatus();
+  },
+});
 
 function bindAccountPanel(): void {
-  app!.querySelector<HTMLButtonElement>("#osm-sign-out")?.addEventListener("click", () => {
-    void signOutFromOSM();
-  });
-  app!.querySelector<HTMLButtonElement>("#osm-session-retry")?.addEventListener("click", () => {
-    void retryOSMSessionStatus();
-  });
+  accountPanelBindings.bind();
 }
 
 function updateAccountPanel(focusSelector?: string): void {
-  const currentPanel = app!.querySelector(".account-panel");
-  if (!currentPanel) return;
-  const replacement = document.createElement("div");
-  replacement.innerHTML = accountPanel();
-  const nextPanel = replacement.firstElementChild;
-  if (!nextPanel) return;
-  currentPanel.replaceWith(nextPanel);
-  bindAccountPanel();
-  if (focusSelector) {
-    const focusTarget =
-      nextPanel instanceof HTMLElement && nextPanel.matches(focusSelector)
-        ? nextPanel
-        : nextPanel.querySelector<HTMLElement>(focusSelector);
-    if (focusTarget) focusTarget.focus();
-    else if (nextPanel instanceof HTMLElement) nextPanel.focus();
-  }
+  accountPanelBindings.update(focusSelector);
 }
 
 /**
@@ -1552,7 +940,7 @@ async function refreshAccountState(focusSelector?: string, afterLogout = false):
   render();
   if (pendingDevelopmentWrite && accountState === "signed-out") {
     // The restored request needs the test-server session to reconcile safely; point directly at that login.
-    app!.querySelector<HTMLElement>("#osm-dev-sign-in")?.focus();
+    app.querySelector<HTMLElement>("#osm-dev-sign-in")?.focus();
   } else if (focusSelector === "next-action") {
     const nextActionSelector =
       accountState === "connection-error"
@@ -1562,9 +950,9 @@ async function refreshAccountState(focusSelector?: string, afterLogout = false):
           : accountState === "signed-out" || accountState === "login-error"
             ? "#osm-sign-in"
             : "#login-title";
-    app!.querySelector<HTMLElement>(nextActionSelector)?.focus();
+    app.querySelector<HTMLElement>(nextActionSelector)?.focus();
   } else if (focusSelector) {
-    app!.querySelector<HTMLElement>(focusSelector)?.focus();
+    app.querySelector<HTMLElement>(focusSelector)?.focus();
   }
 }
 
@@ -1577,7 +965,7 @@ async function signOutFromOSM(): Promise<void> {
   } catch {
     accountState = "logout-error";
     render();
-    app!.querySelector<HTMLElement>("#login-title")?.focus();
+    app.querySelector<HTMLElement>("#login-title")?.focus();
   }
 }
 
@@ -1671,10 +1059,6 @@ function isDevelopmentWriteResponse(
   );
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function isRecoveryOwnerMismatch(): boolean {
   return Boolean(
     pendingDevelopmentWriteOwnerHash &&
@@ -1685,7 +1069,7 @@ function isRecoveryOwnerMismatch(): boolean {
 
 function focusCurrentState(): void {
   if (accountState !== "signed-in") {
-    const loginControl = app!.querySelector<HTMLElement>(
+    const loginControl = app.querySelector<HTMLElement>(
       "#osm-dev-sign-in, #osm-session-retry, #osm-sign-in, #login-title",
     );
     loginControl?.focus();
@@ -1708,7 +1092,7 @@ function focusCurrentState(): void {
     "existing-aed-details": ".result-message h2",
     "candidate-error": ".result-message h2",
   };
-  const target = app!.querySelector<HTMLElement>(focusTargets[state.kind]);
+  const target = app.querySelector<HTMLElement>(focusTargets[state.kind]);
   if (!target) return;
 
   // Newly rendered headings and status messages are not normally tabbable; temporary focus lets
@@ -1799,379 +1183,120 @@ function showPhotoSelectionError(): void {
 }
 
 async function handleAction(action: string | undefined, source?: HTMLElement): Promise<void> {
-  const photoActionResult = dispatchPhotoLocationAction(action, {
-    getState: () => state,
-    setState: (nextState) => {
-      state = nextState;
-    },
-    photoSession,
-    accountSignedIn: accountState === "signed-in",
-    photoCheckAvailable,
-    phoneLocationPermission,
-    phoneLocationFitsPhoto: () =>
-      phoneLocationFitsPhoto({ fromCamera: photoSession.fromCamera, capturedAtMs: photoSession.capturedAtMs }),
-    readObservedDate: () => app!.querySelector<HTMLInputElement>("#photo-observed-on")?.value,
-    isValidObservedDate,
-    runPhotoCheck: (photoUrl) => {
-      void runPhotoCheck(photoUrl);
-    },
-    proceedAfterSighting,
-    continueAfterSighting,
-    runNearbySearch: (photoUrl, location) => {
-      void runNearbySearch(photoUrl, location);
-    },
-    clearSearchRetryTimer: () => {
-      if (searchRetryTimer) window.clearTimeout(searchRetryTimer);
-      searchRetryTimer = undefined;
-    },
-    render,
+  const result = await dispatchUiAction(action, {
+    photoLocation: () =>
+      dispatchPhotoLocationAction(action, {
+        getState: () => state,
+        setState: (nextState) => {
+          state = nextState;
+        },
+        photoSession,
+        accountSignedIn: accountState === "signed-in",
+        photoCheckAvailable,
+        phoneLocationPermission,
+        phoneLocationFitsPhoto: () =>
+          phoneLocationFitsPhoto({ fromCamera: photoSession.fromCamera, capturedAtMs: photoSession.capturedAtMs }),
+        readObservedDate: () => app.querySelector<HTMLInputElement>("#photo-observed-on")?.value,
+        isValidObservedDate,
+        runPhotoCheck: (photoUrl) => {
+          void runPhotoCheck(photoUrl);
+        },
+        proceedAfterSighting,
+        continueAfterSighting,
+        runNearbySearch: (photoUrl, location) => {
+          void runNearbySearch(photoUrl, location);
+        },
+        clearSearchRetryTimer: () => {
+          if (searchRetryTimer) window.clearTimeout(searchRetryTimer);
+          searchRetryTimer = undefined;
+        },
+        render,
+      }),
+    candidate: () =>
+      handleCandidateAction(action, {
+        state,
+        source,
+        observedOn: photoSession.observedOn,
+        setState: (nextState) => {
+          state = nextState;
+        },
+        setNewAedPositionOverride: (position) => {
+          newAedPositionOverride = position;
+        },
+      }),
+    newEntry: () =>
+      handleNewEntryAction(action, {
+        state,
+        setState: (nextState) => {
+          state = nextState;
+        },
+        newEntryPanelOpen: isNewEntryPanelOpen,
+        readPositionConfirmed: () =>
+          app.querySelector<HTMLInputElement>("#new-aed-position-confirmed")?.checked === true,
+        clearExistingDetailTags: () => {
+          detailExistingTags = undefined;
+        },
+        newAedPositionOverride,
+        computePreview: computeNewAedPreview,
+        buildDetails: buildDetailTags,
+        getDetailForm: () => detailForm,
+        updateDetailFooter,
+      }),
+    existingDetails: () =>
+      handleExistingDetailsAction(action, {
+        state,
+        source,
+        observedOn: photoSession.observedOn,
+        developmentWriteEnabled: developmentSession && developmentWriteAvailable && Boolean(developmentWriteOwnerHash),
+        setState: (nextState) => {
+          state = nextState;
+        },
+        resetDetailForm,
+        setExistingTags: (tags) => {
+          detailExistingTags = tags;
+        },
+        loadExistingAedNode: (candidateId) => {
+          void loadExistingAedNode(candidateId);
+        },
+        currentDetailPlan,
+        updateDetailFooter,
+      }),
+    developmentWrite: () =>
+      handleDevelopmentWriteAction(action, {
+        state,
+        setState: (nextState) => {
+          state = nextState;
+        },
+        developmentSession,
+        developmentWriteAvailable,
+        developmentWriteOwnerHash,
+        accountSignedIn: accountState === "signed-in",
+        pendingDevelopmentWrite,
+        ...(crypto.randomUUID ? { createOperationId: () => crypto.randomUUID() } : {}),
+        prepareSuccessSound: () => successSound.prepare(),
+        hasUnresolvedSave,
+        clearTimers,
+        releasePhoto,
+        redirectToDevelopmentLogin: () => window.location.assign("/api/auth/osm/development/start"),
+        confirmNewNode: () => app.querySelector<HTMLInputElement>("#new-aed-absence-confirmed")?.checked === true,
+        confirmCorrections: () => app.querySelector<HTMLInputElement>("#correction-confirmed")?.checked === true,
+        persistPendingWrite: (request) => persistPendingDevelopmentWrite(request),
+        render,
+        submit: (request) => {
+          void submitDevelopmentWrite(request);
+        },
+        isRecoveryOwnerMismatch,
+        openAccount: openAccountFromLamp,
+        focusRecoveryLogin: () => {
+          const target = app.querySelector<HTMLElement>("#osm-dev-sign-in, #osm-session-retry, #login-title");
+          // Defer until the click's default focus handling has finished.
+          window.requestAnimationFrame(() => target?.focus());
+        },
+        refreshAccountState: () => refreshAccountState(),
+        readPendingWrite: readPendingDevelopmentWrite,
+      }),
   });
-  if (photoActionResult === "stop") return;
-  if (photoActionResult === "handled") {
-    render(true);
-    return;
-  }
-
-  if (action === "continue-recovery" && pendingDevelopmentWrite && accountState !== "signed-in") {
-    // A pending write can only be reconciled under the same test-server session that created it.
-    // Continue starts that OAuth flow directly, even if session status has not finished loading yet.
-    window.location.assign("/api/auth/osm/development/start");
-    return;
-  }
-  if (action === "retake") {
-    if (hasUnresolvedSave(state)) return;
-    clearTimers();
-    releasePhoto();
-    state = pendingDevelopmentWrite
-      ? { kind: "development-write-recovery", request: pendingDevelopmentWrite, writeStatus: "uncertain" }
-      : { kind: "ready" };
-  } else if (action === "preview-candidate" && state.kind === "candidate-result") {
-    const candidateId = source?.dataset.candidateId;
-    const candidate = state.search.candidates.find((item) => item.id === candidateId);
-    if (!candidate || !candidateId) return;
-    const result = previewExistingAedCheck(candidate, true, photoSession.observedOn);
-    // Ohne Name und Ortsangabe bleibt die Bezeichnung leer. Beim Anzeigen steht dann "AED (ohne Namen)" da (siehe
-    // displayCandidateLabel), in der gerade gewählten Sprache und nie die technische Kennung (node/123…).
-    const candidateLabel = candidate.tags.name || candidate.tags["defibrillator:location"] || "";
-    state = { kind: "osm-preview", photoUrl: state.photoUrl, candidateId, candidateLabel, result, returnState: state };
-  } else if (
-    action === "none-of-these" &&
-    state.kind === "candidate-result" &&
-    state.search.status === "complete" &&
-    state.assessment.kind === "candidate-review"
-  ) {
-    // The person explicitly rejects each displayed nearby AED as the photographed device.
-    // A corrected map point and a fresh server-side OSM check are still required before upload.
-    newAedPositionOverride = undefined;
-    state = { ...state, noneOfTheseConfirmed: true };
-  } else if (
-    action === "start-new-entry" &&
-    state.kind === "candidate-result" &&
-    state.search.status === "complete" &&
-    state.assessment.kind === "new-entry-eligible"
-  ) {
-    // Erste Bestätigung bei einer Suche ohne Treffer: Die Person sagt ausdrücklich,
-    // dass hier ein AED fehlt. Erst danach erscheinen Karte und Positionsbestätigung.
-    newAedPositionOverride = undefined;
-    state = { ...state, newEntryRequested: true };
-  } else if (action === "preview-new-aed" && state.kind === "candidate-result") {
-    if (!newEntryPanelOpen(state)) return;
-    const positionConfirmed = app!.querySelector<HTMLInputElement>("#new-aed-position-confirmed")?.checked === true;
-    if (positionConfirmed) {
-      // Ein eventuell übrig gebliebener Stand eines bestehenden AED darf das Neuanlage-Formular nie sperren.
-      detailExistingTags = undefined;
-      // Erste Bestätigung (Position) ist da: weiter zu den freiwilligen Angaben. Die Vorschau folgt erst danach.
-      const confirmedPosition = newAedPositionOverride ?? state.location;
-      state = {
-        kind: "new-aed-details",
-        photoUrl: state.photoUrl,
-        returnState: state,
-        position: { latitude: confirmedPosition.latitude, longitude: confirmedPosition.longitude },
-      };
-    } else {
-      // Position nicht bestätigt: Die gesperrte Vorschau erklärt, was fehlt. Das Formular erscheint noch nicht.
-      const result = computeNewAedPreview(state, false);
-      state = { kind: "new-aed-preview", photoUrl: state.photoUrl, result, returnState: state };
-    }
-  } else if (action === "details-continue" && state.kind === "new-aed-details") {
-    // Die Angaben laufen durch denselben Vertrag wie später beim Server. Ist etwas ungültig, bleibt die Person
-    // im Formular (der Knopf ist dann ohnehin gesperrt; das hier ist die zweite Sicherung gegen erzwungene Klicks).
-    const built = buildDetailTags(detailForm);
-    if (!built.ok) {
-      updateDetailFooter();
-      return;
-    }
-    const result = computeNewAedPreview(state.returnState, true, built.tags);
-    state = {
-      kind: "new-aed-preview",
-      photoUrl: state.photoUrl,
-      result,
-      returnState: state.returnState,
-      detailsPosition: state.position,
-    };
-  } else if (action === "back-from-details" && state.kind === "new-aed-details") {
-    // Zurück zur Positionsbestätigung. Die Angaben bleiben im Speicher, falls die Person gleich wieder weitergeht.
-    state = state.returnState;
-  } else if (action === "back-to-details" && state.kind === "new-aed-preview" && state.detailsPosition) {
-    if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
-    state = {
-      kind: "new-aed-details",
-      photoUrl: state.photoUrl,
-      returnState: state.returnState,
-      position: state.detailsPosition,
-    };
-  } else if (action === "back-to-search" && state.kind === "new-aed-preview") {
-    if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
-    state = state.returnState;
-  } else if (action === "create-development-node" && state.kind === "new-aed-preview") {
-    successSound.prepare(); // Beim Tippen: Ton freischalten, er erklingt erst bei bestätigtem Erfolg.
-    if (
-      !developmentSession ||
-      !developmentWriteAvailable ||
-      !developmentWriteOwnerHash ||
-      !crypto.randomUUID ||
-      state.result.kind !== "ready" ||
-      state.writeStatus
-    )
-      return;
-    // Zweite Bestätigung: Ohne gesetzten Haken „vor Ort geprüft“ wird nichts gesendet,
-    // auch wenn der Knopf (z. B. per Tastatur oder Skript) trotzdem ausgelöst wurde.
-    if (app!.querySelector<HTMLInputElement>("#new-aed-absence-confirmed")?.checked !== true) return;
-    const preview = state;
-    if (preview.result.kind !== "ready") return;
-    const operationId = crypto.randomUUID();
-    const request: DevelopmentWriteRequest = {
-      kind: "create-node",
-      operationId,
-      candidateLabel: `${preview.result.position.latitude.toFixed(5)}, ${preview.result.position.longitude.toFixed(5)}`,
-      latitude: preview.result.position.latitude,
-      longitude: preview.result.position.longitude,
-      observedOn: preview.result.tags.check_date,
-      // Nur die Detailtags gehen als `details` an den Server. `emergency` und `check_date` setzt der Server selbst.
-      details: Object.fromEntries(
-        Object.entries(preview.result.tags).filter(([key]) => isDetailKey(key)),
-      ) as DetailTags,
-      confirmedDifferentCandidateIds: preview.result.confirmedDifferentCandidateIds,
-    };
-    try {
-      // Persist the exact confirmed proposal before network I/O so an interrupted request can be reconciled.
-      persistPendingDevelopmentWrite(request);
-    } catch {
-      state = { ...preview, operationId, writeStatus: "failed" };
-      render(true);
-      return;
-    }
-    state = { ...preview, operationId, writeStatus: "sending" };
-    render(true);
-    void submitDevelopmentWrite(request);
-  } else if (action === "open-existing-details" && state.kind === "osm-preview" && !state.node) {
-    // Zweiter Weg neben „noch vorhanden“: fehlende Angaben ergänzen. Erst wird der AED frisch aus OSM gelesen.
-    const candidateId = state.candidateId;
-    const candidate = state.returnState.search.candidates.find((item) => item.id === candidateId);
-    if (
-      !developmentSession ||
-      !developmentWriteAvailable ||
-      !developmentWriteOwnerHash ||
-      candidate?.osmType !== "node"
-    )
-      return;
-    resetDetailForm();
-    state = {
-      kind: "existing-aed-details",
-      photoUrl: state.photoUrl,
-      candidateId,
-      candidateLabel: state.candidateLabel,
-      returnState: state.returnState,
-      load: { status: "loading" },
-    };
-    void loadExistingAedNode(candidateId);
-  } else if (action === "open-candidate-details" && state.kind === "candidate-result") {
-    // Direkt aus der Trefferliste zu den Tags (vor der Datumsseite). Gleiche Voraussetzungen wie beim Ergänzen: Testserver-Sitzung,
-    // Schreiben an, ein Knoten, der nicht nur im Archiv des echten OSM steht.
-    const candidateId = source?.dataset.candidateId;
-    const candidate = state.search.candidates.find((item) => item.id === candidateId);
-    if (
-      !candidate ||
-      !candidateId ||
-      !developmentSession ||
-      !developmentWriteAvailable ||
-      !developmentWriteOwnerHash ||
-      candidate.osmType !== "node" ||
-      candidate.source === "archive"
-    )
-      return;
-    resetDetailForm();
-    const candidateLabel = candidate.tags.name || candidate.tags["defibrillator:location"] || "";
-    state = {
-      kind: "existing-aed-details",
-      photoUrl: state.photoUrl,
-      candidateId,
-      candidateLabel,
-      returnState: state,
-      load: { status: "loading" },
-      fromList: true,
-    };
-    void loadExistingAedNode(candidateId);
-  } else if (
-    action === "existing-details-retry" &&
-    state.kind === "existing-aed-details" &&
-    state.load.status === "error"
-  ) {
-    const candidateId = state.candidateId;
-    state = { ...state, load: { status: "loading" } };
-    void loadExistingAedNode(candidateId);
-  } else if (
-    action === "existing-details-continue" &&
-    state.kind === "existing-aed-details" &&
-    state.load.status === "ready"
-  ) {
-    // Die Eingaben laufen durch denselben Vertrag wie später beim Server. Bestehende Werte bleiben (gesperrt), nur Fehlendes geht mit.
-    const built = currentDetailPlan();
-    if (!built.ok) {
-      updateDetailFooter();
-      return;
-    }
-    const node = state.load.node;
-    // Das Prüfdatum wird gegen den FRISCH gelesenen Stand vorbereitet, nicht gegen den alten Treffer aus dem Archiv.
-    const result = previewExistingAedCheck(
-      { id: state.candidateId, osmType: "node", tags: node.tags },
-      true,
-      photoSession.observedOn,
-    );
-    state = {
-      kind: "osm-preview",
-      photoUrl: state.photoUrl,
-      candidateId: state.candidateId,
-      candidateLabel: state.candidateLabel,
-      result,
-      returnState: state.returnState,
-      node,
-      ...(state.fromList ? { fromList: true as const } : {}),
-      ...(Object.keys(built.tags).length > 0 ? { details: built.tags } : {}),
-      ...(built.corrections.length > 0 ? { corrections: built.corrections } : {}),
-    };
-  } else if (action === "back-from-existing-details" && state.kind === "existing-aed-details") {
-    // Zurück zur einfachen Bestätigung. Die Eingaben werden verworfen, denn der Stand in OSM kann sich inzwischen ändern.
-    const { candidateId, candidateLabel, returnState, photoUrl } = state;
-    const candidate = returnState.search.candidates.find((item) => item.id === candidateId);
-    const cameFromList = state.fromList === true;
-    resetDetailForm();
-    if (!candidate || cameFromList) {
-      // Aus der Trefferliste gekommen: zurück zur Liste (die Datumsseite war nie dran).
-      state = returnState;
-    } else {
-      state = {
-        kind: "osm-preview",
-        photoUrl,
-        candidateId,
-        candidateLabel,
-        result: previewExistingAedCheck(candidate, true, photoSession.observedOn),
-        returnState,
-      };
-    }
-  } else if (action === "back-to-existing-details" && state.kind === "osm-preview" && state.node) {
-    if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
-    // Der gelesene Stand und die Eingaben bleiben erhalten (detailForm liegt im Speicher).
-    detailExistingTags = state.node.tags;
-    state = {
-      kind: "existing-aed-details",
-      photoUrl: state.photoUrl,
-      candidateId: state.candidateId,
-      candidateLabel: state.candidateLabel,
-      returnState: state.returnState,
-      load: { status: "ready", node: state.node },
-      ...(state.fromList ? { fromList: true as const } : {}),
-    };
-  } else if (action === "back-to-candidates" && state.kind === "osm-preview") {
-    if (state.writeStatus === "sending" || state.writeStatus === "uncertain") return;
-    state = state.returnState;
-  } else if (action === "save-development-check" && state.kind === "osm-preview") {
-    successSound.prepare(); // Beim Tippen: Ton freischalten, er erklingt erst bei bestätigtem Erfolg.
-    if (
-      !developmentSession ||
-      !developmentWriteAvailable ||
-      !developmentWriteOwnerHash ||
-      !crypto.randomUUID ||
-      state.writeStatus === "sending" ||
-      state.writeStatus === "complete" ||
-      state.writeStatus === "unchanged"
-    )
-      return;
-    const preview = state;
-    const candidateId = preview.candidateId;
-    const candidate = preview.returnState.search.candidates.find((item) => item.id === candidateId);
-    if (!candidate || candidate.osmType !== "node" || candidate.source === "archive" || preview.result.kind !== "ready")
-      return;
-    // Korrekturen brauchen die zweite, ausdrückliche Bestätigung. Ohne Haken wird nichts gesendet, auch wenn der Knopf
-    // (zum Beispiel per Tastatur oder Skript) trotzdem ausgelöst wurde.
-    const corrections = preview.corrections ?? [];
-    if (corrections.length > 0 && app!.querySelector<HTMLInputElement>("#correction-confirmed")?.checked !== true)
-      return;
-    const operationId = preview.operationId ?? crypto.randomUUID();
-    const change = preview.result.changes[0];
-    const request: DevelopmentWriteRequest = {
-      kind: "check-date",
-      operationId,
-      target: candidate.id,
-      candidateLabel: preview.candidateLabel,
-      // Kommt die Vorschau aus dem Ergänzen-Formular, zählt die Version, die die Person frisch gesehen hat.
-      ...(preview.node
-        ? { expectedVersion: preview.node.version }
-        : candidate.version === undefined
-          ? {}
-          : { expectedVersion: candidate.version }),
-      expectedCheckDate: change.before,
-      observedOn: change.after,
-      ...(preview.details && Object.keys(preview.details).length > 0 ? { details: preview.details } : {}),
-      // Korrekturen: die alten Werte, genau wie die Person sie gesehen hat. Der Server schreibt nur, wenn sie noch so dastehen.
-      ...(corrections.length > 0
-        ? {
-            expectedBefore: Object.fromEntries(corrections.map((correction) => [correction.key, correction.before])),
-            confirmedCorrections: true as const,
-          }
-        : {}),
-    };
-    try {
-      // Save the exact confirmed proposal before sending so a reload can safely check the same operation.
-      persistPendingDevelopmentWrite(request);
-    } catch {
-      state = { ...preview, operationId, writeStatus: "failed" };
-      render(true);
-      return;
-    }
-    state = { ...preview, operationId, writeStatus: "sending" };
-    render(true);
-    void submitDevelopmentWrite(request);
-  } else if (
-    (action === "continue-recovery" || action === "retry-development-write") &&
-    (state.kind === "development-write-recovery" || state.kind === "new-aed-preview" || state.kind === "osm-preview")
-  ) {
-    if (state.writeStatus !== "uncertain") return;
-    if (isRecoveryOwnerMismatch()) return;
-    if (!developmentSession) {
-      if (accountState === "signed-in") {
-        // The pending request belongs to the test-server session; a production login cannot reconcile it.
-        openAccountFromLamp();
-      } else {
-        const target = app!.querySelector<HTMLElement>("#osm-dev-sign-in, #osm-session-retry, #login-title");
-        // Defer until the click's default focus handling has finished.
-        window.requestAnimationFrame(() => target?.focus());
-      }
-      return;
-    }
-    if (!developmentWriteAvailable || !developmentWriteOwnerHash) {
-      // Recheck the server switch so the same button works after an operator enables writes.
-      await refreshAccountState();
-      return;
-    }
-    successSound.prepare();
-    const request =
-      state.kind === "development-write-recovery" ? state.request : readPendingDevelopmentWrite(state.operationId);
-    if (!request) return;
-    state = { ...state, writeStatus: "sending" };
-    render(true);
-    void submitDevelopmentWrite(request);
-  }
+  if (result === "stop") return;
   render(true);
 }
 
@@ -2254,7 +1379,7 @@ function scheduleSearchRetryCountdown(retryAvailableAt: number): void {
     render(true);
     return;
   }
-  const waitText = app!.querySelector<HTMLElement>(".search-wait");
+  const waitText = app.querySelector<HTMLElement>(".search-wait");
   if (waitText) waitText.textContent = tv("searchWait", { seconds: remainingSeconds });
   searchRetryTimer = window.setTimeout(
     () => scheduleSearchRetryCountdown(retryAvailableAt),

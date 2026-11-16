@@ -114,7 +114,7 @@ export async function importOAuthEncryptionKey(secret: string, cryptoApi: Crypto
     throw new Error("Der OSM-Anmeldeschlüssel ist nicht korrekt konfiguriert.");
   }
 
-  const binary = atob(secret.replaceAll("-", "+").replaceAll("_", "/") + "=");
+  const binary = atob(`${secret.replaceAll("-", "+").replaceAll("_", "/")}=`);
   const raw = Uint8Array.from(binary, (character) => character.charCodeAt(0));
   if (raw.length !== 32) throw new Error("Der OSM-Anmeldeschlüssel ist nicht korrekt konfiguriert.");
 

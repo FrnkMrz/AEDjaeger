@@ -8,14 +8,7 @@ export type SearchSlotReservation =
   | { reserved: true; nextAllowedAt: number }
   | { reserved: false; retryAfterSeconds: number };
 
-/**
- * Limit repeated searches by the same OSM account. The legacy D1 table name is
- * retained to avoid a destructive migration; it contains only a hashed subject
- * and expiry, not the chosen search provider or location.
- *
- * Historisch: Der Tabellenname stammt aus der früheren Overpass-Suche. Heute drosselt
- * die Tabelle die PMTiles-Umgebungssuche je OSM-Konto und Umgebung (Dev/Produktion).
- */
+/** Limit repeated searches by the same OSM account without storing location or results. */
 export async function reserveSearchSlot(
   database: D1Database,
   userId: string,

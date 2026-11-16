@@ -26,7 +26,7 @@ Die in `server/worker.ts` verwendeten Einstellungen sind:
 
 ## Datenbankmigrationen
 
-SQL-Änderungen liegen dauerhaft unter `migrations/`; bereits angewendete Dateien werden weder umbenannt noch entfernt. Neue Dateien erhalten den nächsten freien Namen mit vierstelliger Nummer und beschreibendem Suffix, zum Beispiel `0012_add_example.sql`.
+SQL-Änderungen liegen dauerhaft unter `migrations/`; bereits angewendete Dateien werden weder umbenannt noch entfernt. Neue Dateien erhalten den nächsten freien Namen mit vierstelliger Nummer und beschreibendem Suffix, zum Beispiel `0014_add_example.sql` nach der geplanten Migration `0013_restore_legacy_search_cooldown.sql`.
 
 Vor jeder Worker-Bereitstellung fragt CI ausschließlich `d1_migrations` ab und vergleicht die Einträge mit den Dateien im Repository. Das SQL ist ein `SELECT`; der Deploy wendet keine Migration an. Eine fehlende, zusätzliche oder nicht lesbare Migration stoppt den Deploy. Damit bleibt der Worker auf dem bisherigen Stand, bis der Projektinhaber die Änderung geprüft und manuell angewendet hat.
 

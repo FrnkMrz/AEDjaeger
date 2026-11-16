@@ -12,7 +12,12 @@ function fakeEventSource() {
   return {
     visibilityState: "visible",
     addEventListener(type: string, listener: () => void) {
-      (listeners.get(type) ?? listeners.set(type, new Set()).get(type)!).add(listener);
+      let eventListeners = listeners.get(type);
+      if (!eventListeners) {
+        eventListeners = new Set();
+        listeners.set(type, eventListeners);
+      }
+      eventListeners.add(listener);
     },
     removeEventListener(type: string, listener: () => void) {
       listeners.get(type)?.delete(listener);

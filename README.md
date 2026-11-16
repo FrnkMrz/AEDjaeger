@@ -2,7 +2,9 @@
 
 Sammlung von Informationen, Links und Ideen für eine sehr einfache mobile App, mit der Menschen Defibrillatoren (AEDs) in OpenStreetMap erfassen und bestehende Einträge verbessern können.
 
-**Stand:** 10. November 2026 · **Phase:** Manueller Fotoablauf mit AED-Suche im PMTiles-Archiv · **Sprache:** Deutsch
+**Stand:** 15. November 2026 · **Phase:** Pilot mit Fotoablauf, AED-Suche und freiwilligem Detailweg · **Sprache:** Deutsch
+
+Der maßgebliche Projekt- und Abnahmestatus mit der aktuellen Reihenfolge offener Aufgaben steht in [Entscheidungen und nächste Schritte](docs/offene-fragen.md).
 
 Vorbild ist [Hydrantenjäger](https://hydrantenjaeger.de), insbesondere die einfache Bedienung unterwegs. Die App läuft als kleiner Pilot auf Cloudflare; Vorschau und lokale Entwicklung bleiben verfügbar. Der Produktname lautet in allen Sprachen **AEDjaeger**.
 
