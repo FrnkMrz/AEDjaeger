@@ -353,7 +353,7 @@ function makeFetch(
                 id: 77,
                 open: false,
                 changes_count: 1,
-                tags: { comment: "AEDjaeger: AED mapped on site", created_by: "AEDjaeger 0.1.0" },
+                tags: { comment: "AEDjaeger: AED mapped on site", created_by: "AEDjaeger 0.2.0" },
               };
       return Response.json({ version: "0.6", generator: "OpenStreetMap server", changeset });
     }
