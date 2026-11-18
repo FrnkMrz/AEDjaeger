@@ -733,7 +733,13 @@ async function safelyUpdate(
 }
 function completeResponse(operation: OSMDevelopmentWriteOperation): Response {
   return jsonResponse(
-    { status: "complete", node_id: operation.result_node_id, version: operation.result_version },
+    // changeset_id: Die App zeigt die Nummer des Änderungssatzes im Speicher-Fenster (öffentliche OSM-Angabe).
+    {
+      status: "complete",
+      node_id: operation.result_node_id,
+      version: operation.result_version,
+      changeset_id: operation.changeset_id,
+    },
     200,
   );
 }

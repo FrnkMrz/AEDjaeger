@@ -379,3 +379,14 @@ export const correctButton = (page: import("@playwright/test").Page) =>
 
 export const detailsFromList = (page: import("@playwright/test").Page) =>
   page.getByRole("button", { name: /^Angaben ansehen und (ergänzen|ändern)$/u });
+
+/**
+ * Schließt das Speicher-Fenster (src/ui/saveDialog.ts) mit „Fertig“ oder „Schließen“.
+ * Das Fenster sperrt die Seite dahinter, bis die Person es schließt. Tests, die danach weiterklicken, rufen das auf.
+ */
+export async function closeSaveDialog(page: import("@playwright/test").Page): Promise<void> {
+  const dialog = page.locator("#save-dialog");
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: /^(Fertig|Schließen)$/u }).click();
+  await expect(dialog).toHaveCount(0);
+}

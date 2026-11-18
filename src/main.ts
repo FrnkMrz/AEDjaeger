@@ -15,6 +15,8 @@ import { isAedRecognized } from "./contracts/visionObservation";
 import { formatBuildTime } from "./pwa/buildInfo";
 import { MAX_LOCATION_ACCURACY_METERS, NEARBY_RADIUS_METERS } from "./domain/matchPolicy";
 import { successSound } from "./sound/successSound";
+import { openSaveDialog, type SaveDialog, type SaveDialogOutcome } from "./ui/saveDialog";
+import { buildSaveLogLines, parseOSMApiLog, readSavedIds } from "./domain/saveLog";
 import { readStoredValue, removeStoredValue, writeStoredValue } from "./storage/safeStorage";
 import { startUpdateWatcher } from "./pwa/updateCheck";
 import {
@@ -977,14 +979,28 @@ async function retryOSMSessionStatus(): Promise<void> {
 
 /** Sends one explicitly confirmed test-server edit; a stable operation ID protects uncertain retries. */
 async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Promise<void> {
+  const isCheckDate = requestBody.kind === "check-date";
+  // Das Speicher-Fenster öffnet sich sofort beim Tippen und zeigt, was passiert (siehe src/ui/saveDialog.ts).
+  // Es zeigt nur an; welche Zustände der Vorgang durchläuft, entscheidet weiter allein der Code unten.
+  const saveDialog = openSaveDialog(
+    tv,
+    isCheckDate ? "/api/osm/development/check-date" : "/api/osm/development/create-node",
+    () => focusCurrentState(),
+  );
+  let responsePayload: unknown;
   try {
-    const isCheckDate = requestBody.kind === "check-date";
     const { ok, status, payload } = await sendDevelopmentWrite(requestBody, developmentWriteOwnerHash);
+    responsePayload = payload;
+    // Die Schritte des Servers (Änderungssatz angelegt, hochgeladen, geschlossen) ins Fenster schreiben.
+    saveDialog.addServerLines(buildSaveLogLines(parseOSMApiLog(payload)));
     const matchesCurrentRequest =
       (state.kind === "new-aed-preview" && state.operationId === requestBody.operationId) ||
       (state.kind === "osm-preview" && state.operationId === requestBody.operationId) ||
       (state.kind === "development-write-recovery" && state.request.operationId === requestBody.operationId);
-    if (!matchesCurrentRequest) return;
+    if (!matchesCurrentRequest) {
+      saveDialog.dismiss();
+      return;
+    }
     if (ok && isDevelopmentWriteResponse(payload, "complete")) {
       // "already_current": Das Datum stand schon so auf dem Knoten. Der Server hat bewusst nichts geschrieben (kein neuer
       // Änderungssatz). Das ist ein Erfolg im Sinne von "der Stand stimmt", aber kein Speichern. Darum eine eigene
@@ -1011,6 +1027,7 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
       // Ein anderer Tab kann das gemeinsame Sitzungscookie inzwischen auf ein anderes Konto umgestellt haben.
       // Der Server hat deshalb nichts geschrieben; den Marker aber behalten, bis das richtige Konto zurück ist.
       setDevelopmentWriteStatus(requestBody.operationId, "uncertain");
+      finishSaveDialog(saveDialog, requestBody, payload);
       await refreshAccountState();
       return;
     } else if (status === 202 || status >= 500 || (!ok && !isRecord(payload))) {
@@ -1020,14 +1037,60 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
       clearPendingDevelopmentCheck(requestBody.operationId);
     }
   } catch {
+    // Keine oder keine lesbare Antwort: Ob gespeichert wurde, ist offen. Der Zustand „unklar“ bietet das erneute Prüfen an.
     setDevelopmentWriteStatus(requestBody.operationId, "uncertain");
+    saveDialog.addLine(tv("saveLogNoAnswer"), "error");
   }
+  finishSaveDialog(saveDialog, requestBody, responsePayload);
   if (
     (state.kind === "new-aed-preview" && state.operationId === requestBody.operationId) ||
     (state.kind === "osm-preview" && state.operationId === requestBody.operationId) ||
     (state.kind === "development-write-recovery" && state.request.operationId === requestBody.operationId)
   )
     render(true, true);
+}
+
+/**
+ * Schließt das Speicher-Fenster mit dem Ergebnis ab, das der Ablauf gerade festgelegt hat.
+ * Die Schlussmeldung ist derselbe Text wie auf dem Bildschirm dahinter, damit beide dasselbe sagen.
+ */
+function finishSaveDialog(saveDialog: SaveDialog, requestBody: DevelopmentWriteRequest, payload: unknown): void {
+  const writeStatus =
+    state.kind === "new-aed-preview" && state.operationId === requestBody.operationId
+      ? state.writeStatus
+      : state.kind === "osm-preview" && state.operationId === requestBody.operationId
+        ? state.writeStatus
+        : state.kind === "development-write-recovery" && state.request.operationId === requestBody.operationId
+          ? state.writeStatus
+          : undefined;
+  if (!writeStatus || writeStatus === "sending") {
+    saveDialog.dismiss();
+    return;
+  }
+  // Bei Erfolg passt die Meldung zur Art des Vorgangs: neuer AED, Prüfdatum, Prüfdatum mit Ergänzungen oder Korrekturen.
+  const completeKey: FlowMessageKey =
+    requestBody.kind === "create-node"
+      ? "developmentCreated"
+      : requestBody.expectedBefore && requestBody.confirmedCorrections === true
+        ? "developmentChangesComplete"
+        : requestBody.details && Object.keys(requestBody.details).length > 0
+          ? "developmentDetailsComplete"
+          : "developmentComplete";
+  const outcome: SaveDialogOutcome =
+    writeStatus === "complete"
+      ? "complete"
+      : writeStatus === "unchanged"
+        ? "unchanged"
+        : writeStatus === "uncertain"
+          ? "uncertain"
+          : "failed";
+  const ids = readSavedIds(payload, requestBody.kind === "check-date" ? requestBody.target : undefined);
+  saveDialog.finish({
+    outcome,
+    message: tv(writeStatus === "complete" ? completeKey : developmentWriteStatusKeys[writeStatus]),
+    nodeId: ids.nodeId,
+    changesetId: ids.changesetId,
+  });
 }
 
 function setDevelopmentWriteStatus(

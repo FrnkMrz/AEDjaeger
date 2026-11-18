@@ -4,6 +4,11 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ## [Unreleased]
 
+### Added
+
+- Speicher-Fenster nach dem Vorbild des Hydrantenjägers: Beim Tippen auf „Speichern“ öffnet sich ein Fenster mit laufendem Protokoll (Anfrage gesendet, Änderungssatz angelegt, Änderung hochgeladen, Änderungssatz geschlossen, jeweils mit Methode, Pfad und Statuscode), am Ende Haken, „Gespeichert“, Knoten- und Änderungssatz-Nummer und „Fertig“. Bei Fehler oder unklarem Ergebnis: Ausrufezeichen, Meldung und „Schließen“. In allen sechs Sprachen.
+- Worker: Die Schreibrouten auf dem Testserver hängen ein kurzes Protokoll ihrer OSM-Aufrufe an (`osm_log`: nur Methode, Pfad ohne Abfrageteil und Status, nie Standort, Token oder OSM-Fehlertexte) und melden bei Erfolg die Nummer des Änderungssatzes (`changeset_id`).
+
 ### Changed
 - Hält die Entscheidung des Projektinhabers vom 18.11.2026 fest: `OSM_DEV_WRITES_ENABLED` bleibt auf dem Testserver an. In der Pilot-Abnahme entfällt C5 und das Ausschalten in Schritt 6 des Schreibtests, bei D7 bleibt nur der Korrektur-Schalter zum Ausschalten, und Abschnitt E verlangt das Ausschalten nicht mehr. Reine Dokumentation, kein Programmverhalten.
 - Aktualisiert die Statusangaben nach der Veröffentlichung von `v0.2.0` als Pre-release und hält in `docs/osm.md` fest, dass der Hydrantenjäger dieselben AED-Regeln als eigene Maske übernommen hat (mit Vergleichstabelle und Pflegehinweis). Reine Dokumentation, kein Programmverhalten.
