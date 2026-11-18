@@ -4,6 +4,10 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ## [Unreleased]
 
+### Fixed
+
+- Erfolgsbildschirm nach bestätigtem Speichern: Die Überschrift lautet jetzt „AED gespeichert“ bzw. „Prüfung gespeichert“ statt „Vorschau …“, die Beschriftungen heißen „Position“ und „Gespeicherte Angaben“, die Aufforderung „Prüfe Position und Umgebung genau“ entfällt, und die Erfolgsmeldung steht größer direkt unter der Überschrift. In allen sechs Sprachen.
+
 ## [0.2.0] - 2026-11-16
 
 > Pilotstand: optionale Fotoprüfung, Umgebungssuche, Detailweg, Schreiben nur gegen den OSM-Testserver. Einzelne Einträge beschreiben frühere, inzwischen abgelöste Zwischenstände (zum Beispiel Demo oder „ohne OpenAI“) und sind keine Beschreibung des aktuellen Laufzeitverhaltens.

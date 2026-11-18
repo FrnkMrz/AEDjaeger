@@ -365,6 +365,12 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
   );
   expect(createResponseBody).toEqual({ status: "complete", node_id: "456", version: 1 });
   await expect(page.getByRole("status")).toContainText("Neuer AED wurde eingetragen");
+  // Erfolgsbildschirm: eigene Überschrift, keine „Vorschau“-Wörter und keine Prüfaufforderung mehr.
+  await expect(page.getByRole("heading", { name: "AED gespeichert" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Vorschau für neuen AED" })).toHaveCount(0);
+  await expect(page.locator(".capture-content")).toContainText("Gespeicherte Angaben");
+  await expect(page.locator(".capture-content")).not.toContainText("Vorgeschlagene");
+  await expect(page.locator(".capture-content")).not.toContainText("Prüfe Position und Umgebung genau");
   // Nach dem Speichern steht „nur eine Vorschau“ nicht neben der Erfolgsmeldung.
   await expect(page.locator(".capture-content")).not.toContainText("Nur eine Vorschau");
   expect(createRequest).toMatchObject({

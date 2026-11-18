@@ -29,15 +29,19 @@ export function renderPreviewState(context: PreviewContext): string {
       const point = state.result.kind === "ready" ? state.result.position : state.returnState.location;
       const latitude = point.latitude.toFixed(5);
       const longitude = point.longitude.toFixed(5);
+      // Nach dem bestätigten Speichern ist das keine Vorschau mehr: Überschrift und Beschriftungen sagen „gespeichert“,
+      // und die Aufforderung „Prüfe Position und Umgebung genau“ entfällt, weil es nichts mehr zu prüfen gibt.
+      const savedNew = state.writeStatus === "complete";
+      const cautionMarkup = savedNew
+        ? ""
+        : `<p>${state.result.kind === "ready" && state.result.confirmedDifferentCandidateIds.length > 0 ? tv("newPreviewReviewedCandidates") : tv("newPreviewCaution")}</p>`;
       const content =
         state.result.kind === "ready"
-          ? `<p>${tv("newPreviewCoordinates", { latitude, longitude })}</p><strong>${tv("newPreviewTags")}</strong><ul>${Object.entries(
+          ? `<p>${tv(savedNew ? "newSavedCoordinates" : "newPreviewCoordinates", { latitude, longitude })}</p><strong>${tv(savedNew ? "newSavedTags" : "newPreviewTags")}</strong><ul>${Object.entries(
               state.result.tags,
             )
               .map(([key, value]) => `<li><code>${escapeHtml(key)}=${escapeHtml(value)}</code></li>`)
-              .join(
-                "",
-              )}</ul><p>${state.result.confirmedDifferentCandidateIds.length > 0 ? tv("newPreviewReviewedCandidates") : tv("newPreviewCaution")}</p>`
+              .join("")}</ul>${cautionMarkup}`
           : `<p>${tv(state.result.reason === "position-not-confirmed" ? "newPositionRequired" : state.result.reason === "search-found-candidate" ? "newPreviewFoundCandidate" : "newPreviewSearchInvalid")}</p>`;
       const canCreate =
         developmentSession &&
@@ -83,8 +87,10 @@ export function renderPreviewState(context: PreviewContext): string {
           : state.writeStatus === "complete"
             ? `<button class="button button-primary" data-action="retake">${tv("nextAed")}</button>`
             : `${backButton}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
-      const successful = state.writeStatus === "complete";
-      return `${photoMarkup}<div class="result-message"><span class="status-icon ${successful ? "status-good" : "status-warn"}" aria-hidden="true">${successful ? "✓" : "!"}</span><div><h2>${tv("newPreviewTitle")}</h2>${content}${noWriteNotice}${writeStatus}</div></div>${writeAction}${navigation}`;
+      // Bei Erfolg steht die Bestätigung direkt unter der Überschrift, damit sie nicht unter der Tag-Liste verschwindet.
+      return savedNew
+        ? `${photoMarkup}<div class="result-message"><span class="status-icon status-good" aria-hidden="true">✓</span><div><h2>${tv("newSavedTitle")}</h2>${writeStatus}${content}</div></div>${writeAction}${navigation}`
+        : `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("newPreviewTitle")}</h2>${content}${noWriteNotice}${writeStatus}</div></div>${writeAction}${navigation}`;
     }
     case "osm-preview": {
       const { result } = state;
@@ -196,7 +202,11 @@ export function renderPreviewState(context: PreviewContext): string {
           ? `<button class="button button-primary" data-action="retake">${tv("nextAed")}</button>`
           : `${backButton}<button class="button button-quiet" data-action="retake">${tv("return")}</button>`;
       const successful = state.writeStatus === "complete";
-      return `${photoMarkup}<div class="result-message"><span class="status-icon ${successful ? "status-good" : "status-warn"}" aria-hidden="true">${successful ? "✓" : "!"}</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.candidateLabel, tv("unnamedAed")))}</strong></p>${content}${changedList}${addedList}${levelLeftNote}${noWriteNotice}${writeStatus}</div></div>${writeAction}${addDetailsButton}${navigation}`;
+      const label = `<p><strong>${escapeHtml(displayCandidateLabel(state.candidateLabel, tv("unnamedAed")))}</strong></p>`;
+      // Nach dem bestätigten Speichern: Überschrift „Prüfung gespeichert“ statt „Änderungsvorschau“, Erfolgsmeldung oben.
+      return successful
+        ? `${photoMarkup}<div class="result-message"><span class="status-icon status-good" aria-hidden="true">✓</span><div><h2>${tv("checkSavedTitle")}</h2>${writeStatus}${label}${content}${changedList}${addedList}${levelLeftNote}</div></div>${writeAction}${addDetailsButton}${navigation}`
+        : `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("previewTitle")}</h2>${label}${content}${changedList}${addedList}${levelLeftNote}${noWriteNotice}${writeStatus}</div></div>${writeAction}${addDetailsButton}${navigation}`;
     }
     case "existing-aed-details": {
       const label = escapeHtml(displayCandidateLabel(state.candidateLabel, tv("unnamedAed")));

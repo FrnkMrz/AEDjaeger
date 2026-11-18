@@ -442,9 +442,14 @@ summary:focus-visible,
   line-height: 1.5;
   text-align: center;
 }
+/* Erfolgsmeldung nach bestätigtem Speichern: größer und kräftiger als ein normaler Hinweis,
+   damit die Person sofort sieht, dass der Vorgang abgeschlossen ist. */
 .simulation-note.save-status-success {
   color: #176b4b;
   background: #e7f3e9;
+  border: 1px solid #b9dcc3;
+  font-size: 1rem;
+  font-weight: 600;
 }
 .loading-row {
   min-height: 68px;
