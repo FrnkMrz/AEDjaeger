@@ -99,7 +99,7 @@ Der Schalter `OSM_DEV_WRITES_ENABLED` bleibt in diesem Teil **aus**. Die Punkte 
 | C0.5 | App öffnen, abgemeldet: „Mit OSM-Testserver anmelden“ ist sichtbar. Anmelden | Nach der Rückkehr ist die Lampe grün; im Info-Dialog steht „Mit OSM-Testserver verbunden“. Es wurde nichts geschrieben | `[x]` 13.11.2026, bestätigt vom Projektinhaber |
 | C0.6 | **Testort wählen.** Die Suche liest AEDs aus dem Archiv des echten OSM; geschrieben wird nur auf die Dev-Instanz. Einen abgedeckten Ort (D, A, CH, LI, LU) ohne AED-Treffer im Archiv wählen. Der frühere Testknoten muss dort über die Dev-Suche auffindbar sein, ohne einen Archivtreffer mit einem echten AED zu verwechseln | App zeigt nach vollständiger Suche den vorgesehenen Testknoten bzw. bestätigt vor einer neuen Neuanlage eine vollständige leere Suche | `[ ]` |
 | C0.7 | Beobachtungsdaten festlegen. Für eine neue C3-Neuanlage muss ihr Datum vor dem C2-Prüfdatum liegen. Ist der Knoten aus dem Vorgang vom 13.11. bereits bestätigt, gilt sein bestehendes `check_date` (`2026-11-13`) als C3-Datum; C2 bekommt ein späteres, nicht zukünftiges Datum | Datum des Testknotens und späteres C2-Datum stehen im Bericht-Entwurf | `[ ]` |
-| C0.8 | **Früheren unklaren Vorgang abgleichen, bevor ein neuer Create begonnen wird.** Während der Schreibschalter aus ist, zuerst lesend mit demselben Dev-Konto Node `4365809370` und Changeset `725093` auf der Dev-Instanz sowie die erwarteten Tags prüfen. Die App-Wiederaufnahme „Status erneut prüfen“ erfolgt unmittelbar nach C1, weil sie den aktivierten Dev-Schreibweg voraussetzt; bis dahin keinen neuen Create starten | Nach der Wiederaufnahme meldet die App den Vorgang als erstellt und die Dev-Instanz bestätigt genau `emergency=defibrillator` und `check_date`; oder es liegt ein eindeutiger Nachweis vor, dass kein Objekt angelegt wurde. Bleibt der Status unklar, Schalter ausschalten und abbrechen; keinen neuen Create senden | `[ ]` |
+| C0.8 | **Früheren unklaren Vorgang abgleichen, bevor ein neuer Create begonnen wird.** Während der Schreibschalter aus ist, zuerst lesend mit demselben Dev-Konto Node `4365809370` und Changeset `725093` auf der Dev-Instanz sowie die erwarteten Tags prüfen. Die App-Wiederaufnahme „Status erneut prüfen“ erfolgt unmittelbar nach C1, weil sie den aktivierten Dev-Schreibweg voraussetzt; bis dahin keinen neuen Create starten | Nach der Wiederaufnahme meldet die App den Vorgang als erstellt und die Dev-Instanz bestätigt genau `emergency=defibrillator` und `check_date`; oder es liegt ein eindeutiger Nachweis vor, dass kein Objekt angelegt wurde. Bleibt der Status unklar, Schalter ausschalten und abbrechen; keinen neuen Create senden | `[ ]` **Teilweise erfüllt.** Der Nachweis auf der Dev-Instanz liegt vor (18.11.2026, **lesend** geprüft, keine Änderung); die Wiederaufnahme in der App („Status erneut prüfen“ meldet „erstellt“) ist **noch nicht bestätigt**: Node `4365809370` Version 1 stammt aus Changeset `725093` (13.11.2026, 17:37:31 Uhr UTC, geschlossen nach 10 Sekunden, `created_count` 1, Kommentar „AEDjaeger: AED mapped on site“) und trägt genau `emergency=defibrillator` und `check_date=2026-11-13`. Es gibt keinen zweiten Knoten aus diesem Vorgang. **Neu entdeckt:** Der Knoten hat eine Version 2 aus Changeset `725534` (14.11.2026, 05:48:54 Uhr UTC, gleiches Konto, `modified_count` 1, Kommentar „AEDjaeger: AED presence checked on site“) mit `check_date=2026-11-14`. Das passt zu einer C2-Bestätigung; wer sie ausgelöst hat, ist nicht belegt. Offen bleibt, ob die App den Vorgang nach „Status erneut prüfen“ jetzt als „erstellt“ meldet |
 
 **Ausführungsreihenfolge:** C0.8 zunächst lesend vorbereiten, dann C1 einschalten und als erste Aktion die App-Wiederaufnahme des alten Vorgangs ausführen. Nur wenn eindeutig kein Create stattgefunden hat, C3 neu anlegen; bei unklarem Ergebnis abbrechen und den Schalter ausschalten. Danach am selben Punkt neu suchen und C2 auf demselben Testknoten ausführen. Die Suche soll den Testknoten über die Dev-Instanz finden. Das ergibt sich aus `server/osm/staticCandidateSearchRoute.ts` und ist beim Praxistest zu bestätigen; weicht es ab, stoppen und die Abweichung dokumentieren. C3 ist nicht erneut anzulegen, wenn C0.8 den bereits angelegten Knoten bestätigt.
 
@@ -112,7 +112,7 @@ Der Schalter `OSM_DEV_WRITES_ENABLED` bleibt in diesem Teil **aus**. Die Punkte 
 3. **Nur falls C0.8 eindeutig belegt, dass keine Neuanlage erfolgte:** Einen Test-AED wie beschrieben an einer vollständigen leeren Suche anlegen und genau einmal speichern. Bleibt die Antwort unklar, stoppen; nicht neu senden.
 4. **Prüfdatum erneuern.** Am selben Testknoten neu suchen. „Noch vorhanden“ bestätigen. Das Datum muss **später** sein als das bereits vorhandene `check_date`, darf aber nicht in der Zukunft liegen.
 5. **Ergebnis auf der Dev-Seite ansehen.** Die Änderungen auf `master.apis.dev.openstreetmap.org` öffnen. Die Neuanlage hat genau `emergency=defibrillator` und `check_date`; beim zweiten Vorgang hat sich nur das Datum geändert.
-6. **Schalter wieder aus.** Variable entfernen oder auf `false` setzen. Ein neuer Schreibversuch muss abgelehnt werden.
+6. **Schalter bleibt an (Entscheidung des Projektinhabers vom 18.11.2026).** `OSM_DEV_WRITES_ENABLED` bleibt bewusst eingeschaltet, solange der Pilot nur den Testserver nutzt. Der Projektinhaber kann ihn jederzeit entfernen oder auf `false` setzen; danach wird ein neuer Schreibversuch abgelehnt. Vor jedem Schritt in Richtung echtes OSM wird neu entschieden.
 7. **Echtes OSM ansehen.** Es darf keine Änderung durch den Test geben.
 
 Warum die Kartenposition: Die Suche liest die echten AEDs des echten OSM, geschrieben wird nur auf den Testserver. Ein echter AED aus dem Archiv (zum Beispiel der am Feuerwehrhaus) ist auf dem Testserver nicht vorhanden und darf dort nicht „bestätigt“ werden. Der Testpunkt auf dem Feld ist Testdaten auf dem Testserver; im echten OSM würde man immer die echte Position nehmen.
@@ -122,10 +122,10 @@ Ablauf:
 | Nr | Schritt | Erwartetes Ergebnis | Ergebnis |
 | --- | --- | --- | --- |
 | C1 | `OSM_DEV_WRITES_ENABLED` als Worker-Variable im Cloudflare-Dashboard auf `true` setzen | Der Schalter ist nur für diesen Testlauf an. Ob dafür eine neue Version nötig ist, ist im Dashboard zu prüfen; das Repository belegt dazu nichts | `[ ]` |
-| C3 | Vorhandene Neuanlage aus C0.8 als C3 bestätigen. Nur wenn zweifelsfrei kein Create stattgefunden hat: genau eine Neuanlage nach erfolgreicher, vollständiger Suche im Testgebiet durchführen | App meldet den alten Vorgang als erstellt und die Dev-Instanz zeigt genau die zwei erwarteten Tags; andernfalls höchstens ein neu erstellter Knoten. Kein Create bei unklarem Status | `[ ]` |
-| C2 | Danach genau **eine** `check_date`-Bestätigung an demselben Testknoten durchführen, mit einem Beobachtungsdatum **nach** dem vorhandenen Datum von C3 (siehe C0.7) | Vorschau zeigt nur `check_date`; nach Bestätigung genau eine Änderung auf der Dev-Instanz (ein neues Changeset, nicht `already_current`) | `[ ]` |
+| C3 | Vorhandene Neuanlage aus C0.8 als C3 bestätigen. Nur wenn zweifelsfrei kein Create stattgefunden hat: genau eine Neuanlage nach erfolgreicher, vollständiger Suche im Testgebiet durchführen | App meldet den alten Vorgang als erstellt und die Dev-Instanz zeigt genau die zwei erwarteten Tags; andernfalls höchstens ein neu erstellter Knoten. Kein Create bei unklarem Status | `[ ]` **Teilweise erfüllt.** Die Neuanlage vom 13.11.2026 ist auf der Dev-Instanz belegt (siehe C0.8), es muss nichts neu angelegt werden. Abgehakt wird C3 erst, wenn die App den Vorgang nach „Status erneut prüfen“ als „erstellt“ meldet |
+| C2 | Danach genau **eine** `check_date`-Bestätigung an demselben Testknoten durchführen, mit einem Beobachtungsdatum **nach** dem vorhandenen Datum von C3 (siehe C0.7) | Vorschau zeigt nur `check_date`; nach Bestätigung genau eine Änderung auf der Dev-Instanz (ein neues Changeset, nicht `already_current`) | `[ ]` Nachweis liegt vor: Version 2 des Testknotens (Changeset `725534`, 14.11.2026) ändert nur `check_date` von `2026-11-13` auf `2026-11-14`. Bestätigung durch den Projektinhaber, dass dies sein C2-Test war, und Prüfung von C4 bis C6 stehen noch aus |
 | C4 | Changeset auf der Dev-Instanz öffnen und prüfen | Bei C2 ist nur `check_date` geändert. Bei C3 sind nur `emergency=defibrillator` und `check_date` gesetzt | `[ ]` |
-| C5 | Schalter wieder ausschalten (`OSM_DEV_WRITES_ENABLED` entfernen oder `false`) | Ein erneuter Schreibversuch wird abgelehnt | `[ ]` |
+| C5 | **Entfällt.** Der Projektinhaber lässt `OSM_DEV_WRITES_ENABLED` bewusst an (Entscheidung vom 18.11.2026). Stattdessen gilt: Die Schreibroute ist fest auf die Dev-Instanz begrenzt | Es entsteht keine Schreibanfrage an das echte OSM (siehe C6) | entfällt, Entscheidung 18.11.2026 |
 | C6 | Produktions-OSM prüfen | Es gibt keine Änderung durch diesen Test | `[ ]` |
 
 **Erster Versuch am 13.11.2026 (iPhone):** Die Neuanlage legte auf dem Testserver den Knoten `4365809370` an (Änderungssatz `725093`, Version 1, genau die zwei Angaben `emergency=defibrillator` und `check_date=2026-11-13`; der Änderungssatz wurde nach etwa 10 Sekunden geschlossen). Die App blieb trotzdem bei „Testserver: Ergebnis unklar“. Ursache: Die Statusprüfung des Änderungssatzes las nur XML, der Testserver antwortete mit JSON. Behoben im Code, mit Tests; ohne Deploy bleibt der Zustand unverändert. Nach dem Deploy bestätigt „Testserver: Status erneut prüfen“ den vorhandenen Vorgang, ohne einen zweiten Knoten anzulegen. Der Test ist erst abgehakt, wenn die App „erstellt“ meldet.
@@ -142,7 +142,7 @@ Erst nach C2 bis C4, am gleichen Testort und mit demselben Schalter `OSM_DEV_WRI
 | D4 | `OSM_DETAIL_CORRECTIONS_ENABLED` = `true` setzen. `https://aedjaeger.aedjaeger.workers.dev/api/auth/session` zeigt `"developmentCorrectionsAvailable":true`. In der App erscheint „Angaben ergänzen oder korrigieren“ | Das Formular ist vorbelegt | `[ ]` |
 | D5 | Einen Wert korrigieren (zum Beispiel Zugang) | Gelb umrandet mit „Vorher: …“; die Vorschau zeigt `alt → neu`; Speichern erst nach dem Haken; der Änderungssatz ändert nur diesen Wert und `check_date`; Kommentar „details added and corrected“ | `[ ]` |
 | D6 | Den Wert in einem zweiten Fenster (oder iD) ändern und danach im alten Fenster speichern | Konflikt-Meldung; der fremde Wert bleibt unverändert | `[ ]` |
-| D7 | Beide Schalter wieder ausschalten | Der Sitzungsstatus enthält kein `developmentCorrectionsAvailable`; ein erneuter Schreibversuch mit Korrektur wird mit 403 abgelehnt | `[ ]` |
+| D7 | Nur den Korrektur-Schalter `OSM_DETAIL_CORRECTIONS_ENABLED` wieder ausschalten; `OSM_DEV_WRITES_ENABLED` bleibt an (Entscheidung vom 18.11.2026) | Der Sitzungsstatus enthält kein `developmentCorrectionsAvailable`; ein erneuter Schreibversuch mit Korrektur wird mit 403 abgelehnt | `[ ]` |
 
 Abnahmebericht (ausfüllen, ohne Tokens):
 
@@ -155,7 +155,7 @@ Abnahmebericht (ausfüllen, ohne Tokens):
 | C2: Changeset-Nummer, Node-ID, geänderter Tag | |
 | C3: Changeset-Nummer, neue Node-ID, gesetzte Tags | |
 | C4: Beobachtung im Changeset (nur erwartete Tags?) | |
-| C5: Ablehnung nach dem Ausschalten (Meldung) | |
+| C5: entfällt (Schalter bleibt an, Entscheidung 18.11.2026) | |
 | C6: Produktions-OSM geprüft von / wann | |
 | Auffälligkeiten, Abweichungen | |
 
@@ -172,17 +172,17 @@ Wenn der Test auffällig ist:
 
 ## E. Kriterien für den Release v0.2.0
 
-Version 0.1.0 (17.10.2026) war ein reiner Dokumentationsstand und bekommt keinen Tag. Der Pilotstand trägt seit dem 16.11.2026 die Version 0.2.0. Der Tag `v0.2.0` wird nur gesetzt, wenn alle folgenden Punkte erfüllt sind:
+Version 0.1.0 (17.10.2026) war ein reiner Dokumentationsstand und bekommt keinen Tag. Der Pilotstand trägt seit dem 16.11.2026 die Version 0.2.0. Am 17.11.2026 hat der Projektinhaber `v0.2.0` ausdrücklich als **Pre-release** veröffentlicht, obwohl die Punkte unten noch offen sind. Sie entscheiden jetzt darüber, ob der Pre-release-Haken entfällt und `v0.2.0` als stabiler Stand gilt:
 
 - [ ] Abschnitt A ist bestanden (Android, iPhone, PWA, alle sechs Sprachen).
 - [ ] Abschnitt B ist bestanden.
-- [ ] Abschnitt C ist bestanden und der Schalter ist wieder aus.
+- [ ] Abschnitt C ist bestanden. C5 entfällt: `OSM_DEV_WRITES_ENABLED` bleibt auf Entscheidung des Projektinhabers vom 18.11.2026 an, solange der Pilot nur den Testserver nutzt.
 - [ ] `CHANGELOG.md` enthält die Fassung 0.2.0 mit Datum.
 - [ ] Die Änderungen sind über Pull Requests in `main` gemergt und alle erforderlichen Statusprüfungen sind grün. Die Freigabeanforderung richtet sich nach der dann aktuellen Branch-Protection-Regel; Stand 13.11.2026 ist keine Code-Owner-Freigabe erforderlich.
 - [ ] Der Tag zeigt auf genau diesen gemergten `main`-Commit.
 - [ ] Die ausdrückliche Freigabe der Projektinhaberin oder des Projektinhabers liegt vor.
 
-Ohne diese Punkte wird weder ein Tag noch ein GitHub-Release erstellt.
+Ohne diese Punkte bleibt `v0.2.0` ein Pre-release. Weitere Tags oder Releases entstehen nur auf ausdrücklichen Auftrag.
 
 ## F. Fotoprüfung per OpenAI (nur bei Betreiber-Freigabe)
 

@@ -4,6 +4,11 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ## [Unreleased]
 
+### Changed
+- Hält die Entscheidung des Projektinhabers vom 18.11.2026 fest: `OSM_DEV_WRITES_ENABLED` bleibt auf dem Testserver an. In der Pilot-Abnahme entfällt C5 und das Ausschalten in Schritt 6 des Schreibtests, bei D7 bleibt nur der Korrektur-Schalter zum Ausschalten, und Abschnitt E verlangt das Ausschalten nicht mehr. Reine Dokumentation, kein Programmverhalten.
+- Aktualisiert die Statusangaben nach der Veröffentlichung von `v0.2.0` als Pre-release und hält in `docs/osm.md` fest, dass der Hydrantenjäger dieselben AED-Regeln als eigene Maske übernommen hat (mit Vergleichstabelle und Pflegehinweis). Reine Dokumentation, kein Programmverhalten.
+- Trägt den lesenden Abgleich des Testserver-Vorgangs `725093` / Node `4365809370` in die Pilot-Abnahme ein (C0.8 und C3 als teilweise erfüllt: Der Knoten ist belegt, die Wiederaufnahme in der App ist noch zu bestätigen). Der Knoten hat außerdem eine Version 2 aus Changeset `725534`, die zu einer C2-Bestätigung passt; die Bestätigung durch den Projektinhaber steht noch aus.
+
 ### Fixed
 
 - Erfolgsbildschirm nach bestätigtem Speichern: Die Überschrift lautet jetzt „AED gespeichert“ bzw. „Prüfung gespeichert“ statt „Vorschau …“, die Beschriftungen heißen „Position“ und „Gespeicherte Angaben“, die Aufforderung „Prüfe Position und Umgebung genau“ entfällt, und die Erfolgsmeldung steht größer direkt unter der Überschrift. In allen sechs Sprachen.
