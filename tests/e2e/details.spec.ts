@@ -266,6 +266,9 @@ test("adding details to an existing AED locks what is already entered and sends 
   await expect(page.getByRole("button", { name: "Fehlende Angaben ergänzen" })).toHaveCount(0);
   await page.getByRole("button", { name: "Testserver: Angaben speichern" }).click();
   await expect(page.getByRole("status")).toContainText("Prüfdatum und neue Angaben gespeichert");
+  // Nach dem Speichern heißt die Überschrift „Prüfung gespeichert“ statt „Änderungsvorschau“.
+  await expect(page.getByRole("heading", { name: "Prüfung gespeichert" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Änderungsvorschau" })).toHaveCount(0);
   expect(writes).toHaveLength(1);
   // Die Version und das Prüfdatum kommen aus dem frisch gelesenen Stand, nicht aus dem alten Treffer.
   expect(writes[0]).toMatchObject({

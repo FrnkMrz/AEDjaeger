@@ -112,6 +112,11 @@ export const flowTranslations = {
     newPositionRequired: "Bestätige zuerst, dass der AED genau an diesem GPS-Punkt steht.",
     newPreviewCoordinates: "Vorgeschlagene Position: {latitude}, {longitude}",
     newPreviewTags: "Vorgeschlagene Angaben",
+    // Nach einem vom Server bestätigten Speichern: Überschrift und Beschriftungen ohne „Vorschau“/„vorgeschlagen“.
+    newSavedTitle: "AED gespeichert",
+    newSavedCoordinates: "Position: {latitude}, {longitude}",
+    newSavedTags: "Gespeicherte Angaben",
+    checkSavedTitle: "Prüfung gespeichert",
     newPreviewReviewedCandidates:
       "Die angezeigten nahen AED-Einträge wurden als andere Geräte bestätigt. Vor dem Speichern prüft der Testserver die Umgebung erneut.",
     newPreviewCaution: "Prüfe Position und Umgebung genau.",
@@ -300,6 +305,11 @@ export const flowTranslations = {
     newPositionRequired: "First confirm that the AED is at this exact GPS point.",
     newPreviewCoordinates: "Proposed location: {latitude}, {longitude}",
     newPreviewTags: "Proposed details",
+    // Nach einem vom Server bestätigten Speichern: Überschrift und Beschriftungen ohne „Vorschau“/„vorgeschlagen“.
+    newSavedTitle: "AED saved",
+    newSavedCoordinates: "Location: {latitude}, {longitude}",
+    newSavedTags: "Saved details",
+    checkSavedTitle: "Check saved",
     newPreviewReviewedCandidates:
       "You confirmed the nearby entries shown are other devices. The test server will check the area again before saving.",
     newPreviewCaution: "Check the position and surroundings carefully.",
@@ -485,6 +495,11 @@ export const flowTranslations = {
     newPositionRequired: "Najpierw potwierdź, że AED znajduje się w tym punkcie GPS.",
     newPreviewCoordinates: "Proponowana lokalizacja: {latitude}, {longitude}",
     newPreviewTags: "Proponowane dane",
+    // Nach einem vom Server bestätigten Speichern: Überschrift und Beschriftungen ohne „Vorschau“/„vorgeschlagen“.
+    newSavedTitle: "AED zapisany",
+    newSavedCoordinates: "Lokalizacja: {latitude}, {longitude}",
+    newSavedTags: "Zapisane dane",
+    checkSavedTitle: "Sprawdzenie zapisane",
     newPreviewReviewedCandidates:
       "Potwierdzono, że pokazane pobliskie wpisy dotyczą innych urządzeń. Serwer testowy ponownie sprawdzi obszar przed zapisem.",
     newPreviewCaution: "Sprawdź dokładnie pozycję i okolicę.",
@@ -672,6 +687,11 @@ export const flowTranslations = {
     newPositionRequired: "まずAEDがこのGPS地点にあることを確認してください。",
     newPreviewCoordinates: "提案する位置: {latitude}, {longitude}",
     newPreviewTags: "提案する情報",
+    // Nach einem vom Server bestätigten Speichern: Überschrift und Beschriftungen ohne „Vorschau“/„vorgeschlagen“.
+    newSavedTitle: "AEDを保存しました",
+    newSavedCoordinates: "位置: {latitude}, {longitude}",
+    newSavedTags: "保存した情報",
+    checkSavedTitle: "確認を保存しました",
     newPreviewReviewedCandidates:
       "表示された近くのAEDは別の機器であると確認しました。保存前にテストサーバーが周辺を再確認します。",
     newPreviewCaution: "位置と周辺をよく確認してください。",
@@ -862,6 +882,11 @@ export const flowTranslations = {
     newPositionRequired: "Confirmez d’abord que le DAE se trouve exactement à ce point GPS.",
     newPreviewCoordinates: "Position proposée : {latitude}, {longitude}",
     newPreviewTags: "Informations proposées",
+    // Nach einem vom Server bestätigten Speichern: Überschrift und Beschriftungen ohne „Vorschau“/„vorgeschlagen“.
+    newSavedTitle: "DAE enregistré",
+    newSavedCoordinates: "Position : {latitude}, {longitude}",
+    newSavedTags: "Informations enregistrées",
+    checkSavedTitle: "Vérification enregistrée",
     newPreviewReviewedCandidates:
       "Vous avez confirmé que les entrées proches affichées concernent d’autres appareils. Le serveur de test vérifiera à nouveau la zone avant l’enregistrement.",
     newPreviewCaution: "Vérifiez bien la position et les environs.",
@@ -1052,6 +1077,11 @@ export const flowTranslations = {
     newPositionRequired: "Confirma primero que el DEA está exactamente en este punto GPS.",
     newPreviewCoordinates: "Ubicación propuesta: {latitude}, {longitude}",
     newPreviewTags: "Datos propuestos",
+    // Nach einem vom Server bestätigten Speichern: Überschrift und Beschriftungen ohne „Vorschau“/„vorgeschlagen“.
+    newSavedTitle: "DEA guardado",
+    newSavedCoordinates: "Ubicación: {latitude}, {longitude}",
+    newSavedTags: "Datos guardados",
+    checkSavedTitle: "Comprobación guardada",
     newPreviewReviewedCandidates:
       "Has confirmado que las fichas cercanas mostradas son otros dispositivos. El servidor de pruebas volverá a comprobar la zona antes de guardar.",
     newPreviewCaution: "Comprueba bien la posición y el entorno.",

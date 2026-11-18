@@ -37,5 +37,9 @@ export function renderWriteRecovery(context: RecoveryContext): string {
         ? `<button class="button button-primary" data-action="continue-recovery"${state.writeStatus === "sending" ? " disabled" : ""}>${state.writeStatus === "sending" ? tv("developmentSending") : developmentSession && developmentWriteAvailable ? tv("developmentRetry") : tv("recoveryContinue")}</button>`
         : `<button class="button button-primary" data-action="retake">${state.writeStatus === "complete" ? tv("nextAed") : tv("recoveryContinue")}</button>`;
   const successful = state.writeStatus === "complete";
-  return `<div class="result-message"><span class="status-icon ${successful ? "status-good" : "status-warn"}" aria-hidden="true">${successful ? "✓" : "!"}</span><div><h2>${tv("previewTitle")}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.request.candidateLabel, tv("unnamedAed")))}</strong></p>${targetLink}<p class="simulation-note ${successful ? "save-status-success" : ""}" role="status">${recoveryMessage}</p>${blockedReason ? `<p class="simulation-note" role="status">${blockedReason}</p>` : ""}</div></div>${action}`;
+  // Nach bestätigtem Erfolg dieselbe Überschrift wie im normalen Ablauf: „AED gespeichert“ bzw. „Prüfung gespeichert“.
+  const title = successful
+    ? tv(state.request.kind === "create-node" ? "newSavedTitle" : "checkSavedTitle")
+    : tv("previewTitle");
+  return `<div class="result-message"><span class="status-icon ${successful ? "status-good" : "status-warn"}" aria-hidden="true">${successful ? "✓" : "!"}</span><div><h2>${title}</h2><p><strong>${escapeHtml(displayCandidateLabel(state.request.candidateLabel, tv("unnamedAed")))}</strong></p>${targetLink}<p class="simulation-note ${successful ? "save-status-success" : ""}" role="status">${recoveryMessage}</p>${blockedReason ? `<p class="simulation-note" role="status">${blockedReason}</p>` : ""}</div></div>${action}`;
 }
