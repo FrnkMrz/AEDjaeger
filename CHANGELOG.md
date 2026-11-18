@@ -4,6 +4,10 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ## [Unreleased]
 
+### Changed
+- Aktualisiert die Statusangaben nach der Veröffentlichung von `v0.2.0` als Pre-release und hält in `docs/osm.md` fest, dass der Hydrantenjäger dieselben AED-Regeln als eigene Maske übernommen hat (mit Vergleichstabelle und Pflegehinweis). Reine Dokumentation, kein Programmverhalten.
+- Trägt den lesenden Abgleich des Testserver-Vorgangs `725093` / Node `4365809370` in die Pilot-Abnahme ein (C0.8 und C3 als teilweise erfüllt: Der Knoten ist belegt, die Wiederaufnahme in der App ist noch zu bestätigen). Der Knoten hat außerdem eine Version 2 aus Changeset `725534`, die zu einer C2-Bestätigung passt; die Bestätigung durch den Projektinhaber steht noch aus.
+
 ## [0.2.0] - 2026-11-16
 
 > Pilotstand: optionale Fotoprüfung, Umgebungssuche, Detailweg, Schreiben nur gegen den OSM-Testserver. Einzelne Einträge beschreiben frühere, inzwischen abgelöste Zwischenstände (zum Beispiel Demo oder „ohne OpenAI“) und sind keine Beschreibung des aktuellen Laufzeitverhaltens.

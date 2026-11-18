@@ -1,6 +1,6 @@
 # AEDjaeger – Übergabe an den nächsten Agenten
 
-Stand: **16. November 2026** (Version 0.2.0 vorbereitet, noch nicht getaggt; Changelog-Fassung `[0.2.0]`)
+Stand: **17. November 2026** (Version 0.2.0 ist als Pre-release `v0.2.0` auf GitHub veröffentlicht; Changelog-Fassung `[0.2.0]`)
 
 Repository: [FrnkMrz/AEDjaeger](https://github.com/FrnkMrz/AEDjaeger)
 App: [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev)

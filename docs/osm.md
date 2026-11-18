@@ -59,6 +59,21 @@ Neben dem Schnellweg „Noch da – bestätigen“ (schreibt nur `check_date`) g
 
 **Hinweise zur Datenquelle:** Die Umgebungssuche reicht an den Browser nur die Schlüssel aus `ALLOWED_TAGS` (`server/osm/staticCandidateSearchRoute.ts`) weiter. `description` und `phone` fehlen dort und ob die Ebene `defibrillators` sie überhaupt trägt, ist nicht belegt. Deshalb liest der Detailweg das Objekt frisch.
 
+## Gleiche AED-Regeln im Hydrantenjäger (Stand 17.11.2026)
+
+Der [Hydrantenjäger](https://github.com/FrnkMrz/hydranten-app) hat dieselbe Schlüsselliste und dieselben Eingaberegeln seit dem 17.11.2026 als eigene AED-Maske übernommen ([PR #50](https://github.com/FrnkMrz/hydranten-app/pull/50), Merge-Commit `e6cbae3`; Code in `src/services/aed-details.js` und `src/components/confirm/aed-form.js`). Dort ist die Maske live und schreibt direkt ins **echte** OSM; AEDjaeger schreibt im Pilot weiter nur auf den Testserver.
+
+| Punkt | AEDjaeger | Hydrantenjäger |
+| --- | --- | --- |
+| Schlüssel, Werte, Längengrenzen, Zeichenprüfung | Quelle: `src/contracts/aedDetails.ts` | Portierung in `aed-details.js` |
+| Löschen von Tags | nie | nie (leeres Feld ändert nichts) |
+| Zugangscode `defibrillator:code` | nie erfasst | nie erfasst |
+| Korrektur bestehender Werte | nur mit Betreiber-Schalter (Standard aus) | erlaubt, mit Vorschau „alt → neu“ |
+| `check_date` | Schnellweg „Noch da – bestätigen“ | nicht Teil dieser Maske |
+| Sprachen | sechs | fünfzehn |
+
+**Pflege:** Die Regeln liegen jetzt an zwei Stellen. Ändert sich eine Schlüsselliste, eine Grenze oder eine Eingaberegel hier, muss dieselbe Änderung im Hydrantenjäger nachgezogen werden (und umgekehrt). Änderungen im Hydrantenjäger macht der Projektinhaber oder eine eigene Sitzung dort, nicht diese Repository-Arbeit.
+
 ## Eigene Regeln für eine verlässliche Erfassung
 
 - Einen Punkt am Gerät anlegen; ein AED-Hinweisschild ist nicht zwangsläufig der Gerätestandort.
