@@ -401,7 +401,7 @@ describe("OSM development node creation", () => {
       { now: () => now, fetch: api.fetcher },
     );
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ status: "complete", node_id: "456", version: 1 });
+    expect(await response.json()).toEqual({ status: "complete", node_id: "456", version: 1, changeset_id: "77" });
     expect(api.calls.find((call) => call.url.endsWith("/changeset/create"))).toBeDefined();
     expect(api.calls.find((call) => call.url.endsWith("/upload"))?.body).toContain("<osmChange");
     const replay = await handleDevelopmentCreateNode(
@@ -434,7 +434,7 @@ describe("OSM development node creation", () => {
       { now: () => now, fetch: api.fetcher },
     );
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ status: "complete", node_id: "456", version: 1 });
+    expect(await response.json()).toEqual({ status: "complete", node_id: "456", version: 1, changeset_id: "77" });
     // Die Prüfung der Tags (genau diese, keine weiteren) steckt im Testserver-Ersatz makeFetch.
     expect(api.uploadCount).toBe(1);
   });
@@ -681,7 +681,7 @@ describe("OSM development node creation", () => {
     expect(first.status).toBe(202);
     const retry = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies);
     expect(retry.status).toBe(200);
-    expect(await retry.json()).toEqual({ status: "complete", node_id: "456", version: 1 });
+    expect(await retry.json()).toEqual({ status: "complete", node_id: "456", version: 1, changeset_id: "77" });
     expect(api.uploadCount).toBe(1);
   });
 
@@ -693,7 +693,7 @@ describe("OSM development node creation", () => {
     expect((await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies)).status).toBe(202);
     const retry = await handleDevelopmentCreateNode(makeRequest(), { ...environment, DB }, dependencies);
     expect(retry.status).toBe(200);
-    expect(await retry.json()).toEqual({ status: "complete", node_id: "456", version: 1 });
+    expect(await retry.json()).toEqual({ status: "complete", node_id: "456", version: 1, changeset_id: "77" });
     expect(api.uploadCount).toBe(1);
   });
 
@@ -756,7 +756,7 @@ describe("OSM development node creation", () => {
     );
 
     expect(retry.status).toBe(200);
-    expect(await retry.json()).toEqual({ status: "complete", node_id: "456", version: 1 });
+    expect(await retry.json()).toEqual({ status: "complete", node_id: "456", version: 1, changeset_id: "77" });
     expect(api.uploadCount).toBe(0);
   });
 

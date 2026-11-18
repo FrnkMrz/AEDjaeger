@@ -12,6 +12,7 @@ import {
   freshNode,
   knownNode,
   correctButton,
+  closeSaveDialog,
 } from "./support";
 
 test.beforeEach(async ({ page }) => {
@@ -449,10 +450,10 @@ test("separate tabs keep their own pending write when one tab completes", async 
   ).toBeNull();
 });
 
-test("the information dialog and sound choice survive a confirmed save arriving in the background", async ({
-  page,
-  context,
-}) => {
+// Früher ließ sich während des Speicherns der Info-Dialog öffnen. Seit dem Speicher-Fenster sperrt die App die Seite,
+// bis das Ergebnis da ist. Geprüft wird jetzt: Das Fenster bleibt stehen, während die Antwort im Hintergrund den
+// Bildschirm neu zeichnet, und es endet erst mit dem Tippen auf „Fertig“.
+test("the save dialog stays open while a confirmed save arrives in the background", async ({ page, context }) => {
   await openExistingAedPreview(page, context, { nodes: [freshNode({})] });
   let release: () => void = () => undefined;
   const gate = new Promise<void>((resolve) => {
@@ -463,14 +464,72 @@ test("the information dialog and sound choice survive a confirmed save arriving 
     await route.fulfill({ json: { status: "complete", version: 10 } });
   });
   await page.getByRole("button", { name: "Testserver: Prüfdatum speichern" }).click();
-  await expect(page.locator(".capture-content")).toContainText("wird gesendet");
-  await page.locator("#open-info").click();
-  await page.locator("#success-sound-toggle").check();
+  const saveDialog = page.locator("#save-dialog");
+  await expect(saveDialog.getByRole("heading", { name: "Speichern …" })).toBeVisible();
+  // Während des Speicherns gibt es keinen Knopf zum Schließen, und Escape schließt nicht.
+  await expect(saveDialog.getByRole("button")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(saveDialog).toBeVisible();
   release();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toBeVisible();
-  await expect(dialog.locator("#success-sound-toggle")).toBeChecked();
+  await expect(saveDialog.getByRole("heading", { name: "Gespeichert" })).toBeVisible();
+  await expect(page.locator(".capture-content .status-good")).toBeAttached();
+  await closeSaveDialog(page);
   await expect(page.locator(".capture-content .status-good")).toBeVisible();
+});
+
+test("the save dialog shows the server steps, the node and changeset numbers and closes with Done", async ({
+  page,
+  context,
+}) => {
+  const saveButton = await openCheckDateSaveButton(page, context, async (route) => {
+    await route.fulfill({
+      json: {
+        status: "complete",
+        version: 8,
+        changeset_id: "77",
+        // So sieht das Protokoll des Workers aus (server/osm/osmApiLog.ts): nur Methode, Pfad und Status.
+        osm_log: [
+          { method: "GET", path: "/api/0.6/node/123.json", status: 200 },
+          { method: "PUT", path: "/api/0.6/changeset/create", status: 200 },
+          { method: "POST", path: "/api/0.6/changeset/77/upload", status: 200 },
+          { method: "PUT", path: "/api/0.6/changeset/77/close", status: 200 },
+          // Unbekanntes oder Markup zeigt die App nie an.
+          { method: "GET", path: "<img src=x onerror=alert(1)>", status: 200 },
+        ],
+      },
+    });
+  });
+  await saveButton.click();
+  const saveDialog = page.locator("#save-dialog");
+  await expect(saveDialog.getByRole("heading", { name: "Gespeichert" })).toBeVisible();
+  const log = saveDialog.getByRole("log");
+  await expect(log).toContainText("Anfrage an den AEDjaeger-Server gesendet");
+  await expect(log).toContainText("POST /api/osm/development/check-date");
+  await expect(log).toContainText("AED frisch vom Testserver gelesen");
+  await expect(log).toContainText("PUT /api/0.6/changeset/create → 200");
+  await expect(log).toContainText("Änderungssatz angelegt");
+  await expect(log).toContainText("Änderung hochgeladen");
+  await expect(log).toContainText("Änderungssatz geschlossen");
+  await expect(log).toContainText("Vor-Ort-Prüfung gespeichert");
+  await expect(log).not.toContainText("img");
+  await expect(saveDialog.locator(".save-dialog-ids")).toContainText("#123");
+  await expect(saveDialog.locator(".save-dialog-ids")).toContainText("#77");
+  await closeSaveDialog(page);
+  // Nach „Fertig“ steht der Erfolgsbildschirm da, und der nächste Knopf hat den Fokus.
+  await expect(page.getByRole("heading", { name: "Prüfung gespeichert" })).toBeVisible();
+});
+
+test("the save dialog shows an unclear result with Close and no numbers", async ({ page, context }) => {
+  const saveButton = await openCheckDateSaveButton(page, context, async (route) => {
+    await route.fulfill({ status: 202, json: { status: "uncertain", osm_log: [] } });
+  });
+  await saveButton.click();
+  const saveDialog = page.locator("#save-dialog");
+  await expect(saveDialog.getByRole("heading", { name: "Ergebnis unklar" })).toBeVisible();
+  await expect(saveDialog.locator(".save-dialog-ids")).toHaveCount(0);
+  await expect(saveDialog.getByRole("button", { name: "Schließen" })).toBeVisible();
+  await closeSaveDialog(page);
+  await expect(page.getByRole("button", { name: "Testserver: Status erneut prüfen" })).toBeVisible();
 });
 
 test("the confirmation page shows the earlier check date only when there is one", async ({ page }) => {
@@ -628,6 +687,7 @@ test("the sound can be switched off for the open page even when the browser stor
   await expect(page.getByRole("status")).toContainText("Vor-Ort-Prüfung gespeichert");
   expect(writes).toBe(1);
   expect(await readSound(page)).toEqual({ contexts: 0, resumes: 0, oscillators: 0 });
+  await closeSaveDialog(page);
   // Der Schalter springt nach einer neuen Darstellung nicht zurück auf „an“.
   await page.locator("#open-info").click();
   await expect(page.locator("#success-sound-toggle")).not.toBeChecked();
@@ -864,6 +924,7 @@ test("the reload button stays blocked while a save result is unclear", async ({ 
   const banner = page.locator("#update-banner");
   await expect(banner.getByRole("button", { name: "Neu laden" })).toBeDisabled();
   await expect(banner).toContainText("Neu laden geht, sobald das Speichern abgeschlossen ist.");
+  await closeSaveDialog(page);
 
   // Nach der Statusprüfung ist der Vorgang abgeschlossen und der Knopf wieder frei.
   await page.route("**/api/osm/development/check-date", (route) =>

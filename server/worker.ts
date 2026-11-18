@@ -21,6 +21,7 @@ import { hashOSMDevelopmentWriteOwner } from "./storage/osmDevelopmentWriteOpera
 import { handleStaticCandidateSearch } from "./osm/staticCandidateSearchRoute";
 import { handleDevelopmentCheckDate } from "./osm/developmentWriteRoute";
 import { handleDevelopmentCreateNode } from "./osm/developmentCreateNodeRoute";
+import { withOSMApiLog } from "./osm/osmApiLog";
 import { handleDevelopmentNodeRead } from "./osm/developmentNodeRoute";
 import { handleVisionAnalysis, isPhotoCheckAvailable } from "./vision/analyzeRoute";
 
@@ -92,8 +93,12 @@ const worker = {
       return logout(request, environment);
     }
     if (pathname === "/api/osm/candidates/search") return handleStaticCandidateSearch(request, environment);
-    if (pathname === "/api/osm/development/check-date") return handleDevelopmentCheckDate(request, environment);
-    if (pathname === "/api/osm/development/create-node") return handleDevelopmentCreateNode(request, environment);
+    // Beide Schreibrouten hängen ein kurzes Protokoll ihrer OSM-Aufrufe an (Methode, Pfad, Status; siehe osmApiLog.ts).
+    // Die App zeigt es im Speicher-Fenster an.
+    if (pathname === "/api/osm/development/check-date")
+      return withOSMApiLog(handleDevelopmentCheckDate)(request, environment);
+    if (pathname === "/api/osm/development/create-node")
+      return withOSMApiLog(handleDevelopmentCreateNode)(request, environment);
     // Frisches Lesen eines bestehenden AED (nur lesend) für das Ergänzen von Angaben.
     if (pathname === "/api/osm/development/node") return handleDevelopmentNodeRead(request, environment);
     // Fotoprüfung: Die Route ist standardmäßig AUS. Sie arbeitet nur, wenn der Betreiber
