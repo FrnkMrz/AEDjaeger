@@ -112,7 +112,7 @@ Der Schalter `OSM_DEV_WRITES_ENABLED` bleibt in diesem Teil **aus**. Die Punkte 
 3. **Nur falls C0.8 eindeutig belegt, dass keine Neuanlage erfolgte:** Einen Test-AED wie beschrieben an einer vollständigen leeren Suche anlegen und genau einmal speichern. Bleibt die Antwort unklar, stoppen; nicht neu senden.
 4. **Prüfdatum erneuern.** Am selben Testknoten neu suchen. „Noch vorhanden“ bestätigen. Das Datum muss **später** sein als das bereits vorhandene `check_date`, darf aber nicht in der Zukunft liegen.
 5. **Ergebnis auf der Dev-Seite ansehen.** Die Änderungen auf `master.apis.dev.openstreetmap.org` öffnen. Die Neuanlage hat genau `emergency=defibrillator` und `check_date`; beim zweiten Vorgang hat sich nur das Datum geändert.
-6. **Schalter wieder aus.** Variable entfernen oder auf `false` setzen. Ein neuer Schreibversuch muss abgelehnt werden.
+6. **Schalter bleibt an (Entscheidung des Projektinhabers vom 18.11.2026).** `OSM_DEV_WRITES_ENABLED` bleibt bewusst eingeschaltet, solange der Pilot nur den Testserver nutzt. Der Projektinhaber kann ihn jederzeit entfernen oder auf `false` setzen; danach wird ein neuer Schreibversuch abgelehnt. Vor jedem Schritt in Richtung echtes OSM wird neu entschieden.
 7. **Echtes OSM ansehen.** Es darf keine Änderung durch den Test geben.
 
 Warum die Kartenposition: Die Suche liest die echten AEDs des echten OSM, geschrieben wird nur auf den Testserver. Ein echter AED aus dem Archiv (zum Beispiel der am Feuerwehrhaus) ist auf dem Testserver nicht vorhanden und darf dort nicht „bestätigt“ werden. Der Testpunkt auf dem Feld ist Testdaten auf dem Testserver; im echten OSM würde man immer die echte Position nehmen.
@@ -125,7 +125,7 @@ Ablauf:
 | C3 | Vorhandene Neuanlage aus C0.8 als C3 bestätigen. Nur wenn zweifelsfrei kein Create stattgefunden hat: genau eine Neuanlage nach erfolgreicher, vollständiger Suche im Testgebiet durchführen | App meldet den alten Vorgang als erstellt und die Dev-Instanz zeigt genau die zwei erwarteten Tags; andernfalls höchstens ein neu erstellter Knoten. Kein Create bei unklarem Status | `[ ]` **Teilweise erfüllt.** Die Neuanlage vom 13.11.2026 ist auf der Dev-Instanz belegt (siehe C0.8), es muss nichts neu angelegt werden. Abgehakt wird C3 erst, wenn die App den Vorgang nach „Status erneut prüfen“ als „erstellt“ meldet |
 | C2 | Danach genau **eine** `check_date`-Bestätigung an demselben Testknoten durchführen, mit einem Beobachtungsdatum **nach** dem vorhandenen Datum von C3 (siehe C0.7) | Vorschau zeigt nur `check_date`; nach Bestätigung genau eine Änderung auf der Dev-Instanz (ein neues Changeset, nicht `already_current`) | `[ ]` Nachweis liegt vor: Version 2 des Testknotens (Changeset `725534`, 14.11.2026) ändert nur `check_date` von `2026-11-13` auf `2026-11-14`. Bestätigung durch den Projektinhaber, dass dies sein C2-Test war, und Prüfung von C4 bis C6 stehen noch aus |
 | C4 | Changeset auf der Dev-Instanz öffnen und prüfen | Bei C2 ist nur `check_date` geändert. Bei C3 sind nur `emergency=defibrillator` und `check_date` gesetzt | `[ ]` |
-| C5 | Schalter wieder ausschalten (`OSM_DEV_WRITES_ENABLED` entfernen oder `false`) | Ein erneuter Schreibversuch wird abgelehnt | `[ ]` |
+| C5 | **Entfällt.** Der Projektinhaber lässt `OSM_DEV_WRITES_ENABLED` bewusst an (Entscheidung vom 18.11.2026). Stattdessen gilt: Die Schreibroute ist fest auf die Dev-Instanz begrenzt | Es entsteht keine Schreibanfrage an das echte OSM (siehe C6) | entfällt, Entscheidung 18.11.2026 |
 | C6 | Produktions-OSM prüfen | Es gibt keine Änderung durch diesen Test | `[ ]` |
 
 **Erster Versuch am 13.11.2026 (iPhone):** Die Neuanlage legte auf dem Testserver den Knoten `4365809370` an (Änderungssatz `725093`, Version 1, genau die zwei Angaben `emergency=defibrillator` und `check_date=2026-11-13`; der Änderungssatz wurde nach etwa 10 Sekunden geschlossen). Die App blieb trotzdem bei „Testserver: Ergebnis unklar“. Ursache: Die Statusprüfung des Änderungssatzes las nur XML, der Testserver antwortete mit JSON. Behoben im Code, mit Tests; ohne Deploy bleibt der Zustand unverändert. Nach dem Deploy bestätigt „Testserver: Status erneut prüfen“ den vorhandenen Vorgang, ohne einen zweiten Knoten anzulegen. Der Test ist erst abgehakt, wenn die App „erstellt“ meldet.
@@ -142,7 +142,7 @@ Erst nach C2 bis C4, am gleichen Testort und mit demselben Schalter `OSM_DEV_WRI
 | D4 | `OSM_DETAIL_CORRECTIONS_ENABLED` = `true` setzen. `https://aedjaeger.aedjaeger.workers.dev/api/auth/session` zeigt `"developmentCorrectionsAvailable":true`. In der App erscheint „Angaben ergänzen oder korrigieren“ | Das Formular ist vorbelegt | `[ ]` |
 | D5 | Einen Wert korrigieren (zum Beispiel Zugang) | Gelb umrandet mit „Vorher: …“; die Vorschau zeigt `alt → neu`; Speichern erst nach dem Haken; der Änderungssatz ändert nur diesen Wert und `check_date`; Kommentar „details added and corrected“ | `[ ]` |
 | D6 | Den Wert in einem zweiten Fenster (oder iD) ändern und danach im alten Fenster speichern | Konflikt-Meldung; der fremde Wert bleibt unverändert | `[ ]` |
-| D7 | Beide Schalter wieder ausschalten | Der Sitzungsstatus enthält kein `developmentCorrectionsAvailable`; ein erneuter Schreibversuch mit Korrektur wird mit 403 abgelehnt | `[ ]` |
+| D7 | Nur den Korrektur-Schalter `OSM_DETAIL_CORRECTIONS_ENABLED` wieder ausschalten; `OSM_DEV_WRITES_ENABLED` bleibt an (Entscheidung vom 18.11.2026) | Der Sitzungsstatus enthält kein `developmentCorrectionsAvailable`; ein erneuter Schreibversuch mit Korrektur wird mit 403 abgelehnt | `[ ]` |
 
 Abnahmebericht (ausfüllen, ohne Tokens):
 
@@ -155,7 +155,7 @@ Abnahmebericht (ausfüllen, ohne Tokens):
 | C2: Changeset-Nummer, Node-ID, geänderter Tag | |
 | C3: Changeset-Nummer, neue Node-ID, gesetzte Tags | |
 | C4: Beobachtung im Changeset (nur erwartete Tags?) | |
-| C5: Ablehnung nach dem Ausschalten (Meldung) | |
+| C5: entfällt (Schalter bleibt an, Entscheidung 18.11.2026) | |
 | C6: Produktions-OSM geprüft von / wann | |
 | Auffälligkeiten, Abweichungen | |
 
@@ -176,7 +176,7 @@ Version 0.1.0 (17.10.2026) war ein reiner Dokumentationsstand und bekommt keinen
 
 - [ ] Abschnitt A ist bestanden (Android, iPhone, PWA, alle sechs Sprachen).
 - [ ] Abschnitt B ist bestanden.
-- [ ] Abschnitt C ist bestanden und der Schalter ist wieder aus.
+- [ ] Abschnitt C ist bestanden. C5 entfällt: `OSM_DEV_WRITES_ENABLED` bleibt auf Entscheidung des Projektinhabers vom 18.11.2026 an, solange der Pilot nur den Testserver nutzt.
 - [ ] `CHANGELOG.md` enthält die Fassung 0.2.0 mit Datum.
 - [ ] Die Änderungen sind über Pull Requests in `main` gemergt und alle erforderlichen Statusprüfungen sind grün. Die Freigabeanforderung richtet sich nach der dann aktuellen Branch-Protection-Regel; Stand 13.11.2026 ist keine Code-Owner-Freigabe erforderlich.
 - [ ] Der Tag zeigt auf genau diesen gemergten `main`-Commit.
