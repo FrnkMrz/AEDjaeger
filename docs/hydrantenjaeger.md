@@ -4,6 +4,8 @@ Geprüft am 17.10.2026: README, package.json, Dateistruktur und ein Ausschnitt d
 
 Referenzstand auf `main`: [`7a320fe6a6508ef26c4e29ec6734103ab67db550`](https://github.com/FrnkMrz/hydranten-app/tree/7a320fe6a6508ef26c4e29ec6734103ab67db550). Dies ist keine vollständige Codeprüfung und kein Funktionstest der Live-App.
 
+> **Update 17.11.2026:** Der Hydrantenjäger hat inzwischen eine eigene AED-Maske mit denselben Detailangaben wie der AEDjaeger-Detailweg (PR #50, live). Vergleich und Pflegehinweis stehen in [docs/osm.md](osm.md#gleiche-aed-regeln-im-hydrantenjäger-stand-17112026). Die Angaben unten beschreiben den Stand vom 17.10.2026.
+
 ## Was bereits vorhanden ist
 
 Laut [README dieses Stands](https://github.com/FrnkMrz/hydranten-app/blob/7a320fe6a6508ef26c4e29ec6734103ab67db550/README.md) unterstützt Version 1.7.0 bereits das Erfassen, Anzeigen und Bearbeiten von AEDs, einschließlich Zugang, Innen-/Außenlage und Öffnungszeiten. Die Dokumentation bezeichnet 1.7.0 als live und 1.8.0 als Release-Kandidaten; der Veröffentlichungsstatus wurde nicht separat geprüft.

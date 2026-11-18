@@ -172,7 +172,7 @@ Wenn der Test auffällig ist:
 
 ## E. Kriterien für den Release v0.2.0
 
-Version 0.1.0 (17.10.2026) war ein reiner Dokumentationsstand und bekommt keinen Tag. Der Pilotstand trägt seit dem 16.11.2026 die Version 0.2.0. Der Tag `v0.2.0` wird nur gesetzt, wenn alle folgenden Punkte erfüllt sind:
+Version 0.1.0 (17.10.2026) war ein reiner Dokumentationsstand und bekommt keinen Tag. Der Pilotstand trägt seit dem 16.11.2026 die Version 0.2.0. Am 17.11.2026 hat der Projektinhaber `v0.2.0` ausdrücklich als **Pre-release** veröffentlicht, obwohl die Punkte unten noch offen sind. Sie entscheiden jetzt darüber, ob der Pre-release-Haken entfällt und `v0.2.0` als stabiler Stand gilt:
 
 - [ ] Abschnitt A ist bestanden (Android, iPhone, PWA, alle sechs Sprachen).
 - [ ] Abschnitt B ist bestanden.
@@ -182,7 +182,7 @@ Version 0.1.0 (17.10.2026) war ein reiner Dokumentationsstand und bekommt keinen
 - [ ] Der Tag zeigt auf genau diesen gemergten `main`-Commit.
 - [ ] Die ausdrückliche Freigabe der Projektinhaberin oder des Projektinhabers liegt vor.
 
-Ohne diese Punkte wird weder ein Tag noch ein GitHub-Release erstellt.
+Ohne diese Punkte bleibt `v0.2.0` ein Pre-release. Weitere Tags oder Releases entstehen nur auf ausdrücklichen Auftrag.
 
 ## F. Fotoprüfung per OpenAI (nur bei Betreiber-Freigabe)
 
