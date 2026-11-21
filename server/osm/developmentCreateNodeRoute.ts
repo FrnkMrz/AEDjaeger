@@ -80,8 +80,7 @@ export async function handleDevelopmentCreateNode(
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
-  if (session?.environment !== "development")
-    return jsonResponse({ error: "development_session_required" }, 403);
+  if (session?.environment !== "development") return jsonResponse({ error: "development_session_required" }, 403);
 
   let input: CreateRequest;
   try {

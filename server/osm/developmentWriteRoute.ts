@@ -109,8 +109,7 @@ export async function handleDevelopmentCheckDate(
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
-  if (session?.environment !== "development")
-    return jsonResponse({ error: "development_session_required" }, 403);
+  if (session?.environment !== "development") return jsonResponse({ error: "development_session_required" }, 403);
 
   let input: ConfirmedCheckDate;
   let ownerHash: string;

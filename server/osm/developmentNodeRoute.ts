@@ -46,8 +46,7 @@ export async function handleDevelopmentNodeRead(
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
-  if (session?.environment !== "development")
-    return jsonResponse({ error: "development_session_required" }, 403);
+  if (session?.environment !== "development") return jsonResponse({ error: "development_session_required" }, 403);
 
   const id = url.searchParams.get("id");
   if (id === null || !/^node\/[1-9]\d{0,15}$/u.test(id)) return jsonResponse({ error: "invalid_request" }, 400);

@@ -24,6 +24,9 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # Prüft nur, ob alle Dateien so formatiert sind, wie Biome es vorgibt.
+      # Bei Abweichungen lokal `npm run format` ausführen und das Ergebnis committen.
+      - run: npm run format:check
       - run: npm run lint
       - run: npm test
       - run: npm run build
