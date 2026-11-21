@@ -161,7 +161,7 @@ class MemoryD1 implements D1Database {
         }
         if (sql.includes("state IN ('uploading', 'uncertain')")) {
           const [updated, hash, id, changeset, time] = params as [number, string, string, string, number];
-        const row = this.operations.get(`${hash}:${id}`);
+          const row = this.operations.get(`${hash}:${id}`);
           if (
             !row ||
             row.changeset_id !== changeset ||
@@ -283,8 +283,7 @@ class MemoryD1 implements D1Database {
     if (sql.includes("SET state = 'uploading'")) {
       const [_updated, hash, id, time] = params as [number, string, string, number];
       const row = this.operations.get(`${hash}:${id}`);
-      if (row?.state !== "changeset-created" || row.expires_at <= time)
-        return { success: true, meta: { changes: 0 } };
+      if (row?.state !== "changeset-created" || row.expires_at <= time) return { success: true, meta: { changes: 0 } };
       row.state = "uploading";
       return { success: true, meta: { changes: 1 } };
     }

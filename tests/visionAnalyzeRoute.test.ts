@@ -252,11 +252,9 @@ describe("protected image analysis route", () => {
   it("requires a valid request ID before reading or processing the image", async () => {
     const { database, calls } = createDatabase();
     const analyze = successfulAnalysis();
-    const response = await handleVisionAnalysis(
-      analysisRequest({ requestId: "invalid" }),
-      environment(database),
-      { analyze },
-    );
+    const response = await handleVisionAnalysis(analysisRequest({ requestId: "invalid" }), environment(database), {
+      analyze,
+    });
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "invalid_request" });
