@@ -1,7 +1,7 @@
 # Entwurf: sicherer Produktions-Schreibweg für OpenStreetMap
 
-Stand: **15.11.2026**  
-Status: **Entwurf zur Produkt- und Betriebsentscheidung; nicht implementiert und keine Freigabe für produktive OSM-Schreibvorgänge.**
+Stand: **26.11.2026**  
+Status: **Entschieden und freigegeben am 26.11.2026 (Abschnitt 13); die Umsetzung läuft in den Etappen Q1 bis Q6 (Abschnitt 15). Bis eine Etappe gemergt und ihr Schalter vom Projektinhaber gesetzt ist, bleiben produktive Schreibvorgänge technisch aus.**
 
 Dieses Dokument beschreibt, welche Voraussetzungen erfüllt sein müssen, bevor AEDjaeger Änderungen an der öffentlichen OpenStreetMap-API anbieten darf. Es knüpft an die vorhandenen Regeln für den Testserver an und macht sie für einen möglichen Produktionsbetrieb konkret. Bis eine gesonderte Freigabe vorliegt, bleiben Produktionsschreibzugriffe technisch unmöglich. Die aktive Pilotadresse ist weiterhin `workers.dev`.
 
@@ -19,7 +19,7 @@ Der Entwurf umfasst:
 - Überwachung, Störungsbehandlung, Korrektur/Rücknahme und öffentliche Ankündigung;
 - schrittweise Umbenennung von `development*`-Bezeichnungen in neutrale Namen.
 
-Es autorisiert ausdrücklich **nicht**: Code für Produktionsschreibzugriffe, Aktivierung von Secrets oder Schaltern, echte OSM-Schreibtests, reale Änderungen, kostenpflichtige Dienste, bezahlte Tarife, Domains oder einen öffentlichen Start. Für jeden dieser Schritte ist eine eigene Entscheidung nötig. Produktions-OSM darf in gewöhnlichen Tests, CI, Vorschauen und Agentenläufen nie geändert werden.
+Seit dem 26.11.2026 ist der Code für Produktionsschreibzugriffe freigegeben (Abschnitt 13). Weiterhin **nicht** autorisiert sind: das Setzen von Secrets oder Schaltern durch einen Agenten, echte OSM-Schreibtests in Tests, CI oder Agentenläufen, kostenpflichtige Dienste, bezahlte Tarife und weitere Domains. Die Schalter setzt ausschließlich der Projektinhaber. Produktions-OSM darf in gewöhnlichen Tests, CI, Vorschauen und Agentenläufen nie geändert werden.
 
 ### Aktueller Stand
 
@@ -216,20 +216,22 @@ Die Migration erfolgt schrittweise: erst Typen/Konstanten ohne Verhaltensänderu
 
 Zu jedem Tor gehört ein PR mit deutscher Beschreibung, genaue Schalterliste und Rückweg. PRs und CI erhalten niemals Produktions-Tokens. Ein Deployment mit standardmäßig ausgeschalteten Flags ist keine Freigabe, die Schalter später ohne gesonderte Entscheidung einzuschalten.
 
-## 13. Offene Entscheidungen vor Implementierung
+## 13. Entscheidungen des Projektinhabers (26.11.2026)
 
-1. Welche Länder/Regionen und welche Nutzergruppe umfasst der mögliche Pilot?
-2. Ist `source=survey` auf Objekt-Tags erwünscht oder soll die Information allein im Changeset-Kommentar stehen?
-3. Welcher Changeset-Kommentar ist mit der OSM-Gemeinschaft abgestimmt?
-4. Welcher API-Endpunkt kann eine vollständige, ausreichend aktuelle AED-Umkreissuche belegen? Wenn keiner: Soll Neuanlage in Produktion zunächst deaktiviert bleiben?
-5. Sind die Startlimits (5 insgesamt, davon 2 Neuanlagen/Tag, 1 Änderung je Objekt/24 h) angemessen?
-6. Wie lange müssen abgeschlossene und unklare Vorgänge aufbewahrt werden, und wer darf die Betreiberübersicht lesen?
-7. Soll Produktionskorrektur vorhandener Werte im ersten Pilot vollständig ausgeschlossen bleiben?
-8. Welche Community-Kanäle und Ansprechpartner nutzt der Projektinhaber für die Vorankündigung?
-9. Ist eine separate Production-OAuth-Anwendung für Redirects und Zugangskontrolle verfügbar und eingerichtet?
-10. Welcher Freigabezeitpunkt gilt nach Community-Feedback, manueller Abnahme und erfolgreichem Testserver-Schreibtest?
+Die zehn offenen Fragen sind beantwortet. Wo die Antwort vom Vorschlag abweicht, steht der Hinweis auf das verbleibende Risiko dabei.
 
-Bis diese Fragen entschieden und die Abnahmetore dokumentiert sind, bleiben alle Produktionsschreibschalter aus und Neuanlagen auf den Testserver beschränkt.
+| Nr | Frage | Entscheidung | Folge und Risiko |
+| --- | --- | --- | --- |
+| 1 | Region und Nutzergruppe | **Weltweit, alle angemeldeten OSM-Konten.** | Das PMTiles-Archiv deckt nur DACH ab. Deshalb wechselt die Umkreissuche auf die OSM-API (Abschnitt 6). Ein Fehler trifft sofort fremde Daten; Schutz durch Schalter und Limit. `OSM_PROD_ALLOWED_SUBJECTS` entfällt bzw. akzeptiert alle Konten. |
+| 2 | `source=survey` | **Nur am Changeset**, nicht am Objekt. | Keine zusätzlichen Objekt-Tags. |
+| 3 | Changeset-Kommentar | **Zweisprachig, Deutsch und Englisch**, vor dem Speichern sichtbar. | Wortlaut in Abschnitt 15, Etappe Q3. |
+| 4 | Neuanlage in Produktion | **Eingeschaltet** (eigener Schalter `OSM_PROD_NEW_AEDS_ENABLED`). | Nur mit frischer, vollständiger OSM-API-Abfrage vor dem Vorschlag und erneut vor dem Upload. Ein Fehler sperrt die Neuanlage. |
+| 5 | Limits | **20 Schreibvorgänge pro Konto und UTC-Tag** zum Testen; später eventuell weniger. Zusätzlich höchstens 1 Änderung je Objekt in 24 Stunden. | Kein eigenes Teil-Limit für Neuanlagen. |
+| 6 | Aufbewahrung und Übersicht | **90 Tage**, Betreiberübersicht nur für den Projektinhaber. | Bereinigung über den vorhandenen Aufräumjob. |
+| 7 | Korrekturen in Produktion | **Einbauen**, hinter `OSM_PROD_DETAIL_CORRECTIONS_ENABLED` (Standard aus). | Gleiche Schutzregeln wie auf dem Testserver (Vorwert-Prüfung, zweite Bestätigung). |
+| 8 | Community-Ankündigung | **Entfällt.** | Risiko: Ohne Ankündigung kann die Data Working Group Änderungen aus der App als unabgestimmt werten und Konten sperren. Gegenmaßnahme: eindeutiges Changeset mit `created_by=AEDjaeger`, Kommentar und `source=survey`. |
+| 9 | Production-OAuth-Anwendung | **Ja, wird eingerichtet.** | Nur der Projektinhaber kann sie mit seinem Konto auf openstreetmap.org anlegen. Anleitung in Abschnitt 15, Etappe Q2. |
+| 10 | Freigabezeitpunkt | **Freigegeben am 26.11.2026.** | Die Schalter setzt der Projektinhaber je Etappe selbst, nachdem sie gemergt und geprüft ist. |
 
 ## 14. Referenzen im Repository und externe Grundlagen
 
@@ -241,3 +243,19 @@ Bis diese Fragen entschieden und die Abnahmetore dokumentiert sind, bleiben alle
 - Gesamt-Review vom 13.11.2026 (P9/P10) – lokale Arbeitsgrundlage, nicht Bestandteil des veröffentlichten Repositories.
 - [OSM OAuth](https://wiki.openstreetmap.org/wiki/OAuth) – OAuth-Hosts und Scopes.
 - [OSM API v0.6](https://wiki.openstreetmap.org/wiki/Api06) – Bounding-Box-Abfrage, Capabilities, Changesets und Fehlerbehandlung.
+
+## 15. Bauplan (Etappen Q1 bis Q6)
+
+Jede Etappe ist ein eigener PR gegen `main`. Kein Test, keine CI und kein Agentenlauf ruft die echte OSM-API schreibend auf; lesende Aufrufe laufen in Tests nur gegen Mocks.
+
+| Etappe | Inhalt | Schalter |
+| --- | --- | --- |
+| **Q1** Frische Umkreissuche | Neue Suche über `GET /api/0.6/map` mit kleinem Ausschnitt (Radius 50 m plus Rand) am Produktionshost `api.openstreetmap.org`: weltweit, minutenaktuell. Prüft Status, Grenzen, Fehlerzeilen und Größe; ein Fehler ist nie ein leeres Ergebnis. Ersetzt die PMTiles-Suche für Treffer und Doppelschutz. Rein lesend. | keiner (nur lesend) |
+| **Q2** Produktions-Anmeldung mit Schreibrecht | OAuth mit `openid write_api`, eigene Production-OAuth-Anwendung, Token verschlüsselt in D1 (eigenes Secret), feste Host-Zuordnung je Umgebung. Anleitung für den Projektinhaber zum Anlegen der OAuth-Anwendung. | `OSM_PROD_LOGIN_ENABLED` |
+| **Q3** Schnellweg in Produktion | „Noch vorhanden“ schreibt `check_date` in das echte OSM. Changeset mit `created_by=AEDjaeger`, `source=survey` und zweisprachigem Kommentar. Limit 20 pro Tag und 1 je Objekt in 24 h, atomar in D1. Wiederaufnahme unklarer Uploads wie auf dem Testserver. | `OSM_PROD_WRITES_ENABLED` |
+| **Q4** Ergänzen in Produktion | Detailweg (nur fehlende Tags) für bestehende AEDs. | `OSM_PROD_WRITES_ENABLED` |
+| **Q5** Neuanlage in Produktion | Neuanlage mit erneuter OSM-API-Abfrage unmittelbar vor dem Upload. | `OSM_PROD_NEW_AEDS_ENABLED` |
+| **Q6** Korrekturen in Produktion | Ersetzen vorhandener Werte mit Vorwert-Prüfung und zweiter Bestätigung. | `OSM_PROD_DETAIL_CORRECTIONS_ENABLED` |
+
+Die Umbenennung der `development*`-Namen (Abschnitt 11) bleibt ein eigener, späterer Schritt und gehört nicht in dieselben PRs.
+

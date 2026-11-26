@@ -12,7 +12,9 @@ Die historischen Präfixe `0002` und `0003` kommen jeweils zweimal vor. Die voll
 
 ## Produktions-Schreibweg (P9)
 
-Der ausführliche Entwurf steht in [Produktion-OSM](produktion-osm.md); die Dokumentation ist mit PR #100 gemergt. **P9 ist als Entwurf abgeschlossen, Produktionsschreiben ist weder implementiert noch freigegeben.** Vor jeder Implementierung bleiben die zehn Entscheidungen in Abschnitt 13 von `produktion-osm.md` offen, insbesondere Suchvollständigkeit, Community-Rückmeldung zu Changeset-Metadaten/`source=survey`, Limits, Aufbewahrung, Pilotumfang und Freigabekriterien. Produktionsschreibzugriffe und echte OSM-Schreibtests bleiben deaktiviert.
+**Entschieden am 26.11.2026:** Der Projektinhaber hat die zehn Fragen aus [Produktion-OSM](produktion-osm.md#13-entscheidungen-des-projektinhabers-26112026) beantwortet und das Schreiben in das echte OSM freigegeben: weltweit, alle angemeldeten Konten, Neuanlage und Korrekturen eingeschlossen, 20 Schreibvorgänge pro Konto und Tag, `source=survey` nur am Changeset, Kommentar Deutsch und Englisch, 90 Tage Aufbewahrung, keine Community-Ankündigung. Die Umkreissuche wechselt auf eine frische OSM-API-Abfrage. Umsetzung in den Etappen Q1 bis Q6 ([Bauplan](produktion-osm.md#15-bauplan-etappen-q1-bis-q6)). **Bis eine Etappe gemergt ist und der Projektinhaber ihren Schalter setzt, bleibt das Schreiben in das echte OSM aus.**
+
+**Offen beim Projektinhaber:** Production-OAuth-Anwendung auf openstreetmap.org anlegen (Anleitung kommt mit Q2); Schalter je Etappe setzen.
 
 ## Aufteilung von `main.ts` (P10)
 
