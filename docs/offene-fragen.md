@@ -14,7 +14,7 @@ Die historischen Präfixe `0002` und `0003` kommen jeweils zweimal vor. Die voll
 
 **Entschieden am 26.11.2026:** Der Projektinhaber hat die zehn Fragen aus [Produktion-OSM](produktion-osm.md#13-entscheidungen-des-projektinhabers-26112026) beantwortet und das Schreiben in das echte OSM freigegeben: weltweit, alle angemeldeten Konten, Neuanlage und Korrekturen eingeschlossen, 20 Schreibvorgänge pro Konto und Tag, `source=survey` nur am Changeset, Kommentar Deutsch und Englisch, 90 Tage Aufbewahrung, keine Community-Ankündigung (wie beim Hydrantenjäger). PMTiles bleibt für die schnelle Anzeige; vor jeder Bestätigung, Neuanlage oder Änderung holt der Server frische Daten von der OSM-API. Eintragen nur bis 100 m vom Standort. Umsetzung in den Etappen Q1 bis Q6 ([Bauplan](produktion-osm.md#15-bauplan-etappen-q1-bis-q6)). **Bis eine Etappe gemergt ist und der Projektinhaber ihren Schalter setzt, bleibt das Schreiben in das echte OSM aus.**
 
-**Offen beim Projektinhaber:** Production-OAuth-Anwendung auf openstreetmap.org anlegen (Anleitung kommt mit Q2); Schalter je Etappe setzen.
+**Offen beim Projektinhaber:** Die Production-OAuth-Anwendung ist registriert (26.11.2026, vertraulich, Rechte `openid` und `write_api`). Client-ID und Secret trägt er erst nach dem Merge von Q2 im Cloudflare-Dashboard ein; danach setzt er die Schalter je Etappe.
 
 ## Aufteilung von `main.ts` (P10)
 
