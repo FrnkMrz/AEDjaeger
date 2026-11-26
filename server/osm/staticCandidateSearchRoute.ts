@@ -10,6 +10,7 @@ import type { D1Database } from "../storage/d1";
 import { reserveSearchSlot } from "../storage/searchCooldown";
 import type { NearbyAedCandidate, SearchCoordinate } from "../../src/osm/candidateTypes";
 import { requestOSMDevelopmentApi } from "./developmentApi";
+import { requestOSMProductionMap } from "./productionApi";
 import { distanceMeters } from "../../src/domain/candidateMatch";
 import {
   BodyTooLargeError,
@@ -141,12 +142,22 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
   const location = parseLocation(body);
   if (!location) return jsonResponse({ error: "invalid_request" }, 400);
   if (location.accuracyMeters > MAX_ACCURACY) return jsonResponse({ error: "location_too_uncertain" }, 422);
-  if (location.latitude < 45 || location.latitude > 56 || location.longitude < 5 || location.longitude > 18) {
+  // Produktion (echtes OSM) sucht weltweit über die frische OSM-API. Nur der Testserver bleibt an das Archivgebiet
+  // gebunden, weil seine Suche weiter vom Archiv ausgeht.
+  const production = session.environment === "production";
+  const insideArchiveArea =
+    location.latitude >= 45 && location.latitude <= 56 && location.longitude >= 5 && location.longitude <= 18;
+  if (!production && !insideArchiveArea) return jsonResponse({ error: "outside_coverage" }, 422);
+  // Reichweite: Genauigkeit plus Suchradius, höchstens 50 + 50 = 100 m („nur dort, wo die Person ist“).
+  const radius = Math.ceil(location.accuracyMeters + SEARCH_RADIUS);
+  let bounds: ReturnType<typeof searchBounds>;
+  try {
+    bounds = searchBounds(location, radius);
+  } catch {
+    // Nur ganz nahe an den Polen: Dort lässt sich kein sinnvoller Ausschnitt bilden.
     return jsonResponse({ error: "outside_coverage" }, 422);
   }
-  const radius = Math.ceil(location.accuracyMeters + SEARCH_RADIUS);
-  const bounds = searchBounds(location, radius);
-  if (!boundsFitArchive(bounds)) return jsonResponse({ error: "outside_coverage" }, 422);
+  if (!production && !boundsFitArchive(bounds)) return jsonResponse({ error: "outside_coverage" }, 422);
 
   const now = (deps.now ?? Date.now)();
   let retryAfter = 30;
@@ -159,43 +170,15 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
     return jsonResponse({ error: "search_unavailable" }, 503);
   }
 
+  if (production) {
+    return runProductionSearch(location, radius, bounds, deps.fetch ?? fetch, now, retryAfter);
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
     const fetcher = deps.fetch ?? fetch;
-    const metadata = await fetchMetadata(fetcher, controller.signal, now);
-    if (metadata.region !== "dachlilu") throw new CoverageUnavailableError();
-
-    // metadata.json is the current pointer. Putting its build time in the archive URL
-    // prevents a warm Worker from mixing cached tile directories from two builds.
-    const archiveUrl = new URL(PMTILES_PATH, DATA_ORIGIN);
-    archiveUrl.searchParams.set("v", metadata.generated_at);
-    const archive = new PMTiles(new FixedRangeSource(archiveUrl, fetcher, controller.signal));
-    const header = await archive.getHeader();
-    if (header.tileType !== 1 || header.minZoom > AED_ZOOM || header.maxZoom < AED_ZOOM)
-      throw new CoverageUnavailableError();
-    if (!boundsFitHeader(bounds, header)) throw new OutsideCoverageError();
-
-    const tiles = tilesForBounds(bounds, AED_ZOOM);
-    if (tiles.length === 0 || tiles.length > MAX_TILES) throw new CoverageUnavailableError();
-    const candidates = new Map<string, NearbyAedCandidate>();
-    for (const tile of tiles) {
-      const content = await archive.getZxy(tile.z, tile.x, tile.y, controller.signal);
-      if (!content) continue; // A missing tile in a validated archive represents an empty tile.
-      if (content.data.byteLength > MAX_TILE_BYTES) throw new InvalidFeedError();
-      const decoded = new VectorTile(new PbfReader(new Uint8Array(content.data)));
-      const layer = decoded.layers[AED_LAYER];
-      if (!layer) continue;
-      for (let index = 0; index < layer.length; index += 1) {
-        const feature = layer.feature(index);
-        const candidate = candidateFromFeature(feature.toGeoJSON(tile.x, tile.y, tile.z), "archive");
-        if (!candidate || distanceMeters(location, candidate.position) > radius) continue;
-        const prior = candidates.get(candidate.id);
-        if (prior && JSON.stringify(prior) !== JSON.stringify(candidate)) throw new InvalidFeedError();
-        candidates.set(candidate.id, candidate);
-        if (candidates.size > MAX_CANDIDATES) throw new InvalidFeedError();
-      }
-    }
+    const { candidates, metadata } = await searchArchive(bounds, location, radius, fetcher, controller.signal, now);
 
     // Das PMTiles-Headerrechteck ist größer als die tatsächlich heruntergeladenen
     // Länderflächen. Deshalb kann eine leere Kachel außerhalb der Extrakte keinen
@@ -245,21 +228,141 @@ async function runSearch(request: Request, env: Environment, deps: Dependencies)
       { "Retry-After": String(retryAfter) },
     );
   } catch (error) {
-    if (error instanceof OutsideCoverageError) return jsonResponse({ error: "outside_coverage" }, 422);
-    if (error instanceof CoverageUnavailableError)
-      return jsonResponse({ error: "coverage_unavailable" }, 503, { "Retry-After": String(retryAfter) });
-    if (error instanceof InvalidFeedError)
-      return jsonResponse({ error: "invalid_response" }, 503, { "Retry-After": String(retryAfter) });
-    if (error instanceof FeedHTTPError)
-      return jsonResponse({ error: "source_unavailable" }, 502, { "Retry-After": String(retryAfter) });
-    return jsonResponse(
-      { error: controller.signal.aborted ? "source_timeout" : "source_unavailable" },
-      controller.signal.aborted ? 504 : 502,
-      { "Retry-After": String(retryAfter) },
-    );
+    return searchErrorResponse(error, controller.signal.aborted, retryAfter);
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/** Übersetzt einen Suchfehler in eine feste Antwort. Ein Fehler wird nie zu einer leeren Trefferliste. */
+function searchErrorResponse(error: unknown, timedOut: boolean, retryAfter: number): Response {
+  if (error instanceof OutsideCoverageError) return jsonResponse({ error: "outside_coverage" }, 422);
+  if (error instanceof CoverageUnavailableError)
+    return jsonResponse({ error: "coverage_unavailable" }, 503, { "Retry-After": String(retryAfter) });
+  if (error instanceof InvalidFeedError)
+    return jsonResponse({ error: "invalid_response" }, 503, { "Retry-After": String(retryAfter) });
+  if (error instanceof FeedHTTPError)
+    return jsonResponse({ error: "source_unavailable" }, 502, { "Retry-After": String(retryAfter) });
+  return jsonResponse({ error: timedOut ? "source_timeout" : "source_unavailable" }, timedOut ? 504 : 502, {
+    "Retry-After": String(retryAfter),
+  });
+}
+
+/**
+ * Suche für eine Anmeldung am echten OSM (Etappe Q1, Vorbild Hydrantenjäger).
+ *
+ * 1. Frisch: Die öffentliche OSM-API liefert den kleinen Ausschnitt um den Standort, weltweit und minutenaktuell.
+ *    Nur dieses Ergebnis ist „vollständig“ (`complete`) und darf Bestätigen oder eine Neuanlage freigeben.
+ * 2. Rückfall: Antwortet die OSM-API nicht, zeigt die App in DACH die Treffer aus dem Archiv, aber als
+ *    „unvollständig“ (`partial`). Dann bietet sie weder Bestätigung noch Neuanlage an, sondern einen neuen Versuch.
+ * 3. Außerhalb von DACH gibt es keinen Rückfall: Die Suche meldet einen Fehler, nie eine leere Liste.
+ */
+async function runProductionSearch(
+  location: Location,
+  radius: number,
+  bounds: ReturnType<typeof searchBounds>,
+  fetcher: typeof fetch,
+  now: number,
+  retryAfter: number,
+): Promise<Response> {
+  const liveController = new AbortController();
+  const liveTimeout = setTimeout(() => liveController.abort(), TIMEOUT_MS);
+  let liveError: unknown;
+  try {
+    const response = await requestOSMProductionMap(
+      { west: bounds.minLon, south: bounds.minLat, east: bounds.maxLon, north: bounds.maxLat },
+      liveController.signal,
+      fetcher,
+    );
+    const candidates = await mapCandidatesFromResponse(response, location, radius, "live");
+    return jsonResponse({ status: "complete", candidates, coverage_radius_meters: radius }, 200, {
+      "Retry-After": String(retryAfter),
+    });
+  } catch (error) {
+    liveError = error;
+  } finally {
+    clearTimeout(liveTimeout);
+  }
+
+  if (boundsFitArchive(bounds)) {
+    const archiveController = new AbortController();
+    const archiveTimeout = setTimeout(() => archiveController.abort(), TIMEOUT_MS);
+    try {
+      const { candidates, metadata } = await searchArchive(
+        bounds,
+        location,
+        radius,
+        fetcher,
+        archiveController.signal,
+        now,
+      );
+      return jsonResponse(
+        {
+          status: "partial",
+          candidates: [...candidates.values()],
+          coverage_radius_meters: radius,
+          snapshot_id: await snapshotId(metadata),
+          data_until: metadata.osm_data_until,
+        },
+        200,
+        { "Retry-After": String(retryAfter) },
+      );
+    } catch {
+      /* Auch das Archiv scheitert: Es bleibt beim Fehler der frischen Abfrage. */
+    } finally {
+      clearTimeout(archiveTimeout);
+    }
+  }
+  return searchErrorResponse(liveError, liveController.signal.aborted, retryAfter);
+}
+
+/**
+ * Sucht AEDs im PMTiles-Archiv (nur DACH, bis zu 5 Tage alt). Wird für den Testserver genutzt und in der Produktion
+ * nur als Rückfall, wenn die frische OSM-API nicht antwortet.
+ */
+async function searchArchive(
+  bounds: ReturnType<typeof searchBounds>,
+  location: Location,
+  radius: number,
+  fetcher: typeof fetch,
+  signal: AbortSignal,
+  now: number,
+): Promise<{ candidates: Map<string, NearbyAedCandidate>; metadata: PipelineMetadata }> {
+  const metadata = await fetchMetadata(fetcher, signal, now);
+  if (metadata.region !== "dachlilu") throw new CoverageUnavailableError();
+
+  // metadata.json is the current pointer. Putting its build time in the archive URL
+  // prevents a warm Worker from mixing cached tile directories from two builds.
+  const archiveUrl = new URL(PMTILES_PATH, DATA_ORIGIN);
+  archiveUrl.searchParams.set("v", metadata.generated_at);
+  const archive = new PMTiles(new FixedRangeSource(archiveUrl, fetcher, signal));
+  const header = await archive.getHeader();
+  if (header.tileType !== 1 || header.minZoom > AED_ZOOM || header.maxZoom < AED_ZOOM)
+    throw new CoverageUnavailableError();
+  if (!boundsFitHeader(bounds, header)) throw new OutsideCoverageError();
+
+  const tiles = tilesForBounds(bounds, AED_ZOOM);
+  if (tiles.length === 0 || tiles.length > MAX_TILES) throw new CoverageUnavailableError();
+  const candidates = new Map<string, NearbyAedCandidate>();
+  for (const tile of tiles) {
+    const content = await archive.getZxy(tile.z, tile.x, tile.y, signal);
+    if (!content) continue; // A missing tile in a validated archive represents an empty tile.
+    if (content.data.byteLength > MAX_TILE_BYTES) throw new InvalidFeedError();
+    const decoded = new VectorTile(new PbfReader(new Uint8Array(content.data)));
+    const layer = decoded.layers[AED_LAYER];
+    if (!layer) continue;
+    for (let index = 0; index < layer.length; index += 1) {
+      const feature = layer.feature(index);
+      const candidate = candidateFromFeature(feature.toGeoJSON(tile.x, tile.y, tile.z), "archive");
+      if (!candidate || distanceMeters(location, candidate.position) > radius) continue;
+      const prior = candidates.get(candidate.id);
+      if (prior && JSON.stringify(prior) !== JSON.stringify(candidate)) throw new InvalidFeedError();
+      candidates.set(candidate.id, candidate);
+      if (candidates.size > MAX_CANDIDATES) throw new InvalidFeedError();
+    }
+  }
+
+  return { candidates, metadata };
 }
 
 /** Fetch current build metadata and reject partial/stale source coverage before searching tiles. */
@@ -371,7 +474,10 @@ class FixedRangeSource implements Source {
   }
 }
 
-function candidateFromFeature(feature: GeoJSON.Feature, source: "archive" | "development"): NearbyAedCandidate | null {
+function candidateFromFeature(
+  feature: GeoJSON.Feature,
+  source: "archive" | "development" | "live",
+): NearbyAedCandidate | null {
   if (!feature.properties || feature.geometry?.type !== "Point") return null;
   const props = feature.properties as Record<string, unknown>;
   if (props.emergency !== "defibrillator") return null;
@@ -428,6 +534,26 @@ async function fetchDevelopmentCandidates(
     },
     fetcher,
   );
+  return mapCandidatesFromResponse(
+    response,
+    location,
+    Math.ceil(location.accuracyMeters + SEARCH_RADIUS),
+    "development",
+  );
+}
+
+/**
+ * Wertet die Antwort einer OSM-Kartenabfrage (`map.json`) aus, vom Testserver oder vom echten OSM.
+ * Die Antwort ist nicht vertrauenswürdig: Größe, Form und jedes Element werden geprüft. Ein AED als Linie oder
+ * Relation sperrt die Suche, weil sein Punkt nicht sicher bestimmbar ist und eine leere Liste sonst eine Dublette
+ * erlauben könnte.
+ */
+async function mapCandidatesFromResponse(
+  response: Response,
+  location: Location,
+  radius: number,
+  source: "development" | "live",
+): Promise<NearbyAedCandidate[]> {
   if (!response.ok) throw new FeedHTTPError(response.status);
 
   let payload: unknown;
@@ -461,10 +587,10 @@ async function fetchDevelopmentCandidates(
         properties: { ...element.tags, "@type": "node", "@id": `node/${element.id}` },
         geometry: { type: "Point", coordinates: [element.lon, element.lat] },
       },
-      "development",
+      source,
     );
     if (!candidate) throw new InvalidFeedError();
-    if (distanceMeters(location, candidate.position) <= Math.ceil(location.accuracyMeters + SEARCH_RADIUS)) {
+    if (distanceMeters(location, candidate.position) <= radius) {
       candidates.set(candidate.id, candidate);
     }
     if (candidates.size > MAX_CANDIDATES) throw new InvalidFeedError();

@@ -13,9 +13,10 @@ export interface NearbyAedCandidate {
   /**
    * Woher der Treffer stammt. "archive": aus dem Archiv des echten OSM. "development": von der OSM-Entwicklungsinstanz
    * (Testserver). Ein Treffer aus dem Archiv gibt es auf dem Testserver nicht und lässt sich dort nicht ändern.
+   * "live": frisch von der öffentlichen OSM-API (Etappe Q1, Anmeldung am echten OSM).
    * Fehlt die Angabe (ältere Antworten, Tests), ist die Herkunft unbekannt; dann entscheidet der Server beim Schreiben.
    */
-  source?: "archive" | "development";
+  source?: "archive" | "development" | "live";
   position: SearchCoordinate;
   tags: Readonly<Record<string, string>>;
 }
