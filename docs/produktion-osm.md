@@ -222,14 +222,14 @@ Die zehn offenen Fragen sind beantwortet. Wo die Antwort vom Vorschlag abweicht,
 
 | Nr | Frage | Entscheidung | Folge und Risiko |
 | --- | --- | --- | --- |
-| 1 | Region und Nutzergruppe | **Weltweit, alle angemeldeten OSM-Konten.** | Das PMTiles-Archiv deckt nur DACH ab. Deshalb wechselt die Umkreissuche auf die OSM-API (Abschnitt 6). Ein Fehler trifft sofort fremde Daten; Schutz durch Schalter und Limit. `OSM_PROD_ALLOWED_SUBJECTS` entfällt bzw. akzeptiert alle Konten. |
+| 1 | Region und Nutzergruppe | **Weltweit, alle angemeldeten OSM-Konten, aber nur dort, wo die Person ist:** Ein neuer AED liegt höchstens 100 m vom Standort (Foto-GPS oder Handy) entfernt. | Das PMTiles-Archiv deckt nur DACH ab; außerhalb ist die frische OSM-API-Abfrage die einzige Quelle (Abschnitt 6). Ein Fehler trifft sofort fremde Daten; Schutz durch Schalter und Limit. `OSM_PROD_ALLOWED_SUBJECTS` entfällt. |
 | 2 | `source=survey` | **Nur am Changeset**, nicht am Objekt. | Keine zusätzlichen Objekt-Tags. |
-| 3 | Changeset-Kommentar | **Zweisprachig, Deutsch und Englisch**, vor dem Speichern sichtbar. | Wortlaut in Abschnitt 15, Etappe Q3. |
-| 4 | Neuanlage in Produktion | **Eingeschaltet** (eigener Schalter `OSM_PROD_NEW_AEDS_ENABLED`). | Nur mit frischer, vollständiger OSM-API-Abfrage vor dem Vorschlag und erneut vor dem Upload. Ein Fehler sperrt die Neuanlage. |
+| 3 | Changeset-Kommentar | **Zweisprachig, Deutsch und Englisch**, vor dem Speichern sichtbar. | Muster wie beim Hydrantenjäger, etwa „AED als vorhanden bestätigt / Confirmed AED as present (via AEDjaeger)“; genauer Wortlaut mit Etappe Q3. |
+| 4 | Neuanlage in Produktion | **Eingeschaltet** (eigener Schalter `OSM_PROD_NEW_AEDS_ENABLED`). | Wie beim Hydrantenjäger: PMTiles nur zum schnellen Anzeigen, vor dem Vorschlag und erneut vor dem Upload eine frische OSM-API-Abfrage. Ein Fehler sperrt die Neuanlage. |
 | 5 | Limits | **20 Schreibvorgänge pro Konto und UTC-Tag** zum Testen; später eventuell weniger. Zusätzlich höchstens 1 Änderung je Objekt in 24 Stunden. | Kein eigenes Teil-Limit für Neuanlagen. |
 | 6 | Aufbewahrung und Übersicht | **90 Tage**, Betreiberübersicht nur für den Projektinhaber. | Bereinigung über den vorhandenen Aufräumjob. |
 | 7 | Korrekturen in Produktion | **Einbauen**, hinter `OSM_PROD_DETAIL_CORRECTIONS_ENABLED` (Standard aus). | Gleiche Schutzregeln wie auf dem Testserver (Vorwert-Prüfung, zweite Bestätigung). |
-| 8 | Community-Ankündigung | **Entfällt.** | Risiko: Ohne Ankündigung kann die Data Working Group Änderungen aus der App als unabgestimmt werten und Konten sperren. Gegenmaßnahme: eindeutiges Changeset mit `created_by=AEDjaeger`, Kommentar und `source=survey`. |
+| 8 | Community-Ankündigung | **Entfällt**, wie beim bereits veröffentlichten Hydrantenjäger. | Das Changeset macht die Herkunft klar: `created_by=AEDjaeger`, `locale`, `source=survey` und ein Kommentar. Verbleibendes Risiko: Rückfragen anderer Mapper kommen über die Changeset-Kommentare. |
 | 9 | Production-OAuth-Anwendung | **Ja, wird eingerichtet.** | Nur der Projektinhaber kann sie mit seinem Konto auf openstreetmap.org anlegen. Anleitung in Abschnitt 15, Etappe Q2. |
 | 10 | Freigabezeitpunkt | **Freigegeben am 26.11.2026.** | Die Schalter setzt der Projektinhaber je Etappe selbst, nachdem sie gemergt und geprüft ist. |
 
@@ -250,7 +250,7 @@ Jede Etappe ist ein eigener PR gegen `main`. Kein Test, keine CI und kein Agente
 
 | Etappe | Inhalt | Schalter |
 | --- | --- | --- |
-| **Q1** Frische Umkreissuche | Neue Suche über `GET /api/0.6/map` mit kleinem Ausschnitt (Radius 50 m plus Rand) am Produktionshost `api.openstreetmap.org`: weltweit, minutenaktuell. Prüft Status, Grenzen, Fehlerzeilen und Größe; ein Fehler ist nie ein leeres Ergebnis. Ersetzt die PMTiles-Suche für Treffer und Doppelschutz. Rein lesend. | keiner (nur lesend) |
+| **Q1** Frische Umkreissuche | Nach dem Vorbild des Hydrantenjägers: PMTiles liefert in DACH weiter die schnelle erste Anzeige. Danach fragt der Worker `GET /api/0.6/map` für einen Ausschnitt von etwa 100 m um den Standort am Produktionshost `api.openstreetmap.org` ab: weltweit, minutenaktuell. Erst dieses frische Ergebnis entscheidet über Treffer, Hinweise und Neuanlage. Prüft Status, Grenzen, Fehlerzeilen und Größe; ein Fehler ist nie ein leeres Ergebnis. Neu: Ein Kartenpunkt darf höchstens 100 m vom Standort entfernt liegen. Rein lesend. | keiner (nur lesend) |
 | **Q2** Produktions-Anmeldung mit Schreibrecht | OAuth mit `openid write_api`, eigene Production-OAuth-Anwendung, Token verschlüsselt in D1 (eigenes Secret), feste Host-Zuordnung je Umgebung. Anleitung für den Projektinhaber zum Anlegen der OAuth-Anwendung. | `OSM_PROD_LOGIN_ENABLED` |
 | **Q3** Schnellweg in Produktion | „Noch vorhanden“ schreibt `check_date` in das echte OSM. Changeset mit `created_by=AEDjaeger`, `source=survey` und zweisprachigem Kommentar. Limit 20 pro Tag und 1 je Objekt in 24 h, atomar in D1. Wiederaufnahme unklarer Uploads wie auf dem Testserver. | `OSM_PROD_WRITES_ENABLED` |
 | **Q4** Ergänzen in Produktion | Detailweg (nur fehlende Tags) für bestehende AEDs. | `OSM_PROD_WRITES_ENABLED` |
