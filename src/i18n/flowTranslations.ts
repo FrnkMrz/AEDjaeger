@@ -60,6 +60,7 @@ export const flowTranslations = {
     nextAed: "Nächsten AED fotografieren",
     recoveryContinue: "Weiter",
     recoveryNeedSignIn: "Melde dich beim OSM-Testserver an, um den offenen Speichervorgang zu prüfen.",
+    recoveryNeedProductionSignIn: "Melde dich bei OpenStreetMap an, um den offenen Speichervorgang zu prüfen.",
     recoveryWritesDisabled:
       "Schreiben auf dem Testserver ist abgeschaltet. Der Vorgang bleibt gespeichert; versuche es später erneut.",
     recoveryWrongAccount:
@@ -288,6 +289,7 @@ export const flowTranslations = {
     nextAed: "Photograph the next AED",
     recoveryContinue: "Continue",
     recoveryNeedSignIn: "Sign in to the OSM test server to check the pending save.",
+    recoveryNeedProductionSignIn: "Sign in to OpenStreetMap to check the pending save.",
     recoveryWritesDisabled: "Writing to the test server is disabled. The operation stays saved; try again later.",
     recoveryWrongAccount:
       "You are signed in to a different OSM test-server account. Use the account that started this operation.",
@@ -511,6 +513,7 @@ export const flowTranslations = {
     nextAed: "Zrób zdjęcie następnego AED",
     recoveryContinue: "Dalej",
     recoveryNeedSignIn: "Zaloguj się na serwerze testowym OSM, aby sprawdzić oczekujący zapis.",
+    recoveryNeedProductionSignIn: "Zaloguj się do OpenStreetMap, aby sprawdzić oczekujący zapis.",
     recoveryWritesDisabled: "Zapisy na serwerze testowym są wyłączone. Operacja pozostaje zapisana; spróbuj później.",
     recoveryWrongAccount: "Zalogowano na inne konto testowe OSM. Zaloguj się na konto, które rozpoczęło tę operację.",
     buildVersion: "Wersja {revision}",
@@ -735,6 +738,7 @@ export const flowTranslations = {
     nextAed: "次のAEDを撮影",
     recoveryContinue: "続行",
     recoveryNeedSignIn: "保留中の保存を確認するには、OSMテストサーバーにログインしてください。",
+    recoveryNeedProductionSignIn: "保留中の保存を確認するには、OpenStreetMapにログインしてください。",
     recoveryWritesDisabled:
       "テストサーバーへの書き込みは無効です。操作は保存されています。後でもう一度お試しください。",
     recoveryWrongAccount:
@@ -961,6 +965,7 @@ export const flowTranslations = {
     nextAed: "Photographier le DAE suivant",
     recoveryContinue: "Continuer",
     recoveryNeedSignIn: "Connectez-vous au serveur de test OSM pour vérifier l’enregistrement en attente.",
+    recoveryNeedProductionSignIn: "Connectez-vous à OpenStreetMap pour vérifier l’enregistrement en attente.",
     recoveryWritesDisabled:
       "Les écritures sur le serveur de test sont désactivées. L’opération reste enregistrée ; réessayez plus tard.",
     recoveryWrongAccount:
@@ -1190,6 +1195,7 @@ export const flowTranslations = {
     nextAed: "Fotografiar el siguiente DEA",
     recoveryContinue: "Continuar",
     recoveryNeedSignIn: "Inicia sesión en el servidor de pruebas de OSM para comprobar el guardado pendiente.",
+    recoveryNeedProductionSignIn: "Inicia sesión en OpenStreetMap para comprobar el guardado pendiente.",
     recoveryWritesDisabled:
       "La escritura en el servidor de pruebas está desactivada. La operación sigue guardada; inténtalo más tarde.",
     recoveryWrongAccount:

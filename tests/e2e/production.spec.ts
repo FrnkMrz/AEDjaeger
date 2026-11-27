@@ -12,6 +12,7 @@ type Options = {
   writeAvailable?: boolean;
   source?: "live" | "archive";
   searchStatus?: "complete" | "partial";
+  withoutVersion?: boolean;
 };
 
 /** Anmeldung am echten OSM, Suche mit einem Treffer direkt am Standort, bis zur Vorschau mit dem Prüfdatum. */
@@ -43,6 +44,7 @@ async function openProductionPreview(page: Page, context: BrowserContext, option
             osmType: "node",
             coordinateQuality: "exact",
             source: options.source ?? "live",
+            ...(options.withoutVersion ? {} : { version: 7 }),
             position: { latitude: 52.52001, longitude: 13.40501 },
             tags: { emergency: "defibrillator", name: "Rathaus", check_date: "2025-10-20" },
           },
@@ -97,6 +99,7 @@ test("a confirmed check date goes to the real OSM route with the visible comment
   expect(writes.production[0]).toMatchObject({
     confirmed: true,
     target: "node/123",
+    expected_version: 7,
     expected_check_date: "2025-10-20",
     locale: "de",
     recovery_identity: productionOwnerHash,
@@ -154,4 +157,57 @@ test("an unclear answer keeps the same operation and checks it again on the real
   expect(writes.production).toHaveLength(2);
   expect(writes.production[1].operation_id).toBe(writes.production[0].operation_id);
   expect(writes.development).toEqual([]);
+});
+
+test("a fresh hit without a version gets no save button, because the server could not detect a later change", async ({
+  page,
+  context,
+}) => {
+  const writes = await recordWrites(page, () => ({ status: 200, json: { status: "complete", version: 8 } }));
+  await openProductionPreview(page, context, { withoutVersion: true });
+  await expect(page.getByRole("button", { name: "In OpenStreetMap speichern" })).toHaveCount(0);
+  expect(writes.production).toEqual([]);
+});
+
+test("a pending save in the real OSM sends a signed-out person to the OpenStreetMap login, not the test server", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const now = Date.now();
+    localStorage.setItem(
+      "aedjaeger-pending-osm-development-write:d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab",
+      JSON.stringify({
+        version: 1,
+        savedAt: now,
+        expiresAt: now + 24 * 60 * 60 * 1_000,
+        request: {
+          kind: "check-date",
+          environment: "production",
+          locale: "de",
+          operationId: "d5c1a2e3-5b6d-4a7c-8d9e-0123456789ab",
+          target: "node/42",
+          candidateLabel: "Rathaus",
+          expectedVersion: 3,
+          expectedCheckDate: null,
+          observedOn: "2026-11-27",
+        },
+      }),
+    );
+  });
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: false,
+        loginAvailable: true,
+        developmentLoginAvailable: true,
+        developmentSession: false,
+        developmentWriteAvailable: false,
+      },
+    }),
+  );
+  await page.goto("/");
+  await expect(
+    page.getByText("Melde dich bei OpenStreetMap an, um den offenen Speichervorgang zu prüfen."),
+  ).toBeVisible();
+  await expect(page.locator("#osm-sign-in")).toBeFocused();
 });

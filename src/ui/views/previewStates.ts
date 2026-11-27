@@ -115,6 +115,7 @@ export function renderPreviewState(context: PreviewContext): string {
         productionWriteAvailable &&
         candidate?.osmType === "node" &&
         candidate.source === "live" &&
+        candidate.version !== undefined &&
         result.kind === "ready" &&
         !state.details &&
         !state.node;

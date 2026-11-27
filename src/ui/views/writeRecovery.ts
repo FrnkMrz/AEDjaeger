@@ -21,7 +21,9 @@ export function renderWriteRecovery(context: RecoveryContext): string {
           isRecoveryOwnerMismatch()
             ? "recoveryWrongAccount"
             : !rightSession
-              ? "recoveryNeedSignIn"
+              ? production
+                ? "recoveryNeedProductionSignIn"
+                : "recoveryNeedSignIn"
               : "recoveryWritesDisabled",
         )
       : "";

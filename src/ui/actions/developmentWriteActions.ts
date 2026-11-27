@@ -139,7 +139,14 @@ export async function handleDevelopmentWriteAction(
       return "stop";
     const preview = state;
     const candidate = preview.returnState.search.candidates.find((item) => item.id === preview.candidateId);
-    if (candidate?.osmType !== "node" || candidate.source !== "live" || preview.result.kind !== "ready") return "stop";
+    // Die frisch gelesene Version ist Pflicht: Nur mit ihr erkennt der Server, ob der AED seit der Vorschau geändert wurde.
+    if (
+      candidate?.osmType !== "node" ||
+      candidate.source !== "live" ||
+      candidate.version === undefined ||
+      preview.result.kind !== "ready"
+    )
+      return "stop";
     const operationId = preview.operationId ?? operationIdFactory();
     const change = preview.result.changes[0];
     const request: DevelopmentWriteRequest = {
@@ -149,7 +156,7 @@ export async function handleDevelopmentWriteAction(
       operationId,
       target: candidate.id,
       candidateLabel: preview.candidateLabel,
-      ...(candidate.version === undefined ? {} : { expectedVersion: candidate.version }),
+      expectedVersion: candidate.version,
       expectedCheckDate: change.before,
       observedOn: change.after,
     };

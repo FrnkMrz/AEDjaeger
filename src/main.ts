@@ -434,6 +434,7 @@ function accountViewContext() {
     photoSelectionPending: photoSession.selectionPending,
     activePhotoDraft: hasActivePhotoDraft(state),
     pendingDevelopmentWrite: Boolean(pendingDevelopmentWrite),
+    pendingProductionWrite: pendingDevelopmentWrite ? isProductionWrite(pendingDevelopmentWrite) : false,
     illustrationMarkup: defibrillatorMark(defibrillatorPath),
   };
 }
@@ -980,8 +981,10 @@ async function refreshAccountState(focusSelector?: string, afterLogout = false):
   // Rendering the whole app here enforces the gate after sign-in, expiry, and logout.
   render();
   if (pendingDevelopmentWrite && accountState === "signed-out") {
-    // The restored request needs the test-server session to reconcile safely; point directly at that login.
-    app.querySelector<HTMLElement>("#osm-dev-sign-in")?.focus();
+    // Der offene Vorgang braucht die passende Anmeldung: echtes OSM oder Testserver.
+    app
+      .querySelector<HTMLElement>(isProductionWrite(pendingDevelopmentWrite) ? "#osm-sign-in" : "#osm-dev-sign-in")
+      ?.focus();
   } else if (focusSelector === "next-action") {
     const nextActionSelector =
       accountState === "connection-error"
@@ -1403,7 +1406,10 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
         isRecoveryOwnerMismatch,
         openAccount: openAccountFromLamp,
         focusRecoveryLogin: () => {
-          const target = app.querySelector<HTMLElement>("#osm-dev-sign-in, #osm-session-retry, #login-title");
+          // Ein Vorgang am echten OSM braucht die Anmeldung bei OpenStreetMap, einer am Testserver die Testanmeldung.
+          const login =
+            pendingDevelopmentWrite && isProductionWrite(pendingDevelopmentWrite) ? "#osm-sign-in" : "#osm-dev-sign-in";
+          const target = app.querySelector<HTMLElement>(`${login}, #osm-session-retry, #login-title`);
           // Defer until the click's default focus handling has finished.
           window.requestAnimationFrame(() => target?.focus());
         },

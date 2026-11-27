@@ -308,4 +308,43 @@ describe("echtes OSM: noch vorhanden bestätigen (Etappe Q3)", () => {
     expect(await session("production", "yes")).not.toHaveProperty("productionWriteAvailable");
     expect(await session("development", "true")).not.toHaveProperty("productionWriteAvailable");
   });
+
+  it("verlangt die gesehene Version, sonst könnte eine veraltete Vorschau bestätigt werden", async () => {
+    const database = await signedIn();
+    const osm = fakeOsm();
+    const body = checkDate();
+    delete body.expected_version;
+    const response = await handleProductionCheckDate(request(body), environment(database), {
+      fetch: osm.fetcher,
+      now: () => now,
+    });
+    expect(response.status).toBe(400);
+    expect(osm.calls).toEqual([]);
+  });
+
+  it("zählt „schon aktuell“ nicht gegen die Limits, weil nichts geschrieben wurde", async () => {
+    const database = await signedIn();
+    // Fünfmal „schon aktuell“ am selben AED: Der AED hat das Datum bereits.
+    for (let index = 0; index < 5; index += 1) {
+      const osm = fakeOsm({ version: 3, tags: { emergency: "defibrillator", check_date: "2026-11-27" } });
+      const response = await handleProductionCheckDate(
+        request(checkDate({ expected_check_date: "2026-11-27" })),
+        environment(database),
+        { fetch: osm.fetcher, now: () => now + index },
+      );
+      expect(await response.json()).toMatchObject({ status: "complete", already_current: true });
+      expect(osm.calls.some((call) => call.path.endsWith("/changeset/create"))).toBe(false);
+    }
+    expect(database.sqlite.prepare("SELECT COUNT(*) AS n FROM osm_development_write_operations").get()).toEqual({
+      n: 0,
+    });
+    // Eine echte Änderung ist danach weiter möglich.
+    const real = fakeOsm();
+    const response = await handleProductionCheckDate(request(checkDate()), environment(database), {
+      fetch: real.fetcher,
+      now: () => now + 100,
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: "complete", version: 4 });
+  });
 });

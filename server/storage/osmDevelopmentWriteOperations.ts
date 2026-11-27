@@ -251,6 +251,30 @@ export async function reserveOSMProductionWrite(
   }
 }
 
+/**
+ * Gibt die Reservierung eines Vorgangs am echten OSM wieder frei, der nichts geschrieben hat („schon aktuell“).
+ *
+ * Warum: Solche Vorgänge ändern OSM nicht und dürfen weder das Tageslimit noch die Grenze je AED verbrauchen. Gelöscht wird
+ * nur ein Vorgang, der noch nie ein Changeset hatte und noch am Anfang steht (`started`); einen begonnenen Upload rührt diese
+ * Funktion nie an. Eine spätere Wiederholung derselben Vorgangs-ID liest den AED einfach neu.
+ */
+export async function releaseUnchangedOSMProductionWrite(
+  database: D1Database,
+  ownerHash: string,
+  operationId: string,
+): Promise<void> {
+  if (!isSha256(ownerHash) || !isUuid(operationId)) throw new Error("Ungültige OSM-Änderung.");
+  const result = await database
+    .prepare(
+      `DELETE FROM osm_development_write_operations
+       WHERE owner_hash = ? AND operation_id = ? AND osm_environment = 'production'
+         AND state = 'started' AND changeset_id IS NULL`,
+    )
+    .bind(ownerHash, operationId)
+    .run();
+  if (!result.success) throw new Error("D1 delete failed");
+}
+
 /** Liest einen Vorgang und prüft jede Spalte, bevor ihr Inhalt verwendet wird. */
 async function readOperation(
   database: D1Database,

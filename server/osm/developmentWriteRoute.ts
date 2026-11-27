@@ -8,6 +8,7 @@ import {
   hashOSMDevelopmentWriteValue,
   migrateLegacyOSMDevelopmentWriteOwner,
   reserveOSMDevelopmentWrite,
+  releaseUnchangedOSMProductionWrite,
   reserveOSMProductionWrite,
   updateOSMDevelopmentWrite,
   type OSMDevelopmentWriteOperation,
@@ -177,6 +178,9 @@ async function handleCheckDate(
   if (production && (input.details !== undefined || input.expected_before !== undefined)) {
     return jsonResponse({ error: "details_unavailable" }, 403);
   }
+  // Echtes OSM: Die Version, die die Person gesehen hat, ist Pflicht. Ohne sie könnte der Server nicht erkennen, ob
+  // jemand den AED seit der Vorschau verschoben oder geändert hat, und würde die alte Vorschau bestätigen.
+  if (production && input.expected_version === undefined) return jsonResponse({ error: "invalid_request" }, 400);
   if (input.recovery_identity && input.recovery_identity !== ownerHash)
     return jsonResponse({ error: "recovery_identity_mismatch" }, 403);
   input.recovery_identity = ownerHash;
@@ -303,6 +307,16 @@ async function handleCheckDate(
   }
   // „Schon aktuell“ gilt nur, wenn es auch keine Detailtags zu schreiben gibt.
   if (currentNode.tags.check_date === input.observed_on && !hasDetails(input)) {
+    if (production) {
+      // Echtes OSM: Es wurde nichts geschrieben. Die Reservierung wieder freigeben, damit „schon aktuell“ weder das
+      // Tageslimit noch die Grenze je AED verbraucht. Scheitert das Freigeben, bleibt sie stehen (zählt dann, schadet nicht).
+      try {
+        await releaseUnchangedOSMProductionWrite(environment.DB, ownerHash, input.operation_id);
+      } catch {
+        /* Die Antwort an die Person bleibt richtig: Es wurde nichts geändert. */
+      }
+      return jsonResponse({ status: "complete", version: currentNode.version, already_current: true }, 200);
+    }
     await safelyUpdate(environment.DB, {
       ownerHash,
       operationId: input.operation_id,
