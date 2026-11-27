@@ -610,12 +610,18 @@ function searchBounds(
   const cosine = Math.cos((location.latitude * Math.PI) / 180);
   if (Math.abs(cosine) < 0.01) throw new CoverageUnavailableError();
   const longitudeDelta = radius / (111_000 * Math.abs(cosine));
-  return {
-    minLat: Math.max(-90, location.latitude - latitudeDelta),
-    maxLat: Math.min(90, location.latitude + latitudeDelta),
-    minLon: Math.max(-180, location.longitude - longitudeDelta),
-    maxLon: Math.min(180, location.longitude + longitudeDelta),
+  const box = {
+    minLat: location.latitude - latitudeDelta,
+    maxLat: location.latitude + latitudeDelta,
+    minLon: location.longitude - longitudeDelta,
+    maxLon: location.longitude + longitudeDelta,
   };
+  // Ragt der Kreis über die Datumsgrenze (±180° Länge) oder über einen Pol, würde ein abgeschnittener Ausschnitt
+  // einen Teil des Suchkreises nicht abfragen. Die Antwort wäre dann zu Unrecht „vollständig“ und könnte einen nahen
+  // AED verstecken, also eine Doppelanlage erlauben. Deshalb dort lieber gar nicht suchen (fail closed).
+  if (box.minLon < -180 || box.maxLon > 180 || box.minLat < -90 || box.maxLat > 90)
+    throw new CoverageUnavailableError();
+  return box;
 }
 function boundsFitArchive(bounds: ReturnType<typeof searchBounds>): boolean {
   // Reject an unsupported location separately from a temporarily unavailable or stale data feed.

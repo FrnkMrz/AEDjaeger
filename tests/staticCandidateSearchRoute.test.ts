@@ -627,6 +627,20 @@ describe("PMTiles AED candidate search", () => {
       expect(await response.json()).toEqual({ error: "coverage_unavailable" });
     });
 
+    it("near the date line it refuses to search instead of cutting the area and claiming a complete result", async () => {
+      // Bei −16,5° Breite und 179,9999° Länge läge ein AED auf −179,9999° nur etwa 21 m entfernt. Ein abgeschnittener
+      // Ausschnitt fände ihn nicht. Deshalb gibt es dort keine Suche und keine Neuanlage.
+      const fetcher = fetchArchive();
+      const response = await handleStaticCandidateSearch(
+        request({ latitude: -16.5, longitude: 179.9999, accuracy_meters: 10 }),
+        { DB: database({ environment: "production" }) },
+        { fetch: fetcher, now: () => now },
+      );
+      expect(response.status).toBe(422);
+      expect(await response.json()).toEqual({ error: "outside_coverage" });
+      expect(fetcher).not.toHaveBeenCalled();
+    });
+
     it("a test-server session stays bound to the archive area", async () => {
       const fetcher = fetchArchive();
       const response = await handleStaticCandidateSearch(
