@@ -1,9 +1,4 @@
-import {
-  ACCESS_VALUES,
-  type AedDetailForm,
-  DETAIL_LIMITS,
-  INDOOR_VALUES,
-} from "../../contracts/aedDetails";
+import { ACCESS_VALUES, type AedDetailForm, DETAIL_LIMITS, INDOOR_VALUES } from "../../contracts/aedDetails";
 
 type DetailTextField = "location" | "hoursText" | "operator" | "phone" | "description" | "ref";
 
@@ -90,9 +85,7 @@ export function bindDetailForm(root: ParentNode, context: DetailFormBindingConte
       const step = Number(button.dataset.detailStep) < 0 ? -1 : 1;
       // The first tap lands on 0 (ground floor), whichever direction was pressed.
       form.level =
-        form.level === null
-          ? 0
-          : Math.max(DETAIL_LIMITS.levelMin, Math.min(DETAIL_LIMITS.levelMax, form.level + step));
+        form.level === null ? 0 : Math.max(DETAIL_LIMITS.levelMin, Math.min(DETAIL_LIMITS.levelMax, form.level + step));
       context.showDetailLevel();
       context.updateDetailFooter();
     } else if (button.dataset.detailLevelClear !== undefined) {

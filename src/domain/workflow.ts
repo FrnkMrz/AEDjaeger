@@ -2,6 +2,7 @@ import type { CandidateAssessment, Coordinate, LocationEstimate } from "./candid
 import type { DetailCorrection, DetailTags } from "../contracts/aedDetails";
 import type { ExistingNode, ExistingNodeErrorCode } from "../osm/existingNode";
 import type { CandidateSearchResult } from "../osm/candidateTypes";
+import type { ChangesetLocale } from "../contracts/changesetComment";
 import type { SearchLocation } from "../osm/candidateSearch";
 import type { ExistingCheckDatePreview, NewAedPreview, ProposalResult } from "./osmChangeProposal";
 
@@ -27,6 +28,13 @@ export type DevelopmentWriteRequest = {
 } & ( // details (optional): Detailtags, die ERGÄNZT werden sollen. Dann ist expectedVersion die Version, die die Person frisch gesehen hat.
   | {
       kind: "check-date";
+      /**
+       * Ziel: fehlt die Angabe, der Testserver (wie bisher). "production" = echtes OSM (Etappe Q3). Die App setzt den Wert
+       * nur bei einer Anmeldung am echten OSM; der Server prüft trotzdem selbst, ob Sitzung und Route zusammenpassen.
+       */
+      environment?: "production";
+      /** Sprache der App für das Changeset (`locale`), nur beim echten OSM. */
+      locale?: ChangesetLocale;
       target: string;
       expectedVersion?: number;
       expectedCheckDate: string | null;
@@ -105,13 +113,14 @@ export type FlowState =
       corrections?: DetailCorrection[];
       node?: ExistingNode;
       fromList?: true;
-      writeStatus?: "sending" | "complete" | "unchanged" | "notFound" | "uncertain" | "conflict" | "failed";
+      // "limited": Das echte OSM hat den Vorgang wegen eines Limits abgelehnt (20 pro Tag, 1 je AED in 24 h); nichts geändert.
+      writeStatus?: "sending" | "complete" | "unchanged" | "notFound" | "uncertain" | "conflict" | "failed" | "limited";
       operationId?: string;
     }
   | {
       kind: "development-write-recovery";
       request: DevelopmentWriteRequest;
-      writeStatus: "uncertain" | "sending" | "complete" | "unchanged" | "notFound" | "conflict" | "failed";
+      writeStatus: "uncertain" | "sending" | "complete" | "unchanged" | "notFound" | "conflict" | "failed" | "limited";
     }
   | {
       kind: "candidate-error";

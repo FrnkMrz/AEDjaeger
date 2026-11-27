@@ -1,5 +1,6 @@
 import { isDetailKey, type DetailTags } from "../../contracts/aedDetails";
 import type { DevelopmentWriteRequest, FlowState } from "../../domain/workflow";
+import { isChangesetLocale } from "../../contracts/changesetComment";
 
 type DevelopmentWriteActionContext = {
   state: FlowState;
@@ -7,6 +8,11 @@ type DevelopmentWriteActionContext = {
   developmentSession: boolean;
   developmentWriteAvailable: boolean;
   developmentWriteOwnerHash?: string;
+  /** Echtes OSM (Etappe Q3): Sitzung am echten OSM, Schalter an und Kontokennung vorhanden. */
+  productionWriteAvailable: boolean;
+  productionWriteOwnerHash?: string;
+  /** Sprache der App; geht beim echten OSM als `locale` an das Changeset. */
+  locale: string;
   accountSignedIn: boolean;
   pendingDevelopmentWrite?: DevelopmentWriteRequest;
   createOperationId?: () => string;
@@ -36,7 +42,15 @@ export async function handleDevelopmentWriteAction(
 ): Promise<DevelopmentWriteActionResult> {
   const { state, setState } = context;
 
-  if (action === "continue-recovery" && context.pendingDevelopmentWrite && !context.accountSignedIn) {
+  if (
+    action === "continue-recovery" &&
+    context.pendingDevelopmentWrite &&
+    !context.accountSignedIn &&
+    !(
+      context.pendingDevelopmentWrite.kind === "check-date" &&
+      context.pendingDevelopmentWrite.environment === "production"
+    )
+  ) {
     // Reconcile only after returning to the OSM development session that owns this pending operation.
     context.redirectToDevelopmentLogin();
     return "stop";
@@ -104,6 +118,55 @@ export async function handleDevelopmentWriteAction(
     return "handled";
   }
 
+  if (action === "save-development-check" && state.kind === "osm-preview" && !context.developmentSession) {
+    // Echtes OSM (Etappe Q3). Dieselben Sicherungen wie beim Testserver, aber enger: nur das Prüfdatum, nur für einen
+    // frisch von der OSM-API gelesenen Treffer, keine Detailangaben, keine Korrekturen. Die Prüfung steht hier zusätzlich
+    // zur Anzeige, falls der Knopf auf anderem Weg ausgelöst wird.
+    context.prepareSuccessSound();
+    const operationIdFactory = context.createOperationId;
+    if (
+      !context.productionWriteAvailable ||
+      !context.productionWriteOwnerHash ||
+      !operationIdFactory ||
+      !isChangesetLocale(context.locale) ||
+      state.writeStatus === "sending" ||
+      state.writeStatus === "complete" ||
+      state.writeStatus === "unchanged" ||
+      state.details ||
+      state.node ||
+      (state.corrections ?? []).length > 0
+    )
+      return "stop";
+    const preview = state;
+    const candidate = preview.returnState.search.candidates.find((item) => item.id === preview.candidateId);
+    if (candidate?.osmType !== "node" || candidate.source !== "live" || preview.result.kind !== "ready") return "stop";
+    const operationId = preview.operationId ?? operationIdFactory();
+    const change = preview.result.changes[0];
+    const request: DevelopmentWriteRequest = {
+      kind: "check-date",
+      environment: "production",
+      locale: context.locale,
+      operationId,
+      target: candidate.id,
+      candidateLabel: preview.candidateLabel,
+      ...(candidate.version === undefined ? {} : { expectedVersion: candidate.version }),
+      expectedCheckDate: change.before,
+      observedOn: change.after,
+    };
+    try {
+      // Vor dem Senden sichern, damit ein Neuladen denselben Vorgang sicher abgleichen kann.
+      context.persistPendingWrite(request);
+    } catch {
+      setState({ ...preview, operationId, writeStatus: "failed" });
+      context.render(true);
+      return "stop";
+    }
+    setState({ ...preview, operationId, writeStatus: "sending" });
+    context.render(true);
+    context.submit(request);
+    return "handled";
+  }
+
   if (action === "save-development-check" && state.kind === "osm-preview") {
     context.prepareSuccessSound(); // Unlock on the deliberate tap; play only after confirmed server success.
     const operationIdFactory = context.createOperationId;
@@ -167,6 +230,25 @@ export async function handleDevelopmentWriteAction(
     (state.kind === "development-write-recovery" || state.kind === "new-aed-preview" || state.kind === "osm-preview")
   ) {
     if (state.writeStatus !== "uncertain" || context.isRecoveryOwnerMismatch()) return "stop";
+    const pending =
+      state.kind === "development-write-recovery" ? state.request : context.readPendingWrite(state.operationId);
+    if (pending?.kind === "check-date" && pending.environment === "production") {
+      // Ein Vorgang am echten OSM lässt sich nur in einer Sitzung am echten OSM fortsetzen.
+      if (context.developmentSession || !context.accountSignedIn) {
+        if (context.accountSignedIn) context.openAccount();
+        else context.focusRecoveryLogin();
+        return "stop";
+      }
+      if (!context.productionWriteAvailable || !context.productionWriteOwnerHash) {
+        await context.refreshAccountState();
+        return "stop";
+      }
+      context.prepareSuccessSound();
+      setState({ ...state, writeStatus: "sending" });
+      context.render(true);
+      context.submit(pending);
+      return "handled";
+    }
     if (!context.developmentSession) {
       if (context.accountSignedIn) {
         // A production login cannot reconcile an operation that belongs to the development session.

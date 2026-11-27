@@ -10,6 +10,7 @@ import { importOAuthEncryptionKey } from "../server/auth/osmOAuth";
 import { handleDevelopmentCheckDate, handleProductionCheckDate } from "../server/osm/developmentWriteRoute";
 import { createOSMSession } from "../server/storage/osmSessions";
 import { storeOSMOAuthToken } from "../server/storage/osmOAuthTokens";
+import worker from "../server/worker";
 
 const migrationsDir = resolve(import.meta.dirname, "../migrations");
 const keySecret = "k".repeat(43);
@@ -261,5 +262,33 @@ describe("echtes OSM: noch vorhanden bestätigen (Etappe Q3)", () => {
     });
     expect(response.status).toBe(400);
     expect(osm.calls).toEqual([]);
+  });
+
+  it("meldet die Schreibfreigabe nur mit Schalter und nur einer Sitzung am echten OSM", async () => {
+    const session = async (environmentName, writes) => {
+      const database = await signedIn(environmentName);
+      const response = await worker.fetch(
+        new Request("https://aedjaeger.de/api/auth/session", {
+          headers: { Cookie: `__Host-aedjaeger_osm_session=${sessionToken}` },
+        }),
+        {
+          ASSETS: { fetch: async () => new Response("") },
+          DB: database.d1,
+          OSM_OAUTH_ENCRYPTION_KEY: keySecret,
+          OSM_PROD_LOGIN_ENABLED: "true",
+          OSM_CLIENT_ID: "client",
+          OSM_CLIENT_SECRET: "secret",
+          OSM_REDIRECT_URI: "https://aedjaeger.de/api/auth/osm/callback",
+          ...(writes === undefined ? {} : { OSM_PROD_WRITES_ENABLED: writes }),
+        },
+      );
+      return response.json();
+    };
+    const on = await session("production", "true");
+    expect(on).toMatchObject({ authenticated: true, productionWriteAvailable: true });
+    expect(on.productionWriteOwnerHash).toMatch(/^[a-f0-9]{64}$/u);
+    expect(await session("production", undefined)).not.toHaveProperty("productionWriteAvailable");
+    expect(await session("production", "yes")).not.toHaveProperty("productionWriteAvailable");
+    expect(await session("development", "true")).not.toHaveProperty("productionWriteAvailable");
   });
 });
