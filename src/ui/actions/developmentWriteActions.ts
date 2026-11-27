@@ -139,8 +139,10 @@ export async function handleDevelopmentWriteAction(
     const preview = state;
     const candidate = preview.returnState.search.candidates.find((item) => item.id === preview.candidateId);
     // Die frisch gelesene Version ist Pflicht: Nur mit ihr erkennt der Server, ob der AED seit der Vorschau geändert wurde.
-    // Nach dem Formular gilt die Version des frisch gelesenen Objekts, sonst die aus der frischen Suche.
-    const expectedVersion = preview.node ? preview.node.version : candidate?.version;
+    // Maßgeblich ist immer die Version aus der frischen Suche, denn auf ihr beruht die Zuordnung (bis 10 m). Ein im Formular
+    // frisch gelesenes Objekt muss genau diese Version haben; sonst könnte es inzwischen verschoben worden sein.
+    const expectedVersion = candidate?.version;
+    if (preview.node && preview.node.version !== expectedVersion) return "stop";
     if (
       candidate?.osmType !== "node" ||
       candidate.source !== "live" ||

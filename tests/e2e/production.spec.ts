@@ -217,12 +217,16 @@ test("a pending save in the real OSM sends a signed-out person to the OpenStreet
   await expect(page.locator("#osm-sign-in")).toBeFocused();
 });
 
-/** Nachgebildete Leseroute für das Formular: frischer Stand vom echten OSM mit Version 9. */
-async function routeProductionNode(page: Page, tags: Record<string, string> = { check_date: "2025-10-20" }) {
+/** Nachgebildete Leseroute für das Formular: frischer Stand vom echten OSM (Standard: dieselbe Version 7 wie die Suche). */
+async function routeProductionNode(
+  page: Page,
+  tags: Record<string, string> = { check_date: "2025-10-20" },
+  version = 7,
+) {
   const reads: string[] = [];
   await page.route("**/api/osm/node?**", async (route) => {
     reads.push(route.request().url());
-    await route.fulfill({ json: { status: "ok", id: "node/123", version: 9, tags } });
+    await route.fulfill({ json: { status: "ok", id: "node/123", version, tags } });
   });
   await page.route("**/api/osm/development/node?**", (route) => route.fulfill({ status: 500, json: {} }));
   return reads;
@@ -252,8 +256,8 @@ test("missing details can be added in the real OSM: the form reads the fresh obj
   expect(reads).toHaveLength(1);
   expect(writes.development).toEqual([]);
   expect(writes.production).toHaveLength(1);
-  // Die Version stammt aus dem frisch gelesenen Objekt, nicht aus der Suche.
-  expect(writes.production[0]).toMatchObject({ expected_version: 9, details: { access: "yes" } });
+  // Die Version aus der Suche, die das frisch gelesene Objekt bestätigt hat.
+  expect(writes.production[0]).toMatchObject({ expected_version: 7, details: { access: "yes" } });
   expect(writes.production[0]).not.toHaveProperty("expected_before");
   expect(writes.production[0]).not.toHaveProperty("confirmed_corrections");
 });
@@ -274,4 +278,18 @@ test("an archive hit in the real OSM gets no details button in the list", async 
   await openProductionList(page, context, { source: "archive" });
   await expect(page.getByRole("button", { name: "Als noch vorhanden bestätigen" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Angaben ansehen und ergänzen" })).toHaveCount(0);
+});
+
+test("if the AED changed since the search, the form refuses to continue and asks for a new search", async ({
+  page,
+  context,
+}) => {
+  // Suche: Version 7. Beim Öffnen des Formulars liefert OSM Version 8, zum Beispiel weil jemand den AED verschoben hat.
+  const writes = await recordWrites(page, () => ({ status: 200, json: { status: "complete", version: 9 } }));
+  await routeProductionNode(page, { check_date: "2025-10-20" }, 8);
+  await openProductionPreview(page, context);
+  await page.getByRole("button", { name: "Fehlende Angaben ergänzen" }).click();
+  await expect(page.locator(".capture-content")).toContainText("nicht mehr verfügbar");
+  await expect(page.locator("#detail-continue")).toHaveCount(0);
+  expect(writes.production).toEqual([]);
 });

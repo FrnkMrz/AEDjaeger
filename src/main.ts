@@ -1538,6 +1538,16 @@ async function loadExistingAedNode(candidateId: string): Promise<void> {
   try {
     // Echtes OSM oder Testserver: Die Sitzung bestimmt die Route; der Server prüft das zusätzlich.
     const node = await requestExistingNode(candidateId, fetch, developmentSession ? "development" : "production");
+    // Echtes OSM: Die Zuordnung (bis 10 m) beruht auf Position und Version aus der frischen Suche. Hat sich die Version
+    // seitdem geändert, kann jemand den AED verschoben haben; dann gilt der Treffer als veraltet, und die Person sucht
+    // neu. Die neue Version wird nie ungeprüft übernommen.
+    const searched =
+      state.kind === "existing-aed-details"
+        ? state.returnState.search.candidates.find((item) => item.id === candidateId)
+        : undefined;
+    if (!developmentSession && searched?.version !== node.version) {
+      throw new ExistingNodeError("node_unavailable");
+    }
     if (state.kind !== "existing-aed-details" || state.candidateId !== candidateId || state.load.status !== "loading")
       return;
     detailExistingTags = node.tags;
