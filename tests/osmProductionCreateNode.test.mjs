@@ -229,4 +229,52 @@ describe("echtes OSM: neuen AED eintragen (Etappe Q5)", () => {
     expect(response.status).toBe(200);
     expect(again.calls.some((call) => call.path.endsWith("/upload"))).toBe(false);
   });
+
+  it("prüft beim Fortsetzen nach einem Datenbankfehler erneut frisch auf Doppelte und lädt dann nicht hoch", async () => {
+    const database = await signedIn();
+    // Die Datenbank speichert die Changeset-Nummer, meldet aber einen Fehler (z. B. Zeitüberschreitung nach dem Schreiben).
+    let failAfterCommit = true;
+    const flaky = {
+      prepare(query) {
+        const statement = database.d1.prepare(query);
+        if (!query.includes("SET state = 'changeset-created'")) return statement;
+        return {
+          bind(...values) {
+            statement.bind(...values);
+            return this;
+          },
+          async run() {
+            const result = await statement.run();
+            if (failAfterCommit) {
+              failAfterCommit = false;
+              throw new Error("D1 timeout after commit");
+            }
+            return result;
+          },
+          first: (...args) => statement.first(...args),
+        };
+      },
+    };
+    const body = createBody();
+    const first = fakeOsm();
+    const firstResponse = await handleProductionCreateNode(request(body), environment(database, { DB: flaky }), {
+      fetch: first.fetcher,
+      now: () => now,
+    });
+    expect(firstResponse.status).toBe(503);
+    expect(first.calls.some((call) => call.path.endsWith("/upload"))).toBe(false);
+
+    // Inzwischen hat jemand einen AED direkt daneben eingetragen. Die Wiederholung muss das bemerken.
+    const retry = fakeOsm([{ type: "node", id: 99, lat: 49.5, lon: 11.4, tags: { emergency: "defibrillator" } }]);
+    const response = await handleProductionCreateNode(request(body), environment(database), {
+      fetch: retry.fetcher,
+      now: () => now + 5_000,
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "nearby_aed_found" });
+    expect(retry.calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      "GET /api/0.6/map.json",
+      "PUT /api/0.6/changeset/888/close",
+    ]);
+  });
 });

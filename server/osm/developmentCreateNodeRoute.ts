@@ -208,6 +208,18 @@ async function handleCreateNode(
         (dependencies.now ?? Date.now)(),
       );
       if (!claimed) return jsonResponse({ status: "pending" }, 202);
+      // Wiederaufnahme vor dem Upload (z. B. nach einem Datenbankfehler direkt nach dem Öffnen des Changesets): Seit der
+      // ersten Prüfung kann jemand einen AED in der Nähe eingetragen haben. Deshalb hier erneut frisch prüfen, bevor
+      // hochgeladen wird. Der Upload-Anspruch (claim) bleibt bestehen und verhindert parallele Wiederholungen.
+      const resumeCheck = await recheckBeforeResumedUpload(
+        environment.DB,
+        ownerHash,
+        input,
+        operation,
+        token,
+        dependencies,
+      );
+      if (resumeCheck) return resumeCheck;
       return uploadCreatedNode(environment.DB, ownerHash, input, operation, token, dependencies);
     }
     if (operation.state === "started") {
@@ -778,6 +790,47 @@ function isStringRecord(value: unknown): value is Record<string, string> {
   );
 }
 /** Entfernung zweier Punkte in Metern (Haversine-Formel, Erdradius 6.371 km). */
+/**
+ * Frische Prüfung auf Doppelte vor einem fortgesetzten Upload. Gibt eine fertige Antwort zurück, wenn NICHT
+ * hochgeladen werden darf (AED in der Nähe gefunden oder Prüfung nicht möglich), sonst `null`.
+ * Da noch nichts hochgeladen wurde, ist ein Abbruch hier sicher: Das leere Changeset wird geschlossen.
+ */
+async function recheckBeforeResumedUpload(
+  database: D1Database,
+  ownerHash: string,
+  input: CreateRequest,
+  operation: OSMDevelopmentWriteOperation,
+  token: string,
+  dependencies: Dependencies,
+): Promise<Response | null> {
+  let possibleDuplicate: boolean;
+  try {
+    possibleDuplicate = await findNearbyAed(input, token, dependencies.fetch ?? fetch, osmEnvironmentOf(dependencies));
+  } catch {
+    await safelyUpdate(database, {
+      ownerHash,
+      operationId: input.operation_id,
+      state: "failed",
+      changesetId: operation.changeset_id ?? undefined,
+      now: (dependencies.now ?? Date.now)(),
+    });
+    if (operation.changeset_id)
+      await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch, osmEnvironmentOf(dependencies));
+    return jsonResponse({ error: "write_failed" }, 422);
+  }
+  if (!possibleDuplicate) return null;
+  await safelyUpdate(database, {
+    ownerHash,
+    operationId: input.operation_id,
+    state: "conflict",
+    changesetId: operation.changeset_id ?? undefined,
+    now: (dependencies.now ?? Date.now)(),
+  });
+  if (operation.changeset_id)
+    await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch, osmEnvironmentOf(dependencies));
+  return jsonResponse({ error: "nearby_aed_found" }, 409);
+}
+
 async function safelyClaimUpload(
   database: D1Database,
   ownerHash: string,

@@ -390,3 +390,58 @@ test("a map point set by hand is not enough for a new AED in the real OSM", asyn
     "braucht die App deinen Standort aus dem Foto oder vom Handy",
   );
 });
+
+test("an uncertain new AED in the real OSM, resumed after a reload, ends with the real-OSM success message", async ({
+  page,
+}) => {
+  await page.addInitScript((ownerHash) => {
+    const now = Date.now();
+    localStorage.setItem(
+      "aedjaeger-pending-osm-development-write:e5c1a2e3-5b6d-4a7c-8d9e-0123456789ab",
+      JSON.stringify({
+        version: 1,
+        savedAt: now,
+        expiresAt: now + 24 * 60 * 60 * 1_000,
+        ownerHash,
+        request: {
+          kind: "create-node",
+          environment: "production",
+          locale: "de",
+          operationId: "e5c1a2e3-5b6d-4a7c-8d9e-0123456789ab",
+          candidateLabel: "52.52000, 13.40500",
+          latitude: 52.52,
+          longitude: 13.405,
+          observedOn: "2026-11-27",
+          details: {},
+          confirmedDifferentCandidateIds: [],
+        },
+      }),
+    );
+  }, productionOwnerHash);
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: true,
+        loginAvailable: true,
+        developmentLoginAvailable: false,
+        developmentSession: false,
+        developmentWriteAvailable: false,
+        productionWriteAvailable: true,
+        productionWriteOwnerHash: productionOwnerHash,
+        productionNewAedsAvailable: true,
+      },
+    }),
+  );
+  const creates: Array<Record<string, unknown>> = [];
+  await page.route("**/api/osm/create-node", async (route) => {
+    creates.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({ json: { status: "complete", node_id: "5555", version: 1 } });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Status erneut prüfen" }).click();
+  await closeSaveDialog(page);
+  await expect(page.locator(".capture-content")).toContainText("Neuer AED in OpenStreetMap eingetragen.");
+  await expect(page.locator(".capture-content")).not.toContainText("Testserver");
+  expect(creates).toHaveLength(1);
+  expect(creates[0].operation_id).toBe("e5c1a2e3-5b6d-4a7c-8d9e-0123456789ab");
+});

@@ -34,7 +34,7 @@ export function renderWriteRecovery(context: RecoveryContext): string {
       : `<p>${state.request.latitude.toFixed(5)}, ${state.request.longitude.toFixed(5)}</p>`;
   const recoveryMessage =
     state.request.kind === "create-node" && state.writeStatus === "complete"
-      ? tv("developmentCreated")
+      ? tv(production ? "productionCreated" : "developmentCreated")
       : tv(statusKeys[state.writeStatus]);
   const action =
     state.writeStatus === "uncertain" && isRecoveryOwnerMismatch()
