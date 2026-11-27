@@ -25,6 +25,7 @@ describe("OSM session client", () => {
       developmentCorrectionsAvailable: false,
       photoCheckAvailable: false,
       productionWriteAvailable: false,
+      productionNewAedsAvailable: false,
     });
     expect(fetcher).toHaveBeenCalledWith("/api/auth/session", {
       credentials: "same-origin",

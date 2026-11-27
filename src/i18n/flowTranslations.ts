@@ -26,6 +26,10 @@ export const flowTranslations = {
     productionSending: "Änderung wird an OpenStreetMap gesendet…",
     productionComplete: "In OpenStreetMap gespeichert.",
     productionDetailsComplete: "Prüfdatum und neue Angaben in OpenStreetMap gespeichert.",
+    productionCreateAction: "In OpenStreetMap eintragen",
+    productionCreated: "Neuer AED in OpenStreetMap eingetragen.",
+    productionNeedsDeviceLocation:
+      "Für einen neuen AED im echten OpenStreetMap braucht die App deinen Standort aus dem Foto oder vom Handy. Ein selbst gesetzter Kartenpunkt reicht dafür nicht.",
     productionUnchanged: "Schon aktuell. Es wurde nichts geändert.",
     productionNotFound: "Diesen AED gibt es in OpenStreetMap nicht mehr. Es wurde nichts geändert.",
     productionUncertain:
@@ -257,6 +261,10 @@ export const flowTranslations = {
     productionSending: "Sending the change to OpenStreetMap…",
     productionComplete: "Saved in OpenStreetMap.",
     productionDetailsComplete: "Check date and new details saved in OpenStreetMap.",
+    productionCreateAction: "Add to OpenStreetMap",
+    productionCreated: "New AED added to OpenStreetMap.",
+    productionNeedsDeviceLocation:
+      "To add a new AED to the real OpenStreetMap, the app needs your location from the photo or your phone. A map point you set yourself is not enough.",
     productionUnchanged: "Already up to date. Nothing was changed.",
     productionNotFound: "This AED no longer exists in OpenStreetMap. Nothing was changed.",
     productionUncertain: "Result unclear. Check again with the same request; no new change is sent blindly.",
@@ -482,6 +490,10 @@ export const flowTranslations = {
     productionSending: "Wysyłanie zmiany do OpenStreetMap…",
     productionComplete: "Zapisano w OpenStreetMap.",
     productionDetailsComplete: "Zapisano w OpenStreetMap datę kontroli i nowe dane.",
+    productionCreateAction: "Dodaj do OpenStreetMap",
+    productionCreated: "Nowy AED dodano do OpenStreetMap.",
+    productionNeedsDeviceLocation:
+      "Aby dodać nowy AED do prawdziwego OpenStreetMap, aplikacja potrzebuje Twojej lokalizacji ze zdjęcia lub telefonu. Samodzielnie ustawiony punkt na mapie nie wystarczy.",
     productionUnchanged: "Już aktualne. Nic nie zmieniono.",
     productionNotFound: "Tego AED nie ma już w OpenStreetMap. Nic nie zmieniono.",
     productionUncertain:
@@ -708,6 +720,10 @@ export const flowTranslations = {
     productionSending: "OpenStreetMapに変更を送信中…",
     productionComplete: "OpenStreetMapに保存しました。",
     productionDetailsComplete: "確認日と新しい情報をOpenStreetMapに保存しました。",
+    productionCreateAction: "OpenStreetMapに登録",
+    productionCreated: "新しいAEDをOpenStreetMapに登録しました。",
+    productionNeedsDeviceLocation:
+      "本物のOpenStreetMapに新しいAEDを登録するには、写真または携帯電話の位置情報が必要です。自分で設定した地図上の点では足りません。",
     productionUnchanged: "すでに最新です。何も変更していません。",
     productionNotFound: "このAEDはOpenStreetMapにもう存在しません。何も変更していません。",
     productionUncertain:
@@ -935,6 +951,10 @@ export const flowTranslations = {
     productionSending: "Envoi de la modification à OpenStreetMap…",
     productionComplete: "Enregistré dans OpenStreetMap.",
     productionDetailsComplete: "Date de vérification et nouvelles informations enregistrées dans OpenStreetMap.",
+    productionCreateAction: "Ajouter à OpenStreetMap",
+    productionCreated: "Nouveau DAE ajouté à OpenStreetMap.",
+    productionNeedsDeviceLocation:
+      "Pour ajouter un nouveau DAE au vrai OpenStreetMap, l’application a besoin de votre position issue de la photo ou du téléphone. Un point choisi vous-même sur la carte ne suffit pas.",
     productionUnchanged: "Déjà à jour. Rien n’a été modifié.",
     productionNotFound: "Ce DAE n’existe plus dans OpenStreetMap. Rien n’a été modifié.",
     productionUncertain:
@@ -1166,6 +1186,10 @@ export const flowTranslations = {
     productionSending: "Enviando el cambio a OpenStreetMap…",
     productionComplete: "Guardado en OpenStreetMap.",
     productionDetailsComplete: "Fecha de revisión y nuevos datos guardados en OpenStreetMap.",
+    productionCreateAction: "Añadir a OpenStreetMap",
+    productionCreated: "Nuevo DEA añadido a OpenStreetMap.",
+    productionNeedsDeviceLocation:
+      "Para añadir un DEA nuevo al OpenStreetMap real, la app necesita tu ubicación de la foto o del móvil. Un punto que marques tú en el mapa no basta.",
     productionUnchanged: "Ya está actualizado. No se cambió nada.",
     productionNotFound: "Este DEA ya no existe en OpenStreetMap. No se cambió nada.",
     productionUncertain:

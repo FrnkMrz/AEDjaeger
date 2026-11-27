@@ -11,7 +11,7 @@ export function renderWriteRecovery(context: RecoveryContext): string {
   const { state, tv, escapeHtml, developmentWriteStatusKeys, productionWriteStatusKeys } = context;
   const isRecoveryOwnerMismatch = context.isRecoveryOwnerMismatch;
   // Ein Vorgang am echten OSM lässt sich nur in einer Sitzung am echten OSM fortsetzen, einer am Testserver nur dort.
-  const production = state.request.kind === "check-date" && state.request.environment === "production";
+  const production = state.request.environment === "production";
   const rightSession = production ? !context.developmentSession : context.developmentSession;
   const writesAvailable = production ? context.productionWriteAvailable : context.developmentWriteAvailable;
   const statusKeys = production ? productionWriteStatusKeys : developmentWriteStatusKeys;
@@ -34,7 +34,7 @@ export function renderWriteRecovery(context: RecoveryContext): string {
       : `<p>${state.request.latitude.toFixed(5)}, ${state.request.longitude.toFixed(5)}</p>`;
   const recoveryMessage =
     state.request.kind === "create-node" && state.writeStatus === "complete"
-      ? tv("developmentCreated")
+      ? tv(production ? "productionCreated" : "developmentCreated")
       : tv(statusKeys[state.writeStatus]);
   const action =
     state.writeStatus === "uncertain" && isRecoveryOwnerMismatch()

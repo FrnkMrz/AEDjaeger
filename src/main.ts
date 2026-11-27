@@ -171,10 +171,12 @@ let developmentCorrectionsAvailable = false;
 // Echtes OSM (Etappe Q3): nur true, wenn der Server es für diese Sitzung ausdrücklich freigibt.
 let productionWriteAvailable = false;
 let productionWriteOwnerHash: string | undefined;
+// Echtes OSM (Etappe Q5): Neuanlagen freigegeben (beide Schalter am Server).
+let productionNewAedsAvailable = false;
 
 /** Gehört ein Vorgang zum echten OSM? Nur dann gelten dessen Kontokennung, Route und Texte. */
 function isProductionWrite(request: DevelopmentWriteRequest): boolean {
-  return request.kind === "check-date" && request.environment === "production";
+  return request.environment === "production";
 }
 
 /** Die Kontokennung, mit der ein Vorgang nach einem Netzabbruch sicher fortgesetzt wird (je Umgebung verschieden). */
@@ -357,8 +359,13 @@ function parseDevelopmentWriteRequest(raw: string, legacyCheck = false): Develop
       }
       const checkedDetails = validateDetailTags(rawDetails);
       if (!checkedDetails.ok) return undefined;
+      // Ziel und Sprache prüfen: nur "production" oder nichts, nur eine der sechs App-Sprachen.
+      if (value.environment !== undefined && value.environment !== "production") return undefined;
+      if (value.locale !== undefined && !isChangesetLocale(value.locale)) return undefined;
       return {
         kind: "create-node",
+        ...(value.environment === "production" ? { environment: "production" as const } : {}),
+        ...(isChangesetLocale(value.locale) ? { locale: value.locale } : {}),
         operationId: value.operationId,
         candidateLabel: value.candidateLabel,
         latitude: value.latitude,
@@ -777,6 +784,7 @@ function statusContent(): string {
     developmentWriteOwnerHash,
     developmentCorrectionsAvailable,
     productionWriteAvailable: productionWriteAvailable && Boolean(productionWriteOwnerHash),
+    productionNewAedsAvailable: productionNewAedsAvailable && Boolean(productionWriteOwnerHash),
     productionWriteStatusKeys,
     newAedPositionOverride,
     searchLocationSource: photoSession.searchLocationSource,
@@ -950,6 +958,7 @@ async function refreshAccountState(focusSelector?: string, afterLogout = false):
     photoCheckAvailable = status.photoCheckAvailable;
     productionWriteAvailable = status.productionWriteAvailable && !status.developmentSession;
     productionWriteOwnerHash = status.productionWriteOwnerHash;
+    productionNewAedsAvailable = status.productionNewAedsAvailable && !status.developmentSession;
     if (
       pendingDevelopmentWrite &&
       !pendingDevelopmentWriteOwnerHash &&
@@ -1118,9 +1127,11 @@ function finishSaveDialog(saveDialog: SaveDialog, requestBody: DevelopmentWriteR
   // Bei Erfolg passt die Meldung zur Art des Vorgangs: neuer AED, Prüfdatum, Prüfdatum mit Ergänzungen oder Korrekturen.
   const statusKeys = isProductionWrite(requestBody) ? productionWriteStatusKeys : developmentWriteStatusKeys;
   const completeKey: FlowMessageKey = isProductionWrite(requestBody)
-    ? requestBody.kind === "check-date" && requestBody.details && Object.keys(requestBody.details).length > 0
-      ? "productionDetailsComplete"
-      : "productionComplete"
+    ? requestBody.kind === "create-node"
+      ? "productionCreated"
+      : requestBody.details && Object.keys(requestBody.details).length > 0
+        ? "productionDetailsComplete"
+        : "productionComplete"
     : requestBody.kind === "create-node"
       ? "developmentCreated"
       : requestBody.expectedBefore && requestBody.confirmedCorrections === true
@@ -1392,6 +1403,10 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
         developmentWriteOwnerHash,
         productionWriteAvailable: productionWriteAvailable && accountState === "signed-in" && !developmentSession,
         productionWriteOwnerHash,
+        productionNewAedsAvailable: productionNewAedsAvailable && accountState === "signed-in" && !developmentSession,
+        // Für eine Neuanlage am echten OSM muss der Standort echt sein (Foto-GPS oder Handy), kein Kartenpunkt.
+        realLocationAvailable:
+          photoSession.searchLocationSource !== undefined && photoSession.searchLocationSource !== "map",
         locale: language,
         accountSignedIn: accountState === "signed-in",
         pendingDevelopmentWrite,

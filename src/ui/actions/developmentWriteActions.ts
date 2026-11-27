@@ -13,6 +13,10 @@ type DevelopmentWriteActionContext = {
   productionWriteOwnerHash?: string;
   /** Sprache der App; geht beim echten OSM als `locale` an das Changeset. */
   locale: string;
+  /** Echtes OSM (Etappe Q5): Neuanlagen freigegeben (beide Schalter am Server). */
+  productionNewAedsAvailable: boolean;
+  /** Der Suchstandort stammt aus Foto-GPS oder vom Handy, nicht aus einem selbst gesetzten Kartenpunkt. */
+  realLocationAvailable: boolean;
   accountSignedIn: boolean;
   pendingDevelopmentWrite?: DevelopmentWriteRequest;
   createOperationId?: () => string;
@@ -46,10 +50,7 @@ export async function handleDevelopmentWriteAction(
     action === "continue-recovery" &&
     context.pendingDevelopmentWrite &&
     !context.accountSignedIn &&
-    !(
-      context.pendingDevelopmentWrite.kind === "check-date" &&
-      context.pendingDevelopmentWrite.environment === "production"
-    )
+    context.pendingDevelopmentWrite.environment !== "production"
   ) {
     // Reconcile only after returning to the OSM development session that owns this pending operation.
     context.redirectToDevelopmentLogin();
@@ -65,6 +66,53 @@ export async function handleDevelopmentWriteAction(
         ? { kind: "development-write-recovery", request: context.pendingDevelopmentWrite, writeStatus: "uncertain" }
         : { kind: "ready" },
     );
+    return "handled";
+  }
+
+  if (action === "create-development-node" && state.kind === "new-aed-preview" && !context.developmentSession) {
+    // Echtes OSM (Etappe Q5). Dieselben Sicherungen wie beim Testserver (zweite Bestätigung, Vorgangs-ID vor dem
+    // Senden gesichert, Server prüft frisch auf Doppelte). Zusätzlich: nur mit echtem Standort (Foto-GPS oder Handy),
+    // weil ein neuer AED nur dort eingetragen werden darf, wo die Person ist.
+    context.prepareSuccessSound();
+    const operationIdFactory = context.createOperationId;
+    if (
+      !context.productionNewAedsAvailable ||
+      !context.productionWriteOwnerHash ||
+      !context.realLocationAvailable ||
+      !operationIdFactory ||
+      !isChangesetLocale(context.locale) ||
+      state.result.kind !== "ready" ||
+      state.writeStatus
+    )
+      return "stop";
+    if (!context.confirmNewNode()) return "stop";
+    const preview = state;
+    if (preview.result.kind !== "ready") return "stop";
+    const operationId = operationIdFactory();
+    const request: DevelopmentWriteRequest = {
+      kind: "create-node",
+      environment: "production",
+      locale: context.locale,
+      operationId,
+      candidateLabel: `${preview.result.position.latitude.toFixed(5)}, ${preview.result.position.longitude.toFixed(5)}`,
+      latitude: preview.result.position.latitude,
+      longitude: preview.result.position.longitude,
+      observedOn: preview.result.tags.check_date,
+      details: Object.fromEntries(
+        Object.entries(preview.result.tags).filter(([key]) => isDetailKey(key)),
+      ) as DetailTags,
+      confirmedDifferentCandidateIds: preview.result.confirmedDifferentCandidateIds,
+    };
+    try {
+      context.persistPendingWrite(request);
+    } catch {
+      setState({ ...preview, operationId, writeStatus: "failed" });
+      context.render(true);
+      return "stop";
+    }
+    setState({ ...preview, operationId, writeStatus: "sending" });
+    context.render(true);
+    context.submit(request);
     return "handled";
   }
 
@@ -244,7 +292,7 @@ export async function handleDevelopmentWriteAction(
     if (state.writeStatus !== "uncertain" || context.isRecoveryOwnerMismatch()) return "stop";
     const pending =
       state.kind === "development-write-recovery" ? state.request : context.readPendingWrite(state.operationId);
-    if (pending?.kind === "check-date" && pending.environment === "production") {
+    if (pending?.environment === "production") {
       // Ein Vorgang am echten OSM lässt sich nur in einer Sitzung am echten OSM fortsetzen.
       if (context.developmentSession || !context.accountSignedIn) {
         if (context.accountSignedIn) context.openAccount();

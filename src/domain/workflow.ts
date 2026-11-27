@@ -46,6 +46,10 @@ export type DevelopmentWriteRequest = {
   // details: die geprüften Detailtags (siehe src/contracts/aedDetails.ts). Leer, wenn die Person nichts angegeben hat.
   | {
       kind: "create-node";
+      /** Ziel: fehlt die Angabe, der Testserver. "production" = echtes OSM (Etappe Q5). */
+      environment?: "production";
+      /** Sprache der App für das Changeset (`locale`), nur beim echten OSM. */
+      locale?: ChangesetLocale;
       latitude: number;
       longitude: number;
       observedOn: string;

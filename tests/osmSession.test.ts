@@ -24,6 +24,7 @@ describe("OSM session status", () => {
       // Nicht gesendet = Fotoprüfung aus.
       photoCheckAvailable: false,
       productionWriteAvailable: false,
+      productionNewAedsAvailable: false,
     });
   });
 

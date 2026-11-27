@@ -21,12 +21,11 @@ export async function sendDevelopmentWrite(
   return fetchWrite(developmentWritePath(request), request, recoveryIdentity);
 }
 
-/** Die Route je Ziel: Testserver wie bisher, echtes OSM nur für das Prüfdatum (Etappe Q3). */
+/** Die Route je Ziel: Testserver wie bisher, echtes OSM für Prüfdatum, Ergänzen (Q3, Q4) und Neuanlage (Q5). */
 export function developmentWritePath(request: DevelopmentWriteRequest): string {
-  if (request.kind === "check-date") {
-    return request.environment === "production" ? "/api/osm/check-date" : "/api/osm/development/check-date";
-  }
-  return "/api/osm/development/create-node";
+  const production = request.environment === "production";
+  if (request.kind === "check-date") return production ? "/api/osm/check-date" : "/api/osm/development/check-date";
+  return production ? "/api/osm/create-node" : "/api/osm/development/create-node";
 }
 
 async function fetchWrite(
@@ -68,6 +67,8 @@ async function fetchWrite(
             observed_on: request.observedOn,
             details: request.details,
             confirmed_different_candidate_ids: request.confirmedDifferentCandidateIds,
+            // Nur beim echten OSM: die Sprache für das Changeset (`locale`).
+            ...(request.environment === "production" && request.locale ? { locale: request.locale } : {}),
           },
     ),
   });
