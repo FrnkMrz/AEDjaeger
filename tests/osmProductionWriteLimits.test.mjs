@@ -116,23 +116,28 @@ describe("Grenzen für das echte OSM (Migration 0014)", () => {
     expect(nextDay.kind).toBe("reserved");
   });
 
-  it("sperrt dasselbe Objekt 24 Stunden lang, auch für ein anderes Konto", async () => {
+  it("erlaubt 5 Änderungen am selben AED in 24 Stunden, auch über Konten hinweg, und sperrt die sechste", async () => {
     const { d1 } = createDatabase();
-    await reserveOSMProductionWrite(d1, {
-      ownerHash: owner,
-      operationId: nextId(),
-      requestHash: hash,
-      targetId: "node/5",
-      now,
-    });
-    const sameObject = await reserveOSMProductionWrite(d1, {
+    // Fünf Änderungen am selben AED, abwechselnd von zwei Konten (zum Beispiel ein Tippfehler und seine Korrektur).
+    for (let index = 0; index < 5; index += 1) {
+      const result = await reserveOSMProductionWrite(d1, {
+        ownerHash: index % 2 === 0 ? owner : otherOwner,
+        operationId: nextId(),
+        requestHash: hash,
+        targetId: "node/5",
+        now: now + index * 60_000,
+      });
+      expect(result.kind).toBe("reserved");
+    }
+    const sixth = await reserveOSMProductionWrite(d1, {
       ownerHash: otherOwner,
       operationId: nextId(),
       requestHash: hash,
       targetId: "node/5",
-      now: now + 60_000,
+      now: now + 10 * 60_000,
     });
-    expect(sameObject).toEqual({ kind: "limited", reason: "object_recently_changed" });
+    expect(sixth).toEqual({ kind: "limited", reason: "object_recently_changed" });
+    // 24 Stunden nach der ersten Änderung ist wieder eine frei.
     const later = await reserveOSMProductionWrite(d1, {
       ownerHash: otherOwner,
       operationId: nextId(),

@@ -209,22 +209,39 @@ describe("echtes OSM: noch vorhanden bestätigen (Etappe Q3)", () => {
     expect(osm.calls).toEqual([]);
   });
 
-  it("sperrt eine zweite Änderung am selben AED innerhalb von 24 Stunden, bevor etwas an OSM geht", async () => {
+  it("erlaubt eine schnelle Korrektur am selben AED und sperrt erst die sechste Änderung in 24 Stunden", async () => {
     const database = await signedIn();
+    // Eine zweite Änderung kurz nach der ersten geht durch (zum Beispiel, weil sich die Person vertippt hat).
     const first = fakeOsm();
     await handleProductionCheckDate(request(checkDate()), environment(database), {
       fetch: first.fetcher,
       now: () => now,
     });
-    const second = fakeOsm({ version: 4, tags: { emergency: "defibrillator", check_date: "2026-11-27" } });
-    const response = await handleProductionCheckDate(
-      request(checkDate({ expected_version: 4, expected_check_date: "2026-11-27" })),
+    const second = fakeOsm({ version: 4, tags: { emergency: "defibrillator", check_date: "2026-11-26" } });
+    const secondResponse = await handleProductionCheckDate(
+      request(checkDate({ expected_version: 4, expected_check_date: "2026-11-26" })),
       environment(database),
       { fetch: second.fetcher, now: () => now + 60_000 },
     );
+    expect(secondResponse.status).toBe(200);
+    // Drei weitere Vorgänge am selben AED stehen schon in der Datenbank; damit sind es fünf.
+    for (let index = 0; index < 3; index += 1) {
+      database.sqlite
+        .prepare(
+          `INSERT INTO osm_development_write_operations
+           (owner_hash, operation_id, request_hash, state, created_at, updated_at, expires_at, osm_environment, target_id)
+           VALUES (?, ?, ?, 'complete', ?, ?, ?, 'production', 'node/42')`,
+        )
+        .run("d".repeat(64), nextId(), "e".repeat(64), now + index, now + index, now + 1e10);
+    }
+    const sixth = fakeOsm();
+    const response = await handleProductionCheckDate(request(checkDate()), environment(database), {
+      fetch: sixth.fetcher,
+      now: () => now + 120_000,
+    });
     expect(response.status).toBe(429);
     expect(await response.json()).toEqual({ error: "object_recently_changed" });
-    expect(second.calls).toEqual([]);
+    expect(sixth.calls).toEqual([]);
   });
 
   it("schreibt bei einer Wiederholung derselben Vorgangs-ID nicht ein zweites Mal", async () => {

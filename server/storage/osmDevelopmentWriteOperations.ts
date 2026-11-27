@@ -139,9 +139,17 @@ export async function reserveOSMDevelopmentWrite(
 export const PRODUCTION_OPERATION_LIFETIME_MS = 90 * 24 * 60 * 60 * 1_000;
 const DAY_MS = 24 * 60 * 60 * 1_000;
 
-/** Grenzen für das echte OSM. Startwerte vom 26.11.2026: 20 je Konto und UTC-Tag, 1 Änderung je Objekt in 24 h. */
-export type ProductionWriteLimits = { perAccountPerDay: number; perObjectWindowMs: number };
-export const PRODUCTION_WRITE_LIMITS: ProductionWriteLimits = { perAccountPerDay: 20, perObjectWindowMs: DAY_MS };
+/**
+ * Grenzen für das echte OSM. 20 je Konto und UTC-Tag (Entscheidung vom 26.11.2026) und 5 Änderungen je Objekt in
+ * 24 Stunden (Entscheidung vom 27.11.2026: Wer sich vertippt hat, muss es gleich korrigieren können; eine einzige
+ * Änderung pro Tag war zu streng).
+ */
+export type ProductionWriteLimits = { perAccountPerDay: number; perObjectPerWindow: number; perObjectWindowMs: number };
+export const PRODUCTION_WRITE_LIMITS: ProductionWriteLimits = {
+  perAccountPerDay: 20,
+  perObjectPerWindow: 5,
+  perObjectWindowMs: DAY_MS,
+};
 
 export type ProductionReservation =
   | { kind: "reserved"; operation: OSMDevelopmentWriteOperation; created: boolean }
@@ -156,7 +164,8 @@ export type ProductionReservation =
  *  2. Sonst legt EINE SQL-Anweisung den Vorgang nur an, wenn beide Grenzen eingehalten sind. Weil Prüfen und Anlegen in
  *     einer einzigen Anweisung stecken, können zwei gleichzeitige Anfragen ein Limit nicht gemeinsam überschreiten.
  *     - je Konto: höchstens `perAccountPerDay` Vorgänge seit Mitternacht UTC,
- *     - je Objekt: kein anderer Vorgang am selben Objekt in den letzten 24 Stunden, egal von welchem Konto.
+ *     - je Objekt: höchstens `perObjectPerWindow` Vorgänge am selben Objekt in den letzten 24 Stunden, egal von welchem
+ *       Konto. Das bremst einen Änderungskrieg, lässt aber eine schnelle Korrektur eines eigenen Fehlers zu.
  *     Vorgänge, die mit „Konflikt“ oder „fehlgeschlagen“ endeten, haben nichts geändert und zählen nicht.
  */
 export async function reserveOSMProductionWrite(
@@ -173,6 +182,8 @@ export async function reserveOSMProductionWrite(
     !isTimestamp(now) ||
     !Number.isSafeInteger(limits.perAccountPerDay) ||
     limits.perAccountPerDay < 1 ||
+    !Number.isSafeInteger(limits.perObjectPerWindow) ||
+    limits.perObjectPerWindow < 1 ||
     !Number.isSafeInteger(limits.perObjectWindowMs) ||
     limits.perObjectWindowMs < 0
   ) {
@@ -198,9 +209,9 @@ export async function reserveOSMProductionWrite(
        WHERE (SELECT COUNT(*) FROM osm_development_write_operations
               WHERE owner_hash = ? AND osm_environment = 'production' AND created_at >= ?
                 AND state NOT IN ('failed', 'conflict')) < ?
-         AND NOT EXISTS (SELECT 1 FROM osm_development_write_operations
+         AND (SELECT COUNT(*) FROM osm_development_write_operations
               WHERE osm_environment = 'production' AND target_id = ? AND created_at > ?
-                AND state NOT IN ('failed', 'conflict'))`,
+                AND state NOT IN ('failed', 'conflict')) < ?`,
       )
       .bind(
         ownerHash,
@@ -215,6 +226,7 @@ export async function reserveOSMProductionWrite(
         limits.perAccountPerDay,
         targetId,
         now - limits.perObjectWindowMs,
+        limits.perObjectPerWindow,
       )
       .run();
     if (!insert.success) throw new Error("D1 insert failed");
@@ -225,13 +237,15 @@ export async function reserveOSMProductionWrite(
     // Nicht angelegt: Welche Grenze greift? Das Objekt zuerst, weil es die genauere Auskunft ist.
     const recent = await database
       .prepare(
-        `SELECT 1 AS hit FROM osm_development_write_operations
-       WHERE osm_environment = 'production' AND target_id = ? AND created_at > ? AND state NOT IN ('failed', 'conflict')
-       LIMIT 1`,
+        `SELECT COUNT(*) AS n FROM osm_development_write_operations
+       WHERE osm_environment = 'production' AND target_id = ? AND created_at > ? AND state NOT IN ('failed', 'conflict')`,
       )
       .bind(targetId, now - limits.perObjectWindowMs)
-      .first<{ hit: number }>();
-    return { kind: "limited", reason: recent ? "object_recently_changed" : "daily_limit" };
+      .first<{ n: number }>();
+    return {
+      kind: "limited",
+      reason: (recent?.n ?? 0) >= limits.perObjectPerWindow ? "object_recently_changed" : "daily_limit",
+    };
   } catch {
     throw new Error("Der OSM-Vorgang konnte nicht sicher gespeichert werden.");
   }
