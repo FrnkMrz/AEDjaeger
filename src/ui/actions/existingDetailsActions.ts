@@ -68,11 +68,7 @@ export function handleExistingDetailsAction(
     return "handled";
   }
 
-  if (
-    action === "existing-details-retry" &&
-    state.kind === "existing-aed-details" &&
-    state.load.status === "error"
-  ) {
+  if (action === "existing-details-retry" && state.kind === "existing-aed-details" && state.load.status === "error") {
     setState({ ...state, load: { status: "loading" } });
     context.loadExistingAedNode(state.candidateId);
     return "handled";

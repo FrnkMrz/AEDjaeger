@@ -206,6 +206,22 @@ Voraussetzung: Der Betreiber hat die Fotoprüfung im Cloudflare-Dashboard einger
 
 Hinweise: F1 bis F7 prüfen Verhalten, F8 die Trefferqualität. Zeigt F8 viele falsch gesperrte AED-Fotos, ist die Sperre „kein AED“ zu streng und wird mit dem Projektinhaber neu bewertet. Bei jedem Fehler Uhrzeit und genaue Meldung notieren, keinen Schlüssel teilen.
 
+## G. Echtes OSM: noch vorhanden bestätigen (Etappe Q3)
+
+Voraussetzungen (Projektinhaber):
+
+1. Migration `0014` auf der Produktions-D1 anwenden, **bevor** das Deploy nach dem Merge durchlaufen kann (die Deploy-Prüfung stoppt bei offenen Migrationen). Ohne Kommandozeile: Anleitung „Migration im Cloudflare-Dashboard“ in [Betrieb](betrieb.md#migration-im-cloudflare-dashboard-ohne-kommandozeile).
+2. Im Worker die Variable `OSM_PROD_WRITES_ENABLED=true` setzen. Zum Abschalten den Wert löschen oder auf etwas anderes setzen; das wirkt ohne Deploy.
+
+| Nr | Schritt | Erwartetes Ergebnis | Ergebnis |
+| --- | --- | --- | --- |
+| G1 | Auf `https://aedjaeger.de` mit OpenStreetMap anmelden, ohne Schalter | Bei einem Treffer kein Knopf „In OpenStreetMap speichern“, Hinweis „Nur eine Vorschau“ | `[ ]` |
+| G2 | Schalter an, Foto eines echten, eingetragenen AED, Suche | Treffer bis 10 m; in der Vorschau der Hinweis „öffentlich in OpenStreetMap“ mit dem Kommentar | `[ ]` |
+| G3 | „In OpenStreetMap speichern“ | „In OpenStreetMap gespeichert.“; auf openstreetmap.org am AED nur `check_date` geändert, Changeset mit `source=survey`, `locale` und dem Kommentar | `[ ]` |
+| G4 | Denselben AED innerhalb von 24 h noch einmal bestätigen | Geht (bis zu 5 Änderungen je AED in 24 h); erst die sechste meldet „Nichts wurde geändert: Erlaubt sind …“ ohne Changeset | `[ ]` |
+| G5 | Flugmodus während des Speicherns | „Ergebnis unklar“; nach „Status erneut prüfen“ kein zweites Changeset | `[ ]` |
+| G6 | Treffer nur aus dem Archiv (OSM-API nicht erreichbar) | Kein Speichern-Knopf | `[ ]` |
+
 ## Was diese Abnahme nicht abdeckt
 
 - Die Trefferqualität der Fotoprüfung (wie oft sie echte AED-Fotos fälschlich sperrt oder fremde Fotos durchlässt) ist nicht belegt. Abschnitt F verlangt dazu eine Stichprobe mit echten Fotos.

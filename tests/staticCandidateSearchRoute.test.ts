@@ -497,6 +497,7 @@ describe("PMTiles AED candidate search", () => {
     const liveNode = (id: number, lat: number, lon: number, tags: Record<string, string> = {}) => ({
       type: "node",
       id,
+      version: 3,
       lat,
       lon,
       tags: { emergency: "defibrillator", ...tags },
@@ -527,6 +528,7 @@ describe("PMTiles AED candidate search", () => {
             osmType: "node",
             coordinateQuality: "exact",
             source: "live",
+            version: 3,
             position: { latitude: 52.52, longitude: 13.405 },
             tags: { name: "Frisch" },
           },
@@ -611,6 +613,19 @@ describe("PMTiles AED candidate search", () => {
         request({ latitude: 51.5, longitude: -0.12, accuracy_meters: 20 }),
         { DB: database({ environment: "production" }) },
         { fetch: fetchArchive({ liveBody: '{"elements":[' }), now: () => now },
+      );
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({ error: "invalid_response" });
+    });
+
+    it("rejects a fresh AED without a valid version, because saving needs it for the conflict check", async () => {
+      fixture.livePayload = {
+        elements: [{ type: "node", id: 9, lat: 51.5, lon: -0.12, tags: { emergency: "defibrillator" } }],
+      };
+      const response = await handleStaticCandidateSearch(
+        request({ latitude: 51.5, longitude: -0.12, accuracy_meters: 20 }),
+        { DB: database({ environment: "production" }) },
+        { fetch: fetchArchive(), now: () => now },
       );
       expect(response.status).toBe(503);
       expect(await response.json()).toEqual({ error: "invalid_response" });

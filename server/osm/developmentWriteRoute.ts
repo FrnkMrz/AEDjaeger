@@ -8,11 +8,13 @@ import {
   hashOSMDevelopmentWriteValue,
   migrateLegacyOSMDevelopmentWriteOwner,
   reserveOSMDevelopmentWrite,
+  releaseUnchangedOSMProductionWrite,
+  reserveOSMProductionWrite,
   updateOSMDevelopmentWrite,
   type OSMDevelopmentWriteOperation,
 } from "../storage/osmDevelopmentWriteOperations";
 import type { D1Database } from "../storage/d1";
-import { requestOSMDevelopmentApi } from "./developmentApi";
+import { requestOSMApi, type OSMApiEnvironment } from "./developmentApi";
 import { escapeXml, withoutXmlDeclaration } from "./xmlText";
 import { createChangeset, closeChangeset } from "./changeset";
 import {
@@ -27,6 +29,7 @@ import {
 } from "../http/requestGuards";
 import { isAcceptableObservationDate } from "./observationDate";
 import { validateDetailTags, type DetailTags } from "../../src/contracts/aedDetails";
+import { isChangesetLocale, PRODUCTION_CHANGESET_COMMENTS } from "../../src/contracts/changesetComment";
 
 export const SESSION_COOKIE = "__Host-aedjaeger_osm_session";
 // Genug Platz für Detailtags auch mit Mehrbyte-Zeichen (Japanisch: 3 Byte je Zeichen); die Längengrenzen des Vertrags
@@ -42,9 +45,24 @@ export type DevelopmentWriteEnvironment = {
   /** Betreiber-Schalter (Etappe P5): nur bei "true" darf die Route bestehende Detailwerte ERSETZEN. Standard: aus. */
   OSM_DETAIL_CORRECTIONS_ENABLED?: string;
   OSM_OAUTH_ENCRYPTION_KEY?: string;
+  /** Betreiber-Schalter für das echte OSM (Etappe Q3): nur bei "true" schreibt die Produktionsroute. Standard: aus. */
+  OSM_PROD_WRITES_ENABLED?: string;
 };
 
-type Dependencies = { fetch?: typeof fetch; now?: () => number; crypto?: Crypto };
+type Dependencies = {
+  fetch?: typeof fetch;
+  now?: () => number;
+  crypto?: Crypto;
+  /** Intern: Ziel-Umgebung. Setzt nur der Server selbst (aus der Route), nie der Browser. Standard: Testserver. */
+  osmEnvironment?: OSMApiEnvironment;
+  /** Intern: Sprache für das Changeset (`locale`), nur beim echten OSM. */
+  locale?: string;
+};
+
+/** Die OSM-Umgebung dieses Aufrufs; ohne Angabe immer der Testserver. */
+function osmEnvironmentOf(dependencies: Dependencies): OSMApiEnvironment {
+  return dependencies.osmEnvironment ?? "development";
+}
 
 type ConfirmedCheckDate = {
   recovery_identity: string;
@@ -68,6 +86,8 @@ type ConfirmedCheckDate = {
    */
   expected_before?: Record<string, string>;
   confirmed_corrections?: true;
+  /** Sprache der App (de, en, pl, ja, fr, es). Geht beim echten OSM als `locale` an das Changeset. */
+  locale?: string;
 };
 
 export type OSMNode = {
@@ -90,11 +110,41 @@ export async function handleDevelopmentCheckDate(
   environment: DevelopmentWriteEnvironment,
   dependencies: Dependencies = {},
 ): Promise<Response> {
+  return handleCheckDate(request, environment, { ...dependencies, osmEnvironment: "development" });
+}
+
+/**
+ * Bestätigt einen AED im ECHTEN OSM als vorhanden (Etappe Q3, Entscheidung vom 26.11.2026).
+ *
+ * Dieselbe, auf dem Testserver erprobte Logik wie oben (Vorgangs-ID, frisches Lesen, Versionsprüfung, Wiederaufnahme
+ * nach Netzabbruch). Zusätzlich gilt hier:
+ *  - Schalter `OSM_PROD_WRITES_ENABLED` (Standard aus) und eine Anmeldung am echten OSM.
+ *  - Nur das Prüfdatum. Details und Korrekturen kommen in eigenen Etappen (Q4, Q6) mit eigenen Schaltern.
+ *  - Grenzen: 20 Vorgänge je Konto und UTC-Tag, eine Änderung je Objekt in 24 Stunden (atomar in D1).
+ *  - Changeset mit `source=survey`, `locale` und dem zweisprachigen Kommentar, den die App vorher zeigt.
+ */
+export async function handleProductionCheckDate(
+  request: Request,
+  environment: DevelopmentWriteEnvironment,
+  dependencies: Dependencies = {},
+): Promise<Response> {
+  return handleCheckDate(request, environment, { ...dependencies, osmEnvironment: "production" });
+}
+
+async function handleCheckDate(
+  request: Request,
+  environment: DevelopmentWriteEnvironment,
+  dependencies: Dependencies,
+): Promise<Response> {
+  const production = osmEnvironmentOf(dependencies) === "production";
   if (request.method !== "POST") return jsonResponse({ error: "method_not_allowed" }, 405, { Allow: "POST" });
   const requestUrl = new URL(request.url);
   if (isCrossOrigin(request, requestUrl.origin)) return jsonResponse({ error: "invalid_origin" }, 403);
-  if (environment.OSM_DEV_WRITES_ENABLED !== "true" || !environment.DB || !environment.OSM_OAUTH_ENCRYPTION_KEY) {
-    return jsonResponse({ error: "development_write_unavailable" }, 503);
+  const writesEnabled = production
+    ? environment.OSM_PROD_WRITES_ENABLED === "true"
+    : environment.OSM_DEV_WRITES_ENABLED === "true";
+  if (!writesEnabled || !environment.DB || !environment.OSM_OAUTH_ENCRYPTION_KEY) {
+    return jsonResponse({ error: production ? "production_write_unavailable" : "development_write_unavailable" }, 503);
   }
   if (request.headers.get("Content-Type")?.split(";", 1)[0]?.trim().toLowerCase() !== "application/json") {
     return jsonResponse({ error: "unsupported_media_type" }, 415);
@@ -109,8 +159,9 @@ export async function handleDevelopmentCheckDate(
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
-  if (session?.environment !== "development")
-    return jsonResponse({ error: "development_session_required" }, 403);
+  // Die Sitzung muss zur Route passen: Ein Testserver-Token geht nie an das echte OSM und umgekehrt.
+  if (session?.environment !== osmEnvironmentOf(dependencies))
+    return jsonResponse({ error: production ? "production_session_required" : "development_session_required" }, 403);
 
   let input: ConfirmedCheckDate;
   let ownerHash: string;
@@ -123,13 +174,20 @@ export async function handleDevelopmentCheckDate(
       error instanceof BodyTooLargeError ? 413 : 400,
     );
   }
+  // Echtes OSM, Etappe Q3: nur das Prüfdatum. Details (Q4) und Korrekturen (Q6) kommen mit eigenen Etappen.
+  if (production && (input.details !== undefined || input.expected_before !== undefined)) {
+    return jsonResponse({ error: "details_unavailable" }, 403);
+  }
+  // Echtes OSM: Die Version, die die Person gesehen hat, ist Pflicht. Ohne sie könnte der Server nicht erkennen, ob
+  // jemand den AED seit der Vorschau verschoben oder geändert hat, und würde die alte Vorschau bestätigen.
+  if (production && input.expected_version === undefined) return jsonResponse({ error: "invalid_request" }, 400);
   if (input.recovery_identity && input.recovery_identity !== ownerHash)
     return jsonResponse({ error: "recovery_identity_mismatch" }, 403);
   input.recovery_identity = ownerHash;
 
   // Korrekturen (bestehende Werte ersetzen) erlaubt nur der Betreiber-Schalter. Ohne ihn geschieht nichts: weder eine
   // Reservierung noch ein Lesen oder Schreiben bei OSM.
-  if (input.expected_before !== undefined && environment.OSM_DETAIL_CORRECTIONS_ENABLED !== "true") {
+  if (input.expected_before !== undefined && (production || environment.OSM_DETAIL_CORRECTIONS_ENABLED !== "true")) {
     return jsonResponse({ error: "corrections_disabled" }, 403);
   }
 
@@ -138,7 +196,11 @@ export async function handleDevelopmentCheckDate(
   try {
     const key = await importOAuthEncryptionKey(environment.OSM_OAUTH_ENCRYPTION_KEY);
     const storedToken = await findOSMOAuthToken(environment.DB, sessionToken, now, key, dependencies.crypto);
-    if (!storedToken) return jsonResponse({ error: "development_token_unavailable" }, 401);
+    if (!storedToken)
+      return jsonResponse(
+        { error: production ? "production_token_unavailable" : "development_token_unavailable" },
+        401,
+      );
     token = storedToken;
     // The account is already the storage partition and is verified above. Keep it out of the
     // payload hash so operations created before account-bound recovery remain replayable.
@@ -149,12 +211,25 @@ export async function handleDevelopmentCheckDate(
     const legacySessionHash = await hashOSMDevelopmentWriteValue(sessionToken, dependencies.crypto);
     await migrateLegacyOSMDevelopmentWriteOwner(environment.DB, legacySessionHash, ownerHash);
   } catch {
-    return jsonResponse({ error: "development_write_unavailable" }, 503);
+    return jsonResponse({ error: production ? "production_write_unavailable" : "development_write_unavailable" }, 503);
   }
 
   let reserved: Awaited<ReturnType<typeof reserveOSMDevelopmentWrite>>;
   try {
-    reserved = await reserveOSMDevelopmentWrite(environment.DB, ownerHash, input.operation_id, requestHash, now);
+    if (production) {
+      // Echtes OSM: Reservierung samt Tageslimit und Objektsperre in einem Schritt. Greift ein Limit, geht nichts an OSM.
+      const reservation = await reserveOSMProductionWrite(environment.DB, {
+        ownerHash,
+        operationId: input.operation_id,
+        requestHash,
+        targetId: input.target,
+        now,
+      });
+      if (reservation.kind === "limited") return jsonResponse({ error: reservation.reason }, 429);
+      reserved = { operation: reservation.operation, created: reservation.created };
+    } else {
+      reserved = await reserveOSMDevelopmentWrite(environment.DB, ownerHash, input.operation_id, requestHash, now);
+    }
   } catch {
     return jsonResponse({ error: "write_status_unavailable" }, 503);
   }
@@ -187,7 +262,12 @@ export async function handleDevelopmentCheckDate(
 
   let currentNode: OSMNode;
   try {
-    currentNode = await readDevelopmentNode(input.target, token, dependencies.fetch ?? fetch);
+    currentNode = await readDevelopmentNode(
+      input.target,
+      token,
+      dependencies.fetch ?? fetch,
+      osmEnvironmentOf(dependencies),
+    );
   } catch (error) {
     const state = error instanceof VersionConflictError ? "conflict" : "failed";
     await safelyUpdate(environment.DB, {
@@ -227,6 +307,16 @@ export async function handleDevelopmentCheckDate(
   }
   // „Schon aktuell“ gilt nur, wenn es auch keine Detailtags zu schreiben gibt.
   if (currentNode.tags.check_date === input.observed_on && !hasDetails(input)) {
+    if (production) {
+      // Echtes OSM: Es wurde nichts geschrieben. Die Reservierung wieder freigeben, damit „schon aktuell“ weder das
+      // Tageslimit noch die Grenze je AED verbraucht. Scheitert das Freigeben, bleibt sie stehen (zählt dann, schadet nicht).
+      try {
+        await releaseUnchangedOSMProductionWrite(environment.DB, ownerHash, input.operation_id);
+      } catch {
+        /* Die Antwort an die Person bleibt richtig: Es wurde nichts geändert. */
+      }
+      return jsonResponse({ status: "complete", version: currentNode.version, already_current: true }, 200);
+    }
     await safelyUpdate(environment.DB, {
       ownerHash,
       operationId: input.operation_id,
@@ -240,13 +330,17 @@ export async function handleDevelopmentCheckDate(
   let changesetId: string;
   try {
     const kind = hasCorrections(input) ? "corrections" : hasDetails(input) ? "details" : "none";
-    const comment =
-      kind === "corrections"
+    const comment = production
+      ? PRODUCTION_CHANGESET_COMMENTS.checkDate
+      : kind === "corrections"
         ? "AEDjaeger: AED checked on site, details added and corrected"
         : kind === "details"
           ? "AEDjaeger: AED checked on site, missing details added"
           : "AEDjaeger: AED presence checked on site";
-    changesetId = await createChangeset(token, comment, dependencies.fetch ?? fetch);
+    changesetId = await createChangeset(token, comment, dependencies.fetch ?? fetch, {
+      environment: osmEnvironmentOf(dependencies),
+      locale: input.locale,
+    });
   } catch {
     // Without a changeset ID this request cannot upload a map object. Retire it
     // as failed so the same operation ID cannot remain uncertain for a week.
@@ -294,7 +388,12 @@ async function uploadNodeChange(
   if (!operation.changeset_id) return jsonResponse({ status: "pending" }, 202);
   let node = knownNode;
   try {
-    node ??= await readDevelopmentNode(input.target, token, dependencies.fetch ?? fetch);
+    node ??= await readDevelopmentNode(
+      input.target,
+      token,
+      dependencies.fetch ?? fetch,
+      osmEnvironmentOf(dependencies),
+    );
   } catch (error) {
     const state = error instanceof VersionConflictError ? "conflict" : "failed";
     await safelyUpdate(database, {
@@ -331,8 +430,8 @@ async function uploadNodeChange(
   let response: Response;
   try {
     const xml = buildNodeUpdateChange(node, updatedTags, operation.changeset_id);
-    response = await requestOSMDevelopmentApi(
-      "development",
+    response = await requestOSMApi(
+      osmEnvironmentOf(dependencies),
       `/api/0.6/changeset/${operation.changeset_id}/upload`,
       token,
       {
@@ -360,7 +459,7 @@ async function uploadNodeChange(
       changesetId: operation.changeset_id,
       now: (dependencies.now ?? Date.now)(),
     });
-    await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch);
+    await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch, osmEnvironmentOf(dependencies));
     return jsonResponse({ error: "version_conflict" }, 409);
   }
   if (!response.ok) {
@@ -371,7 +470,8 @@ async function uploadNodeChange(
       changesetId: operation.changeset_id,
       now: (dependencies.now ?? Date.now)(),
     });
-    if (response.status < 500) await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch);
+    if (response.status < 500)
+      await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch, osmEnvironmentOf(dependencies));
     return response.status >= 500
       ? jsonResponse({ status: "uncertain" }, 202)
       : jsonResponse({ error: "write_failed" }, 502);
@@ -436,12 +536,19 @@ async function reconcileUncertainWrite(
   try {
     // Closing is a barrier: once confirmed, a late upload cannot change the
     // node after the following changeset download has been inspected.
-    if (!(await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch))) {
+    if (
+      !(await closeChangeset(
+        token,
+        operation.changeset_id,
+        dependencies.fetch ?? fetch,
+        osmEnvironmentOf(dependencies),
+      ))
+    ) {
       return jsonResponse({ status: "uncertain" }, 202);
     }
 
-    const response = await requestOSMDevelopmentApi(
-      "development",
+    const response = await requestOSMApi(
+      osmEnvironmentOf(dependencies),
       `/api/0.6/changeset/${operation.changeset_id}/download`,
       token,
       { method: "GET" },
@@ -509,7 +616,9 @@ async function finishChangeset(
   dependencies: Dependencies,
 ): Promise<Response> {
   if (!operation.changeset_id) return jsonResponse({ status: "uncertain" }, 202);
-  if (await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch)) {
+  if (
+    await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch, osmEnvironmentOf(dependencies))
+  ) {
     await safelyUpdate(database, {
       ownerHash,
       operationId,
@@ -571,15 +680,14 @@ function writeAppearsApplied(node: Pick<OSMNode, "version" | "tags">, input: Con
   );
 }
 
-export async function readDevelopmentNode(path: string, token: string, fetcher: typeof fetch): Promise<OSMNode> {
+export async function readDevelopmentNode(
+  path: string,
+  token: string,
+  fetcher: typeof fetch,
+  environment: OSMApiEnvironment = "development",
+): Promise<OSMNode> {
   const id = Number(path.slice("node/".length));
-  const response = await requestOSMDevelopmentApi(
-    "development",
-    `/api/0.6/node/${id}.json`,
-    token,
-    { method: "GET" },
-    fetcher,
-  );
+  const response = await requestOSMApi(environment, `/api/0.6/node/${id}.json`, token, { method: "GET" }, fetcher);
   if (response.status === 409 || response.status === 410) throw new VersionConflictError();
   // 404: Diesen Knoten gibt es auf dem Testserver nicht. Typisch bei einem AED aus dem Archiv des echten OSM: Die
   // Entwicklungsinstanz hat eine eigene, getrennte Datenbank. Das ist ein eindeutiges Ergebnis (nichts wurde geschrieben),
@@ -854,7 +962,8 @@ function parseRequest(bytes: Uint8Array, now: number): ConfirmedCheckDate {
             key !== "details" &&
             key !== "expected_before" &&
             key !== "confirmed_corrections" &&
-            key !== "recovery_identity",
+            key !== "recovery_identity" &&
+            key !== "locale",
         )
         .sort()
         .join(",")
@@ -874,7 +983,8 @@ function parseRequest(bytes: Uint8Array, now: number): ConfirmedCheckDate {
     !(value.expected_check_date === null || isCalendarDate(value.expected_check_date)) ||
     (value.recovery_identity !== undefined &&
       (typeof value.recovery_identity !== "string" || !/^[a-f0-9]{64}$/u.test(value.recovery_identity))) ||
-    !isAcceptableObservationDate(value.observed_on, now)
+    !isAcceptableObservationDate(value.observed_on, now) ||
+    (value.locale !== undefined && !isChangesetLocale(value.locale))
   ) {
     throw new Error("Invalid request");
   }

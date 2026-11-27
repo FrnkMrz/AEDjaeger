@@ -590,6 +590,14 @@ async function mapCandidatesFromResponse(
       source,
     );
     if (!candidate) throw new InvalidFeedError();
+    // Die Objektversion gehört zum frischen Ergebnis. Beim Speichern schickt die App sie als erwartete Version mit;
+    // der Server schreibt nur, wenn der AED seitdem unverändert ist (auch nicht verschoben oder umgetaggt).
+    // Eine frische Antwort ohne gültige Version ist unvollständig und wird nicht verwendet.
+    if (source === "live") {
+      if (typeof element.version !== "number" || !Number.isSafeInteger(element.version) || element.version <= 0)
+        throw new InvalidFeedError();
+      candidate.version = element.version;
+    }
     if (distanceMeters(location, candidate.position) <= radius) {
       candidates.set(candidate.id, candidate);
     }

@@ -29,6 +29,9 @@ export type StatusContentContext = {
   developmentWriteAvailable: boolean;
   developmentWriteOwnerHash?: string;
   developmentCorrectionsAvailable: boolean;
+  /** Echtes OSM (Etappe Q3): Der Server erlaubt dieser Sitzung, das Prüfdatum zu speichern. */
+  productionWriteAvailable: boolean;
+  productionWriteStatusKeys: Record<DevelopmentWriteStatus, FlowMessageKey>;
   newAedPositionOverride?: Coordinate;
   searchLocationSource?: SearchLocationSource;
   language: Language;

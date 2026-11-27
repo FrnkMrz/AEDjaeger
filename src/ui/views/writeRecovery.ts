@@ -8,16 +8,22 @@ type RecoveryContext = Omit<StatusContentContext, "state"> & {
 
 /** Show the recovery state for a saved test-server request without changing it. */
 export function renderWriteRecovery(context: RecoveryContext): string {
-  const { state, tv, escapeHtml, developmentSession, developmentWriteAvailable, developmentWriteStatusKeys } = context;
+  const { state, tv, escapeHtml, developmentWriteStatusKeys, productionWriteStatusKeys } = context;
   const isRecoveryOwnerMismatch = context.isRecoveryOwnerMismatch;
+  // Ein Vorgang am echten OSM lässt sich nur in einer Sitzung am echten OSM fortsetzen, einer am Testserver nur dort.
+  const production = state.request.kind === "check-date" && state.request.environment === "production";
+  const rightSession = production ? !context.developmentSession : context.developmentSession;
+  const writesAvailable = production ? context.productionWriteAvailable : context.developmentWriteAvailable;
+  const statusKeys = production ? productionWriteStatusKeys : developmentWriteStatusKeys;
   const blockedReason =
-    state.writeStatus === "uncertain" &&
-    (isRecoveryOwnerMismatch() || !developmentSession || !developmentWriteAvailable)
+    state.writeStatus === "uncertain" && (isRecoveryOwnerMismatch() || !rightSession || !writesAvailable)
       ? tv(
           isRecoveryOwnerMismatch()
             ? "recoveryWrongAccount"
-            : !developmentSession
-              ? "recoveryNeedSignIn"
+            : !rightSession
+              ? production
+                ? "recoveryNeedProductionSignIn"
+                : "recoveryNeedSignIn"
               : "recoveryWritesDisabled",
         )
       : "";
@@ -29,12 +35,12 @@ export function renderWriteRecovery(context: RecoveryContext): string {
   const recoveryMessage =
     state.request.kind === "create-node" && state.writeStatus === "complete"
       ? tv("developmentCreated")
-      : tv(developmentWriteStatusKeys[state.writeStatus]);
+      : tv(statusKeys[state.writeStatus]);
   const action =
     state.writeStatus === "uncertain" && isRecoveryOwnerMismatch()
       ? ""
       : state.writeStatus === "uncertain" || state.writeStatus === "sending"
-        ? `<button class="button button-primary" data-action="continue-recovery"${state.writeStatus === "sending" ? " disabled" : ""}>${state.writeStatus === "sending" ? tv("developmentSending") : developmentSession && developmentWriteAvailable ? tv("developmentRetry") : tv("recoveryContinue")}</button>`
+        ? `<button class="button button-primary" data-action="continue-recovery"${state.writeStatus === "sending" ? " disabled" : ""}>${state.writeStatus === "sending" ? tv(statusKeys.sending) : rightSession && writesAvailable ? tv(production ? "productionRetry" : "developmentRetry") : tv("recoveryContinue")}</button>`
         : `<button class="button button-primary" data-action="retake">${state.writeStatus === "complete" ? tv("nextAed") : tv("recoveryContinue")}</button>`;
   const successful = state.writeStatus === "complete";
   // Nach bestätigtem Erfolg dieselbe Überschrift wie im normalen Ablauf: „AED gespeichert“ bzw. „Prüfung gespeichert“.

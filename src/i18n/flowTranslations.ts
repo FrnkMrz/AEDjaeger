@@ -21,6 +21,18 @@ export const flowTranslations = {
     developmentConflict:
       "Testserver: Nichts wurde geändert. In der Nähe gibt es einen AED, den du noch nicht geprüft hast, oder der Eintrag hat sich geändert. Bitte suche erneut.",
     developmentFailed: "Testserver: Änderung fehlgeschlagen. Bitte Eintrag erneut prüfen.",
+    productionWriteAction: "In OpenStreetMap speichern",
+    productionWriteNotice: "Die Änderung geht öffentlich in OpenStreetMap, unter deinem Konto. Kommentar: {comment}",
+    productionSending: "Änderung wird an OpenStreetMap gesendet…",
+    productionComplete: "In OpenStreetMap gespeichert.",
+    productionUnchanged: "Schon aktuell. Es wurde nichts geändert.",
+    productionNotFound: "Diesen AED gibt es in OpenStreetMap nicht mehr. Es wurde nichts geändert.",
+    productionUncertain:
+      "Ergebnis unklar. Mit derselben Anfrage erneut prüfen; keine neue Änderung wird blind gesendet.",
+    productionConflict: "Nichts wurde geändert. Der Eintrag hat sich inzwischen geändert. Bitte suche erneut.",
+    productionFailed: "Änderung fehlgeschlagen. Bitte Eintrag erneut prüfen.",
+    productionLimited: "Nichts wurde geändert: Erlaubt sind 20 Änderungen pro Tag und 5 je AED in 24 Stunden.",
+    productionRetry: "Status erneut prüfen",
     sightingConfirm: "AED oder Gehäuse gesehen – weiter",
     photoDateTitle: "Wann hast du den AED gesehen?",
     photoDateHelp: "Bestätige den Tag, an dem du den AED gesehen hast.",
@@ -48,6 +60,7 @@ export const flowTranslations = {
     nextAed: "Nächsten AED fotografieren",
     recoveryContinue: "Weiter",
     recoveryNeedSignIn: "Melde dich beim OSM-Testserver an, um den offenen Speichervorgang zu prüfen.",
+    recoveryNeedProductionSignIn: "Melde dich bei OpenStreetMap an, um den offenen Speichervorgang zu prüfen.",
     recoveryWritesDisabled:
       "Schreiben auf dem Testserver ist abgeschaltet. Der Vorgang bleibt gespeichert; versuche es später erneut.",
     recoveryWrongAccount:
@@ -238,6 +251,17 @@ export const flowTranslations = {
     developmentConflict:
       "Test server: Nothing was changed. There is an AED nearby that you have not reviewed yet, or the entry has changed. Please search again.",
     developmentFailed: "Test server: Update failed. Please check the entry again.",
+    productionWriteAction: "Save in OpenStreetMap",
+    productionWriteNotice: "The change goes public in OpenStreetMap under your account. Comment: {comment}",
+    productionSending: "Sending the change to OpenStreetMap…",
+    productionComplete: "Saved in OpenStreetMap.",
+    productionUnchanged: "Already up to date. Nothing was changed.",
+    productionNotFound: "This AED no longer exists in OpenStreetMap. Nothing was changed.",
+    productionUncertain: "Result unclear. Check again with the same request; no new change is sent blindly.",
+    productionConflict: "Nothing was changed. The entry has changed in the meantime. Please search again.",
+    productionFailed: "Change failed. Please check the entry again.",
+    productionLimited: "Nothing was changed: 20 changes per day and 5 per AED in 24 hours are allowed.",
+    productionRetry: "Check status again",
     sightingConfirm: "I see an AED or its cabinet — continue",
     photoDateTitle: "When did you see the AED?",
     photoDateHelp: "Confirm the day you saw the AED.",
@@ -265,6 +289,7 @@ export const flowTranslations = {
     nextAed: "Photograph the next AED",
     recoveryContinue: "Continue",
     recoveryNeedSignIn: "Sign in to the OSM test server to check the pending save.",
+    recoveryNeedProductionSignIn: "Sign in to OpenStreetMap to check the pending save.",
     recoveryWritesDisabled: "Writing to the test server is disabled. The operation stays saved; try again later.",
     recoveryWrongAccount:
       "You are signed in to a different OSM test-server account. Use the account that started this operation.",
@@ -450,6 +475,18 @@ export const flowTranslations = {
     developmentConflict:
       "Serwer testowy: Nic nie zmieniono. W pobliżu jest AED, którego jeszcze nie sprawdzono, albo wpis się zmienił. Wyszukaj ponownie.",
     developmentFailed: "Serwer testowy: nie udało się zapisać zmiany. Sprawdź ponownie wpis.",
+    productionWriteAction: "Zapisz w OpenStreetMap",
+    productionWriteNotice: "Zmiana zostanie opublikowana w OpenStreetMap z Twojego konta. Komentarz: {comment}",
+    productionSending: "Wysyłanie zmiany do OpenStreetMap…",
+    productionComplete: "Zapisano w OpenStreetMap.",
+    productionUnchanged: "Już aktualne. Nic nie zmieniono.",
+    productionNotFound: "Tego AED nie ma już w OpenStreetMap. Nic nie zmieniono.",
+    productionUncertain:
+      "Wynik niejasny. Sprawdź ponownie tym samym żądaniem; żadna nowa zmiana nie zostanie wysłana na ślepo.",
+    productionConflict: "Nic nie zmieniono. Wpis w międzyczasie się zmienił. Wyszukaj ponownie.",
+    productionFailed: "Zmiana nie powiodła się. Sprawdź wpis ponownie.",
+    productionLimited: "Nic nie zmieniono: dozwolone jest 20 zmian dziennie i 5 na AED w ciągu 24 godzin.",
+    productionRetry: "Sprawdź status ponownie",
     sightingConfirm: "Widzę AED lub jego obudowę — dalej",
     photoDateTitle: "Kiedy widziano AED?",
     photoDateHelp: "Potwierdź dzień, w którym widziałeś(-aś) AED.",
@@ -476,6 +513,7 @@ export const flowTranslations = {
     nextAed: "Zrób zdjęcie następnego AED",
     recoveryContinue: "Dalej",
     recoveryNeedSignIn: "Zaloguj się na serwerze testowym OSM, aby sprawdzić oczekujący zapis.",
+    recoveryNeedProductionSignIn: "Zaloguj się do OpenStreetMap, aby sprawdzić oczekujący zapis.",
     recoveryWritesDisabled: "Zapisy na serwerze testowym są wyłączone. Operacja pozostaje zapisana; spróbuj później.",
     recoveryWrongAccount: "Zalogowano na inne konto testowe OSM. Zaloguj się na konto, które rozpoczęło tę operację.",
     buildVersion: "Wersja {revision}",
@@ -662,6 +700,18 @@ export const flowTranslations = {
     developmentConflict:
       "テストサーバー：変更はありません。近くに未確認のAEDがあるか、登録内容が変わりました。もう一度検索してください。",
     developmentFailed: "テストサーバー：変更に失敗しました。項目を再確認してください。",
+    productionWriteAction: "OpenStreetMapに保存",
+    productionWriteNotice: "変更はあなたのアカウントでOpenStreetMapに公開されます。コメント：{comment}",
+    productionSending: "OpenStreetMapに変更を送信中…",
+    productionComplete: "OpenStreetMapに保存しました。",
+    productionUnchanged: "すでに最新です。何も変更していません。",
+    productionNotFound: "このAEDはOpenStreetMapにもう存在しません。何も変更していません。",
+    productionUncertain:
+      "結果が不明です。同じリクエストで再確認してください。新しい変更を確認なしに送ることはありません。",
+    productionConflict: "何も変更していません。その間に登録内容が変わりました。もう一度検索してください。",
+    productionFailed: "変更に失敗しました。登録内容をもう一度確認してください。",
+    productionLimited: "何も変更していません：1日20件、AEDごとに24時間で5件までです。",
+    productionRetry: "状態を再確認",
     sightingConfirm: "AEDまたは収納ケースを確認しました — 続行",
     photoDateTitle: "AEDを確認したのはいつですか？",
     photoDateHelp: "AEDを見た日を確認してください。",
@@ -688,6 +738,7 @@ export const flowTranslations = {
     nextAed: "次のAEDを撮影",
     recoveryContinue: "続行",
     recoveryNeedSignIn: "保留中の保存を確認するには、OSMテストサーバーにログインしてください。",
+    recoveryNeedProductionSignIn: "保留中の保存を確認するには、OpenStreetMapにログインしてください。",
     recoveryWritesDisabled:
       "テストサーバーへの書き込みは無効です。操作は保存されています。後でもう一度お試しください。",
     recoveryWrongAccount:
@@ -874,6 +925,19 @@ export const flowTranslations = {
     developmentConflict:
       "Serveur de test : rien n'a été modifié. Un DAE à proximité n'a pas encore été vérifié, ou l'entrée a changé. Veuillez relancer la recherche.",
     developmentFailed: "Serveur de test : échec de la modification. Vérifiez à nouveau la fiche.",
+    productionWriteAction: "Enregistrer dans OpenStreetMap",
+    productionWriteNotice:
+      "La modification sera publique dans OpenStreetMap, sous votre compte. Commentaire : {comment}",
+    productionSending: "Envoi de la modification à OpenStreetMap…",
+    productionComplete: "Enregistré dans OpenStreetMap.",
+    productionUnchanged: "Déjà à jour. Rien n’a été modifié.",
+    productionNotFound: "Ce DAE n’existe plus dans OpenStreetMap. Rien n’a été modifié.",
+    productionUncertain:
+      "Résultat incertain. Vérifiez à nouveau avec la même requête ; aucune nouvelle modification n’est envoyée à l’aveugle.",
+    productionConflict: "Rien n’a été modifié. L’entrée a changé entre-temps. Veuillez relancer la recherche.",
+    productionFailed: "Échec de la modification. Vérifiez à nouveau la fiche.",
+    productionLimited: "Rien n’a été modifié : 20 modifications par jour et 5 par DAE en 24 heures sont autorisées.",
+    productionRetry: "Vérifier à nouveau l’état",
     sightingConfirm: "Je vois un DAE ou son boîtier — continuer",
     photoDateTitle: "Quand avez-vous vu le DAE ?",
     photoDateHelp: "Confirmez le jour où vous avez vu le DAE.",
@@ -901,6 +965,7 @@ export const flowTranslations = {
     nextAed: "Photographier le DAE suivant",
     recoveryContinue: "Continuer",
     recoveryNeedSignIn: "Connectez-vous au serveur de test OSM pour vérifier l’enregistrement en attente.",
+    recoveryNeedProductionSignIn: "Connectez-vous à OpenStreetMap pour vérifier l’enregistrement en attente.",
     recoveryWritesDisabled:
       "Les écritures sur le serveur de test sont désactivées. L’opération reste enregistrée ; réessayez plus tard.",
     recoveryWrongAccount:
@@ -1091,6 +1156,18 @@ export const flowTranslations = {
     developmentConflict:
       "Servidor de pruebas: no se cambió nada. Hay un DEA cercano que aún no se ha revisado, o la entrada cambió. Busca de nuevo.",
     developmentFailed: "Servidor de pruebas: no se pudo guardar. Comprueba de nuevo la ficha.",
+    productionWriteAction: "Guardar en OpenStreetMap",
+    productionWriteNotice: "El cambio se publica en OpenStreetMap con tu cuenta. Comentario: {comment}",
+    productionSending: "Enviando el cambio a OpenStreetMap…",
+    productionComplete: "Guardado en OpenStreetMap.",
+    productionUnchanged: "Ya está actualizado. No se cambió nada.",
+    productionNotFound: "Este DEA ya no existe en OpenStreetMap. No se cambió nada.",
+    productionUncertain:
+      "Resultado incierto. Comprueba de nuevo con la misma solicitud; no enviaremos otro cambio a ciegas.",
+    productionConflict: "No se cambió nada. La entrada cambió mientras tanto. Busca de nuevo.",
+    productionFailed: "No se pudo guardar. Comprueba de nuevo la ficha.",
+    productionLimited: "No se cambió nada: se permiten 20 cambios al día y 5 por DEA en 24 horas.",
+    productionRetry: "Comprobar el estado de nuevo",
     sightingConfirm: "Veo un DEA o su armario — continuar",
     photoDateTitle: "¿Cuándo viste el DEA?",
     photoDateHelp: "Confirma el día en que viste el DEA.",
@@ -1118,6 +1195,7 @@ export const flowTranslations = {
     nextAed: "Fotografiar el siguiente DEA",
     recoveryContinue: "Continuar",
     recoveryNeedSignIn: "Inicia sesión en el servidor de pruebas de OSM para comprobar el guardado pendiente.",
+    recoveryNeedProductionSignIn: "Inicia sesión en OpenStreetMap para comprobar el guardado pendiente.",
     recoveryWritesDisabled:
       "La escritura en el servidor de pruebas está desactivada. La operación sigue guardada; inténtalo más tarde.",
     recoveryWrongAccount:
