@@ -14,11 +14,10 @@ Erledigt vom Projektinhaber (mit Claude in Chrome), geprüft am 27.11.2026 07:38
 
 Offen (Projektinhaber):
 
-1. OSM-OAuth-Anwendungen um die neuen Weiterleitungs-URIs ergänzen (alte Einträge zunächst stehen lassen):
-   - echte OSM-Anwendung, die heute in `OSM_CLIENT_ID` steht: `https://aedjaeger.de/api/auth/osm/callback`
-   - Testserver-Anwendung (`master.apis.dev.openstreetmap.org`): `https://aedjaeger.de/api/auth/osm/development/callback`
-   - neue, vertrauliche Produktions-Anwendung (für Q2): Weiterleitung auf `https://aedjaeger.de/api/auth/osm/callback` ändern; die `www`-Adresse funktioniert nicht, weil `www` auf die Hauptadresse umleitet.
-2. Im Worker `aedjaeger` (Einstellungen → Variablen) `OSM_REDIRECT_URI` und `OSM_DEV_REDIRECT_URI` auf diese Adressen stellen. Das sind keine Geheimnisse. Ab dann funktioniert die Anmeldung nur noch auf `aedjaeger.de`.
+1. OSM-OAuth-Anwendungen (Stand 27.11.2026, geprüft im Konto des Projektinhabers): Auf openstreetmap.org gibt es nur **eine** AEDjaeger-Anwendung (ID 14528, vertraulich); eine ältere Produktions-Anmeldung gab es nie, bisher lief die Anmeldung nur über den Testserver.
+   - App 14528: Weiterleitungs-URI ist jetzt `https://aedjaeger.de/api/auth/osm/callback` (erledigt). `OSM_CLIENT_ID` und das Secret `OSM_CLIENT_SECRET` kommen erst nach dem Merge von Q2 in den Worker, weil der heutige Code sich ohne Secret anmeldet und an einer vertraulichen App scheitern würde.
+   - Testserver-Anwendung (`master.apis.dev.openstreetmap.org`): `https://aedjaeger.de/api/auth/osm/development/callback` ergänzen. **Offen**; bis dahin scheitert die Testserver-Anmeldung, weil `OSM_DEV_REDIRECT_URI` schon auf die neue Adresse zeigt.
+2. Im Worker `aedjaeger` sind `OSM_REDIRECT_URI` und `OSM_DEV_REDIRECT_URI` auf die neuen Adressen gestellt (erledigt, 27.11.2026). Ab dann funktioniert die Anmeldung nur noch auf `aedjaeger.de`.
 3. Anmelden, Foto, Suche und Abmelden auf `https://aedjaeger.de` prüfen.
 4. Entscheiden, ob `workers_dev` danach aus geht (Empfehlung: ja).
 
