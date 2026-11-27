@@ -10,6 +10,8 @@ export const PRODUCTION_CHANGESET_COMMENTS = {
   checkDate: "AED vor Ort als vorhanden bestätigt / AED confirmed present on site (AEDjaeger)",
   /** Detailweg „nur Fehlendes ergänzen“ (Etappe Q4): Prüfdatum plus neue Angaben, nichts wird ersetzt. */
   details: "AED vor Ort geprüft, fehlende Angaben ergänzt / AED checked on site, missing details added (AEDjaeger)",
+  /** Neuanlage (Etappe Q5): ein AED, den es in OSM noch nicht gab. */
+  create: "AED vor Ort neu eingetragen / New AED mapped on site (AEDjaeger)",
 } as const;
 
 /** Sprachen der App. Nur diese Werte gehen als `locale` an das Changeset. */

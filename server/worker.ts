@@ -20,7 +20,7 @@ import { findOSMOAuthToken, storeOSMOAuthToken } from "./storage/osmOAuthTokens"
 import { hashOSMDevelopmentWriteOwner } from "./storage/osmDevelopmentWriteOperations";
 import { handleStaticCandidateSearch } from "./osm/staticCandidateSearchRoute";
 import { handleDevelopmentCheckDate, handleProductionCheckDate } from "./osm/developmentWriteRoute";
-import { handleDevelopmentCreateNode } from "./osm/developmentCreateNodeRoute";
+import { handleDevelopmentCreateNode, handleProductionCreateNode } from "./osm/developmentCreateNodeRoute";
 import { withOSMApiLog } from "./osm/osmApiLog";
 import { handleDevelopmentNodeRead, handleProductionNodeRead } from "./osm/developmentNodeRoute";
 import { handleVisionAnalysis, isPhotoCheckAvailable } from "./vision/analyzeRoute";
@@ -42,6 +42,8 @@ type WorkerEnvironment = {
   OSM_DEV_WRITES_ENABLED?: string;
   // Schreiben ins echte OSM (Etappe Q3). Standard: aus. Nur der Projektinhaber setzt ihn.
   OSM_PROD_WRITES_ENABLED?: string;
+  // Neuanlagen im echten OSM (Etappe Q5). Standard: aus. Wirkt nur zusammen mit OSM_PROD_WRITES_ENABLED.
+  OSM_PROD_NEW_AEDS_ENABLED?: string;
   // Betreiber-Schalter für Korrekturen bestehender Detailwerte (Etappe P5). Standard: aus.
   OSM_DETAIL_CORRECTIONS_ENABLED?: string;
   OSM_OAUTH_ENCRYPTION_KEY?: string;
@@ -109,6 +111,9 @@ const worker = {
     if (pathname === "/api/osm/check-date") return withOSMApiLog(handleProductionCheckDate)(request, environment);
     if (pathname === "/api/osm/development/create-node")
       return withOSMApiLog(handleDevelopmentCreateNode)(request, environment);
+    // Echtes OSM (Etappe Q5): neuen AED eintragen. Standardmäßig AUS; braucht OSM_PROD_WRITES_ENABLED UND
+    // OSM_PROD_NEW_AEDS_ENABLED.
+    if (pathname === "/api/osm/create-node") return withOSMApiLog(handleProductionCreateNode)(request, environment);
     // Frisches Lesen eines bestehenden AED (nur lesend) für das Ergänzen von Angaben.
     if (pathname === "/api/osm/development/node") return handleDevelopmentNodeRead(request, environment);
     // Echtes OSM (Etappe Q4): AED frisch lesen, bevor fehlende Angaben ergänzt werden. Nur lesend, nur mit Schalter.
@@ -326,6 +331,9 @@ async function getSession(request: Request, environment: WorkerEnvironment): Pro
         ...(developmentWriteOwnerHash ? { developmentWriteOwnerHash } : {}),
         ...(correctionsAvailable ? { developmentCorrectionsAvailable: true } : {}),
         ...(productionWriteAvailable ? { productionWriteAvailable: true } : {}),
+        ...(productionWriteAvailable && environment.OSM_PROD_NEW_AEDS_ENABLED === "true"
+          ? { productionNewAedsAvailable: true }
+          : {}),
         ...(productionWriteOwnerHash ? { productionWriteOwnerHash } : {}),
         ...(photoCheckAvailable ? { photoCheckAvailable: true } : {}),
       },

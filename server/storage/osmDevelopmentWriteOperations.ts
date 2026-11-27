@@ -170,7 +170,8 @@ export type ProductionReservation =
  */
 export async function reserveOSMProductionWrite(
   database: D1Database,
-  input: { ownerHash: string; operationId: string; requestHash: string; targetId: string; now: number },
+  // targetId null: Neuanlage (Etappe Q5). Es gibt noch kein Objekt, also gilt nur das Tageslimit des Kontos.
+  input: { ownerHash: string; operationId: string; requestHash: string; targetId: string | null; now: number },
   limits: ProductionWriteLimits = PRODUCTION_WRITE_LIMITS,
 ): Promise<ProductionReservation> {
   const { ownerHash, operationId, requestHash, targetId, now } = input;
@@ -178,7 +179,7 @@ export async function reserveOSMProductionWrite(
     !isSha256(ownerHash) ||
     !isUuid(operationId) ||
     !isSha256(requestHash) ||
-    !/^node\/[1-9]\d{0,15}$/u.test(targetId) ||
+    (targetId !== null && !/^node\/[1-9]\d{0,15}$/u.test(targetId)) ||
     !isTimestamp(now) ||
     !Number.isSafeInteger(limits.perAccountPerDay) ||
     limits.perAccountPerDay < 1 ||
@@ -209,9 +210,9 @@ export async function reserveOSMProductionWrite(
        WHERE (SELECT COUNT(*) FROM osm_development_write_operations
               WHERE owner_hash = ? AND osm_environment = 'production' AND created_at >= ?
                 AND state NOT IN ('failed', 'conflict')) < ?
-         AND (SELECT COUNT(*) FROM osm_development_write_operations
+         AND (? IS NULL OR (SELECT COUNT(*) FROM osm_development_write_operations
               WHERE osm_environment = 'production' AND target_id = ? AND created_at > ?
-                AND state NOT IN ('failed', 'conflict')) < ?`,
+                AND state NOT IN ('failed', 'conflict')) < ?)`,
       )
       .bind(
         ownerHash,
@@ -225,6 +226,7 @@ export async function reserveOSMProductionWrite(
         dayStart,
         limits.perAccountPerDay,
         targetId,
+        targetId,
         now - limits.perObjectWindowMs,
         limits.perObjectPerWindow,
       )
@@ -235,6 +237,7 @@ export async function reserveOSMProductionWrite(
     if (operation) return { kind: "reserved", operation, created: insert.meta?.changes === 1 };
 
     // Nicht angelegt: Welche Grenze greift? Das Objekt zuerst, weil es die genauere Auskunft ist.
+    if (targetId === null) return { kind: "limited", reason: "daily_limit" };
     const recent = await database
       .prepare(
         `SELECT COUNT(*) AS n FROM osm_development_write_operations
