@@ -61,7 +61,7 @@ export function renderCandidateResult(context: CandidateResultContext): string {
         candidate.source === "live" &&
         candidate.version !== undefined;
       const detailsAction = productionDetails
-        ? `<button class="button button-secondary" data-action="open-candidate-details" data-candidate-id="${escapeHtml(candidate.id)}">${tv("candidateDetailsView")}</button>`
+        ? `<button class="button button-secondary" data-action="open-candidate-details" data-candidate-id="${escapeHtml(candidate.id)}">${tv(developmentCorrectionsAvailable ? "candidateDetailsChange" : "candidateDetailsView")}</button>`
         : developmentSession && developmentWriteAvailable && developmentWriteOwnerHash && candidate.source !== "archive"
           ? `<button class="button button-secondary" data-action="open-candidate-details" data-candidate-id="${escapeHtml(candidate.id)}">${tv(developmentCorrectionsAvailable ? "candidateDetailsChange" : "candidateDetailsView")}</button>`
           : "";

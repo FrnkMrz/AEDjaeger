@@ -15,6 +15,8 @@ type DevelopmentWriteActionContext = {
   locale: string;
   /** Echtes OSM (Etappe Q5): Neuanlagen freigegeben (beide Schalter am Server). */
   productionNewAedsAvailable: boolean;
+  /** Echtes OSM (Etappe Q6): Korrekturen bestehender Werte freigegeben (eigener Schalter am Server). */
+  productionCorrectionsAvailable: boolean;
   /** Der Suchstandort stammt aus Foto-GPS oder vom Handy, nicht aus einem selbst gesetzten Kartenpunkt. */
   realLocationAvailable: boolean;
   accountSignedIn: boolean;
@@ -180,10 +182,13 @@ export async function handleDevelopmentWriteAction(
       state.writeStatus === "sending" ||
       state.writeStatus === "complete" ||
       state.writeStatus === "unchanged" ||
-      // Ergänzen ja (Q4); bestehende Werte ersetzen (Korrekturen) gibt es am echten OSM noch nicht.
-      (state.corrections ?? []).length > 0
+      // Korrekturen (Q6) nur mit eigenem Schalter.
+      ((state.corrections ?? []).length > 0 && !context.productionCorrectionsAvailable)
     )
       return "stop";
+    // Zweite Bestätigung bei Korrekturen: „Der alte Wert stimmt nicht“. Auch hier zusätzlich zur Anzeige geprüft.
+    const productionCorrections = state.corrections ?? [];
+    if (productionCorrections.length > 0 && !context.confirmCorrections()) return "stop";
     const preview = state;
     const candidate = preview.returnState.search.candidates.find((item) => item.id === preview.candidateId);
     // Die frisch gelesene Version ist Pflicht: Nur mit ihr erkennt der Server, ob der AED seit der Vorschau geändert wurde.
@@ -210,8 +215,17 @@ export async function handleDevelopmentWriteAction(
       expectedVersion,
       expectedCheckDate: change.before,
       observedOn: change.after,
-      // Nur Ergänzungen: Der Server schreibt sie nur, wenn jeder dieser Schlüssel am Objekt noch fehlt.
+      // Ergänzungen schreibt der Server nur, wenn der Schlüssel am Objekt noch fehlt; Korrekturen nur, wenn der alte Wert
+      // noch genau so dasteht, wie die Person ihn gesehen hat.
       ...(preview.details && Object.keys(preview.details).length > 0 ? { details: preview.details } : {}),
+      ...(productionCorrections.length > 0
+        ? {
+            expectedBefore: Object.fromEntries(
+              productionCorrections.map((correction) => [correction.key, correction.before]),
+            ),
+            confirmedCorrections: true as const,
+          }
+        : {}),
     };
     try {
       // Vor dem Senden sichern, damit ein Neuladen denselben Vorgang sicher abgleichen kann.

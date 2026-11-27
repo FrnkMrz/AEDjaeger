@@ -13,6 +13,7 @@ type Options = {
   source?: "live" | "archive";
   searchStatus?: "complete" | "partial";
   withoutVersion?: boolean;
+  corrections?: boolean;
 };
 
 /** Anmeldung am echten OSM, Suche mit einem Treffer direkt am Standort, bis zur Vorschau mit dem Prüfdatum. */
@@ -35,7 +36,11 @@ async function openProductionList(page: Page, context: BrowserContext, options: 
         developmentWriteAvailable: false,
         ...(options.writeAvailable === false
           ? {}
-          : { productionWriteAvailable: true, productionWriteOwnerHash: productionOwnerHash }),
+          : {
+              productionWriteAvailable: true,
+              productionWriteOwnerHash: productionOwnerHash,
+              ...(options.corrections ? { productionCorrectionsAvailable: true } : {}),
+            }),
       },
     }),
   );
@@ -444,4 +449,47 @@ test("an uncertain new AED in the real OSM, resumed after a reload, ends with th
   await expect(page.locator(".capture-content")).not.toContainText("Testserver");
   expect(creates).toHaveLength(1);
   expect(creates[0].operation_id).toBe("e5c1a2e3-5b6d-4a7c-8d9e-0123456789ab");
+});
+
+test("with the correction switch, a wrong value in the real OSM can be replaced after a second confirmation", async ({
+  page,
+  context,
+}) => {
+  const writes = await recordWrites(page, () => ({ status: 200, json: { status: "complete", version: 8 } }));
+  await routeProductionNode(page, { check_date: "2025-10-20", access: "private" });
+  await openProductionPreview(page, context, { corrections: true });
+  await page.getByRole("button", { name: "Angaben ergänzen oder korrigieren", exact: true }).click();
+  // Vorbelegt mit dem Wert aus OSM; die Änderung zeigt den alten Wert.
+  await expect(page.locator("#detail-access-private")).toBeChecked();
+  await page.getByText("Jeder", { exact: true }).click();
+  await page.locator("#detail-continue").click();
+
+  const preview = page.locator(".capture-content");
+  await expect(preview).toContainText("access=private → yes");
+  await expect(preview).toContainText(
+    "AED vor Ort geprüft, Angaben ergänzt und korrigiert / AED checked on site, details added and corrected (AEDjaeger)",
+  );
+  const save = page.getByRole("button", { name: "In OpenStreetMap speichern" });
+  await expect(save).toBeDisabled();
+  await page.locator("#correction-confirmed").check();
+  await save.click();
+  await expect(page.locator(".capture-content").getByRole("status")).toContainText(
+    "Prüfdatum und Änderungen in OpenStreetMap gespeichert.",
+  );
+  expect(writes.development).toEqual([]);
+  expect(writes.production).toHaveLength(1);
+  expect(writes.production[0]).toMatchObject({
+    expected_version: 7,
+    details: { access: "yes" },
+    expected_before: { access: "private" },
+    confirmed_corrections: true,
+  });
+});
+
+test("without the correction switch the real-OSM form locks existing values", async ({ page, context }) => {
+  await routeProductionNode(page, { check_date: "2025-10-20", access: "private" });
+  await openProductionPreview(page, context);
+  await page.getByRole("button", { name: "Fehlende Angaben ergänzen" }).click();
+  await expect(page.locator("#detail-group-access")).toContainText("Schon eingetragen");
+  await expect(page.locator("#detail-access-yes")).toHaveCount(0);
 });
