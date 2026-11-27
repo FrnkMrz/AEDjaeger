@@ -1,6 +1,25 @@
 # Domain aedjaeger.de
 
-Stand: **13.11.2026**
+Stand: **27.11.2026**
+
+## Stand 27.11.2026: Umzug läuft
+
+Erledigt vom Projektinhaber (mit Claude in Chrome), geprüft am 27.11.2026 07:38:
+
+- Zone `aedjaeger.de` in Cloudflare (Free), Nameserver bei united domains auf `autumn.ns.cloudflare.com` und `morgan.ns.cloudflare.com` umgestellt. DNSSEC war aus. Die Parking-Einträge von united domains sind gelöscht.
+- Custom Domain `aedjaeger.de` am Worker `aedjaeger`. `www` ist ein CNAME auf `aedjaeger.de` (proxied); eine Redirect Rule leitet `https://www.*` per 301 auf die Hauptadresse um, mit Query-String.
+- E-Mail: kein Postfach bei united domains. Cloudflare Email Routing mit Catch-all an die private Adresse des Projektinhabers (MX, SPF, DKIM gesetzt).
+- **Hauptadresse ist `https://aedjaeger.de` ohne `www`.**
+- Im Repo: `wrangler.jsonc` hält die Custom Domain fest (`routes` mit `custom_domain`), `ci.yml` nennt die neue Adresse.
+
+Offen (Projektinhaber):
+
+1. OSM-OAuth-Anwendungen (Stand 27.11.2026, geprüft im Konto des Projektinhabers): Auf openstreetmap.org gibt es nur **eine** AEDjaeger-Anwendung (ID 14528, vertraulich); eine ältere Produktions-Anmeldung gab es nie, bisher lief die Anmeldung nur über den Testserver.
+   - App 14528: Weiterleitungs-URI ist jetzt `https://aedjaeger.de/api/auth/osm/callback` (erledigt). `OSM_CLIENT_ID` und das Secret `OSM_CLIENT_SECRET` kommen erst nach dem Merge von Q2 in den Worker, weil der heutige Code sich ohne Secret anmeldet und an einer vertraulichen App scheitern würde.
+   - Testserver-Anwendung (`master.apis.dev.openstreetmap.org`): `https://aedjaeger.de/api/auth/osm/development/callback` ergänzen. **Offen**; bis dahin scheitert die Testserver-Anmeldung, weil `OSM_DEV_REDIRECT_URI` schon auf die neue Adresse zeigt.
+2. Im Worker `aedjaeger` sind `OSM_REDIRECT_URI` und `OSM_DEV_REDIRECT_URI` auf die neuen Adressen gestellt (erledigt, 27.11.2026). Ab dann funktioniert die Anmeldung nur noch auf `aedjaeger.de`.
+3. Anmelden, Foto, Suche und Abmelden auf `https://aedjaeger.de` prüfen.
+4. Entscheiden, ob `workers_dev` danach aus geht (Empfehlung: ja).
 
 ## Entscheidung
 

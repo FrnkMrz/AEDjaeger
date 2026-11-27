@@ -4,6 +4,10 @@
   "main": "server/worker.ts",
   "compatibility_date": "2026-10-20",
   "workers_dev": true,
+  // Eigene Domain (eingerichtet am 27.11.2026). Der Eintrag hält die Custom Domain bei jedem Deploy fest, damit ein
+  // Deploy sie nicht verliert. Die Zone aedjaeger.de liegt im Cloudflare-Konto (Free); www leitet per Regel auf die
+  // Hauptadresse um. workers.dev bleibt vorerst an, bis der Projektinhaber über das Abschalten entscheidet.
+  "routes": [{ "pattern": "aedjaeger.de", "custom_domain": true }],
   // Pilot OAuth flags and endpoints are managed as dashboard vars; keep them during code deployments.
   "keep_vars": true,
   "send_metrics": false,

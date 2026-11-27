@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: https://aedjaeger.aedjaeger.workers.dev
+      url: https://aedjaeger.de
     concurrency:
       group: production-deploy
       cancel-in-progress: false

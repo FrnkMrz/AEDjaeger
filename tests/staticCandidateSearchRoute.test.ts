@@ -18,6 +18,8 @@ const { fixture } = vi.hoisted(() => ({
       geometry: { type: "Point", coordinates: [13.405, 52.52] },
     } as Record<string, unknown> | null,
     mapPayload: { elements: [] as unknown[] },
+    // Antwort der echten OSM-API (Etappe Q1); null = Anfrage scheitert mit liveStatus.
+    livePayload: { elements: [] as unknown[] } as unknown,
   },
 }));
 
@@ -116,7 +118,15 @@ function metadata(dataUntil = new Date(now - 60 * 60_000).toISOString()) {
   };
 }
 
-function fetchArchive(options: { dataUntil?: string; ignoreRange?: boolean; mapStatus?: number } = {}) {
+function fetchArchive(
+  options: {
+    dataUntil?: string;
+    ignoreRange?: boolean;
+    mapStatus?: number;
+    liveStatus?: number;
+    liveBody?: string;
+  } = {},
+) {
   const currentMetadata = metadata(options.dataUntil);
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
@@ -126,6 +136,17 @@ function fetchArchive(options: { dataUntil?: string; ignoreRange?: boolean; mapS
       expect(url.searchParams.get("bbox")).toBeTruthy();
       expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer dev-access-token");
       return Response.json(fixture.mapPayload, { status: options.mapStatus ?? 200 });
+    }
+    if (url.origin === "https://api.openstreetmap.org") {
+      // Echte OSM-API: nur die öffentliche Kartenabfrage, ohne Token, mit App-Kennung.
+      expect(init?.method).toBe("GET");
+      expect(url.pathname).toBe("/api/0.6/map.json");
+      expect(url.searchParams.get("bbox")).toBeTruthy();
+      const headers = new Headers(init?.headers);
+      expect(headers.get("Authorization")).toBeNull();
+      expect(headers.get("User-Agent")).toMatch(/^AEDjaeger\//u);
+      if (options.liveBody !== undefined) return new Response(options.liveBody, { status: options.liveStatus ?? 200 });
+      return Response.json(fixture.livePayload, { status: options.liveStatus ?? 200 });
     }
     expect(url.origin).toBe("https://pipeline.openfiremap.org");
     if (url.pathname === "/metadata.json") {
@@ -168,6 +189,7 @@ describe("PMTiles AED candidate search", () => {
       geometry: { type: "Point", coordinates: [13.405, 52.52] },
     };
     fixture.mapPayload = { elements: [] };
+    fixture.livePayload = { elements: [] };
   });
   it("authenticates before fetching the fixed archive", async () => {
     const fetcher = vi.fn<typeof fetch>();
@@ -364,9 +386,11 @@ describe("PMTiles AED candidate search", () => {
     ).toBe(true);
   });
 
-  it("keeps an empty production PMTiles result incomplete without verified extract coverage", async () => {
+  it("keeps an empty production PMTiles result incomplete when the fresh OSM check fails", async () => {
+    // Die frische Abfrage scheitert. Das leere Archiv ist kein Beleg, dass dort kein AED ist: Die Antwort bleibt
+    // „unvollständig“ und gibt so weder Bestätigung noch Neuanlage frei.
     fixture.pointFeature = null;
-    const fetcher = fetchArchive();
+    const fetcher = fetchArchive({ liveStatus: 503 });
     const response = await handleStaticCandidateSearch(
       request(),
       {
@@ -375,8 +399,8 @@ describe("PMTiles AED candidate search", () => {
       },
       { fetch: fetcher, now: () => now },
     );
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ error: "coverage_unavailable" });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: "partial", candidates: [] });
     expect(
       fetcher.mock.calls.some(
         ([input]) => new URL(String(input)).origin === "https://master.apis.dev.openstreetmap.org",
@@ -467,5 +491,165 @@ describe("PMTiles AED candidate search", () => {
     expect(await response.text()).not.toContain("private source payload");
     expect(logs[0]).toMatchObject({ event: "static_aed_search_failure", failure_code: "source_unavailable" });
     expect(JSON.stringify(logs)).not.toMatch(/52\.52|13\.405|Bahnhof/u);
+  });
+
+  describe("echtes OSM: frische Abfrage der OSM-API (Etappe Q1)", () => {
+    const liveNode = (id: number, lat: number, lon: number, tags: Record<string, string> = {}) => ({
+      type: "node",
+      id,
+      lat,
+      lon,
+      tags: { emergency: "defibrillator", ...tags },
+    });
+
+    it("uses the fresh OSM result as the complete answer and never reads the archive", async () => {
+      fixture.livePayload = {
+        elements: [
+          liveNode(777, 52.52, 13.405, { name: "Frisch", secret_note: "nicht weitergeben" }),
+          // Gut 300 m entfernt: liegt außerhalb der Reichweite und wird nicht gezeigt.
+          liveNode(778, 52.523, 13.405),
+          { type: "node", id: 779, lat: 52.52, lon: 13.405, tags: { amenity: "bench" } },
+        ],
+      };
+      const fetcher = fetchArchive();
+      const response = await handleStaticCandidateSearch(
+        request(),
+        { DB: database({ environment: "production" }) },
+        { fetch: fetcher, now: () => now },
+      );
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body).toEqual({
+        status: "complete",
+        candidates: [
+          {
+            id: "node/777",
+            osmType: "node",
+            coordinateQuality: "exact",
+            source: "live",
+            position: { latitude: 52.52, longitude: 13.405 },
+            tags: { name: "Frisch" },
+          },
+        ],
+        coverage_radius_meters: 100,
+      });
+      const origins = fetcher.mock.calls.map(([input]) => new URL(String(input)).origin);
+      expect(origins).toEqual(["https://api.openstreetmap.org"]);
+    });
+
+    it("keeps the queried area small, about 100 m around the location", async () => {
+      const fetcher = fetchArchive();
+      await handleStaticCandidateSearch(
+        request(),
+        { DB: database({ environment: "production" }) },
+        { fetch: fetcher, now: () => now },
+      );
+      const bbox = new URL(String(fetcher.mock.calls[0][0])).searchParams.get("bbox")?.split(",").map(Number) ?? [];
+      const [west, south, east, north] = bbox;
+      // 100 m nach Norden und Süden sind etwa 0,0009 Grad je Richtung.
+      expect(north - south).toBeGreaterThan(0.0017);
+      expect(north - south).toBeLessThan(0.0019);
+      expect(east - west).toBeLessThan(0.004);
+    });
+
+    it("searches worldwide, outside the archive area", async () => {
+      fixture.livePayload = { elements: [liveNode(42, 51.5, -0.12)] };
+      const fetcher = fetchArchive();
+      const response = await handleStaticCandidateSearch(
+        request({ latitude: 51.5, longitude: -0.12, accuracy_meters: 20 }),
+        { DB: database({ environment: "production" }) },
+        { fetch: fetcher, now: () => now },
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        status: "complete",
+        candidates: [{ id: "node/42", source: "live" }],
+        coverage_radius_meters: 70,
+      });
+    });
+
+    it("an empty fresh result is a complete search that can allow a new entry", async () => {
+      fixture.pointFeature = null;
+      const response = await handleStaticCandidateSearch(
+        request({ latitude: -33.8688, longitude: 151.2093, accuracy_meters: 10 }),
+        { DB: database({ environment: "production" }) },
+        { fetch: fetchArchive(), now: () => now },
+      );
+      expect(await response.json()).toEqual({ status: "complete", candidates: [], coverage_radius_meters: 60 });
+    });
+
+    it("falls back to the archive inside DACH, but only as an incomplete search", async () => {
+      const fetcher = fetchArchive({ liveStatus: 503 });
+      const response = await handleStaticCandidateSearch(
+        request(),
+        { DB: database({ environment: "production" }) },
+        { fetch: fetcher, now: () => now },
+      );
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        status: "partial",
+        candidates: [{ id: "node/123", source: "archive" }],
+      });
+    });
+
+    it("outside DACH a failed fresh check is an error, never an empty list", async () => {
+      const fetcher = fetchArchive({ liveStatus: 503 });
+      const response = await handleStaticCandidateSearch(
+        request({ latitude: 51.5, longitude: -0.12, accuracy_meters: 20 }),
+        { DB: database({ environment: "production" }) },
+        { fetch: fetcher, now: () => now },
+      );
+      expect(response.status).toBe(502);
+      expect(await response.json()).toEqual({ error: "source_unavailable" });
+      expect(
+        fetcher.mock.calls.every(([input]) => new URL(String(input)).origin === "https://api.openstreetmap.org"),
+      ).toBe(true);
+    });
+
+    it("rejects a broken or truncated fresh answer instead of reading it as empty", async () => {
+      const response = await handleStaticCandidateSearch(
+        request({ latitude: 51.5, longitude: -0.12, accuracy_meters: 20 }),
+        { DB: database({ environment: "production" }) },
+        { fetch: fetchArchive({ liveBody: '{"elements":[' }), now: () => now },
+      );
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({ error: "invalid_response" });
+    });
+
+    it("an AED mapped as an area blocks the search, because a list without it could allow a duplicate", async () => {
+      fixture.livePayload = { elements: [{ type: "way", id: 5, nodes: [1, 2], tags: { emergency: "defibrillator" } }] };
+      const response = await handleStaticCandidateSearch(
+        request({ latitude: 51.5, longitude: -0.12, accuracy_meters: 20 }),
+        { DB: database({ environment: "production" }) },
+        { fetch: fetchArchive(), now: () => now },
+      );
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({ error: "coverage_unavailable" });
+    });
+
+    it("near the date line it refuses to search instead of cutting the area and claiming a complete result", async () => {
+      // Bei −16,5° Breite und 179,9999° Länge läge ein AED auf −179,9999° nur etwa 21 m entfernt. Ein abgeschnittener
+      // Ausschnitt fände ihn nicht. Deshalb gibt es dort keine Suche und keine Neuanlage.
+      const fetcher = fetchArchive();
+      const response = await handleStaticCandidateSearch(
+        request({ latitude: -16.5, longitude: 179.9999, accuracy_meters: 10 }),
+        { DB: database({ environment: "production" }) },
+        { fetch: fetcher, now: () => now },
+      );
+      expect(response.status).toBe(422);
+      expect(await response.json()).toEqual({ error: "outside_coverage" });
+      expect(fetcher).not.toHaveBeenCalled();
+    });
+
+    it("a test-server session stays bound to the archive area", async () => {
+      const fetcher = fetchArchive();
+      const response = await handleStaticCandidateSearch(
+        request({ latitude: 51.5, longitude: -0.12, accuracy_meters: 20 }),
+        { DB: database({ environment: "development" }) },
+        { fetch: fetcher, now: () => now },
+      );
+      expect(response.status).toBe(422);
+      expect(fetcher).not.toHaveBeenCalled();
+    });
   });
 });

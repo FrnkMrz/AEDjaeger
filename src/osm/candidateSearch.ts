@@ -128,7 +128,12 @@ function parseSearchResult(value: unknown): CandidateSearchResult | null {
     const osmType = candidate.id.split("/", 1)[0];
     if (candidate.osmType !== osmType) return null;
     if (candidate.coordinateQuality !== (osmType === "node" ? "exact" : "approximate-center")) return null;
-    if (candidate.source !== undefined && candidate.source !== "archive" && candidate.source !== "development")
+    if (
+      candidate.source !== undefined &&
+      candidate.source !== "archive" &&
+      candidate.source !== "development" &&
+      candidate.source !== "live"
+    )
       return null;
     if (!isCoordinate(candidate.position) || !isStringRecord(candidate.tags)) return null;
     candidates.push(candidate as unknown as NearbyAedCandidate);
