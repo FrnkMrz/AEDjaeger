@@ -21,6 +21,8 @@ export function renderPreviewState(context: PreviewContext): string {
     developmentWriteStatusKeys,
     productionWriteAvailable,
     productionWriteStatusKeys,
+    productionNewAedsAvailable,
+    searchLocationSource,
     isRecoveryOwnerMismatch,
     detailEverythingPresent,
     detailFormMarkup,
@@ -46,21 +48,31 @@ export function renderPreviewState(context: PreviewContext): string {
               .map(([key, value]) => `<li><code>${escapeHtml(key)}=${escapeHtml(value)}</code></li>`)
               .join("")}</ul>${cautionMarkup}`
           : `<p>${tv(state.result.reason === "position-not-confirmed" ? "newPositionRequired" : state.result.reason === "search-found-candidate" ? "newPreviewFoundCandidate" : "newPreviewSearchInvalid")}</p>`;
-      const canCreate =
+      const developmentCanCreate =
         developmentSession &&
         developmentWriteAvailable &&
         Boolean(developmentWriteOwnerHash) &&
         state.result.kind === "ready";
+      // Echtes OSM (Etappe Q5): nur mit Schalter und nur mit echtem Standort (Foto-GPS oder Handy). Ein selbst gesetzter
+      // Kartenpunkt reicht nicht, weil ein neuer AED nur dort eingetragen werden darf, wo die Person ist.
+      const realLocation = searchLocationSource !== undefined && searchLocationSource !== "map";
+      const productionTarget = !developmentSession && productionNewAedsAvailable;
+      const productionCanCreate = productionTarget && realLocation && state.result.kind === "ready";
+      const canCreate = developmentCanCreate || productionCanCreate;
+      const createStatusKeys = productionTarget ? productionWriteStatusKeys : developmentWriteStatusKeys;
       const statusCopy =
         state.writeStatus === "complete"
-          ? tv("developmentCreated")
+          ? tv(productionTarget ? "productionCreated" : "developmentCreated")
           : state.writeStatus
-            ? tv(developmentWriteStatusKeys[state.writeStatus])
+            ? tv(createStatusKeys[state.writeStatus])
             : "";
+      // Ein unklarer Vorgang lässt sich nur dort fortsetzen, wo er begann: am echten OSM oder am Testserver.
+      const createWritesHere = productionTarget
+        ? productionNewAedsAvailable
+        : developmentSession && developmentWriteAvailable;
       const blockedRecovery =
-        state.writeStatus === "uncertain" &&
-        (isRecoveryOwnerMismatch() || !developmentSession || !developmentWriteAvailable)
-          ? `<p class="simulation-note" role="status">${tv(isRecoveryOwnerMismatch() ? "recoveryWrongAccount" : !developmentSession ? "recoveryNeedSignIn" : "recoveryWritesDisabled")}</p>`
+        state.writeStatus === "uncertain" && (isRecoveryOwnerMismatch() || !createWritesHere)
+          ? `<p class="simulation-note" role="status">${tv(isRecoveryOwnerMismatch() ? "recoveryWrongAccount" : productionTarget || developmentSession ? "recoveryWritesDisabled" : "recoveryNeedSignIn")}</p>`
           : "";
       const writeStatus = state.writeStatus
         ? `<p role="status" class="simulation-note ${state.writeStatus === "complete" ? "save-status-success" : ""}">${statusCopy}</p>${blockedRecovery}`
@@ -69,16 +81,18 @@ export function renderPreviewState(context: PreviewContext): string {
       // Speichern-Knopf gesperrt. Der Klick-Handler prüft den Haken zusätzlich noch einmal.
       const writeAction =
         canCreate && !state.writeStatus
-          ? `<div class="position-confirmation"><label for="new-aed-absence-confirmed"><input id="new-aed-absence-confirmed" type="checkbox" /><span>${tv("newAbsenceConfirm")}</span></label></div><button class="button button-primary" data-action="create-development-node" disabled>${tv("developmentCreateAction")}</button>`
+          ? `${productionCanCreate ? `<p class="simulation-note">${escapeHtml(tv("productionWriteNotice", { comment: PRODUCTION_CHANGESET_COMMENTS.create }))}</p>` : ""}<div class="position-confirmation"><label for="new-aed-absence-confirmed"><input id="new-aed-absence-confirmed" type="checkbox" /><span>${tv("newAbsenceConfirm")}</span></label></div><button class="button button-primary" data-action="create-development-node" disabled>${tv(productionCanCreate ? "productionCreateAction" : "developmentCreateAction")}</button>`
           : state.writeStatus === "uncertain" && state.operationId && !isRecoveryOwnerMismatch()
-            ? `<button class="button button-secondary" data-action="retry-development-write">${developmentSession && developmentWriteAvailable ? tv("developmentRetry") : tv("recoveryContinue")}</button>`
+            ? `<button class="button button-secondary" data-action="retry-development-write">${createWritesHere ? tv(productionTarget ? "productionRetry" : "developmentRetry") : tv("recoveryContinue")}</button>`
             : "";
       // Der Hinweis „nur eine Vorschau“ steht nur, wenn es nichts zu speichern gibt. Mit Speichern-Knopf sagt dessen
       // Beschriftung („Testserver: AED eintragen“) schon, wohin die Änderung geht.
       // Der Hinweis „nur eine Vorschau“ gilt nur, wenn gar nichts gespeichert werden kann und kein Vorgang läuft. Nach einem
       // Speichern (oder währenddessen) wäre er falsch; dann sagt die Statusmeldung, was passiert ist.
       const noWriteNotice =
-        !canCreate && !state.writeStatus ? `<p class="simulation-note">${tv("previewNoWrite")}</p>` : "";
+        !canCreate && !state.writeStatus
+          ? `<p class="simulation-note">${tv(productionTarget && !realLocation && state.result.kind === "ready" ? "productionNeedsDeviceLocation" : "previewNoWrite")}</p>`
+          : "";
       // „Zurück“ bleibt hier immer: Es führt zur Positionsbestätigung bzw. zur Suche, nicht nur zu Treffern.
       // Kommt die Vorschau aus dem Detailformular, führt „Zurück“ dorthin (die Eingaben bleiben erhalten). Sonst zur Suche.
       const backButton = state.detailsPosition

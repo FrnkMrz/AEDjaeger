@@ -293,3 +293,100 @@ test("if the AED changed since the search, the form refuses to continue and asks
   await expect(page.locator("#detail-continue")).toHaveCount(0);
   expect(writes.production).toEqual([]);
 });
+
+/** Neuanlage am echten OSM bis zur Vorschau. `viaMap`: Standort selbst auf der Karte gesetzt statt Handy-Standort. */
+async function openProductionNewAed(
+  page: Page,
+  context: BrowserContext,
+  options: { newAedsAvailable?: boolean; viaMap?: boolean } = {},
+): Promise<void> {
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
+  await page.route("https://tile.openstreetmap.org/**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "image/svg+xml",
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#e5ece3"/></svg>',
+    }),
+  );
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: {
+        authenticated: true,
+        loginAvailable: true,
+        developmentLoginAvailable: false,
+        developmentSession: false,
+        developmentWriteAvailable: false,
+        productionWriteAvailable: true,
+        productionWriteOwnerHash: productionOwnerHash,
+        ...(options.newAedsAvailable === false ? {} : { productionNewAedsAvailable: true }),
+      },
+    }),
+  );
+  await page.route("**/api/osm/candidates/search", (route) =>
+    route.fulfill({ json: { status: "complete", coverage_radius_meters: 62, candidates: [] } }),
+  );
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  await page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" }).click();
+  if (options.viaMap) {
+    const dateConfirm = page.locator('[data-action="confirm-photo-date"]');
+    if (await dateConfirm.isVisible()) await dateConfirm.click();
+    await page.locator('[data-action="choose-map-location"]').click();
+    // Wie im Testserver-Test: bis zur Straße zoomen, erst dann ist die Suche freigegeben.
+    for (let zoom = 0; zoom < 9; zoom += 1) await page.getByRole("button", { name: "Karte vergrößern" }).click();
+    await page.locator("#search-location-map").focus();
+    await page.keyboard.press("ArrowRight");
+    await page.locator('[data-action="confirm-map-location"]').click();
+  } else {
+    await beginNearbySearch(page);
+  }
+  await page.getByRole("button", { name: "Hier fehlt ein AED – neu eintragen" }).click();
+  await page.locator("#new-aed-position-confirmed").check();
+  await page.getByRole("button", { name: "Neuen AED vorbereiten" }).click();
+  await page.locator("#detail-continue").click();
+}
+
+test("a new AED goes to the real OSM route after both confirmations, with the visible comment", async ({
+  page,
+  context,
+}) => {
+  const creates: Array<Record<string, unknown>> = [];
+  await page.route("**/api/osm/create-node", async (route) => {
+    creates.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({ json: { status: "complete", node_id: "5555", version: 1 } });
+  });
+  await page.route("**/api/osm/development/create-node", (route) => route.fulfill({ status: 500, json: {} }));
+  await openProductionNewAed(page, context);
+
+  const preview = page.locator(".capture-content");
+  await expect(preview).toContainText("AED vor Ort neu eingetragen / New AED mapped on site (AEDjaeger)");
+  const create = page.getByRole("button", { name: "In OpenStreetMap eintragen" });
+  // Zweite Bestätigung: Ohne den Haken bleibt der Knopf gesperrt.
+  await expect(create).toBeDisabled();
+  await page.locator("#new-aed-absence-confirmed").check();
+  await create.click();
+  await expect(page.getByText("Neuer AED in OpenStreetMap eingetragen.").first()).toBeVisible();
+  expect(creates).toHaveLength(1);
+  expect(creates[0]).toMatchObject({
+    confirmed: true,
+    absence_confirmed: true,
+    observed_on: expect.any(String),
+    locale: "de",
+    recovery_identity: productionOwnerHash,
+  });
+});
+
+test("without the switch for new AEDs there is no button to add one to the real OSM", async ({ page, context }) => {
+  await openProductionNewAed(page, context, { newAedsAvailable: false });
+  await expect(page.getByRole("button", { name: "In OpenStreetMap eintragen" })).toHaveCount(0);
+  await expect(page.locator(".capture-content")).toContainText("Nur eine Vorschau");
+});
+
+test("a map point set by hand is not enough for a new AED in the real OSM", async ({ page, context }) => {
+  await openProductionNewAed(page, context, { viaMap: true });
+  await expect(page.getByRole("button", { name: "In OpenStreetMap eintragen" })).toHaveCount(0);
+  await expect(page.locator(".capture-content")).toContainText(
+    "braucht die App deinen Standort aus dem Foto oder vom Handy",
+  );
+});
