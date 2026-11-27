@@ -32,7 +32,7 @@ describe("OSM OAuth PKCE building blocks", () => {
     await expect(createCodeChallenge("not a valid verifier")).rejects.toThrow("PKCE-Verifier");
   });
 
-  it("builds only the fixed OSM authorization endpoint and login-only scope", async () => {
+  it("builds only the fixed OSM authorization endpoint and the small openid write_api scope", async () => {
     const transaction = await createPkceTransaction();
     const authorizationUrl = buildOSMAuthorizationUrl({
       clientId: "aedjaeger-test-client",
@@ -43,7 +43,7 @@ describe("OSM OAuth PKCE building blocks", () => {
     expect(authorizationUrl.origin).toBe("https://www.openstreetmap.org");
     expect(authorizationUrl.pathname).toBe("/oauth2/authorize");
     expect(authorizationUrl.searchParams.get("response_type")).toBe("code");
-    expect(authorizationUrl.searchParams.get("scope")).toBe("openid");
+    expect(authorizationUrl.searchParams.get("scope")).toBe("openid write_api");
     expect(authorizationUrl.searchParams.get("state")).toBe(transaction.state);
     expect(authorizationUrl.searchParams.get("nonce")).toBe(transaction.nonce);
     expect(authorizationUrl.searchParams.get("code_challenge")).toBe(transaction.challenge);

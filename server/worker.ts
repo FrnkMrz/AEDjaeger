@@ -7,7 +7,7 @@ import {
   validateOSMAuthorizationCallback,
 } from "./auth/osmOAuth";
 import {
-  exchangeOSMCodeForIdentity,
+  exchangeOSMProductionCodeForAccess,
   exchangeOSMDevelopmentCodeForAccess,
   OSMOAuthDiagnosticError,
 } from "./auth/osmOidc";
@@ -29,7 +29,11 @@ type StaticAssets = { fetch(request: Request): Promise<Response> };
 type WorkerEnvironment = {
   ASSETS: StaticAssets;
   DB?: D1Database;
+  // Anmeldung am echten OSM (Etappe Q2): Schalter, Client-ID und Weiterleitung sind Variablen, das Secret ist ein
+  // Worker-Secret. Fehlt eins davon, gibt es keine Produktions-Anmeldung.
+  OSM_PROD_LOGIN_ENABLED?: string;
   OSM_CLIENT_ID?: string;
+  OSM_CLIENT_SECRET?: string;
   OSM_REDIRECT_URI?: string;
   OSM_DEV_LOGIN_ENABLED?: string;
   OSM_DEV_CLIENT_ID?: string;
@@ -52,7 +56,9 @@ type OSMAuthConfiguration = {
   clientId: string;
   redirectUri: string;
   encryptionKey: string;
-} & ({ provider: "production" } | { provider: "development"; clientSecret: string });
+  clientSecret: string;
+  provider: OSMEnvironment;
+};
 
 const AUTH_COOKIE = "__Host-aedjaeger_osm_auth";
 const LEGACY_AUTH_COOKIE = "aedjaeger_osm_auth";
@@ -192,16 +198,17 @@ async function finishOSMLogin(
       clientId: configuration.clientId,
       redirectUri: configuration.redirectUri,
     };
+    const exchangeWithSecret = { ...exchangeInput, clientSecret: configuration.clientSecret };
     const exchanged =
       configuration.provider === "development"
         ? {
             environment: "development" as const,
-            identity: await exchangeOSMDevelopmentCodeForAccess({
-              ...exchangeInput,
-              clientSecret: configuration.clientSecret,
-            }),
+            identity: await exchangeOSMDevelopmentCodeForAccess(exchangeWithSecret),
           }
-        : { environment: "production" as const, identity: await exchangeOSMCodeForIdentity(exchangeInput) };
+        : {
+            environment: "production" as const,
+            identity: await exchangeOSMProductionCodeForAccess(exchangeWithSecret),
+          };
     stage = "rotate_session";
     const sessionToken = createOAuthSecret();
     // Die alte Sitzung wird widerrufen, bevor der neue Sitzungstoken ausgegeben wird.
@@ -352,13 +359,10 @@ export async function revokeOSMToken(
   if (!configuration) return;
   const body = new URLSearchParams({ token, token_type_hint: "access_token" });
   const headers = new Headers({ "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" });
-  if (configuration.provider === "development") {
-    const formEncode = (value: string): string => new URLSearchParams({ value }).toString().slice("value=".length);
-    const credentials = btoa(`${formEncode(configuration.clientId)}:${formEncode(configuration.clientSecret)}`);
-    headers.set("Authorization", `Basic ${credentials}`);
-  } else {
-    body.set("client_id", configuration.clientId);
-  }
+  // Beide Anwendungen sind vertraulich: Auch der Widerruf meldet sich mit client_secret_basic an.
+  const formEncode = (value: string): string => new URLSearchParams({ value }).toString().slice("value=".length);
+  const credentials = btoa(`${formEncode(configuration.clientId)}:${formEncode(configuration.clientSecret)}`);
+  headers.set("Authorization", `Basic ${credentials}`);
   try {
     await fetchWithoutRedirects(
       getOSMProviderEndpoints(osmEnvironment).revocation,
@@ -382,11 +386,13 @@ function getAuthConfiguration(
 ): OSMAuthConfiguration | null {
   const development = osmEnvironment === "development";
   if (development && environment.OSM_DEV_LOGIN_ENABLED !== "true") return null;
+  // Echtes OSM nur mit ausdrücklichem Schalter (Standard aus). So lässt sich die Anmeldung ohne Deploy abschalten.
+  if (!development && environment.OSM_PROD_LOGIN_ENABLED !== "true") return null;
   const clientId = development ? environment.OSM_DEV_CLIENT_ID : environment.OSM_CLIENT_ID;
   const redirectValue = development ? environment.OSM_DEV_REDIRECT_URI : environment.OSM_REDIRECT_URI;
   if (!clientId || !redirectValue || !environment.OSM_OAUTH_ENCRYPTION_KEY) return null;
-  const clientSecret = development ? environment.OSM_DEV_CLIENT_SECRET : undefined;
-  if (development && !clientSecret) return null;
+  const clientSecret = development ? environment.OSM_DEV_CLIENT_SECRET : environment.OSM_CLIENT_SECRET;
+  if (!clientSecret) return null;
   if (clientId.length > 256 || clientId.trim().length === 0) return null;
   try {
     const redirectUri = new URL(redirectValue);
@@ -402,16 +408,13 @@ function getAuthConfiguration(
       redirectUri.hash
     )
       return null;
-    const common = {
+    return {
       clientId,
+      clientSecret,
       redirectUri: redirectUri.toString(),
       encryptionKey: environment.OSM_OAUTH_ENCRYPTION_KEY,
+      provider: osmEnvironment,
     };
-    if (development) {
-      if (!clientSecret) return null;
-      return { ...common, provider: "development", clientSecret };
-    }
-    return { ...common, provider: "production" };
   } catch {
     return null;
   }

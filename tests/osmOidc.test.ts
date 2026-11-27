@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  exchangeOSMCodeForIdentity,
+  exchangeOSMProductionCodeForAccess,
   exchangeOSMDevelopmentCodeForAccess,
   OSMOAuthDiagnosticError,
 } from "../server/auth/osmOidc";
@@ -63,20 +63,18 @@ async function signedFixture(
       expect(init?.method).toBe("POST");
       const body = String(init?.body);
       expect(body).toContain("code_verifier=verifier-value");
-      if (environment === "development") {
-        const formEncode = (value: string): string => new URLSearchParams({ value }).toString().slice("value=".length);
-        expect(new Headers(init?.headers).get("Authorization")).toBe(
-          `Basic ${btoa(`${formEncode(clientId)}:${formEncode(clientSecret)}`)}`,
-        );
-        expect(body).not.toContain("client_secret");
-      } else {
-        expect(new Headers(init?.headers).get("Authorization")).toBeNull();
-      }
+      // Testserver und echtes OSM sind beide vertrauliche Anwendungen: client_secret_basic, nie im Body.
+      const formEncode = (value: string): string => new URLSearchParams({ value }).toString().slice("value=".length);
+      expect(new Headers(init?.headers).get("Authorization")).toBe(
+        `Basic ${btoa(`${formEncode(clientId)}:${formEncode(clientSecret)}`)}`,
+      );
+      expect(body).not.toContain("client_secret");
+      expect(body).not.toContain("client_id");
       return Response.json({
         id_token: token,
         access_token: "A".repeat(60),
         token_type: "Bearer",
-        ...(environment === "development" ? { scope: "openid write_api" } : {}),
+        scope: "openid write_api",
         ...tokenOverrides,
       });
     }
@@ -96,11 +94,12 @@ describe("OSM OpenID Connect verification", () => {
       return new Response("private redirect body", { status: 302, headers: { Location: "https://attacker.example" } });
     };
     await expect(
-      exchangeOSMCodeForIdentity({
+      exchangeOSMProductionCodeForAccess({
         code: "one-time-code",
         verifier: "verifier-value",
         nonce,
         clientId,
+        clientSecret,
         redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
         fetcher,
       }),
@@ -112,11 +111,12 @@ describe("OSM OpenID Connect verification", () => {
     const { fetcher } = await signedFixture();
 
     await expect(
-      exchangeOSMCodeForIdentity({
+      exchangeOSMProductionCodeForAccess({
         code: "one-time-code",
         verifier: "verifier-value",
         nonce,
         clientId,
+        clientSecret,
         redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
         now,
         fetcher,
@@ -263,11 +263,12 @@ describe("OSM OpenID Connect verification", () => {
   ])("rejects a signed token with an invalid %s", async (_label, claimOverrides) => {
     const { fetcher } = await signedFixture(claimOverrides);
     await expect(
-      exchangeOSMCodeForIdentity({
+      exchangeOSMProductionCodeForAccess({
         code: "code",
         verifier: "verifier-value",
         nonce,
         clientId,
+        clientSecret,
         redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
         now,
         fetcher,
@@ -289,11 +290,12 @@ describe("OSM OpenID Connect verification", () => {
       return response;
     };
     await expect(
-      exchangeOSMCodeForIdentity({
+      exchangeOSMProductionCodeForAccess({
         code: "code",
         verifier: "verifier-value",
         nonce,
         clientId,
+        clientSecret,
         redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
         now,
         fetcher: changedFetcher,
@@ -310,11 +312,12 @@ describe("OSM OpenID Connect verification", () => {
         id_token_signing_alg_values_supported: ["RS256"],
       });
     await expect(
-      exchangeOSMCodeForIdentity({
+      exchangeOSMProductionCodeForAccess({
         code: "code",
         verifier: "verifier-value",
         nonce,
         clientId,
+        clientSecret,
         redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
         fetcher,
       }),
@@ -326,11 +329,12 @@ describe("OSM OpenID Connect verification", () => {
       throw new TypeError("network details must not escape");
     };
     await expect(
-      exchangeOSMCodeForIdentity({
+      exchangeOSMProductionCodeForAccess({
         code: "code",
         verifier: "verifier-value",
         nonce,
         clientId,
+        clientSecret,
         redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
         fetcher: unreachable,
       }),
@@ -343,11 +347,12 @@ describe("OSM OpenID Connect verification", () => {
       });
     let failure: unknown;
     try {
-      await exchangeOSMCodeForIdentity({
+      await exchangeOSMProductionCodeForAccess({
         code: "code",
         verifier: "verifier-value",
         nonce,
         clientId,
+        clientSecret,
         redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
         fetcher: blockedResponse,
       });
@@ -356,5 +361,53 @@ describe("OSM OpenID Connect verification", () => {
     }
     expect(failure).toMatchObject({ diagnosticCode: "provider_discovery_http_error", httpStatus: 403 });
     expect((failure as Error).message).not.toContain("private block page detail");
+  });
+
+  describe("echtes OSM mit Schreibrecht (Etappe Q2)", () => {
+    const base = {
+      code: "code",
+      verifier: "verifier-value",
+      nonce,
+      clientId,
+      clientSecret,
+      redirectUri: "https://aedjaeger.example/api/auth/osm/callback",
+      now,
+    };
+
+    it.each([
+      ["ohne write_api", { scope: "openid" }, "production_scope_invalid"],
+      ["mit zusätzlichen Rechten", { scope: "openid write_api write_prefs" }, "production_scope_invalid"],
+      ["ohne Token", { access_token: undefined }, "production_access_token_invalid"],
+      ["mit falschem Tokentyp", { token_type: "MAC" }, "production_access_token_invalid"],
+    ])("lehnt eine Anmeldung %s ab", async (_label, tokenOverrides, diagnosticCode) => {
+      const { fetcher } = await signedFixture({}, "production", tokenOverrides);
+      await expect(exchangeOSMProductionCodeForAccess({ ...base, fetcher })).rejects.toMatchObject({ diagnosticCode });
+    });
+
+    it("verlangt das Secret, bevor eine Anfrage hinausgeht", async () => {
+      const calls: string[] = [];
+      const fetcher = async (input: RequestInfo | URL): Promise<Response> => {
+        calls.push(String(input));
+        return Response.json({});
+      };
+      await expect(exchangeOSMProductionCodeForAccess({ ...base, clientSecret: "", fetcher })).rejects.toThrow();
+      expect(calls.some((url) => url.endsWith("/oauth2/token"))).toBe(false);
+    });
+
+    it("liefert Identität und Token und verrät das Secret in keiner Fehlermeldung", async () => {
+      const { fetcher } = await signedFixture({}, "production", { scope: "openid" });
+      let failure: unknown;
+      try {
+        await exchangeOSMProductionCodeForAccess({ ...base, fetcher });
+      } catch (error) {
+        failure = error;
+      }
+      expect((failure as Error).message).not.toContain(clientSecret);
+      const ok = await signedFixture();
+      await expect(exchangeOSMProductionCodeForAccess({ ...base, fetcher: ok.fetcher })).resolves.toMatchObject({
+        subject: "987654321",
+        accessToken: "A".repeat(60),
+      });
+    });
   });
 });

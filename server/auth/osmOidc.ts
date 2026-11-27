@@ -14,6 +14,12 @@ export type OSMIdentityToken = {
   expiresAt?: number;
 };
 
+/** Ergebnis einer Anmeldung mit Schreibrecht: Identität plus API-Token (bleibt im Worker). */
+export type OSMAccessAuthorization = OSMIdentityToken & {
+  accessToken: string;
+  expiresAt: number;
+};
+
 export type OSMDevelopmentAuthorization = OSMIdentityToken & {
   accessToken: string;
   expiresAt: number;
@@ -38,7 +44,9 @@ export type OSMOAuthDiagnosticCode =
   | "identity_keys_unavailable"
   | "identity_token_invalid"
   | "development_scope_invalid"
-  | "development_access_token_invalid";
+  | "development_access_token_invalid"
+  | "production_scope_invalid"
+  | "production_access_token_invalid";
 
 /** Safe, bounded details for server logs; provider bodies and credentials stay private. */
 export class OSMOAuthDiagnosticError extends Error {
@@ -52,29 +60,27 @@ export class OSMOAuthDiagnosticError extends Error {
   }
 }
 
-/** Production login only verifies identity and never returns its access token. */
-export async function exchangeOSMCodeForIdentity(input: {
+/**
+ * Anmeldung am echten OSM (Etappe Q2, Entscheidung vom 26.11.2026).
+ *
+ * Die App 14528 auf openstreetmap.org ist „vertraulich“. Deshalb meldet sich der Worker beim Token-Tausch mit
+ * Client-ID und Secret an (client_secret_basic), zusätzlich zu PKCE. Akzeptiert wird genau der kleine Satz
+ * `openid write_api`: Fehlt `write_api` oder kommen weitere Rechte dazu, scheitert die Anmeldung. Das Token bleibt
+ * im Worker und geht nie an den Browser. Schreiben kann damit erst eine spätere Etappe, hinter eigenen Schaltern.
+ */
+export async function exchangeOSMProductionCodeForAccess(input: {
   code: string;
   verifier: string;
   nonce: string;
   clientId: string;
+  clientSecret: string;
   redirectUri: string;
   now?: number;
   fetcher?: Fetcher;
   cryptoApi?: Crypto;
-}): Promise<OSMIdentityToken> {
+}): Promise<OSMAccessAuthorization> {
   const { subject, tokenResponse } = await exchangeCode(input, "production");
-  const accessToken = tokenResponse.access_token;
-  if (typeof accessToken !== "string" || !isAccessToken(accessToken) || tokenResponse.token_type !== "Bearer")
-    return { subject };
-  const now = input.now ?? Date.now();
-  const expiresIn = tokenResponse.expires_in;
-  const expiresAt =
-    typeof expiresIn === "number" && Number.isSafeInteger(expiresIn) && expiresIn > 0
-      ? now + expiresIn * 1_000
-      : now + OSM_SESSION_LIFETIME_MS;
-  if (!Number.isSafeInteger(expiresAt) || expiresAt <= now) return { subject };
-  return { subject, accessToken, expiresAt };
+  return acceptWriteAccess(subject, tokenResponse, input.now ?? Date.now(), "production");
 }
 
 /**
@@ -93,6 +99,20 @@ export async function exchangeOSMDevelopmentCodeForAccess(input: {
   cryptoApi?: Crypto;
 }): Promise<OSMDevelopmentAuthorization> {
   const { subject, tokenResponse } = await exchangeCode(input, "development");
+  return acceptWriteAccess(subject, tokenResponse, input.now ?? Date.now(), "development");
+}
+
+/**
+ * Gemeinsame Prüfung für Testserver und echtes OSM: Bearer-Token vorhanden und gültig geformt, Rechte genau
+ * `openid` und `write_api`, sinnvolle Laufzeit. Fehlt die Laufzeit (OSM liefert heute oft keine), begrenzt die App
+ * die Aufbewahrung auf ihre eigene, kurze Sitzungsdauer.
+ */
+function acceptWriteAccess(
+  subject: string,
+  tokenResponse: TokenResponse,
+  now: number,
+  environment: OSMEnvironment,
+): OSMAccessAuthorization {
   const scopes =
     typeof tokenResponse.scope === "string"
       ? tokenResponse.scope.split(/\s+/u).filter(Boolean)
@@ -101,37 +121,28 @@ export async function exchangeOSMDevelopmentCodeForAccess(input: {
         : [];
   const uniqueScopes = new Set(scopes);
   const accessToken = tokenResponse.access_token;
+  const message =
+    environment === "development"
+      ? "Die OSM-Testanmeldung hat nicht den erwarteten Zugriff erteilt."
+      : "Die OpenStreetMap-Anmeldung hat nicht den erwarteten Zugriff erteilt.";
   if (typeof accessToken !== "string" || !isAccessToken(accessToken) || tokenResponse.token_type !== "Bearer") {
-    throw new OSMOAuthDiagnosticError(
-      "development_access_token_invalid",
-      undefined,
-      "Die OSM-Testanmeldung hat nicht den erwarteten Zugriff erteilt.",
-    );
+    throw new OSMOAuthDiagnosticError(`${environment}_access_token_invalid`, undefined, message);
   }
   if (
     !uniqueScopes.has("openid") ||
     !uniqueScopes.has("write_api") ||
     [...uniqueScopes].some((scope) => scope !== "openid" && scope !== "write_api")
   ) {
-    throw new OSMOAuthDiagnosticError(
-      "development_scope_invalid",
-      undefined,
-      "Die OSM-Testanmeldung hat nicht den erwarteten Zugriff erteilt.",
-    );
+    throw new OSMOAuthDiagnosticError(`${environment}_scope_invalid`, undefined, message);
   }
-
-  const now = input.now ?? Date.now();
   const expiresIn = tokenResponse.expires_in;
-  // OSM access tokens currently may not provide an expiry. In that case the
-  // app limits retention to its own short-lived session instead.
   const expiresAt =
     typeof expiresIn === "number" && Number.isSafeInteger(expiresIn) && expiresIn > 0
       ? now + expiresIn * 1_000
       : now + OSM_SESSION_LIFETIME_MS;
   if (!Number.isSafeInteger(expiresAt) || expiresAt <= now) {
-    throw new Error("Die OSM-Testanmeldung hat eine ungültige Tokenlaufzeit geliefert.");
+    throw new Error("Die OSM-Anmeldung hat eine ungültige Tokenlaufzeit geliefert.");
   }
-
   return { subject, accessToken, expiresAt };
 }
 
@@ -161,17 +172,10 @@ async function exchangeCode(
   });
   const tokenHeaders = new Headers({ "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" });
 
-  if (environment === "development") {
-    if (!isOAuthClientSecret(input.clientSecret))
-      throw new Error("Die OSM-Testanmeldung ist nicht korrekt konfiguriert.");
-    // Der OSM-Testserver verlangt client_secret_basic zusätzlich zu PKCE.
-    // Beide Werte werden nur für diesen HTTPS-Tokenaustausch verwendet und
-    // bleiben serverseitig; der Browser erhält weder Secret noch Access-Token.
-    tokenHeaders.set("Authorization", `Basic ${encodeBasicCredentials(input.clientId, input.clientSecret)}`);
-  } else {
-    // Der bestehende Produktionspfad nutzt weiterhin seine bisherige Anmeldung.
-    tokenBody.set("client_id", input.clientId);
-  }
+  // Beide Anwendungen (Testserver und echtes OSM, App 14528) sind „vertraulich“: Der Worker meldet sich mit
+  // client_secret_basic an, zusätzlich zu PKCE. Secret und Token bleiben serverseitig; der Browser sieht keins davon.
+  if (!isOAuthClientSecret(input.clientSecret)) throw new Error("Die OSM-Anmeldung ist nicht korrekt konfiguriert.");
+  tokenHeaders.set("Authorization", `Basic ${encodeBasicCredentials(input.clientId, input.clientSecret)}`);
 
   let response: Response;
   try {
