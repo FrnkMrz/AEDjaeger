@@ -36,10 +36,16 @@ export class ExistingNodeError extends Error {
  * @param id       Kennung des Objekts, zum Beispiel "node/123".
  * @param fetcher  Austauschbar für Tests.
  */
-export async function requestExistingNode(id: string, fetcher: typeof fetch = fetch): Promise<ExistingNode> {
+export async function requestExistingNode(
+  id: string,
+  fetcher: typeof fetch = fetch,
+  environment: "development" | "production" = "development",
+): Promise<ExistingNode> {
+  // Echtes OSM (Etappe Q4) und Testserver haben getrennte Routen; der Server prüft zusätzlich die Sitzung.
+  const path = environment === "production" ? "/api/osm/node" : "/api/osm/development/node";
   let response: Response;
   try {
-    response = await fetcher(`/api/osm/development/node?id=${encodeURIComponent(id)}`, {
+    response = await fetcher(`${path}?id=${encodeURIComponent(id)}`, {
       method: "GET",
       credentials: "same-origin",
       headers: { Accept: "application/json" },

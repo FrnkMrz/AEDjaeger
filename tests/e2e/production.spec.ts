@@ -17,6 +17,12 @@ type Options = {
 
 /** Anmeldung am echten OSM, Suche mit einem Treffer direkt am Standort, bis zur Vorschau mit dem Prüfdatum. */
 async function openProductionPreview(page: Page, context: BrowserContext, options: Options = {}): Promise<void> {
+  await openProductionList(page, context, options);
+  await page.getByRole("button", { name: "Als noch vorhanden bestätigen" }).click();
+}
+
+/** Dasselbe, aber nur bis zur Trefferliste. */
+async function openProductionList(page: Page, context: BrowserContext, options: Options = {}): Promise<void> {
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 52.52, longitude: 13.405, accuracy: 12 });
   await page.route("**/api/auth/session", (route) =>
@@ -56,7 +62,6 @@ async function openProductionPreview(page: Page, context: BrowserContext, option
   await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
   await page.locator('[data-action="confirm-sighting"]').click();
   await beginNearbySearch(page);
-  await page.getByRole("button", { name: "Als noch vorhanden bestätigen" }).click();
 }
 
 /** Hält fest, was an die beiden Schreibrouten geht. */
@@ -89,8 +94,8 @@ test("a confirmed check date goes to the real OSM route with the visible comment
   await expect(preview).toContainText("öffentlich in OpenStreetMap");
   await expect(preview).toContainText(comment);
   await expect(preview).not.toContainText("Testserver");
-  // Kein Detailweg in dieser Etappe.
-  await expect(page.locator('[data-action="open-existing-details"]')).toHaveCount(0);
+  // Seit Etappe Q4 gibt es daneben den Weg „Fehlende Angaben ergänzen“ (ohne Korrekturen).
+  await expect(page.getByRole("button", { name: "Fehlende Angaben ergänzen" })).toBeVisible();
 
   await save.click();
   await expect(page.locator(".capture-content").getByRole("status")).toContainText("In OpenStreetMap gespeichert.");
@@ -210,4 +215,63 @@ test("a pending save in the real OSM sends a signed-out person to the OpenStreet
     page.getByText("Melde dich bei OpenStreetMap an, um den offenen Speichervorgang zu prüfen."),
   ).toBeVisible();
   await expect(page.locator("#osm-sign-in")).toBeFocused();
+});
+
+/** Nachgebildete Leseroute für das Formular: frischer Stand vom echten OSM mit Version 9. */
+async function routeProductionNode(page: Page, tags: Record<string, string> = { check_date: "2025-10-20" }) {
+  const reads: string[] = [];
+  await page.route("**/api/osm/node?**", async (route) => {
+    reads.push(route.request().url());
+    await route.fulfill({ json: { status: "ok", id: "node/123", version: 9, tags } });
+  });
+  await page.route("**/api/osm/development/node?**", (route) => route.fulfill({ status: 500, json: {} }));
+  return reads;
+}
+
+test("missing details can be added in the real OSM: the form reads the fresh object, and the save sends only additions", async ({
+  page,
+  context,
+}) => {
+  const writes = await recordWrites(page, () => ({ status: 200, json: { status: "complete", version: 10 } }));
+  const reads = await routeProductionNode(page, { check_date: "2025-10-20", operator: "Stadt" });
+  await openProductionPreview(page, context);
+  await page.getByRole("button", { name: "Fehlende Angaben ergänzen" }).click();
+  // Der vorhandene Wert ist gesperrt; Korrekturen gibt es am echten OSM noch nicht.
+  await page.getByText("Jeder", { exact: true }).click();
+  await page.locator("#detail-continue").click();
+
+  const preview = page.locator(".capture-content");
+  await expect(preview).toContainText("access=yes");
+  await expect(preview).toContainText(
+    "AED vor Ort geprüft, fehlende Angaben ergänzt / AED checked on site, missing details added (AEDjaeger)",
+  );
+  await page.getByRole("button", { name: "In OpenStreetMap speichern" }).click();
+  await expect(page.locator(".capture-content").getByRole("status")).toContainText(
+    "Prüfdatum und neue Angaben in OpenStreetMap gespeichert.",
+  );
+  expect(reads).toHaveLength(1);
+  expect(writes.development).toEqual([]);
+  expect(writes.production).toHaveLength(1);
+  // Die Version stammt aus dem frisch gelesenen Objekt, nicht aus der Suche.
+  expect(writes.production[0]).toMatchObject({ expected_version: 9, details: { access: "yes" } });
+  expect(writes.production[0]).not.toHaveProperty("expected_before");
+  expect(writes.production[0]).not.toHaveProperty("confirmed_corrections");
+});
+
+test("the hit list offers the details form for a fresh real-OSM hit, but not for an archive hit", async ({
+  page,
+  context,
+}) => {
+  const reads = await routeProductionNode(page);
+  await openProductionList(page, context);
+  await page.getByRole("button", { name: "Angaben ansehen und ergänzen" }).click();
+  await expect(page.locator("#detail-continue")).toBeVisible();
+  expect(reads).toHaveLength(1);
+});
+
+test("an archive hit in the real OSM gets no details button in the list", async ({ page, context }) => {
+  await routeProductionNode(page);
+  await openProductionList(page, context, { source: "archive" });
+  await expect(page.getByRole("button", { name: "Als noch vorhanden bestätigen" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Angaben ansehen und ergänzen" })).toHaveCount(0);
 });

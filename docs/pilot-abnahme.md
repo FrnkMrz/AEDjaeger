@@ -206,7 +206,7 @@ Voraussetzung: Der Betreiber hat die Fotoprüfung im Cloudflare-Dashboard einger
 
 Hinweise: F1 bis F7 prüfen Verhalten, F8 die Trefferqualität. Zeigt F8 viele falsch gesperrte AED-Fotos, ist die Sperre „kein AED“ zu streng und wird mit dem Projektinhaber neu bewertet. Bei jedem Fehler Uhrzeit und genaue Meldung notieren, keinen Schlüssel teilen.
 
-## G. Echtes OSM: noch vorhanden bestätigen (Etappe Q3)
+## G. Echtes OSM: noch vorhanden bestätigen und Angaben ergänzen (Etappen Q3, Q4)
 
 Voraussetzungen (Projektinhaber):
 
@@ -221,6 +221,8 @@ Voraussetzungen (Projektinhaber):
 | G4 | Denselben AED innerhalb von 24 h noch einmal bestätigen | Geht (bis zu 5 Änderungen je AED in 24 h); erst die sechste meldet „Nichts wurde geändert: Erlaubt sind …“ ohne Changeset | `[ ]` |
 | G5 | Flugmodus während des Speicherns | „Ergebnis unklar“; nach „Status erneut prüfen“ kein zweites Changeset | `[ ]` |
 | G6 | Treffer nur aus dem Archiv (OSM-API nicht erreichbar) | Kein Speichern-Knopf | `[ ]` |
+| G7 | Bei einem bekannten AED „Fehlende Angaben ergänzen“ (oder in der Liste „Angaben ansehen und ergänzen“), eine fehlende Angabe wählen | Vorhandene Werte gesperrt; Vorschau zeigt nur die neuen Tags und den Kommentar „… fehlende Angaben ergänzt …“ | `[ ]` |
+| G8 | Speichern | „Prüfdatum und neue Angaben in OpenStreetMap gespeichert.“; auf openstreetmap.org nur die neuen Tags und `check_date` dazu, nichts ersetzt oder gelöscht | `[ ]` |
 
 ## Was diese Abnahme nicht abdeckt
 

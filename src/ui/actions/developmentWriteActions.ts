@@ -132,18 +132,19 @@ export async function handleDevelopmentWriteAction(
       state.writeStatus === "sending" ||
       state.writeStatus === "complete" ||
       state.writeStatus === "unchanged" ||
-      state.details ||
-      state.node ||
+      // Ergänzen ja (Q4); bestehende Werte ersetzen (Korrekturen) gibt es am echten OSM noch nicht.
       (state.corrections ?? []).length > 0
     )
       return "stop";
     const preview = state;
     const candidate = preview.returnState.search.candidates.find((item) => item.id === preview.candidateId);
     // Die frisch gelesene Version ist Pflicht: Nur mit ihr erkennt der Server, ob der AED seit der Vorschau geändert wurde.
+    // Nach dem Formular gilt die Version des frisch gelesenen Objekts, sonst die aus der frischen Suche.
+    const expectedVersion = preview.node ? preview.node.version : candidate?.version;
     if (
       candidate?.osmType !== "node" ||
       candidate.source !== "live" ||
-      candidate.version === undefined ||
+      expectedVersion === undefined ||
       preview.result.kind !== "ready"
     )
       return "stop";
@@ -156,9 +157,11 @@ export async function handleDevelopmentWriteAction(
       operationId,
       target: candidate.id,
       candidateLabel: preview.candidateLabel,
-      expectedVersion: candidate.version,
+      expectedVersion,
       expectedCheckDate: change.before,
       observedOn: change.after,
+      // Nur Ergänzungen: Der Server schreibt sie nur, wenn jeder dieser Schlüssel am Objekt noch fehlt.
+      ...(preview.details && Object.keys(preview.details).length > 0 ? { details: preview.details } : {}),
     };
     try {
       // Vor dem Senden sichern, damit ein Neuladen denselben Vorgang sicher abgleichen kann.

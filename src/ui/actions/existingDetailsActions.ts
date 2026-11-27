@@ -8,6 +8,8 @@ type ExistingDetailsActionContext = {
   source?: HTMLElement;
   observedOn: PhotoSessionState["observedOn"];
   developmentWriteEnabled: boolean;
+  /** Echtes OSM (Etappe Q4): Ergänzen erlaubt, aber nur für frisch gelesene Treffer mit Version. */
+  productionDetailsEnabled: boolean;
   setState: (state: FlowState) => void;
   resetDetailForm: () => void;
   setExistingTags: (tags: DetailTags | undefined) => void;
@@ -28,7 +30,7 @@ export function handleExistingDetailsAction(
   if (action === "open-existing-details" && state.kind === "osm-preview" && !state.node) {
     const candidateId = state.candidateId;
     const candidate = state.returnState.search.candidates.find((item) => item.id === candidateId);
-    if (!context.developmentWriteEnabled || candidate?.osmType !== "node") return "stop";
+    if (!detailsAllowed(context, candidate) || candidate?.osmType !== "node") return "stop";
     context.resetDetailForm();
     setState({
       kind: "existing-aed-details",
@@ -45,13 +47,7 @@ export function handleExistingDetailsAction(
   if (action === "open-candidate-details" && state.kind === "candidate-result") {
     const candidateId = context.source?.dataset.candidateId;
     const candidate = state.search.candidates.find((item) => item.id === candidateId);
-    if (
-      !context.developmentWriteEnabled ||
-      !candidateId ||
-      !candidate ||
-      candidate.osmType !== "node" ||
-      candidate.source === "archive"
-    )
+    if (!candidateId || !candidate || candidate.osmType !== "node" || !detailsAllowed(context, candidate))
       return "stop";
     context.resetDetailForm();
     const candidateLabel = candidate.tags.name || candidate.tags["defibrillator:location"] || "";
@@ -142,4 +138,18 @@ export function handleExistingDetailsAction(
   }
 
   return "unhandled";
+}
+
+/**
+ * Darf für diesen Treffer das Formular „Angaben ergänzen“ öffnen?
+ *  - Testserver: wie bisher, nur nicht für Treffer aus dem Archiv des echten OSM.
+ *  - Echtes OSM (Etappe Q4): nur für Treffer, die frisch von der OSM-API kamen und eine Version tragen.
+ */
+function detailsAllowed(
+  context: { developmentWriteEnabled: boolean; productionDetailsEnabled: boolean },
+  candidate: { source?: string; version?: number } | undefined,
+): boolean {
+  if (!candidate) return false;
+  if (context.productionDetailsEnabled) return candidate.source === "live" && candidate.version !== undefined;
+  return context.developmentWriteEnabled && candidate.source !== "archive";
 }

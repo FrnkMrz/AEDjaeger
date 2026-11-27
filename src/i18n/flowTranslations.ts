@@ -25,6 +25,7 @@ export const flowTranslations = {
     productionWriteNotice: "Die Änderung geht öffentlich in OpenStreetMap, unter deinem Konto. Kommentar: {comment}",
     productionSending: "Änderung wird an OpenStreetMap gesendet…",
     productionComplete: "In OpenStreetMap gespeichert.",
+    productionDetailsComplete: "Prüfdatum und neue Angaben in OpenStreetMap gespeichert.",
     productionUnchanged: "Schon aktuell. Es wurde nichts geändert.",
     productionNotFound: "Diesen AED gibt es in OpenStreetMap nicht mehr. Es wurde nichts geändert.",
     productionUncertain:
@@ -255,6 +256,7 @@ export const flowTranslations = {
     productionWriteNotice: "The change goes public in OpenStreetMap under your account. Comment: {comment}",
     productionSending: "Sending the change to OpenStreetMap…",
     productionComplete: "Saved in OpenStreetMap.",
+    productionDetailsComplete: "Check date and new details saved in OpenStreetMap.",
     productionUnchanged: "Already up to date. Nothing was changed.",
     productionNotFound: "This AED no longer exists in OpenStreetMap. Nothing was changed.",
     productionUncertain: "Result unclear. Check again with the same request; no new change is sent blindly.",
@@ -479,6 +481,7 @@ export const flowTranslations = {
     productionWriteNotice: "Zmiana zostanie opublikowana w OpenStreetMap z Twojego konta. Komentarz: {comment}",
     productionSending: "Wysyłanie zmiany do OpenStreetMap…",
     productionComplete: "Zapisano w OpenStreetMap.",
+    productionDetailsComplete: "Zapisano w OpenStreetMap datę kontroli i nowe dane.",
     productionUnchanged: "Już aktualne. Nic nie zmieniono.",
     productionNotFound: "Tego AED nie ma już w OpenStreetMap. Nic nie zmieniono.",
     productionUncertain:
@@ -704,6 +707,7 @@ export const flowTranslations = {
     productionWriteNotice: "変更はあなたのアカウントでOpenStreetMapに公開されます。コメント：{comment}",
     productionSending: "OpenStreetMapに変更を送信中…",
     productionComplete: "OpenStreetMapに保存しました。",
+    productionDetailsComplete: "確認日と新しい情報をOpenStreetMapに保存しました。",
     productionUnchanged: "すでに最新です。何も変更していません。",
     productionNotFound: "このAEDはOpenStreetMapにもう存在しません。何も変更していません。",
     productionUncertain:
@@ -930,6 +934,7 @@ export const flowTranslations = {
       "La modification sera publique dans OpenStreetMap, sous votre compte. Commentaire : {comment}",
     productionSending: "Envoi de la modification à OpenStreetMap…",
     productionComplete: "Enregistré dans OpenStreetMap.",
+    productionDetailsComplete: "Date de vérification et nouvelles informations enregistrées dans OpenStreetMap.",
     productionUnchanged: "Déjà à jour. Rien n’a été modifié.",
     productionNotFound: "Ce DAE n’existe plus dans OpenStreetMap. Rien n’a été modifié.",
     productionUncertain:
@@ -1160,6 +1165,7 @@ export const flowTranslations = {
     productionWriteNotice: "El cambio se publica en OpenStreetMap con tu cuenta. Comentario: {comment}",
     productionSending: "Enviando el cambio a OpenStreetMap…",
     productionComplete: "Guardado en OpenStreetMap.",
+    productionDetailsComplete: "Fecha de revisión y nuevos datos guardados en OpenStreetMap.",
     productionUnchanged: "Ya está actualizado. No se cambió nada.",
     productionNotFound: "Este DEA ya no existe en OpenStreetMap. No se cambió nada.",
     productionUncertain:

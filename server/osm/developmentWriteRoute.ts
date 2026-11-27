@@ -174,9 +174,10 @@ async function handleCheckDate(
       error instanceof BodyTooLargeError ? 413 : 400,
     );
   }
-  // Echtes OSM, Etappe Q3: nur das Prüfdatum. Details (Q4) und Korrekturen (Q6) kommen mit eigenen Etappen.
-  if (production && (input.details !== undefined || input.expected_before !== undefined)) {
-    return jsonResponse({ error: "details_unavailable" }, 403);
+  // Echtes OSM: Prüfdatum (Q3) und fehlende Angaben ergänzen (Q4). Bestehende Werte ersetzen (Korrekturen, Q6) gibt es
+  // hier noch nicht; die Prüfung weiter unten sorgt dafür, dass jeder Detailschlüssel am Objekt noch fehlt.
+  if (production && input.expected_before !== undefined) {
+    return jsonResponse({ error: "corrections_disabled" }, 403);
   }
   // Echtes OSM: Die Version, die die Person gesehen hat, ist Pflicht. Ohne sie könnte der Server nicht erkennen, ob
   // jemand den AED seit der Vorschau verschoben oder geändert hat, und würde die alte Vorschau bestätigen.
@@ -331,7 +332,9 @@ async function handleCheckDate(
   try {
     const kind = hasCorrections(input) ? "corrections" : hasDetails(input) ? "details" : "none";
     const comment = production
-      ? PRODUCTION_CHANGESET_COMMENTS.checkDate
+      ? hasDetails(input)
+        ? PRODUCTION_CHANGESET_COMMENTS.details
+        : PRODUCTION_CHANGESET_COMMENTS.checkDate
       : kind === "corrections"
         ? "AEDjaeger: AED checked on site, details added and corrected"
         : kind === "details"
