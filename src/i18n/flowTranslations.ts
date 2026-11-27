@@ -26,6 +26,7 @@ export const flowTranslations = {
     productionSending: "Änderung wird an OpenStreetMap gesendet…",
     productionComplete: "In OpenStreetMap gespeichert.",
     productionDetailsComplete: "Prüfdatum und neue Angaben in OpenStreetMap gespeichert.",
+    productionChangesComplete: "Prüfdatum und Änderungen in OpenStreetMap gespeichert.",
     productionCreateAction: "In OpenStreetMap eintragen",
     productionCreated: "Neuer AED in OpenStreetMap eingetragen.",
     productionNeedsDeviceLocation:
@@ -261,6 +262,7 @@ export const flowTranslations = {
     productionSending: "Sending the change to OpenStreetMap…",
     productionComplete: "Saved in OpenStreetMap.",
     productionDetailsComplete: "Check date and new details saved in OpenStreetMap.",
+    productionChangesComplete: "Check date and changes saved in OpenStreetMap.",
     productionCreateAction: "Add to OpenStreetMap",
     productionCreated: "New AED added to OpenStreetMap.",
     productionNeedsDeviceLocation:
@@ -490,6 +492,7 @@ export const flowTranslations = {
     productionSending: "Wysyłanie zmiany do OpenStreetMap…",
     productionComplete: "Zapisano w OpenStreetMap.",
     productionDetailsComplete: "Zapisano w OpenStreetMap datę kontroli i nowe dane.",
+    productionChangesComplete: "Zapisano w OpenStreetMap datę kontroli i zmiany.",
     productionCreateAction: "Dodaj do OpenStreetMap",
     productionCreated: "Nowy AED dodano do OpenStreetMap.",
     productionNeedsDeviceLocation:
@@ -720,6 +723,7 @@ export const flowTranslations = {
     productionSending: "OpenStreetMapに変更を送信中…",
     productionComplete: "OpenStreetMapに保存しました。",
     productionDetailsComplete: "確認日と新しい情報をOpenStreetMapに保存しました。",
+    productionChangesComplete: "確認日と変更をOpenStreetMapに保存しました。",
     productionCreateAction: "OpenStreetMapに登録",
     productionCreated: "新しいAEDをOpenStreetMapに登録しました。",
     productionNeedsDeviceLocation:
@@ -951,6 +955,7 @@ export const flowTranslations = {
     productionSending: "Envoi de la modification à OpenStreetMap…",
     productionComplete: "Enregistré dans OpenStreetMap.",
     productionDetailsComplete: "Date de vérification et nouvelles informations enregistrées dans OpenStreetMap.",
+    productionChangesComplete: "Date de vérification et modifications enregistrées dans OpenStreetMap.",
     productionCreateAction: "Ajouter à OpenStreetMap",
     productionCreated: "Nouveau DAE ajouté à OpenStreetMap.",
     productionNeedsDeviceLocation:
@@ -1186,6 +1191,7 @@ export const flowTranslations = {
     productionSending: "Enviando el cambio a OpenStreetMap…",
     productionComplete: "Guardado en OpenStreetMap.",
     productionDetailsComplete: "Fecha de revisión y nuevos datos guardados en OpenStreetMap.",
+    productionChangesComplete: "Fecha de revisión y cambios guardados en OpenStreetMap.",
     productionCreateAction: "Añadir a OpenStreetMap",
     productionCreated: "Nuevo DEA añadido a OpenStreetMap.",
     productionNeedsDeviceLocation:

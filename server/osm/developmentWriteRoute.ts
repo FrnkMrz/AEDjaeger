@@ -47,6 +47,8 @@ export type DevelopmentWriteEnvironment = {
   OSM_OAUTH_ENCRYPTION_KEY?: string;
   /** Betreiber-Schalter für das echte OSM (Etappe Q3): nur bei "true" schreibt die Produktionsroute. Standard: aus. */
   OSM_PROD_WRITES_ENABLED?: string;
+  /** Echtes OSM (Etappe Q6): nur bei "true" darf die Produktionsroute bestehende Detailwerte ERSETZEN. Standard: aus. */
+  OSM_PROD_DETAIL_CORRECTIONS_ENABLED?: string;
 };
 
 type Dependencies = {
@@ -174,11 +176,6 @@ async function handleCheckDate(
       error instanceof BodyTooLargeError ? 413 : 400,
     );
   }
-  // Echtes OSM: Prüfdatum (Q3) und fehlende Angaben ergänzen (Q4). Bestehende Werte ersetzen (Korrekturen, Q6) gibt es
-  // hier noch nicht; die Prüfung weiter unten sorgt dafür, dass jeder Detailschlüssel am Objekt noch fehlt.
-  if (production && input.expected_before !== undefined) {
-    return jsonResponse({ error: "corrections_disabled" }, 403);
-  }
   // Echtes OSM: Die Version, die die Person gesehen hat, ist Pflicht. Ohne sie könnte der Server nicht erkennen, ob
   // jemand den AED seit der Vorschau verschoben oder geändert hat, und würde die alte Vorschau bestätigen.
   if (production && input.expected_version === undefined) return jsonResponse({ error: "invalid_request" }, 400);
@@ -188,7 +185,12 @@ async function handleCheckDate(
 
   // Korrekturen (bestehende Werte ersetzen) erlaubt nur der Betreiber-Schalter. Ohne ihn geschieht nichts: weder eine
   // Reservierung noch ein Lesen oder Schreiben bei OSM.
-  if (input.expected_before !== undefined && (production || environment.OSM_DETAIL_CORRECTIONS_ENABLED !== "true")) {
+  // Am echten OSM gilt dafür OSM_PROD_DETAIL_CORRECTIONS_ENABLED (Etappe Q6), am Testserver OSM_DETAIL_CORRECTIONS_ENABLED.
+  // Der Schalter der einen Umgebung wirkt nie auf die andere.
+  const correctionsEnabled = production
+    ? environment.OSM_PROD_DETAIL_CORRECTIONS_ENABLED === "true"
+    : environment.OSM_DETAIL_CORRECTIONS_ENABLED === "true";
+  if (input.expected_before !== undefined && !correctionsEnabled) {
     return jsonResponse({ error: "corrections_disabled" }, 403);
   }
 
@@ -332,9 +334,11 @@ async function handleCheckDate(
   try {
     const kind = hasCorrections(input) ? "corrections" : hasDetails(input) ? "details" : "none";
     const comment = production
-      ? hasDetails(input)
-        ? PRODUCTION_CHANGESET_COMMENTS.details
-        : PRODUCTION_CHANGESET_COMMENTS.checkDate
+      ? hasCorrections(input)
+        ? PRODUCTION_CHANGESET_COMMENTS.corrections
+        : hasDetails(input)
+          ? PRODUCTION_CHANGESET_COMMENTS.details
+          : PRODUCTION_CHANGESET_COMMENTS.checkDate
       : kind === "corrections"
         ? "AEDjaeger: AED checked on site, details added and corrected"
         : kind === "details"

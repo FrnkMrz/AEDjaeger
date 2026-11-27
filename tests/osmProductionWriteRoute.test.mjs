@@ -237,7 +237,7 @@ describe("echtes OSM: noch vorhanden bestätigen (Etappe Q3)", () => {
     expect(osm.calls.some((call) => call.path.endsWith("/upload"))).toBe(false);
   });
 
-  it("lehnt Korrekturen am echten OSM ab, bevor etwas an OSM geht (das kommt erst mit Q6)", async () => {
+  it("lehnt Korrekturen am echten OSM ohne eigenen Schalter ab, bevor etwas an OSM geht", async () => {
     const database = await signedIn();
     const osm = fakeOsm();
     const response = await handleProductionCheckDate(
@@ -420,5 +420,77 @@ describe("echtes OSM: noch vorhanden bestätigen (Etappe Q3)", () => {
     });
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ status: "complete", version: 4 });
+  });
+
+  describe("Korrekturen am echten OSM (Etappe Q6)", () => {
+    const corrections = { OSM_PROD_DETAIL_CORRECTIONS_ENABLED: "true" };
+
+    it("ersetzt einen Wert nur, wenn er noch genau so dasteht, mit eigenem Kommentar", async () => {
+      const database = await signedIn();
+      const osm = fakeOsm({
+        version: 3,
+        tags: { emergency: "defibrillator", check_date: "2025-10-20", access: "private", name: "Rathaus" },
+      });
+      const response = await handleProductionCheckDate(
+        request(
+          checkDate({
+            details: { access: "yes", level: "1", indoor: "yes" },
+            expected_before: { access: "private" },
+            confirmed_corrections: true,
+          }),
+        ),
+        environment(database, corrections),
+        { fetch: osm.fetcher, now: () => now },
+      );
+      expect(response.status).toBe(200);
+      const changeset = osm.calls.find((call) => call.path === "/api/0.6/changeset/create").body;
+      expect(changeset).toContain(
+        '<tag k="comment" v="AED vor Ort geprüft, Angaben ergänzt und korrigiert / AED checked on site, details added and corrected (AEDjaeger)"/>',
+      );
+      const upload = osm.calls.find((call) => call.path.endsWith("/upload")).body;
+      expect(upload).toContain('<tag k="access" v="yes"/>');
+      expect(upload).not.toContain('v="private"');
+      expect(upload).toContain('<tag k="name" v="Rathaus"/>');
+    });
+
+    it("schreibt nichts, wenn der alte Wert inzwischen ein anderer ist", async () => {
+      const database = await signedIn();
+      const osm = fakeOsm({
+        version: 3,
+        tags: { emergency: "defibrillator", check_date: "2025-10-20", access: "customers" },
+      });
+      const response = await handleProductionCheckDate(
+        request(
+          checkDate({
+            details: { access: "yes" },
+            expected_before: { access: "private" },
+            confirmed_corrections: true,
+          }),
+        ),
+        environment(database, corrections),
+        { fetch: osm.fetcher, now: () => now },
+      );
+      expect(response.status).toBe(409);
+      expect(osm.calls.some((call) => call.path.endsWith("/upload"))).toBe(false);
+    });
+
+    it("der Korrektur-Schalter des Testservers gilt nie für das echte OSM", async () => {
+      const database = await signedIn();
+      const osm = fakeOsm();
+      const response = await handleProductionCheckDate(
+        request(
+          checkDate({
+            details: { access: "yes" },
+            expected_before: { access: "private" },
+            confirmed_corrections: true,
+          }),
+        ),
+        environment(database, { OSM_DETAIL_CORRECTIONS_ENABLED: "true" }),
+        { fetch: osm.fetcher, now: () => now },
+      );
+      expect(response.status).toBe(403);
+      expect(await response.json()).toEqual({ error: "corrections_disabled" });
+      expect(osm.calls).toEqual([]);
+    });
   });
 });

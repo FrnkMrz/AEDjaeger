@@ -25,6 +25,7 @@ describe("OSM session status", () => {
       photoCheckAvailable: false,
       productionWriteAvailable: false,
       productionNewAedsAvailable: false,
+      productionCorrectionsAvailable: false,
     });
   });
 

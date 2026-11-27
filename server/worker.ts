@@ -44,6 +44,8 @@ type WorkerEnvironment = {
   OSM_PROD_WRITES_ENABLED?: string;
   // Neuanlagen im echten OSM (Etappe Q5). Standard: aus. Wirkt nur zusammen mit OSM_PROD_WRITES_ENABLED.
   OSM_PROD_NEW_AEDS_ENABLED?: string;
+  // Korrekturen bestehender Werte im echten OSM (Etappe Q6). Standard: aus. Wirkt nur zusammen mit OSM_PROD_WRITES_ENABLED.
+  OSM_PROD_DETAIL_CORRECTIONS_ENABLED?: string;
   // Betreiber-Schalter für Korrekturen bestehender Detailwerte (Etappe P5). Standard: aus.
   OSM_DETAIL_CORRECTIONS_ENABLED?: string;
   OSM_OAUTH_ENCRYPTION_KEY?: string;
@@ -333,6 +335,9 @@ async function getSession(request: Request, environment: WorkerEnvironment): Pro
         ...(productionWriteAvailable ? { productionWriteAvailable: true } : {}),
         ...(productionWriteAvailable && environment.OSM_PROD_NEW_AEDS_ENABLED === "true"
           ? { productionNewAedsAvailable: true }
+          : {}),
+        ...(productionWriteAvailable && environment.OSM_PROD_DETAIL_CORRECTIONS_ENABLED === "true"
+          ? { productionCorrectionsAvailable: true }
           : {}),
         ...(productionWriteOwnerHash ? { productionWriteOwnerHash } : {}),
         ...(photoCheckAvailable ? { photoCheckAvailable: true } : {}),

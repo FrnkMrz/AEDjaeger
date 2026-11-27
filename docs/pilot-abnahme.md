@@ -206,7 +206,7 @@ Voraussetzung: Der Betreiber hat die Fotoprüfung im Cloudflare-Dashboard einger
 
 Hinweise: F1 bis F7 prüfen Verhalten, F8 die Trefferqualität. Zeigt F8 viele falsch gesperrte AED-Fotos, ist die Sperre „kein AED“ zu streng und wird mit dem Projektinhaber neu bewertet. Bei jedem Fehler Uhrzeit und genaue Meldung notieren, keinen Schlüssel teilen.
 
-## G. Echtes OSM: bestätigen, ergänzen und neu eintragen (Etappen Q3 bis Q5)
+## G. Echtes OSM: bestätigen, ergänzen, neu eintragen und korrigieren (Etappen Q3 bis Q6)
 
 Voraussetzungen (Projektinhaber):
 
@@ -226,6 +226,8 @@ Voraussetzungen (Projektinhaber):
 | G9 | Schalter `OSM_PROD_NEW_AEDS_ENABLED=true` setzen; an einer Stelle ohne eingetragenen AED fotografieren (Handy-Standort oder Foto-GPS), „Hier fehlt ein AED – neu eintragen“ | Vorschau mit dem Kommentar „AED vor Ort neu eingetragen …“; „In OpenStreetMap eintragen“ erst nach dem zweiten Haken | `[ ]` |
 | G10 | Eintragen | „Neuer AED in OpenStreetMap eingetragen.“; auf openstreetmap.org ein neuer Knoten mit `emergency=defibrillator`, `check_date` und den gewählten Angaben; Changeset mit `source=survey` | `[ ]` |
 | G11 | Standort selbst auf der Karte setzen statt Handy-Standort | Kein Knopf „In OpenStreetMap eintragen“, Hinweis auf den nötigen echten Standort | `[ ]` |
+| G12 | Schalter `OSM_PROD_DETAIL_CORRECTIONS_ENABLED=true` setzen; bei einem bekannten AED „Angaben ergänzen oder korrigieren“, einen vorhandenen Wert ändern | Formular mit den OSM-Werten vorbelegt; Vorschau zeigt `alt → neu` und den Kommentar „… ergänzt und korrigiert …“; Speichern erst nach dem Haken „Der alte Wert stimmt nicht“ | `[ ]` |
+| G13 | Speichern | „Prüfdatum und Änderungen in OpenStreetMap gespeichert.“; auf openstreetmap.org nur der geänderte Wert neu, alle anderen Tags unverändert, nichts gelöscht | `[ ]` |
 
 ## Was diese Abnahme nicht abdeckt
 

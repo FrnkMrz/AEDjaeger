@@ -132,8 +132,8 @@ export function renderPreviewState(context: PreviewContext): string {
         // Die Version kommt aus der frischen Suche oder (nach dem Formular) aus dem frisch gelesenen Objekt.
         (state.node !== undefined || candidate.version !== undefined) &&
         result.kind === "ready" &&
-        // Ergänzen ja (Q4), bestehende Werte ersetzen nein (das wäre Q6).
-        (state.corrections ?? []).length === 0;
+        // Ergänzen ja (Q4); bestehende Werte ersetzen nur mit dem Korrektur-Schalter dieser Sitzung (Q6).
+        ((state.corrections ?? []).length === 0 || developmentCorrectionsAvailable);
       const canWrite = developmentCanWrite || productionCanWrite;
       const statusKeys =
         productionCanWrite || (!developmentSession && productionWriteAvailable)
@@ -169,7 +169,7 @@ export function renderPreviewState(context: PreviewContext): string {
       const productionTexts = statusKeys === productionWriteStatusKeys;
       const completeText =
         corrections.length > 0
-          ? tv("developmentChangesComplete")
+          ? tv(productionTexts ? "productionChangesComplete" : "developmentChangesComplete")
           : addedTags.length > 0
             ? tv(productionTexts ? "productionDetailsComplete" : "developmentDetailsComplete")
             : tv(statusKeys.complete);
@@ -188,12 +188,12 @@ export function renderPreviewState(context: PreviewContext): string {
       // Server danach an OSM schickt (gemeinsame Datei src/contracts/changesetComment.ts).
       const productionNotice =
         productionCanWrite && !state.writeStatus
-          ? `<p class="simulation-note">${escapeHtml(tv("productionWriteNotice", { comment: addedTags.length > 0 ? PRODUCTION_CHANGESET_COMMENTS.details : PRODUCTION_CHANGESET_COMMENTS.checkDate }))}</p>`
+          ? `<p class="simulation-note">${escapeHtml(tv("productionWriteNotice", { comment: corrections.length > 0 ? PRODUCTION_CHANGESET_COMMENTS.corrections : addedTags.length > 0 ? PRODUCTION_CHANGESET_COMMENTS.details : PRODUCTION_CHANGESET_COMMENTS.checkDate }))}</p>`
           : "";
       // Der zweite Weg neben dem Ein-Tipp-Speichern: fehlende Angaben ergänzen. Nur beim einfachen Prüfdatum-Vorschlag.
       const addDetailsButton =
         (developmentCanWrite || productionCanWrite) && !state.writeStatus && !state.node
-          ? `<button class="button button-secondary" data-action="open-existing-details">${tv(developmentCanWrite && developmentCorrectionsAvailable ? "detailsCorrectAction" : "detailsAddAction")}</button>`
+          ? `<button class="button button-secondary" data-action="open-existing-details">${tv(developmentCorrectionsAvailable ? "detailsCorrectAction" : "detailsAddAction")}</button>`
           : "";
       // Zweite Bestätigung bei Korrekturen: Ohne den Haken „alter Wert stimmt nicht“ bleibt der Speichern-Knopf gesperrt.
       // Der Klick-Handler prüft den Haken zusätzlich noch einmal.

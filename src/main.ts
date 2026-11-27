@@ -307,12 +307,8 @@ function parseDevelopmentWriteRequest(raw: string, legacyCheck = false): Develop
       (value.expectedCheckDate === null || isCalendarDate(value.expectedCheckDate)) &&
       (value.environment === undefined || value.environment === "production") &&
       (value.locale === undefined || isChangesetLocale(value.locale)) &&
-      // Echtes OSM: Prüfdatum und Ergänzungen (Q3, Q4), keine Korrekturen. Ein gespeicherter Vorgang mit Korrekturen gilt
-      // als beschädigt.
-      !(
-        value.environment === "production" &&
-        (value.expectedBefore !== undefined || value.confirmedCorrections !== undefined)
-      )
+      // Echtes OSM: Prüfdatum, Ergänzungen und Korrekturen (Q3, Q4, Q6) mit denselben Prüfungen wie beim Testserver.
+      true
     ) {
       if (value.details !== undefined) {
         const checkedDetails = validateDetailTags(value.details);
@@ -953,8 +949,11 @@ async function refreshAccountState(focusSelector?: string, afterLogout = false):
     developmentSession = status.developmentSession;
     developmentWriteAvailable = status.developmentWriteAvailable;
     developmentWriteOwnerHash = status.developmentWriteOwnerHash;
-    // Korrekturen gibt es nur am Testserver (am echten OSM erst mit Etappe Q6): Nur in einer Testserver-Sitzung gilt der Schalter.
-    developmentCorrectionsAvailable = status.developmentCorrectionsAvailable && status.developmentSession;
+    // „Korrekturen in dieser Sitzung erlaubt“: am Testserver gilt dessen Schalter, am echten OSM der eigene (Etappe Q6).
+    // Der Schalter der einen Umgebung wirkt nie auf die andere.
+    developmentCorrectionsAvailable = status.developmentSession
+      ? status.developmentCorrectionsAvailable
+      : status.productionCorrectionsAvailable;
     photoCheckAvailable = status.photoCheckAvailable;
     productionWriteAvailable = status.productionWriteAvailable && !status.developmentSession;
     productionWriteOwnerHash = status.productionWriteOwnerHash;
@@ -1129,9 +1128,11 @@ function finishSaveDialog(saveDialog: SaveDialog, requestBody: DevelopmentWriteR
   const completeKey: FlowMessageKey = isProductionWrite(requestBody)
     ? requestBody.kind === "create-node"
       ? "productionCreated"
-      : requestBody.details && Object.keys(requestBody.details).length > 0
-        ? "productionDetailsComplete"
-        : "productionComplete"
+      : requestBody.expectedBefore && requestBody.confirmedCorrections === true
+        ? "productionChangesComplete"
+        : requestBody.details && Object.keys(requestBody.details).length > 0
+          ? "productionDetailsComplete"
+          : "productionComplete"
     : requestBody.kind === "create-node"
       ? "developmentCreated"
       : requestBody.expectedBefore && requestBody.confirmedCorrections === true
@@ -1404,6 +1405,11 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
         productionWriteAvailable: productionWriteAvailable && accountState === "signed-in" && !developmentSession,
         productionWriteOwnerHash,
         productionNewAedsAvailable: productionNewAedsAvailable && accountState === "signed-in" && !developmentSession,
+        productionCorrectionsAvailable:
+          developmentCorrectionsAvailable &&
+          productionWriteAvailable &&
+          accountState === "signed-in" &&
+          !developmentSession,
         // Für eine Neuanlage am echten OSM muss der Standort echt sein (Foto-GPS oder Handy), kein Kartenpunkt.
         realLocationAvailable:
           photoSession.searchLocationSource !== undefined && photoSession.searchLocationSource !== "map",

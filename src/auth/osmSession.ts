@@ -20,6 +20,8 @@ export type OSMSessionStatus = {
   productionWriteOwnerHash?: string;
   /** Etappe Q5: Neuanlagen am echten OSM sind freigegeben (beide Schalter). Ein fehlendes Feld heißt „aus“. */
   productionNewAedsAvailable: boolean;
+  /** Etappe Q6: Korrekturen bestehender Werte am echten OSM freigegeben. Ein fehlendes Feld heißt „aus“. */
+  productionCorrectionsAvailable: boolean;
 };
 
 /** Fail closed when the Worker is unreachable or returns an unexpected response. */
@@ -45,6 +47,8 @@ export async function loadOSMSession(fetcher: typeof fetch = fetch): Promise<OSM
     productionWriteAvailable: payload.productionWriteAvailable === true,
     productionNewAedsAvailable:
       payload.productionWriteAvailable === true && payload.productionNewAedsAvailable === true,
+    productionCorrectionsAvailable:
+      payload.productionWriteAvailable === true && payload.productionCorrectionsAvailable === true,
   };
 }
 
@@ -75,6 +79,8 @@ function isSessionStatus(value: unknown): value is OSMSessionStatus {
     (status.photoCheckAvailable === undefined || typeof status.photoCheckAvailable === "boolean") &&
     (status.productionWriteAvailable === undefined || typeof status.productionWriteAvailable === "boolean") &&
     (status.productionNewAedsAvailable === undefined || typeof status.productionNewAedsAvailable === "boolean") &&
+    (status.productionCorrectionsAvailable === undefined ||
+      typeof status.productionCorrectionsAvailable === "boolean") &&
     (status.productionWriteOwnerHash === undefined ||
       (typeof status.productionWriteOwnerHash === "string" && /^[a-f0-9]{64}$/u.test(status.productionWriteOwnerHash)))
   );
