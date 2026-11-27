@@ -19,7 +19,7 @@ import { deleteOSMSession, findOSMSession, rotateOSMSession, OSM_SESSION_LIFETIM
 import { findOSMOAuthToken, storeOSMOAuthToken } from "./storage/osmOAuthTokens";
 import { hashOSMDevelopmentWriteOwner } from "./storage/osmDevelopmentWriteOperations";
 import { handleStaticCandidateSearch } from "./osm/staticCandidateSearchRoute";
-import { handleDevelopmentCheckDate } from "./osm/developmentWriteRoute";
+import { handleDevelopmentCheckDate, handleProductionCheckDate } from "./osm/developmentWriteRoute";
 import { handleDevelopmentCreateNode } from "./osm/developmentCreateNodeRoute";
 import { withOSMApiLog } from "./osm/osmApiLog";
 import { handleDevelopmentNodeRead } from "./osm/developmentNodeRoute";
@@ -40,6 +40,8 @@ type WorkerEnvironment = {
   OSM_DEV_CLIENT_SECRET?: string;
   OSM_DEV_REDIRECT_URI?: string;
   OSM_DEV_WRITES_ENABLED?: string;
+  // Schreiben ins echte OSM (Etappe Q3). Standard: aus. Nur der Projektinhaber setzt ihn.
+  OSM_PROD_WRITES_ENABLED?: string;
   // Betreiber-Schalter für Korrekturen bestehender Detailwerte (Etappe P5). Standard: aus.
   OSM_DETAIL_CORRECTIONS_ENABLED?: string;
   OSM_OAUTH_ENCRYPTION_KEY?: string;
@@ -103,6 +105,8 @@ const worker = {
     // Die App zeigt es im Speicher-Fenster an.
     if (pathname === "/api/osm/development/check-date")
       return withOSMApiLog(handleDevelopmentCheckDate)(request, environment);
+    // Echtes OSM (Etappe Q3): „noch vorhanden“ bestätigen. Standardmäßig AUS; nur mit OSM_PROD_WRITES_ENABLED=true.
+    if (pathname === "/api/osm/check-date") return withOSMApiLog(handleProductionCheckDate)(request, environment);
     if (pathname === "/api/osm/development/create-node")
       return withOSMApiLog(handleDevelopmentCreateNode)(request, environment);
     // Frisches Lesen eines bestehenden AED (nur lesend) für das Ergänzen von Angaben.
@@ -299,6 +303,17 @@ async function getSession(request: Request, environment: WorkerEnvironment): Pro
       session?.environment === "development" && environment.OSM_OAUTH_ENCRYPTION_KEY
         ? await hashOSMDevelopmentWriteOwner(session, environment.OSM_OAUTH_ENCRYPTION_KEY)
         : undefined;
+    // Echtes OSM (Etappe Q3): Schreiben nur mit Schalter, mit funktionierender Produktions-Anmeldung und nur in einer
+    // Sitzung am echten OSM. Fehlt das Feld, gilt für die App „aus“.
+    const productionWriteAvailable =
+      session?.environment === "production" &&
+      environment.OSM_PROD_WRITES_ENABLED === "true" &&
+      loginAvailable &&
+      Boolean(environment.OSM_OAUTH_ENCRYPTION_KEY);
+    const productionWriteOwnerHash =
+      productionWriteAvailable && session && environment.OSM_OAUTH_ENCRYPTION_KEY
+        ? await hashOSMDevelopmentWriteOwner(session, environment.OSM_OAUTH_ENCRYPTION_KEY)
+        : undefined;
     return jsonResponse(
       {
         authenticated: session !== null,
@@ -308,6 +323,8 @@ async function getSession(request: Request, environment: WorkerEnvironment): Pro
         developmentWriteAvailable,
         ...(developmentWriteOwnerHash ? { developmentWriteOwnerHash } : {}),
         ...(correctionsAvailable ? { developmentCorrectionsAvailable: true } : {}),
+        ...(productionWriteAvailable ? { productionWriteAvailable: true } : {}),
+        ...(productionWriteOwnerHash ? { productionWriteOwnerHash } : {}),
         ...(photoCheckAvailable ? { photoCheckAvailable: true } : {}),
       },
       200,

@@ -135,6 +135,137 @@ export async function reserveOSMDevelopmentWrite(
   }
 }
 
+/** Aufbewahrung von Vorgängen am echten OSM: 90 Tage (Entscheidung vom 26.11.2026). */
+export const PRODUCTION_OPERATION_LIFETIME_MS = 90 * 24 * 60 * 60 * 1_000;
+const DAY_MS = 24 * 60 * 60 * 1_000;
+
+/** Grenzen für das echte OSM. Startwerte vom 26.11.2026: 20 je Konto und UTC-Tag, 1 Änderung je Objekt in 24 h. */
+export type ProductionWriteLimits = { perAccountPerDay: number; perObjectWindowMs: number };
+export const PRODUCTION_WRITE_LIMITS: ProductionWriteLimits = { perAccountPerDay: 20, perObjectWindowMs: DAY_MS };
+
+export type ProductionReservation =
+  | { kind: "reserved"; operation: OSMDevelopmentWriteOperation; created: boolean }
+  | { kind: "limited"; reason: "daily_limit" | "object_recently_changed" };
+
+/**
+ * Reserviert einen Schreibvorgang am echten OSM, bevor irgendetwas an OSM geht (Etappe Q3).
+ *
+ * Ablauf:
+ *  1. Gibt es die Vorgangs-ID dieses Kontos schon (Wiederholung nach Netzabbruch), wird sie zurückgegeben. Eine
+ *     Wiederholung zählt nie ein zweites Mal gegen die Limits und kann nie einen zweiten Upload auslösen.
+ *  2. Sonst legt EINE SQL-Anweisung den Vorgang nur an, wenn beide Grenzen eingehalten sind. Weil Prüfen und Anlegen in
+ *     einer einzigen Anweisung stecken, können zwei gleichzeitige Anfragen ein Limit nicht gemeinsam überschreiten.
+ *     - je Konto: höchstens `perAccountPerDay` Vorgänge seit Mitternacht UTC,
+ *     - je Objekt: kein anderer Vorgang am selben Objekt in den letzten 24 Stunden, egal von welchem Konto.
+ *     Vorgänge, die mit „Konflikt“ oder „fehlgeschlagen“ endeten, haben nichts geändert und zählen nicht.
+ */
+export async function reserveOSMProductionWrite(
+  database: D1Database,
+  input: { ownerHash: string; operationId: string; requestHash: string; targetId: string; now: number },
+  limits: ProductionWriteLimits = PRODUCTION_WRITE_LIMITS,
+): Promise<ProductionReservation> {
+  const { ownerHash, operationId, requestHash, targetId, now } = input;
+  if (
+    !isSha256(ownerHash) ||
+    !isUuid(operationId) ||
+    !isSha256(requestHash) ||
+    !/^node\/[1-9]\d{0,15}$/u.test(targetId) ||
+    !isTimestamp(now) ||
+    !Number.isSafeInteger(limits.perAccountPerDay) ||
+    limits.perAccountPerDay < 1 ||
+    !Number.isSafeInteger(limits.perObjectWindowMs) ||
+    limits.perObjectWindowMs < 0
+  ) {
+    throw new Error("Ungültige OSM-Änderung.");
+  }
+  try {
+    const cleanup = await database
+      .prepare("DELETE FROM osm_development_write_operations WHERE expires_at <= ?")
+      .bind(now)
+      .run();
+    if (!cleanup.success) throw new Error("D1 cleanup failed");
+
+    const existing = await readOperation(database, ownerHash, operationId, now);
+    if (existing) return { kind: "reserved", operation: existing, created: false };
+
+    const dayStart = Math.floor(now / DAY_MS) * DAY_MS;
+    const insert = await database
+      .prepare(
+        `INSERT OR IGNORE INTO osm_development_write_operations
+        (owner_hash, operation_id, request_hash, state, changeset_id, result_version, created_at, updated_at, expires_at,
+         osm_environment, target_id)
+       SELECT ?, ?, ?, 'started', NULL, NULL, ?, ?, ?, 'production', ?
+       WHERE (SELECT COUNT(*) FROM osm_development_write_operations
+              WHERE owner_hash = ? AND osm_environment = 'production' AND created_at >= ?
+                AND state NOT IN ('failed', 'conflict')) < ?
+         AND NOT EXISTS (SELECT 1 FROM osm_development_write_operations
+              WHERE osm_environment = 'production' AND target_id = ? AND created_at > ?
+                AND state NOT IN ('failed', 'conflict'))`,
+      )
+      .bind(
+        ownerHash,
+        operationId,
+        requestHash,
+        now,
+        now,
+        now + PRODUCTION_OPERATION_LIFETIME_MS,
+        targetId,
+        ownerHash,
+        dayStart,
+        limits.perAccountPerDay,
+        targetId,
+        now - limits.perObjectWindowMs,
+      )
+      .run();
+    if (!insert.success) throw new Error("D1 insert failed");
+
+    const operation = await readOperation(database, ownerHash, operationId, now);
+    if (operation) return { kind: "reserved", operation, created: insert.meta?.changes === 1 };
+
+    // Nicht angelegt: Welche Grenze greift? Das Objekt zuerst, weil es die genauere Auskunft ist.
+    const recent = await database
+      .prepare(
+        `SELECT 1 AS hit FROM osm_development_write_operations
+       WHERE osm_environment = 'production' AND target_id = ? AND created_at > ? AND state NOT IN ('failed', 'conflict')
+       LIMIT 1`,
+      )
+      .bind(targetId, now - limits.perObjectWindowMs)
+      .first<{ hit: number }>();
+    return { kind: "limited", reason: recent ? "object_recently_changed" : "daily_limit" };
+  } catch {
+    throw new Error("Der OSM-Vorgang konnte nicht sicher gespeichert werden.");
+  }
+}
+
+/** Liest einen Vorgang und prüft jede Spalte, bevor ihr Inhalt verwendet wird. */
+async function readOperation(
+  database: D1Database,
+  ownerHash: string,
+  operationId: string,
+  now: number,
+): Promise<OSMDevelopmentWriteOperation | null> {
+  const operation = await database
+    .prepare(
+      `SELECT request_hash, state, changeset_id, result_version, result_node_id, updated_at
+     FROM osm_development_write_operations
+     WHERE owner_hash = ? AND operation_id = ? AND expires_at > ?`,
+    )
+    .bind(ownerHash, operationId, now)
+    .first<OSMDevelopmentWriteOperation>();
+  if (!operation) return null;
+  if (
+    !isState(operation.state) ||
+    (operation.changeset_id !== null && !isPositiveIntegerString(operation.changeset_id)) ||
+    (operation.result_version !== null &&
+      (!Number.isSafeInteger(operation.result_version) || operation.result_version <= 0)) ||
+    (operation.result_node_id !== null && !isPositiveIntegerString(operation.result_node_id)) ||
+    !isTimestamp(operation.updated_at)
+  ) {
+    throw new Error("D1 read failed");
+  }
+  return operation;
+}
+
 /**
  * Keep an active pre-upload request from being mistaken for an abandoned one.
  * This compare-and-set also stops a request whose lease was already expired.
