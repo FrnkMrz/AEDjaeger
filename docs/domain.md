@@ -1,6 +1,26 @@
 # Domain aedjaeger.de
 
-Stand: **13.11.2026**
+Stand: **27.11.2026**
+
+## Stand 27.11.2026: Umzug läuft
+
+Erledigt vom Projektinhaber (mit Claude in Chrome), geprüft am 27.11.2026 07:38:
+
+- Zone `aedjaeger.de` in Cloudflare (Free), Nameserver bei united domains auf `autumn.ns.cloudflare.com` und `morgan.ns.cloudflare.com` umgestellt. DNSSEC war aus. Die Parking-Einträge von united domains sind gelöscht.
+- Custom Domain `aedjaeger.de` am Worker `aedjaeger`. `www` ist ein CNAME auf `aedjaeger.de` (proxied); eine Redirect Rule leitet `https://www.*` per 301 auf die Hauptadresse um, mit Query-String.
+- E-Mail: kein Postfach bei united domains. Cloudflare Email Routing mit Catch-all an die private Adresse des Projektinhabers (MX, SPF, DKIM gesetzt).
+- **Hauptadresse ist `https://aedjaeger.de` ohne `www`.**
+- Im Repo: `wrangler.jsonc` hält die Custom Domain fest (`routes` mit `custom_domain`), `ci.yml` nennt die neue Adresse.
+
+Offen (Projektinhaber):
+
+1. OSM-OAuth-Anwendungen um die neuen Weiterleitungs-URIs ergänzen (alte Einträge zunächst stehen lassen):
+   - echte OSM-Anwendung, die heute in `OSM_CLIENT_ID` steht: `https://aedjaeger.de/api/auth/osm/callback`
+   - Testserver-Anwendung (`master.apis.dev.openstreetmap.org`): `https://aedjaeger.de/api/auth/osm/development/callback`
+   - neue, vertrauliche Produktions-Anwendung (für Q2): Weiterleitung auf `https://aedjaeger.de/api/auth/osm/callback` ändern; die `www`-Adresse funktioniert nicht, weil `www` auf die Hauptadresse umleitet.
+2. Im Worker `aedjaeger` (Einstellungen → Variablen) `OSM_REDIRECT_URI` und `OSM_DEV_REDIRECT_URI` auf diese Adressen stellen. Das sind keine Geheimnisse. Ab dann funktioniert die Anmeldung nur noch auf `aedjaeger.de`.
+3. Anmelden, Foto, Suche und Abmelden auf `https://aedjaeger.de` prüfen.
+4. Entscheiden, ob `workers_dev` danach aus geht (Empfehlung: ja).
 
 ## Entscheidung
 
