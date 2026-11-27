@@ -305,10 +305,11 @@ function parseDevelopmentWriteRequest(raw: string, legacyCheck = false): Develop
       (value.expectedCheckDate === null || isCalendarDate(value.expectedCheckDate)) &&
       (value.environment === undefined || value.environment === "production") &&
       (value.locale === undefined || isChangesetLocale(value.locale)) &&
-      // Echtes OSM (Etappe Q3): nur das Prüfdatum. Ein gespeicherter Vorgang mit Details gilt als beschädigt.
+      // Echtes OSM: Prüfdatum und Ergänzungen (Q3, Q4), keine Korrekturen. Ein gespeicherter Vorgang mit Korrekturen gilt
+      // als beschädigt.
       !(
         value.environment === "production" &&
-        (value.details !== undefined || value.expectedBefore !== undefined || value.confirmedCorrections !== undefined)
+        (value.expectedBefore !== undefined || value.confirmedCorrections !== undefined)
       )
     ) {
       if (value.details !== undefined) {
@@ -944,7 +945,8 @@ async function refreshAccountState(focusSelector?: string, afterLogout = false):
     developmentSession = status.developmentSession;
     developmentWriteAvailable = status.developmentWriteAvailable;
     developmentWriteOwnerHash = status.developmentWriteOwnerHash;
-    developmentCorrectionsAvailable = status.developmentCorrectionsAvailable;
+    // Korrekturen gibt es nur am Testserver (am echten OSM erst mit Etappe Q6): Nur in einer Testserver-Sitzung gilt der Schalter.
+    developmentCorrectionsAvailable = status.developmentCorrectionsAvailable && status.developmentSession;
     photoCheckAvailable = status.photoCheckAvailable;
     productionWriteAvailable = status.productionWriteAvailable && !status.developmentSession;
     productionWriteOwnerHash = status.productionWriteOwnerHash;
@@ -1116,7 +1118,9 @@ function finishSaveDialog(saveDialog: SaveDialog, requestBody: DevelopmentWriteR
   // Bei Erfolg passt die Meldung zur Art des Vorgangs: neuer AED, Prüfdatum, Prüfdatum mit Ergänzungen oder Korrekturen.
   const statusKeys = isProductionWrite(requestBody) ? productionWriteStatusKeys : developmentWriteStatusKeys;
   const completeKey: FlowMessageKey = isProductionWrite(requestBody)
-    ? "productionComplete"
+    ? requestBody.kind === "check-date" && requestBody.details && Object.keys(requestBody.details).length > 0
+      ? "productionDetailsComplete"
+      : "productionComplete"
     : requestBody.kind === "create-node"
       ? "developmentCreated"
       : requestBody.expectedBefore && requestBody.confirmedCorrections === true
@@ -1363,6 +1367,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
         source,
         observedOn: photoSession.observedOn,
         developmentWriteEnabled: developmentSession && developmentWriteAvailable && Boolean(developmentWriteOwnerHash),
+        productionDetailsEnabled: !developmentSession && productionWriteAvailable && Boolean(productionWriteOwnerHash),
         setState: (nextState) => {
           state = nextState;
         },
@@ -1531,7 +1536,18 @@ function getPhoneLocation(): Promise<SearchLocation> {
  */
 async function loadExistingAedNode(candidateId: string): Promise<void> {
   try {
-    const node = await requestExistingNode(candidateId);
+    // Echtes OSM oder Testserver: Die Sitzung bestimmt die Route; der Server prüft das zusätzlich.
+    const node = await requestExistingNode(candidateId, fetch, developmentSession ? "development" : "production");
+    // Echtes OSM: Die Zuordnung (bis 10 m) beruht auf Position und Version aus der frischen Suche. Hat sich die Version
+    // seitdem geändert, kann jemand den AED verschoben haben; dann gilt der Treffer als veraltet, und die Person sucht
+    // neu. Die neue Version wird nie ungeprüft übernommen.
+    const searched =
+      state.kind === "existing-aed-details"
+        ? state.returnState.search.candidates.find((item) => item.id === candidateId)
+        : undefined;
+    if (!developmentSession && searched?.version !== node.version) {
+      throw new ExistingNodeError("node_unavailable");
+    }
     if (state.kind !== "existing-aed-details" || state.candidateId !== candidateId || state.load.status !== "loading")
       return;
     detailExistingTags = node.tags;

@@ -7,6 +7,7 @@ import { resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import { importOAuthEncryptionKey } from "../server/auth/osmOAuth";
+import { handleProductionNodeRead } from "../server/osm/developmentNodeRoute";
 import { handleDevelopmentCheckDate, handleProductionCheckDate } from "../server/osm/developmentWriteRoute";
 import { createOSMSession } from "../server/storage/osmSessions";
 import { storeOSMOAuthToken } from "../server/storage/osmOAuthTokens";
@@ -196,17 +197,90 @@ describe("echtes OSM: noch vorhanden bestätigen (Etappe Q3)", () => {
     expect(osm.calls).toEqual([]);
   });
 
-  it("lehnt Detailangaben und Korrekturen in dieser Etappe ab", async () => {
+  it("ergänzt fehlende Angaben (Etappe Q4) mit eigenem Kommentar und lässt alle anderen Tags unverändert", async () => {
     const database = await signedIn();
-    const osm = fakeOsm();
+    const osm = fakeOsm({
+      version: 3,
+      tags: { emergency: "defibrillator", check_date: "2025-10-20", name: "Rathaus", operator: "Stadt" },
+    });
+    const response = await handleProductionCheckDate(
+      request(checkDate({ details: { access: "yes", indoor: "yes", level: "1" } })),
+      environment(database),
+      { fetch: osm.fetcher, now: () => now },
+    );
+    expect(response.status).toBe(200);
+    const changeset = osm.calls.find((call) => call.path === "/api/0.6/changeset/create").body;
+    expect(changeset).toContain(
+      '<tag k="comment" v="AED vor Ort geprüft, fehlende Angaben ergänzt / AED checked on site, missing details added (AEDjaeger)"/>',
+    );
+    expect(changeset).toContain('<tag k="source" v="survey"/>');
+    const upload = osm.calls.find((call) => call.path.endsWith("/upload")).body;
+    for (const tag of ['k="access" v="yes"', 'k="indoor" v="yes"', 'k="level" v="1"', 'k="check_date" v="2026-11-27"'])
+      expect(upload).toContain(tag);
+    // Fremde Tags bleiben; kein Tag wird gelöscht oder ersetzt.
+    expect(upload).toContain('<tag k="name" v="Rathaus"/>');
+    expect(upload).toContain('<tag k="operator" v="Stadt"/>');
+  });
+
+  it("überschreibt am echten OSM nie einen vorhandenen Wert: steht der Schlüssel schon da, ist es ein Konflikt", async () => {
+    const database = await signedIn();
+    const osm = fakeOsm({
+      version: 3,
+      tags: { emergency: "defibrillator", check_date: "2025-10-20", access: "private" },
+    });
     const response = await handleProductionCheckDate(
       request(checkDate({ details: { access: "yes" } })),
       environment(database),
       { fetch: osm.fetcher, now: () => now },
     );
+    expect(response.status).toBe(409);
+    expect(osm.calls.some((call) => call.path.endsWith("/upload"))).toBe(false);
+  });
+
+  it("lehnt Korrekturen am echten OSM ab, bevor etwas an OSM geht (das kommt erst mit Q6)", async () => {
+    const database = await signedIn();
+    const osm = fakeOsm();
+    const response = await handleProductionCheckDate(
+      request(
+        checkDate({ details: { access: "yes" }, expected_before: { access: "private" }, confirmed_corrections: true }),
+      ),
+      environment(database),
+      { fetch: osm.fetcher, now: () => now },
+    );
     expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({ error: "details_unavailable" });
+    expect(await response.json()).toEqual({ error: "corrections_disabled" });
     expect(osm.calls).toEqual([]);
+  });
+
+  it("liest einen AED frisch vom echten OSM fürs Formular und gibt nur Detail-Schlüssel und Prüfdatum weiter", async () => {
+    const database = await signedIn();
+    const osm = fakeOsm({
+      version: 9,
+      tags: { emergency: "defibrillator", check_date: "2025-10-20", name: "Geheim", access: "yes" },
+    });
+    const response = await handleProductionNodeRead(
+      new Request("https://aedjaeger.de/api/osm/node?id=node/42", {
+        headers: { Cookie: `__Host-aedjaeger_osm_session=${sessionToken}` },
+      }),
+      environment(database),
+      { fetch: osm.fetcher, now: () => now },
+    );
+    expect(await response.json()).toEqual({
+      status: "ok",
+      id: "node/42",
+      version: 9,
+      tags: { access: "yes", check_date: "2025-10-20" },
+    });
+    expect(osm.calls.map((call) => call.origin)).toEqual([PROD]);
+    // Ohne Schalter liest die Route nichts.
+    const off = await handleProductionNodeRead(
+      new Request("https://aedjaeger.de/api/osm/node?id=node/42", {
+        headers: { Cookie: `__Host-aedjaeger_osm_session=${sessionToken}` },
+      }),
+      environment(database, { OSM_PROD_WRITES_ENABLED: undefined }),
+      { fetch: osm.fetcher, now: () => now },
+    );
+    expect(off.status).toBe(503);
   });
 
   it("erlaubt eine schnelle Korrektur am selben AED und sperrt erst die sechste Änderung in 24 Stunden", async () => {

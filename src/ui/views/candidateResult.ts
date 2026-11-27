@@ -17,6 +17,7 @@ export function renderCandidateResult(context: CandidateResultContext): string {
     developmentWriteAvailable,
     developmentWriteOwnerHash,
     developmentCorrectionsAvailable,
+    productionWriteAvailable,
     newAedPositionOverride,
     searchLocationSource,
     newEntryPanelOpen,
@@ -53,8 +54,15 @@ export function renderCandidateResult(context: CandidateResultContext): string {
       // Zweiter Weg direkt aus der Liste: Angaben ansehen und ergänzen (bzw. ändern), bevor das Datum bestätigt wird. Das
       // Datum folgt am Ende mit einem Speichern für alles. Nur für AEDs, die es auf dem Testserver gibt: Ein AED aus dem
       // Archiv des echten OSM existiert dort nicht und lässt sich nicht bearbeiten.
-      const detailsAction =
-        developmentSession && developmentWriteAvailable && developmentWriteOwnerHash && candidate.source !== "archive"
+      // Echtes OSM (Etappe Q4): nur für frisch von der OSM-API gelesene Treffer mit Version, nur Ergänzen.
+      const productionDetails =
+        !developmentSession &&
+        productionWriteAvailable &&
+        candidate.source === "live" &&
+        candidate.version !== undefined;
+      const detailsAction = productionDetails
+        ? `<button class="button button-secondary" data-action="open-candidate-details" data-candidate-id="${escapeHtml(candidate.id)}">${tv("candidateDetailsView")}</button>`
+        : developmentSession && developmentWriteAvailable && developmentWriteOwnerHash && candidate.source !== "archive"
           ? `<button class="button button-secondary" data-action="open-candidate-details" data-candidate-id="${escapeHtml(candidate.id)}">${tv(developmentCorrectionsAvailable ? "candidateDetailsChange" : "candidateDetailsView")}</button>`
           : "";
       const reviewAction =
