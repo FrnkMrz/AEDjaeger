@@ -16,14 +16,20 @@ describe("Cloudflare Worker shell", () => {
       .replaceAll("+", "-")
       .replaceAll("/", "_")
       .replace(/=+$/u, "");
-    const requests: Array<{ url: string; body: string }> = [];
+    const requests: Array<{ url: string; body: string; authorization: string | null }> = [];
     const fetcher: typeof fetch = async (input, init) => {
-      requests.push({ url: String(input), body: String(init?.body) });
+      requests.push({
+        url: String(input),
+        body: String(init?.body),
+        authorization: new Headers(init?.headers).get("Authorization"),
+      });
       return new Response("provider unavailable", { status: 503 });
     };
     const env = {
       ...environment(),
+      OSM_PROD_LOGIN_ENABLED: "true",
       OSM_CLIENT_ID: "aedjaeger-client",
+      OSM_CLIENT_SECRET: "aedjaeger-prod-secret",
       OSM_REDIRECT_URI: "https://aedjaeger.example/api/auth/osm/callback",
       OSM_OAUTH_ENCRYPTION_KEY: encryptionKey,
     };
@@ -32,7 +38,9 @@ describe("Cloudflare Worker shell", () => {
     expect(requests).toEqual([
       {
         url: "https://www.openstreetmap.org/oauth2/revoke",
-        body: "token=secret-access-token&token_type_hint=access_token&client_id=aedjaeger-client",
+        // Die App ist vertraulich: Client-ID und Secret gehen im Basic-Header mit, nie im Body.
+        body: "token=secret-access-token&token_type_hint=access_token",
+        authorization: `Basic ${btoa("aedjaeger-client:aedjaeger-prod-secret")}`,
       },
     ]);
   });
@@ -63,7 +71,9 @@ describe("Cloudflare Worker shell", () => {
         {
           ...environment(),
           DB: database,
+          OSM_PROD_LOGIN_ENABLED: "true",
           OSM_CLIENT_ID: "aedjaeger-client",
+          OSM_CLIENT_SECRET: "aedjaeger-prod-secret",
           OSM_REDIRECT_URI: "https://aedjaeger.example/api/auth/osm/callback",
           OSM_OAUTH_ENCRYPTION_KEY: encryptionSecret,
         },
@@ -183,7 +193,9 @@ describe("Cloudflare Worker shell", () => {
     const env = {
       ...environment(),
       DB: database,
+      OSM_PROD_LOGIN_ENABLED: "true",
       OSM_CLIENT_ID: "aedjaeger-client",
+      OSM_CLIENT_SECRET: "aedjaeger-prod-secret",
       OSM_REDIRECT_URI: "https://aedjaeger.example/api/auth/osm/callback",
       OSM_OAUTH_ENCRYPTION_KEY: encryptionKey,
     };
@@ -194,7 +206,7 @@ describe("Cloudflare Worker shell", () => {
 
     expect(response.status).toBe(302);
     expect(redirect.origin).toBe("https://www.openstreetmap.org");
-    expect(redirect.searchParams.get("scope")).toBe("openid");
+    expect(redirect.searchParams.get("scope")).toBe("openid write_api");
     expect(redirect.searchParams.get("code_challenge_method")).toBe("S256");
     expect(redirect.searchParams.get("code_verifier")).toBeNull();
     expect(cookie).toContain("__Host-aedjaeger_osm_auth=");
@@ -455,7 +467,9 @@ describe("Cloudflare Worker shell", () => {
     const base = {
       ...environment(),
       DB: {} as D1Database,
+      OSM_PROD_LOGIN_ENABLED: "true",
       OSM_CLIENT_ID: "aedjaeger-client",
+      OSM_CLIENT_SECRET: "aedjaeger-prod-secret",
       OSM_REDIRECT_URI: "https://aedjaeger.example/api/auth/osm/callback",
       OSM_OAUTH_ENCRYPTION_KEY: encryptionKey,
     };
@@ -468,6 +482,19 @@ describe("Cloudflare Worker shell", () => {
       developmentSession: false,
       developmentWriteAvailable: false,
     });
+
+    // Ohne Schalter oder ohne Secret gibt es keine Anmeldung am echten OSM (fail closed).
+    for (const missing of [
+      { OSM_PROD_LOGIN_ENABLED: undefined },
+      { OSM_PROD_LOGIN_ENABLED: "yes" },
+      { OSM_CLIENT_SECRET: undefined },
+    ]) {
+      const switchedOff = await worker.fetch(new Request("https://aedjaeger.example/api/auth/session"), {
+        ...base,
+        ...missing,
+      });
+      expect(await switchedOff.json()).toMatchObject({ loginAvailable: false });
+    }
 
     const wrongOrigin = await worker.fetch(new Request("https://other.example/api/auth/session"), base);
     expect(await wrongOrigin.json()).toEqual({

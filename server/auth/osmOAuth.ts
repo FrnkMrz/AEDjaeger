@@ -70,7 +70,8 @@ export function buildOSMAuthorizationUrl(input: {
   authorizationUrl.searchParams.set("response_type", "code");
   authorizationUrl.searchParams.set("client_id", input.clientId);
   authorizationUrl.searchParams.set("redirect_uri", redirectUri);
-  authorizationUrl.searchParams.set("scope", environment === "development" ? "openid write_api" : "openid");
+  // Beide Umgebungen fordern genau `openid write_api` an (Etappe Q2): Anmeldung plus Recht zum Bearbeiten der Karte.
+  authorizationUrl.searchParams.set("scope", "openid write_api");
   authorizationUrl.searchParams.set("state", input.transaction.state);
   authorizationUrl.searchParams.set("nonce", input.transaction.nonce);
   authorizationUrl.searchParams.set("code_challenge", input.transaction.challenge);
