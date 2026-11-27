@@ -208,6 +208,8 @@ Hinweise: F1 bis F7 prüfen Verhalten, F8 die Trefferqualität. Zeigt F8 viele f
 
 ## G. Echtes OSM: bestätigen, ergänzen, neu eintragen und korrigieren (Etappen Q3 bis Q6)
 
+**Stand 27.11.2026:** Migration `0014` ist angewendet, alle vier Produktions-Schalter sind gesetzt. Der Projektinhaber meldet für Q3, Q4, Q5 und Q6 jeweils „klappt“ im Hauptablauf (Bestätigen, Ergänzen, Neu eintragen, Korrigieren). Die einzelnen Zeilen sind nicht einzeln abgehakt; besonders die Randfälle G4 (sechste Änderung), G5 (Flugmodus), G6 (OSM-API nicht erreichbar) und G11 (Kartenpunkt statt Standort) sind auf dem Handy nicht belegt, nur durch automatische Tests.
+
 Voraussetzungen (Projektinhaber):
 
 1. Migration `0014` auf der Produktions-D1 anwenden, **bevor** das Deploy nach dem Merge durchlaufen kann (die Deploy-Prüfung stoppt bei offenen Migrationen). Ohne Kommandozeile: Anleitung „Migration im Cloudflare-Dashboard“ in [Betrieb](betrieb.md#migration-im-cloudflare-dashboard-ohne-kommandozeile).
