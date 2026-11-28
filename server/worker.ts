@@ -46,6 +46,10 @@ type WorkerEnvironment = {
   OSM_PROD_NEW_AEDS_ENABLED?: string;
   // Korrekturen bestehender Werte im echten OSM (Etappe Q6). Standard: aus. Wirkt nur zusammen mit OSM_PROD_WRITES_ENABLED.
   OSM_PROD_DETAIL_CORRECTIONS_ENABLED?: string;
+  // Grenzen am echten OSM (28.11.2026): Schreibvorgänge je Konto und UTC-Tag (Standard 20, höchstens 500) und
+  // Änderungen je AED in 24 Stunden (Standard 5, höchstens 50). Ungültige Werte heißen Standard, nie „unbegrenzt“.
+  OSM_PROD_DAILY_WRITE_LIMIT?: string;
+  OSM_PROD_AED_WRITE_LIMIT?: string;
   // Betreiber-Schalter für Korrekturen bestehender Detailwerte (Etappe P5). Standard: aus.
   OSM_DETAIL_CORRECTIONS_ENABLED?: string;
   OSM_OAUTH_ENCRYPTION_KEY?: string;

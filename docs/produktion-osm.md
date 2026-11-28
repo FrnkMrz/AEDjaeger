@@ -138,6 +138,8 @@ Alle Grenzwerte sind konservative Startwerte zur Diskussion und noch keine Freig
 | `OSM_PROD_WRITES_ENABLED` | produktive Schreibroute freigeben | `false`; unabhängig vom Login |
 | `OSM_PROD_NEW_AEDS_ENABLED` | Produktions-Neuanlagen freigeben | `false`; separat, da höheres Dublettenrisiko |
 | `OSM_PROD_DETAIL_CORRECTIONS_ENABLED` | existierende Werte korrigieren | `false`; standardmäßig und nach Pilot deaktiviert |
+| `OSM_PROD_DAILY_WRITE_LIMIT` | Schreibvorgänge je Konto und UTC-Tag (seit 28.11.2026 einstellbar) | leer = `20`; erlaubt `1` bis `500`, sonst gilt `20` |
+| `OSM_PROD_AED_WRITE_LIMIT` | Änderungen je AED in 24 Stunden, über alle Konten (seit 28.11.2026 einstellbar) | leer = `5`; erlaubt `1` bis `50`, sonst gilt `5` |
 | `OSM_PROD_ALLOWED_SUBJECTS` | freigegebene OSM-Subjects | leer bedeutet niemand |
 
 `OSM_PROD_WRITES_ENABLED` darf allein keine Funktion freischalten. Für Neuanlagen/Korrekturen muss zusätzlich der jeweilige Stufenschalter aktiv sein. Ein globaler Kill-Switch muss ohne Deployment im Worker-Dashboard zurückstellbar sein. Beim Abschalten neuer Vorgänge bleiben bereits begonnene Vorgänge abrufbar und sicher auflösbar, aber ohne neue Uploads, soweit kein Upload bereits begonnen hat.
@@ -226,7 +228,7 @@ Die zehn offenen Fragen sind beantwortet. Wo die Antwort vom Vorschlag abweicht,
 | 2 | `source=survey` | **Nur am Changeset**, nicht am Objekt. | Keine zusätzlichen Objekt-Tags. |
 | 3 | Changeset-Kommentar | **Zweisprachig, Deutsch und Englisch**, vor dem Speichern sichtbar. | Wortlaut (Q3): „AED vor Ort als vorhanden bestätigt / AED confirmed present on site (AEDjaeger)“, festgelegt in `src/contracts/changesetComment.ts` und vor dem Speichern angezeigt. |
 | 4 | Neuanlage in Produktion | **Eingeschaltet** (eigener Schalter `OSM_PROD_NEW_AEDS_ENABLED`). | Wie beim Hydrantenjäger: PMTiles nur zum schnellen Anzeigen, vor dem Vorschlag und erneut vor dem Upload eine frische OSM-API-Abfrage. Ein Fehler sperrt die Neuanlage. |
-| 5 | Limits | **20 Schreibvorgänge pro Konto und UTC-Tag** zum Testen; später eventuell weniger. Zusätzlich höchstens 5 Änderungen je Objekt in 24 Stunden (am 27.11.2026 von 1 auf 5 erhöht, damit sich ein eigener Fehler sofort korrigieren lässt). | Kein eigenes Teil-Limit für Neuanlagen. |
+| 5 | Limits | **20 Schreibvorgänge pro Konto und UTC-Tag** zum Testen; später eventuell weniger. Zusätzlich höchstens 5 Änderungen je Objekt in 24 Stunden (am 27.11.2026 von 1 auf 5 erhöht, damit sich ein eigener Fehler sofort korrigieren lässt). Seit dem 28.11.2026 im Cloudflare-Dashboard einstellbar: `OSM_PROD_DAILY_WRITE_LIMIT` und `OSM_PROD_AED_WRITE_LIMIT`. | Kein eigenes Teil-Limit für Neuanlagen. |
 | 6 | Aufbewahrung und Übersicht | **90 Tage**, Betreiberübersicht nur für den Projektinhaber. | Bereinigung über den vorhandenen Aufräumjob. |
 | 7 | Korrekturen in Produktion | **Einbauen**, hinter `OSM_PROD_DETAIL_CORRECTIONS_ENABLED` (Standard aus). | Gleiche Schutzregeln wie auf dem Testserver (Vorwert-Prüfung, zweite Bestätigung). |
 | 8 | Community-Ankündigung | **Entfällt**, wie beim bereits veröffentlichten Hydrantenjäger. | Das Changeset macht die Herkunft klar: `created_by=AEDjaeger`, `locale`, `source=survey` und ein Kommentar. Verbleibendes Risiko: Rückfragen anderer Mapper kommen über die Changeset-Kommentare. |

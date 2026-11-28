@@ -319,8 +319,34 @@ describe("echtes OSM: noch vorhanden bestätigen (Etappe Q3)", () => {
       now: () => now + 120_000,
     });
     expect(response.status).toBe(429);
-    expect(await response.json()).toEqual({ error: "object_recently_changed" });
+    expect(await response.json()).toEqual({
+      error: "object_recently_changed",
+      limits: { per_account_per_day: 20, per_aed_per_day: 5 },
+    });
     expect(sixth.calls).toEqual([]);
+  });
+
+  it("nimmt die Grenzen aus den Worker-Variablen und meldet sie in der Antwort", async () => {
+    const database = await signedIn();
+    const limited = environment(database, { OSM_PROD_AED_WRITE_LIMIT: "1", OSM_PROD_DAILY_WRITE_LIMIT: "7" });
+    const first = fakeOsm();
+    const firstResponse = await handleProductionCheckDate(request(checkDate()), limited, {
+      fetch: first.fetcher,
+      now: () => now,
+    });
+    expect(firstResponse.status).toBe(200);
+    // Mit OSM_PROD_AED_WRITE_LIMIT=1 ist schon die zweite Änderung am selben AED gesperrt, bevor OSM gefragt wird.
+    const second = fakeOsm();
+    const response = await handleProductionCheckDate(request(checkDate()), limited, {
+      fetch: second.fetcher,
+      now: () => now + 60_000,
+    });
+    expect(response.status).toBe(429);
+    expect(await response.json()).toEqual({
+      error: "object_recently_changed",
+      limits: { per_account_per_day: 7, per_aed_per_day: 1 },
+    });
+    expect(second.calls).toEqual([]);
   });
 
   it("schreibt bei einer Wiederholung derselben Vorgangs-ID nicht ein zweites Mal", async () => {

@@ -173,6 +173,8 @@ let productionWriteAvailable = false;
 let productionWriteOwnerHash: string | undefined;
 // Echtes OSM (Etappe Q5): Neuanlagen freigegeben (beide Schalter am Server).
 let productionNewAedsAvailable = false;
+/** Grenzen am echten OSM aus der letzten 429-Antwort des Servers; vorher die Standardwerte. */
+let lastProductionWriteLimits = { perAccountPerDay: 20, perAedPerDay: 5 };
 
 /** Gehört ein Vorgang zum echten OSM? Nur dann gelten dessen Kontokennung, Route und Texte. */
 function isProductionWrite(request: DevelopmentWriteRequest): boolean {
@@ -426,6 +428,14 @@ function t(key: TranslationKey, values?: Record<string, number | string>): strin
   return values ? translated.replace(/\{(\w+)\}/gu, (_, name: string) => String(values[name] ?? "")) : translated;
 }
 function tv(key: FlowMessageKey, values?: Record<string, number | string>): string {
+  // Der Limit-Text nennt die Grenzen, die der Server zuletzt gemeldet hat (im Cloudflare-Dashboard einstellbar).
+  // Ohne Meldung gelten die Standardwerte 20 und 5. So muss keine Ansicht die Zahlen selbst kennen.
+  if (key === "productionLimited" && !values) {
+    return translateFlow(language, key, {
+      perDay: lastProductionWriteLimits.perAccountPerDay,
+      perAed: lastProductionWriteLimits.perAedPerDay,
+    });
+  }
   return translateFlow(language, key, values);
 }
 function accountViewContext() {
@@ -1064,6 +1074,7 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
       (payload.error === "daily_limit" || payload.error === "object_recently_changed")
     ) {
       // Echtes OSM: Ein Limit hat gegriffen, BEVOR etwas an OSM ging. Eindeutig: nichts geändert, kein Wiederholen-Knopf.
+      lastProductionWriteLimits = readProductionWriteLimits(payload.limits) ?? lastProductionWriteLimits;
       setDevelopmentWriteStatus(requestBody.operationId, "limited");
       clearPendingDevelopmentCheck(requestBody.operationId);
     } else if (status === 409) {
@@ -1155,6 +1166,18 @@ function finishSaveDialog(saveDialog: SaveDialog, requestBody: DevelopmentWriteR
     nodeId: ids.nodeId,
     changesetId: ids.changesetId,
   });
+}
+
+/**
+ * Prüft die vom Server gemeldeten Grenzen. Die Antwort ist eine Vertrauensgrenze: Nur ganze Zahlen von 1 bis 1000
+ * werden angezeigt, alles andere wird ignoriert (dann bleibt der bisherige Text mit den bekannten Zahlen).
+ */
+function readProductionWriteLimits(value: unknown): { perAccountPerDay: number; perAedPerDay: number } | undefined {
+  if (!isRecord(value)) return undefined;
+  const perDay = value.per_account_per_day;
+  const perAed = value.per_aed_per_day;
+  const valid = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 1 && (n as number) <= 1_000;
+  return valid(perDay) && valid(perAed) ? { perAccountPerDay: perDay, perAedPerDay: perAed } : undefined;
 }
 
 function setDevelopmentWriteStatus(
