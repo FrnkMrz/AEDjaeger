@@ -1,0 +1,271 @@
+<!doctype html>
+<!--
+  Datenschutzerklärung für AEDjaeger, Deutsch und Englisch auf einer Seite.
+
+  Jede Aussage hier beschreibt den tatsächlichen Code (Stand 28.11.2026). Wer etwas am Datenfluss ändert
+  (neuer Dienst, neue Tabelle, andere Speicherdauer, neue Browser-Speicherung), muss diese Seite mit anpassen.
+  Quellen im Code:
+   - Browser-Speicher: Schlüssel "aedjaeger-*" in src/ (Sprache, Ton, Standort-Abfrage, offene Speichervorgänge 7 Tage)
+   - Sitzung: server/storage/osmSessions.ts (12 Stunden), Anmeldevorgang server/storage/osmOAuthTransactions.ts (10 Minuten)
+   - Schreibvorgänge: server/storage/osmDevelopmentWriteOperations.ts (echtes OSM 90 Tage, Testserver 7 Tage)
+   - Fotoprüfung: server/vision/analyzeRoute.ts, Budget server/storage/analysisBudget.ts (30 Tage)
+   - Suchbremse: server/storage/searchCooldown.ts (30 Sekunden)
+   - Externe Hosts im Browser: public/_headers (nur tile.openstreetmap.org für Kartenbilder)
+-->
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Datenschutz – AEDjaeger</title>
+    <link rel="stylesheet" href="/legal.css" />
+  </head>
+  <body>
+    <main>
+      <a class="back-link" href="/">← AEDjaeger</a>
+      <p class="language-switch"><a href="#en" lang="en">English version</a> · <a href="/impressum">Impressum</a></p>
+
+      <section class="legal-card" aria-labelledby="privacy-de">
+        <h1 id="privacy-de">Datenschutzerklärung</h1>
+
+        <h2>Verantwortlicher</h2>
+        <p>
+          Frank März, Kersbacher Weg 3, 91220 Schnaittach, Deutschland, E-Mail:
+          <a href="mailto:info@openfiremap.org">info@openfiremap.org</a> (siehe <a href="/impressum">Impressum</a>).
+        </p>
+
+        <h2>Kurz gesagt</h2>
+        <ul>
+          <li>Kein Tracking, keine Werbung, keine Analyse-Werkzeuge.</li>
+          <li>Fotos bleiben auf Ihrem Gerät. Nur wenn Sie die Fotoprüfung ausdrücklich antippen, geht eine verkleinerte Kopie ohne Ortsangaben an OpenAI.</li>
+          <li>Ihr Standort dient nur der Suche nach AEDs in der Nähe und wird nicht gespeichert.</li>
+          <li>Was Sie in OpenStreetMap speichern, ist dort öffentlich und dauerhaft unter Ihrem OSM-Benutzernamen sichtbar.</li>
+        </ul>
+
+        <h2>1. Aufruf der App und Hosting</h2>
+        <p>
+          AEDjaeger läuft bei Cloudflare (Cloudflare, Inc., USA) als Cloudflare Worker. Beim Aufruf verarbeitet
+          Cloudflare technisch bedingt Ihre IP-Adresse, Browserangaben, die aufgerufene Adresse und die Uhrzeit, um
+          die Seite auszuliefern und vor Angriffen zu schützen. Die App selbst schreibt in ihre Betriebsprotokolle nur
+          feste Fehlerkennungen, keine IP-Adressen, Standorte, Fotos oder Zugangsdaten. Rechtsgrundlage ist
+          Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an einem sicheren, funktionierenden Dienst).
+        </p>
+
+        <h2>2. Speicherung auf Ihrem Gerät</h2>
+        <p>
+          Im Browser (localStorage) speichert die App Ihre Spracheinstellung, ob der Erfolgston an ist, ob bereits
+          einmal nach dem Standort gefragt wurde, und offene Speichervorgänge, damit nach einem Netzabbruch nichts
+          verloren geht und nichts doppelt gespeichert wird (höchstens 7 Tage). Für die Offline-Nutzung legt der
+          Service Worker die Dateien der App im Browser-Cache ab. Diese Daten verlassen Ihr Gerät nicht. Sie lassen
+          sich über die Browser-Einstellungen („Websitedaten löschen“) entfernen. Rechtsgrundlage ist
+          § 25 Abs. 2 Nr. 2 TDDDG (für den gewünschten Dienst unbedingt erforderlich).
+        </p>
+
+        <h2>3. Fotos</h2>
+        <p>
+          Das Foto wird im Browser geöffnet. Die App liest dort Aufnahmedatum und, falls vorhanden, die Ortsangabe
+          aus dem Foto. Ohne Fotoprüfung verlässt das Foto Ihr Gerät nicht. Es wird nie dauerhaft gespeichert und
+          nie in OpenStreetMap hochgeladen.
+        </p>
+
+        <h2>4. Fotoprüfung durch OpenAI (nur auf ausdrücklichen Wunsch)</h2>
+        <p>
+          Wenn der Betreiber die Fotoprüfung eingeschaltet hat und Sie nach dem Hinweis in der App „AED gesehen – Foto prüfen“
+          antippen, verkleinert Ihr Browser das Foto und entfernt alle eingebetteten Angaben (EXIF, GPS). Diese Kopie
+          geht über den Server von AEDjaeger an OpenAI (OpenAI, L.L.C., USA), das prüft, ob ein AED zu sehen ist.
+          Standort und OSM-Konto gehen nicht mit. AEDjaeger speichert weder das Foto noch die Antwort. Für die
+          Tageskostengrenze merkt sich der Server je Prüfung nur die OSM-Kennung Ihres Kontos, den Tag und einen
+          festen Kostenbetrag, höchstens 30 Tage lang. Nach den Angaben von OpenAI werden Daten aus der
+          Programmierschnittstelle nicht zum Training verwendet und zur Missbrauchserkennung bis zu 30 Tage
+          aufbewahrt. Rechtsgrundlage ist Ihre Einwilligung durch das Antippen (Art. 6 Abs. 1 lit. a DSGVO). Sie
+          können darauf verzichten und selbst bestätigen, dass ein AED zu sehen ist.
+        </p>
+
+        <h2>5. Standort</h2>
+        <p>
+          Die App fragt einmal pro Gerät über den Systemdialog Ihres Browsers nach der Standort-Erlaubnis. Den
+          Standort aus dem Foto, vom Handy oder von einem auf der Karte gesetzten Punkt sendet die App an den Server
+          von AEDjaeger, nur um AEDs in der Nähe zu suchen. Der Server fragt dafür einen kleinen Ausschnitt von
+          etwa 100 m bei der OpenStreetMap-API (api.openstreetmap.org) und im Datenarchiv von OpenFireMap
+          (pipeline.openfiremap.org, bei Cloudflare) ab. Diese Abfragen kommen vom Server, nicht von Ihrem Gerät;
+          Ihre IP-Adresse geht dabei nicht mit. Der Standort wird nicht gespeichert und nicht protokolliert. Um zu
+          häufige Suchen zu bremsen, merkt sich der Server je angemeldetem Konto eine pseudonyme Kennung und den
+          Zeitpunkt der nächsten erlaubten Suche (30 Sekunden). Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO
+          (Ausführung der von Ihnen gewünschten Suche).
+        </p>
+
+        <h2>6. Kartenbilder</h2>
+        <p>
+          Die Karte lädt Ihr Browser direkt von den Kartenservern der OpenStreetMap Foundation (tile.openstreetmap.org,
+          Vereinigtes Königreich). Dabei werden technisch bedingt Ihre IP-Adresse, Browserangaben und der angezeigte
+          Kartenausschnitt übertragen. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an
+          einer funktionierenden Karte). Es gilt zusätzlich die
+          <a href="https://osmfoundation.org/wiki/Privacy_Policy" target="_blank" rel="noopener noreferrer">Datenschutzerklärung der OpenStreetMap Foundation</a>.
+        </p>
+
+        <h2>7. Anmeldung mit OpenStreetMap</h2>
+        <p>
+          Zum Speichern melden Sie sich bei OpenStreetMap an (OpenStreetMap Foundation; für Tests auch deren
+          Testserver). Die Anmeldung selbst findet auf openstreetmap.org statt; AEDjaeger erfährt Ihr Passwort nie.
+          Danach speichert AEDjaeger:
+        </p>
+        <ul>
+          <li>ein Sitzungs-Cookie (<code>__Host-aedjaeger_osm_session</code>), das für die Anmeldung unbedingt nötig ist, höchstens 12 Stunden;</li>
+          <li>während der Anmeldung für höchstens 10 Minuten ein Cookie (<code>__Host-aedjaeger_osm_auth</code>) mit einem Prüfwert gegen Fälschungen;</li>
+          <li>in der Datenbank des Servers die OSM-Kennung Ihres Kontos und den Zugangsschlüssel von OpenStreetMap, verschlüsselt, bis zum Abmelden oder höchstens 12 Stunden.</li>
+        </ul>
+        <p>Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO und für die Cookies § 25 Abs. 2 Nr. 2 TDDDG.</p>
+
+        <h2>8. Speichern in OpenStreetMap</h2>
+        <p>
+          Erst nach Ihrer ausdrücklichen Bestätigung schreibt AEDjaeger in Ihrem Namen in die öffentliche
+          OpenStreetMap-Datenbank. Die Änderung ist dort mit Ihrem OSM-Benutzernamen, der Uhrzeit und einem
+          Änderungssatz (Kommentar, Sprache der App, Hinweis „vor Ort geprüft“ und „AEDjaeger“) für alle sichtbar,
+          dauerhaft in der Versionsgeschichte und steht unter der Lizenz ODbL. Für die Grenzen pro Tag und als Schutz
+          vor doppelten Änderungen nach einem Netzabbruch speichert der Server je Vorgang eine pseudonyme
+          Kennung Ihres Kontos, das betroffene OSM-Objekt, die Nummer des Änderungssatzes, den Status und die
+          Uhrzeit, 90 Tage lang (Testserver: 7 Tage). Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO, für die
+          Grenzen Art. 6 Abs. 1 lit. f DSGVO (Schutz der gemeinsamen Datenbank vor Fehlern und Missbrauch).
+        </p>
+
+        <h2>9. Übermittlung in Drittländer</h2>
+        <p>
+          Cloudflare und OpenAI sitzen in den USA. Cloudflare ist nach dem EU-US Data Privacy Framework
+          zertifiziert. Bei OpenAI stützt sich die Übermittlung auf die Standardvertragsklauseln der EU-Kommission
+          aus den Vertragsbedingungen von OpenAI. Die OpenStreetMap Foundation sitzt im Vereinigten Königreich, für
+          das ein Angemessenheitsbeschluss der EU gilt.
+        </p>
+
+        <h2>10. Ihre Rechte</h2>
+        <p>
+          Sie haben das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung,
+          Datenübertragbarkeit und Widerspruch (Art. 15 bis 21 DSGVO) sowie das Recht, eine Einwilligung jederzeit
+          für die Zukunft zu widerrufen. Wenden Sie sich dafür an die oben genannte E-Mail-Adresse. Änderungen, die
+          Sie in OpenStreetMap gespeichert haben, verwaltet die OpenStreetMap Foundation; dort gelten deren Regeln.
+          Sie können sich bei einer Datenschutz-Aufsichtsbehörde beschweren, zuständig ist das Bayerische Landesamt
+          für Datenschutzaufsicht (BayLDA), Promenade 18, 91522 Ansbach.
+        </p>
+      </section>
+
+      <section class="legal-card" id="en" lang="en" aria-labelledby="privacy-en">
+        <h1 id="privacy-en">Privacy policy</h1>
+        <p class="legal-meta">The German version above is authoritative.</p>
+
+        <h2>Controller</h2>
+        <p>
+          Frank März, Kersbacher Weg 3, 91220 Schnaittach, Germany, email:
+          <a href="mailto:info@openfiremap.org">info@openfiremap.org</a> (see <a href="/impressum#en">legal notice</a>).
+        </p>
+
+        <h2>In short</h2>
+        <ul>
+          <li>No tracking, no ads, no analytics tools.</li>
+          <li>Photos stay on your device. Only if you explicitly tap the photo check does a reduced copy without location data go to OpenAI.</li>
+          <li>Your location is used only to search for nearby AEDs and is not stored.</li>
+          <li>Whatever you save to OpenStreetMap is public there and permanently visible under your OSM username.</li>
+        </ul>
+
+        <h2>1. Using the app and hosting</h2>
+        <p>
+          AEDjaeger runs on Cloudflare (Cloudflare, Inc., USA) as a Cloudflare Worker. When you open it, Cloudflare
+          processes your IP address, browser details, the requested address and the time, as technically required to
+          deliver the page and protect it against attacks. The app itself writes only fixed error codes to its
+          operating logs, never IP addresses, locations, photos or credentials. Legal basis: Art. 6(1)(f) GDPR
+          (legitimate interest in a secure, working service).
+        </p>
+
+        <h2>2. Storage on your device</h2>
+        <p>
+          In the browser (localStorage) the app stores your language, whether the success sound is on, whether it
+          has already asked for your location once, and unfinished save operations so that nothing gets lost or
+          saved twice after a network failure (at most 7 days). For offline use, the service worker keeps the app
+          files in the browser cache. This data does not leave your device. You can remove it in your browser
+          settings ("clear site data"). Legal basis: § 25(2) no. 2 TDDDG (strictly necessary for the requested
+          service).
+        </p>
+
+        <h2>3. Photos</h2>
+        <p>
+          The photo is opened in your browser. The app reads the capture date and, if present, the location from
+          the photo there. Without the photo check, the photo never leaves your device. It is never stored
+          permanently and never uploaded to OpenStreetMap.
+        </p>
+
+        <h2>4. Photo check by OpenAI (only on explicit request)</h2>
+        <p>
+          If the operator has enabled the photo check and you tap "I see an AED — check photo" after the notice in the app, your
+          browser reduces the photo and removes all embedded data (EXIF, GPS). This copy goes through the AEDjaeger
+          server to OpenAI (OpenAI, L.L.C., USA), which checks whether an AED is visible. Location and OSM account
+          are not sent. AEDjaeger stores neither the photo nor the answer. For the daily cost limit the server keeps,
+          per check, only your account's OSM identifier, the day and a fixed cost amount, for at most 30 days.
+          According to OpenAI, data sent through its API is not used for training and is kept for up to 30 days for
+          abuse monitoring. Legal basis: your consent by tapping (Art. 6(1)(a) GDPR). You can skip the check and
+          confirm yourself that an AED is visible.
+        </p>
+
+        <h2>5. Location</h2>
+        <p>
+          The app asks once per device, through your browser's system dialog, for location permission. The app
+          sends the location from the photo, from the phone or from a point you set on the map to the AEDjaeger
+          server, only to search for nearby AEDs. For this, the server queries a small area of about 100 m from the
+          OpenStreetMap API (api.openstreetmap.org) and from the OpenFireMap data archive
+          (pipeline.openfiremap.org, hosted by Cloudflare). These requests come from the server, not from your
+          device; your IP address is not passed on. The location is neither stored nor logged. To slow down overly
+          frequent searches, the server keeps a pseudonymous identifier and the time of the next allowed search
+          (30 seconds) for signed-in accounts. Legal basis: Art. 6(1)(b) GDPR (performing the search you asked for).
+        </p>
+
+        <h2>6. Map images</h2>
+        <p>
+          Your browser loads the map directly from the tile servers of the OpenStreetMap Foundation
+          (tile.openstreetmap.org, United Kingdom). This technically transmits your IP address, browser details and
+          the visible map area. Legal basis: Art. 6(1)(f) GDPR (legitimate interest in a working map). The
+          <a href="https://osmfoundation.org/wiki/Privacy_Policy" target="_blank" rel="noopener noreferrer">OpenStreetMap Foundation privacy policy</a>
+          also applies.
+        </p>
+
+        <h2>7. Signing in with OpenStreetMap</h2>
+        <p>
+          To save, you sign in with OpenStreetMap (OpenStreetMap Foundation; for tests also its test server). The
+          sign-in itself happens on openstreetmap.org; AEDjaeger never sees your password. Afterwards AEDjaeger
+          stores:
+        </p>
+        <ul>
+          <li>a session cookie (<code>__Host-aedjaeger_osm_session</code>), strictly necessary for signing in, for at most 12 hours;</li>
+          <li>during sign-in, a cookie (<code>__Host-aedjaeger_osm_auth</code>) with a check value against forgery, for at most 10 minutes;</li>
+          <li>in the server database, your account's OSM identifier and the OpenStreetMap access key, encrypted, until you sign out or for at most 12 hours.</li>
+        </ul>
+        <p>Legal basis: Art. 6(1)(b) GDPR and, for the cookies, § 25(2) no. 2 TDDDG.</p>
+
+        <h2>8. Saving to OpenStreetMap</h2>
+        <p>
+          Only after your explicit confirmation does AEDjaeger write to the public OpenStreetMap database on your
+          behalf. The change is visible to everyone there with your OSM username, the time and a changeset
+          (comment, app language, note "checked on site" and "AEDjaeger"), stays permanently in the version history
+          and is licensed under the ODbL. For the daily limits and to prevent duplicate changes after a network
+          failure, the server stores per operation a pseudonymous identifier of your account, the affected OSM
+          object, the changeset number, the status and the time, for 90 days (test server: 7 days). Legal basis:
+          Art. 6(1)(b) GDPR; for the limits Art. 6(1)(f) GDPR (protecting the shared database against errors and
+          abuse).
+        </p>
+
+        <h2>9. Transfers to third countries</h2>
+        <p>
+          Cloudflare and OpenAI are based in the USA. Cloudflare is certified under the EU-US Data Privacy
+          Framework. For OpenAI, the transfer relies on the European Commission's standard contractual clauses in
+          OpenAI's terms. The OpenStreetMap Foundation is based in the United Kingdom, which is covered by an EU
+          adequacy decision.
+        </p>
+
+        <h2>10. Your rights</h2>
+        <p>
+          You have the right of access, rectification, erasure, restriction of processing, data portability and
+          objection (Art. 15 to 21 GDPR), and you may withdraw consent at any time with effect for the future.
+          Contact the email address above. Changes you saved to OpenStreetMap are managed by the OpenStreetMap
+          Foundation under its rules. You may lodge a complaint with a data protection authority; the competent
+          authority is the Bavarian Data Protection Authority (BayLDA), Promenade 18, 91522 Ansbach, Germany.
+        </p>
+      </section>
+      <p class="legal-meta">Stand / As of: 28.11.2026</p>
+    </main>
+  </body>
+</html>

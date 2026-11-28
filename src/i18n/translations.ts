@@ -18,6 +18,9 @@ export const translations = {
     aboutIntro:
       "AEDjaeger soll es einfach machen, einen AED vor Ort zu fotografieren und den passenden OpenStreetMap-Eintrag zu prüfen.",
     iconCreditsTitle: "Symbol und Lizenz",
+    legalTitle: "Rechtliches",
+    legalImprint: "Impressum",
+    legalPrivacy: "Datenschutz",
     iconCreditsBody: "Das AED-Symbol stammt aus Maki von Mapbox.",
     iconCreditsSource: "Originalsymbol",
     iconCreditsLicense: "Lizenz CC0 1.0",
@@ -26,7 +29,7 @@ export const translations = {
       "Du fotografierst einen AED, die App sucht Einträge in der Nähe und schlägt vor, einen vorhandenen zu bestätigen oder einen neuen anzulegen. Gespeichert wird nur, was du vorher ausdrücklich bestätigst.",
     infoLimitsTitle: "Grenzen des Piloten",
     infoLimitsBody:
-      "Die App ist ein Pilot. Änderungen landen nur auf dem OSM-Testserver, nie in den echten OpenStreetMap-Daten. Dein Foto bleibt auf deinem Gerät; nur wenn die Fotoprüfung freigegeben ist und du sie antippst, geht es ohne Standort und Metadaten an OpenAI.",
+      "Die App ist ein Pilot. Was du ausdrücklich bestätigst, speichert sie öffentlich in OpenStreetMap unter deinem OSM-Konto; bei einer Anmeldung am OSM-Testserver nur dort. Dein Foto bleibt auf deinem Gerät; nur wenn die Fotoprüfung freigegeben ist und du sie antippst, geht es ohne Standort und Metadaten an OpenAI.",
     closeInfo: "Schließen",
     camera: "AED fotografieren",
     choosePhoto: "Foto auswählen",
@@ -73,6 +76,9 @@ export const translations = {
     aboutIntro:
       "AEDjaeger aims to make it simple to photograph an AED on site and check the matching OpenStreetMap entry.",
     iconCreditsTitle: "Icon and license",
+    legalTitle: "Legal",
+    legalImprint: "Legal notice",
+    legalPrivacy: "Privacy",
     iconCreditsBody: "The AED symbol comes from Maki by Mapbox.",
     iconCreditsSource: "Original icon",
     iconCreditsLicense: "CC0 1.0 license",
@@ -81,7 +87,7 @@ export const translations = {
       "You photograph an AED, the app looks for entries nearby and suggests confirming an existing one or adding a new one. Only what you confirm explicitly is saved.",
     infoLimitsTitle: "Limits of the pilot",
     infoLimitsBody:
-      "The app is a pilot. Changes only go to the OSM test server, never to the real OpenStreetMap data. Your photo stays on your device; only if the photo check is enabled and you tap it does the photo go to OpenAI, without location or metadata.",
+      "The app is a pilot. What you explicitly confirm is saved publicly to OpenStreetMap under your OSM account; if you sign in to the OSM test server, only there. Your photo stays on your device; only if the photo check is enabled and you tap it does the photo go to OpenAI, without location or metadata.",
     closeInfo: "Close",
     photoAlt: "Your AED photo",
     retake: "Choose another photo",
@@ -125,6 +131,9 @@ export const translations = {
     aboutIntro:
       "AEDjaeger ma ułatwiać fotografowanie AED na miejscu i sprawdzanie odpowiedniego wpisu w OpenStreetMap.",
     iconCreditsTitle: "Ikona i licencja",
+    legalTitle: "Informacje prawne",
+    legalImprint: "Nota prawna",
+    legalPrivacy: "Prywatność",
     iconCreditsBody: "Symbol AED pochodzi z zestawu Maki firmy Mapbox.",
     iconCreditsSource: "Oryginalna ikona",
     iconCreditsLicense: "Licencja CC0 1.0",
@@ -133,7 +142,7 @@ export const translations = {
       "Fotografujesz AED, aplikacja szuka wpisów w pobliżu i proponuje potwierdzić istniejący lub dodać nowy. Zapisywane jest tylko to, co wyraźnie potwierdzisz.",
     infoLimitsTitle: "Ograniczenia pilotażu",
     infoLimitsBody:
-      "Aplikacja jest pilotażem. Zmiany trafiają tylko na serwer testowy OSM, nigdy do prawdziwych danych OpenStreetMap. Zdjęcie zostaje na Twoim urządzeniu; tylko gdy sprawdzanie zdjęć jest włączone i je stukniesz, zdjęcie trafia do OpenAI, bez lokalizacji i metadanych.",
+      "Aplikacja jest pilotażem. To, co wyraźnie potwierdzisz, zapisuje publicznie w OpenStreetMap na Twoim koncie OSM; po zalogowaniu na serwerze testowym OSM tylko tam. Zdjęcie zostaje na Twoim urządzeniu; tylko gdy sprawdzanie zdjęć jest włączone i je stukniesz, zdjęcie trafia do OpenAI, bez lokalizacji i metadanych.",
     closeInfo: "Zamknij",
     photoAlt: "Twoje zdjęcie AED",
     retake: "Wybierz inne zdjęcie",
@@ -177,6 +186,9 @@ export const translations = {
     aboutIntro:
       "AEDjaegerは、現地でAEDを撮影し、OpenStreetMapの該当する登録を簡単に確認できるようにすることを目指しています。",
     iconCreditsTitle: "アイコンとライセンス",
+    legalTitle: "法的情報",
+    legalImprint: "運営者情報",
+    legalPrivacy: "プライバシー",
     iconCreditsBody: "AEDシンボルはMapboxのMakiから使用しています。",
     iconCreditsSource: "元のシンボル",
     iconCreditsLicense: "CC0 1.0 ライセンス",
@@ -185,7 +197,7 @@ export const translations = {
       "AEDを撮影すると、アプリが近くの登録を探し、既存の登録を確認するか新しく登録するかを提案します。保存されるのは、あなたが明示的に確認した内容だけです。",
     infoLimitsTitle: "試験運用の制限",
     infoLimitsBody:
-      "このアプリは試験運用版です。変更はOSMテストサーバーにのみ送られ、実際のOpenStreetMapのデータには反映されません。写真は端末に残ります。写真チェックが有効で、あなたがそれをタップした場合のみ、位置情報とメタデータなしでOpenAIに送られます。",
+      "このアプリは試験運用版です。あなたが明示的に確認した内容は、あなたのOSMアカウントでOpenStreetMapに公開保存されます。OSMテストサーバーにログインした場合は、そこにのみ保存されます。写真は端末に残ります。写真チェックが有効で、あなたがそれをタップした場合のみ、位置情報とメタデータなしでOpenAIに送られます。",
     closeInfo: "閉じる",
     photoAlt: "AEDの写真",
     retake: "別の写真を選ぶ",
@@ -232,6 +244,9 @@ export const translations = {
     aboutIntro:
       "AEDjaeger veut faciliter la photo d’un DAE sur place et la vérification de la fiche correspondante dans OpenStreetMap.",
     iconCreditsTitle: "Icône et licence",
+    legalTitle: "Informations légales",
+    legalImprint: "Mentions légales",
+    legalPrivacy: "Confidentialité",
     iconCreditsBody: "Le symbole DAE provient de Maki par Mapbox.",
     iconCreditsSource: "Icône d’origine",
     iconCreditsLicense: "Licence CC0 1.0",
@@ -240,7 +255,7 @@ export const translations = {
       "Vous photographiez un DAE, l’appli cherche des fiches à proximité et propose de confirmer une fiche existante ou d’en créer une nouvelle. Seul ce que vous confirmez explicitement est enregistré.",
     infoLimitsTitle: "Limites du pilote",
     infoLimitsBody:
-      "L’appli est un pilote. Les modifications vont uniquement sur le serveur de test OSM, jamais dans les vraies données OpenStreetMap. Votre photo reste sur votre appareil ; elle n’est envoyée à OpenAI, sans position ni métadonnées, que si la vérification de photo est activée et que vous la lancez.",
+      "L’appli est un pilote. Ce que vous confirmez explicitement est enregistré publiquement dans OpenStreetMap sous votre compte OSM ; si vous êtes connecté au serveur de test OSM, uniquement là. Votre photo reste sur votre appareil ; elle n’est envoyée à OpenAI, sans position ni métadonnées, que si la vérification de photo est activée et que vous la lancez.",
     closeInfo: "Fermer",
     photoAlt: "Votre photo du DAE",
     retake: "Choisir une autre photo",
@@ -284,6 +299,9 @@ export const translations = {
     aboutIntro:
       "AEDjaeger quiere facilitar fotografiar un DEA en el lugar y comprobar la ficha correspondiente en OpenStreetMap.",
     iconCreditsTitle: "Icono y licencia",
+    legalTitle: "Información legal",
+    legalImprint: "Aviso legal",
+    legalPrivacy: "Privacidad",
     iconCreditsBody: "El símbolo DEA procede de Maki, de Mapbox.",
     iconCreditsSource: "Icono original",
     iconCreditsLicense: "Licencia CC0 1.0",
@@ -292,7 +310,7 @@ export const translations = {
       "Fotografías un DEA, la app busca fichas cercanas y propone confirmar una existente o crear una nueva. Solo se guarda lo que confirmes de forma explícita.",
     infoLimitsTitle: "Límites del piloto",
     infoLimitsBody:
-      "La app es un piloto. Los cambios solo van al servidor de pruebas de OSM, nunca a los datos reales de OpenStreetMap. Tu foto se queda en tu dispositivo; solo si la comprobación de fotos está activada y la pulsas, la foto va a OpenAI, sin ubicación ni metadatos.",
+      "La app es un piloto. Lo que confirmas expresamente se guarda públicamente en OpenStreetMap con tu cuenta de OSM; si inicias sesión en el servidor de pruebas de OSM, solo allí. Tu foto se queda en tu dispositivo; solo si la comprobación de fotos está activada y la pulsas, la foto va a OpenAI, sin ubicación ni metadatos.",
     closeInfo: "Cerrar",
     photoAlt: "Tu foto del DEA",
     retake: "Elegir otra foto",

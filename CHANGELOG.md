@@ -6,7 +6,12 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Added
 
+- Impressum (`/impressum`) und Datenschutzerklärung (`/datenschutz`) auf Deutsch und Englisch, erreichbar im Info-Dialog unter „Rechtliches“ (in allen sechs Sprachen beschriftet; außer auf Deutsch führen die Links zur englischen Fassung). Anbieterangaben wie bei OpenFireMap. Statische Seiten ohne Skript und ohne fremde Server.
 - Grenzen am echten OSM einstellbar: Die Worker-Variablen `OSM_PROD_DAILY_WRITE_LIMIT` (Schreibvorgänge je Konto und UTC-Tag, Standard 20, erlaubt 1 bis 500) und `OSM_PROD_AED_WRITE_LIMIT` (Änderungen je AED in 24 Stunden, Standard 5, erlaubt 1 bis 50) wirken ohne Deploy. Leere, ungültige oder zu große Werte gelten als Standard. Erreicht jemand eine Grenze, nennt die App die eingestellten Zahlen in allen sechs Sprachen.
+
+### Fixed
+
+- Info-Dialog: Der Abschnitt „Grenzen des Piloten“ sagte noch, Änderungen gingen nur an den OSM-Testserver. Er nennt jetzt das Speichern im echten OpenStreetMap (sechs Sprachen).
 
 ## [0.3.0] - 2026-11-28
 
