@@ -1,6 +1,6 @@
 # AEDjaeger – Übergabe an den nächsten Agenten
 
-Stand: **17. November 2026** (Version 0.2.0 ist als Pre-release `v0.2.0` auf GitHub veröffentlicht; Changelog-Fassung `[0.2.0]`)
+Stand: **17. November 2026**, Version **0.3.0** seit 28.11.2026 (Pre-release `v0.3.0`, Changelog-Fassung `[0.3.0]`: Schreiben in das echte OSM). Der Text unten beschreibt noch den Pilotstand 0.2.0; den aktuellen Stand nennt [Offene Fragen](offene-fragen.md).
 
 Repository: [FrnkMrz/AEDjaeger](https://github.com/FrnkMrz/AEDjaeger)
 App: [aedjaeger.aedjaeger.workers.dev](https://aedjaeger.aedjaeger.workers.dev)

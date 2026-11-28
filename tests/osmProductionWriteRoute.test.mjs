@@ -56,11 +56,16 @@ function createDatabase() {
 }
 
 /** Datenbank mit angemeldeter Sitzung (echtes OSM oder Testserver) und gespeichertem Token. */
-async function signedIn(environment = "production") {
+/**
+ * Legt eine angemeldete Sitzung an. `at` ist der Zeitpunkt der Anmeldung: Die Routentests geben ihre feste Uhr
+ * (`now`) mit, Tests über `worker.fetch` brauchen die echte Uhr, weil der Worker dort `Date.now()` nutzt und eine
+ * Sitzung nach 12 Stunden abläuft. Mit dem festen Datum wurde der Test sonst ab dem nächsten Tag rot.
+ */
+async function signedIn(environment = "production", at = now) {
   const database = createDatabase();
-  await createOSMSession(database.d1, sessionToken, "osm-subject-1", now, environment);
+  await createOSMSession(database.d1, sessionToken, "osm-subject-1", at, environment);
   const key = await importOAuthEncryptionKey(keySecret);
-  await storeOSMOAuthToken(database.d1, sessionToken, "prod-access-token", now + 60 * 60_000, now, key);
+  await storeOSMOAuthToken(database.d1, sessionToken, "prod-access-token", at + 60 * 60_000, at, key);
   return database;
 }
 
@@ -357,7 +362,8 @@ describe("echtes OSM: noch vorhanden bestätigen (Etappe Q3)", () => {
 
   it("meldet die Schreibfreigabe nur mit Schalter und nur einer Sitzung am echten OSM", async () => {
     const session = async (environmentName, writes) => {
-      const database = await signedIn(environmentName);
+      // Echte Uhr: worker.fetch prüft die Sitzung gegen Date.now().
+      const database = await signedIn(environmentName, Date.now());
       const response = await worker.fetch(
         new Request("https://aedjaeger.de/api/auth/session", {
           headers: { Cookie: `__Host-aedjaeger_osm_session=${sessionToken}` },
