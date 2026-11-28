@@ -37,7 +37,8 @@ export const flowTranslations = {
       "Ergebnis unklar. Mit derselben Anfrage erneut prüfen; keine neue Änderung wird blind gesendet.",
     productionConflict: "Nichts wurde geändert. Der Eintrag hat sich inzwischen geändert. Bitte suche erneut.",
     productionFailed: "Änderung fehlgeschlagen. Bitte Eintrag erneut prüfen.",
-    productionLimited: "Nichts wurde geändert. Grenze erreicht: {perDay} Änderungen pro Konto und Tag, {perAed} je AED in 24 Stunden.",
+    productionLimited:
+      "Nichts wurde geändert. Grenze erreicht: {perDay} Änderungen pro Konto und Tag, {perAed} je AED in 24 Stunden.",
     productionRetry: "Status erneut prüfen",
     sightingConfirm: "AED oder Gehäuse gesehen – weiter",
     photoDateTitle: "Wann hast du den AED gesehen?",
@@ -272,7 +273,8 @@ export const flowTranslations = {
     productionUncertain: "Result unclear. Check again with the same request; no new change is sent blindly.",
     productionConflict: "Nothing was changed. The entry has changed in the meantime. Please search again.",
     productionFailed: "Change failed. Please check the entry again.",
-    productionLimited: "Nothing was changed. Limit reached: {perDay} per account per day, {perAed} per AED in 24 hours.",
+    productionLimited:
+      "Nothing was changed. Limit reached: {perDay} per account per day, {perAed} per AED in 24 hours.",
     productionRetry: "Check status again",
     sightingConfirm: "I see an AED or its cabinet — continue",
     photoDateTitle: "When did you see the AED?",
@@ -503,7 +505,8 @@ export const flowTranslations = {
       "Wynik niejasny. Sprawdź ponownie tym samym żądaniem; żadna nowa zmiana nie zostanie wysłana na ślepo.",
     productionConflict: "Nic nie zmieniono. Wpis w międzyczasie się zmienił. Wyszukaj ponownie.",
     productionFailed: "Zmiana nie powiodła się. Sprawdź wpis ponownie.",
-    productionLimited: "Nic nie zmieniono. Osiągnięto limit: {perDay} na konto dziennie, {perAed} na AED w ciągu 24 godzin.",
+    productionLimited:
+      "Nic nie zmieniono. Osiągnięto limit: {perDay} na konto dziennie, {perAed} na AED w ciągu 24 godzin.",
     productionRetry: "Sprawdź status ponownie",
     sightingConfirm: "Widzę AED lub jego obudowę — dalej",
     photoDateTitle: "Kiedy widziano AED?",
@@ -734,7 +737,8 @@ export const flowTranslations = {
       "結果が不明です。同じリクエストで再確認してください。新しい変更を確認なしに送ることはありません。",
     productionConflict: "何も変更していません。その間に登録内容が変わりました。もう一度検索してください。",
     productionFailed: "変更に失敗しました。登録内容をもう一度確認してください。",
-    productionLimited: "何も変更していません。上限に達しました：1アカウント1日{perDay}件、AEDごとに24時間で{perAed}件。",
+    productionLimited:
+      "何も変更していません。上限に達しました：1アカウント1日{perDay}件、AEDごとに24時間で{perAed}件。",
     productionRetry: "状態を再確認",
     sightingConfirm: "AEDまたは収納ケースを確認しました — 続行",
     photoDateTitle: "AEDを確認したのはいつですか？",
@@ -966,7 +970,8 @@ export const flowTranslations = {
       "Résultat incertain. Vérifiez à nouveau avec la même requête ; aucune nouvelle modification n’est envoyée à l’aveugle.",
     productionConflict: "Rien n’a été modifié. L’entrée a changé entre-temps. Veuillez relancer la recherche.",
     productionFailed: "Échec de la modification. Vérifiez à nouveau la fiche.",
-    productionLimited: "Rien n’a été modifié. Limite atteinte : {perDay} par compte et par jour, {perAed} par DAE en 24 heures.",
+    productionLimited:
+      "Rien n’a été modifié. Limite atteinte : {perDay} par compte et par jour, {perAed} par DAE en 24 heures.",
     productionRetry: "Vérifier à nouveau l’état",
     sightingConfirm: "Je vois un DAE ou son boîtier — continuer",
     photoDateTitle: "Quand avez-vous vu le DAE ?",
