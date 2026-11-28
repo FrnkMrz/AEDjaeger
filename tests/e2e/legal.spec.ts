@@ -59,3 +59,29 @@ for (const path of ["/impressum", "/datenschutz"]) {
     expect(policyViolations).toEqual([]);
   });
 }
+
+test("opening the privacy policy keeps the running app and its photo in the first tab", async ({ page, context }) => {
+  // Die Fotoauswahl gibt es nur nach der Anmeldung; diese Route gilt vor der aus beforeEach.
+  await page.route("**/api/auth/session", (route) =>
+    route.fulfill({
+      json: { authenticated: true, loginAvailable: true, developmentLoginAvailable: false, developmentSession: false },
+    }),
+  );
+  await page.goto("/");
+  await page.locator("#file-input").setInputFiles("tests/fixtures/aed-test-image.svg");
+  const confirm = page.getByRole("button", { name: "AED oder Gehäuse gesehen – weiter" });
+  await expect(confirm).toBeVisible();
+
+  await page.locator("#open-info").click();
+  const [legalPage] = await Promise.all([
+    context.waitForEvent("page"),
+    page.locator("#info-dialog").getByRole("link", { name: "Datenschutz" }).click(),
+  ]);
+  await legalPage.waitForLoadState();
+  await expect(legalPage.locator("h1").first()).toHaveText("Datenschutzerklärung");
+
+  // Der erste Tab ist unverändert: gleiche Adresse, das gewählte Foto wartet weiter auf die Bestätigung.
+  expect(new URL(page.url()).pathname).toBe("/");
+  await page.keyboard.press("Escape");
+  await expect(confirm).toBeVisible();
+});
