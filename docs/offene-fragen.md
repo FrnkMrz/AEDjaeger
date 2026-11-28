@@ -1,6 +1,17 @@
 # Entscheidungen und nächste Schritte
 
-Stand: **17.11.2026** (Version **0.2.0** ist als Pre-release `v0.2.0` veröffentlicht; der Pre-release-Haken fällt erst, wenn Abschnitt E der Pilot-Abnahme erfüllt ist). Gemergt sind der Detailweg (P0 bis P5, PR #77), die Detail-Angaben aus der Trefferliste (PR #80), die Entfernung der Demo „Vorschau testen“ (PR #81), die Code-Härtung P6 (PR #95), Barrierefreiheit/WebKit P7 (PR #96), die Betriebsergänzungen P8 (PR #97), die Migration-/Deploy-Prüfung (PR #99), der Produktions-Schreibweg-Entwurf (P9, PR #100), die verhaltensneutrale Aufteilung von `src/main.ts` (P10, PRs #101 bis #106), die PWA-Symbolkorrekturen (PR #107) und dieser Statusabgleich (PR #108). `main` steht auf `1695930`; der [CI-Lauf #43701600670](https://github.com/FrnkMrz/AEDjaeger/actions/runs/43701600670) für diesen Merge läuft noch. Der letzte erfolgreiche CI- und Deploy-Lauf ist [#43700608053](https://github.com/FrnkMrz/AEDjaeger/actions/runs/43700608053) auf Commit `062d34e`. Die Migrationen `0010` und `0011` wurden auf der Produktions-D1 geprüft und angewendet. **Produktive OSM-Schreibzugriffe bleiben aus.**
+Stand: **27.11.2026**. AEDjaeger läuft unter `https://aedjaeger.de` und **schreibt in das echte OpenStreetMap**: Die Etappen Q1 bis Q6 (PRs #134 bis #139) sind gemergt und deployt, der Projektinhaber hat alle vier Produktions-Schalter gesetzt und jede Etappe im Hauptablauf getestet. `main` steht auf `e03df11`. Die Version im Code ist weiter **0.2.0**; die Änderungen seit `v0.2.0` stehen in `CHANGELOG.md` unter `Unreleased` und warten auf ein eigenes Release (Vorschlag **0.3.0**, nur auf Auftrag).
+
+**Offen, nach Wichtigkeit:**
+
+1. **Impressum und Datenschutzerklärung:** Die App ist öffentlich erreichbar, schreibt im Namen angemeldeter Konten ins echte OSM und schickt auf ausdrücklichen Wunsch Fotos an OpenAI. Eine Anbieterkennzeichnung und eine Datenschutzerklärung fehlen. Rechtliche Prüfung und Text liegen beim Projektinhaber; die App kann sie danach im Info-Dialog verlinken.
+2. **Release `v0.3.0`:** Version anheben, Changelog-Abschnitt anlegen, Tag auf dem gemergten `main`-Commit. Nur auf ausdrücklichen Auftrag.
+3. **Randfälle am echten OSM auf dem Handy:** G4, G5, G6 und G11 der [Pilot-Abnahme](pilot-abnahme.md) sind nur automatisch getestet.
+4. **Lizenz** des Codes.
+5. **Android-Test, VoiceOver/TalkBack-Durchlauf, muttersprachliche Prüfung der sechs Sprachen.**
+6. **`workers.dev` abschalten** (`workers_dev` in `wrangler.jsonc`, Empfehlung: ja) und **Domain-Laufzeit** im united-domains-Konto ablesen, Erinnerung rund 4 Wochen vorher (siehe [Domain](domain.md)).
+
+**Historischer Stand vom 17.11.2026:** Version **0.2.0** ist als Pre-release `v0.2.0` veröffentlicht; der Pre-release-Haken fällt erst, wenn Abschnitt E der Pilot-Abnahme erfüllt ist. Gemergt sind der Detailweg (P0 bis P5, PR #77), die Detail-Angaben aus der Trefferliste (PR #80), die Entfernung der Demo „Vorschau testen“ (PR #81), die Code-Härtung P6 (PR #95), Barrierefreiheit/WebKit P7 (PR #96), die Betriebsergänzungen P8 (PR #97), die Migration-/Deploy-Prüfung (PR #99), der Produktions-Schreibweg-Entwurf (P9, PR #100), die verhaltensneutrale Aufteilung von `src/main.ts` (P10, PRs #101 bis #106), die PWA-Symbolkorrekturen (PR #107) und dieser Statusabgleich (PR #108). `main` steht auf `1695930`; der [CI-Lauf #43701600670](https://github.com/FrnkMrz/AEDjaeger/actions/runs/43701600670) für diesen Merge läuft noch. Der letzte erfolgreiche CI- und Deploy-Lauf ist [#43700608053](https://github.com/FrnkMrz/AEDjaeger/actions/runs/43700608053) auf Commit `062d34e`. Die Migrationen `0010` und `0011` wurden auf der Produktions-D1 geprüft und angewendet. **Produktive OSM-Schreibzugriffe bleiben aus.**
 
 **Schreibschalter (Entscheidung vom 18.11.2026):** Der Projektinhaber lässt `OSM_DEV_WRITES_ENABLED` bewusst an. Die Schreibroute ist fest auf die OSM-Dev-Instanz begrenzt; für das echte OSM gilt das nicht und es braucht eine eigene Entscheidung. Den Schalter setzt und entfernt weiter nur der Projektinhaber, nie ein Agent. Der Korrektur-Schalter `OSM_DETAIL_CORRECTIONS_ENABLED` bleibt standardmäßig aus.
 
@@ -12,9 +23,11 @@ Die historischen Präfixe `0002` und `0003` kommen jeweils zweimal vor. Die voll
 
 ## Produktions-Schreibweg (P9)
 
-**Entschieden am 26.11.2026:** Der Projektinhaber hat die zehn Fragen aus [Produktion-OSM](produktion-osm.md#13-entscheidungen-des-projektinhabers-26112026) beantwortet und das Schreiben in das echte OSM freigegeben: weltweit, alle angemeldeten Konten, Neuanlage und Korrekturen eingeschlossen, 20 Schreibvorgänge pro Konto und Tag, `source=survey` nur am Changeset, Kommentar Deutsch und Englisch, 90 Tage Aufbewahrung, keine Community-Ankündigung (wie beim Hydrantenjäger). PMTiles bleibt für die schnelle Anzeige; vor jeder Bestätigung, Neuanlage oder Änderung holt der Server frische Daten von der OSM-API. Eintragen nur bis 100 m vom Standort. Umsetzung in den Etappen Q1 bis Q6 ([Bauplan](produktion-osm.md#15-bauplan-etappen-q1-bis-q6)). **Bis eine Etappe gemergt ist und der Projektinhaber ihren Schalter setzt, bleibt das Schreiben in das echte OSM aus.**
+**Entschieden am 26.11.2026:** Der Projektinhaber hat die zehn Fragen aus [Produktion-OSM](produktion-osm.md#13-entscheidungen-des-projektinhabers-26112026) beantwortet und das Schreiben in das echte OSM freigegeben: weltweit, alle angemeldeten Konten, Neuanlage und Korrekturen eingeschlossen, 20 Schreibvorgänge pro Konto und Tag, `source=survey` nur am Changeset, Kommentar Deutsch und Englisch, 90 Tage Aufbewahrung, keine Community-Ankündigung (wie beim Hydrantenjäger). PMTiles bleibt für die schnelle Anzeige; vor jeder Bestätigung, Neuanlage oder Änderung holt der Server frische Daten von der OSM-API. Eintragen nur bis 100 m vom Standort. Umsetzung in den Etappen Q1 bis Q6 ([Bauplan](produktion-osm.md#15-bauplan-etappen-q1-bis-q6)). **Stand 27.11.2026: alle sechs Etappen gemergt, deployt und eingeschaltet.**
 
-**Offen beim Projektinhaber:** Die Production-OAuth-Anwendung ist registriert (26.11.2026, vertraulich, Rechte `openid` und `write_api`). Nach dem Merge von Q2 trägt er im Worker `OSM_CLIENT_ID`, das Secret `OSM_CLIENT_SECRET` und `OSM_PROD_LOGIN_ENABLED=true` ein; danach setzt er die Schalter je Etappe. **Q3 (27.11.2026):** Vor dem Deploy Migration `0014` anwenden, dann `OSM_PROD_WRITES_ENABLED=true`; Prüfschritte in Abschnitt G der [Pilot-Abnahme](pilot-abnahme.md).
+**Erledigt (27.11.2026):** Production-OAuth-Anwendung 14528 (vertraulich, `openid` und `write_api`), `OSM_CLIENT_ID`, Secret `OSM_CLIENT_SECRET`, Migration `0014` und die Schalter `OSM_PROD_LOGIN_ENABLED`, `OSM_PROD_WRITES_ENABLED`, `OSM_PROD_NEW_AEDS_ENABLED`, `OSM_PROD_DETAIL_CORRECTIONS_ENABLED`. Rückweg je Stufe: Schalter löschen, wirkt ohne Deploy.
+
+**Mögliche spätere Härtung:** eigener Verschlüsselungsschlüssel nur für Produktions-Tokens (heute `OSM_OAUTH_ENCRYPTION_KEY` für beide Umgebungen); Umbenennung der internen `development*`-Namen (Abschnitt 11 in [Produktion-OSM](produktion-osm.md)).
 
 ## Aufteilung von `main.ts` (P10)
 
@@ -59,7 +72,9 @@ Bestätigt vom Projektinhaber: Die Versionsnummer im Info-Dialog stimmt mit `/ve
 
 ## Domain aedjaeger.de (13.11.2026)
 
-Der Projektinhaber hat `aedjaeger.de` bei united domains für 12 Monate gesichert. **Entscheidung des Projektinhabers (13.11.2026):** Die Domain ist vorerst nur gesichert. Die App zieht erst um, wenn das Projekt öffentlich online geht; bis dahin bleibt `workers.dev` die Pilotadresse. Die neun Umzugsschritte stehen in [Domain](domain.md). **Offen:** Ablaufdatum und Verlängerung, `www`-Umleitung, ob `workers_dev` nach dem Umzug ausgeschaltet wird.
+**Stand 27.11.2026:** Die App läuft unter `https://aedjaeger.de`, `www.aedjaeger.de` leitet mit 301 dorthin um. **Offen:** Ablaufdatum und Verlängerung ablesen; ob `workers_dev` ausgeschaltet wird (Empfehlung: ja). Details in [Domain](domain.md).
+
+Früher (13.11.2026): Die Domain war zunächst nur gesichert; `workers.dev` war die Pilotadresse.
 
 ## Aufgeräumte Oberfläche (11.11.2026)
 
