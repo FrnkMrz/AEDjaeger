@@ -1,11 +1,11 @@
 # Entscheidungen und nächste Schritte
 
-Stand: **27.11.2026**. AEDjaeger läuft unter `https://aedjaeger.de` und **schreibt in das echte OpenStreetMap**: Die Etappen Q1 bis Q6 (PRs #134 bis #139) sind gemergt und deployt, der Projektinhaber hat alle vier Produktions-Schalter gesetzt und jede Etappe im Hauptablauf getestet. `main` steht auf `e03df11`. Die Version im Code ist weiter **0.2.0**; die Änderungen seit `v0.2.0` stehen in `CHANGELOG.md` unter `Unreleased` und warten auf ein eigenes Release (Vorschlag **0.3.0**, nur auf Auftrag).
+Stand: **27.11.2026**. AEDjaeger läuft unter `https://aedjaeger.de` und **schreibt in das echte OpenStreetMap**: Die Etappen Q1 bis Q6 (PRs #134 bis #139) sind gemergt und deployt, der Projektinhaber hat alle vier Produktions-Schalter gesetzt und jede Etappe im Hauptablauf getestet. `main` steht auf `e03df11`. Seit dem 28.11.2026 gilt Version **0.3.0** (Pre-release `v0.3.0`, Changelog-Fassung `[0.3.0]`).
 
 **Offen, nach Wichtigkeit:**
 
 1. **Impressum und Datenschutzerklärung:** Die App ist öffentlich erreichbar, schreibt im Namen angemeldeter Konten ins echte OSM und schickt auf ausdrücklichen Wunsch Fotos an OpenAI. Eine Anbieterkennzeichnung und eine Datenschutzerklärung fehlen. Rechtliche Prüfung und Text liegen beim Projektinhaber; die App kann sie danach im Info-Dialog verlinken.
-2. **Release `v0.3.0`:** Version anheben, Changelog-Abschnitt anlegen, Tag auf dem gemergten `main`-Commit. Nur auf ausdrücklichen Auftrag.
+2. **Pre-release-Haken bei `v0.3.0`:** fällt, wenn Android-Test, Screenreader-Durchlauf und Impressum/Datenschutz erledigt sind (Entscheidung des Projektinhabers).
 3. **Randfälle am echten OSM auf dem Handy:** G4, G5, G6 und G11 der [Pilot-Abnahme](pilot-abnahme.md) sind nur automatisch getestet.
 4. **Lizenz** des Codes.
 5. **Android-Test, VoiceOver/TalkBack-Durchlauf, muttersprachliche Prüfung der sechs Sprachen.**

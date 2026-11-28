@@ -4,6 +4,10 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-28
+
+> Echtes OpenStreetMap: AEDjaeger läuft unter `https://aedjaeger.de` und schreibt nach Anmeldung weltweit in die öffentliche OSM-Datenbank (Etappen Q1 bis Q6): frische Umkreissuche über die OSM-API, Bestätigen, fehlende Angaben ergänzen, neue AEDs eintragen (höchstens 100 m vom Standort) und Werte korrigieren, jede Stufe hinter einem eigenen Betreiber-Schalter. Limits: 20 Schreibvorgänge je Konto und UTC-Tag, 5 Änderungen je AED in 24 Stunden.
+
 ### Added
 
 - Speicher-Fenster nach dem Vorbild des Hydrantenjägers: Beim Tippen auf „Speichern“ öffnet sich ein Fenster mit laufendem Protokoll (Anfrage gesendet, Änderungssatz angelegt, Änderung hochgeladen, Änderungssatz geschlossen, jeweils mit Methode, Pfad und Statuscode), am Ende Haken, „Gespeichert“, Knoten- und Änderungssatz-Nummer und „Fertig“. Bei Fehler oder unklarem Ergebnis: Ausrufezeichen, Meldung und „Schließen“. In allen sechs Sprachen.
