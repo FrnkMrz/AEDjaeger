@@ -151,6 +151,52 @@ export const PRODUCTION_WRITE_LIMITS: ProductionWriteLimits = {
   perObjectWindowMs: DAY_MS,
 };
 
+/**
+ * Höchstwerte für die einstellbaren Grenzen. Sie schützen vor einem Tippfehler im Cloudflare-Dashboard (zum Beispiel
+ * „2000“ statt „20“), der sonst ein einzelnes Konto fast unbegrenzt schreiben ließe.
+ */
+export const PRODUCTION_WRITE_LIMIT_MAXIMUM = { perAccountPerDay: 500, perObjectPerWindow: 50 } as const;
+
+/** Die zwei Worker-Variablen, mit denen der Projektinhaber die Grenzen ohne Code-Änderung einstellt. */
+export type ProductionWriteLimitEnvironment = {
+  /** Schreibvorgänge je Konto und UTC-Tag. Fehlt der Wert oder ist er ungültig, gilt 20. */
+  OSM_PROD_DAILY_WRITE_LIMIT?: string;
+  /** Änderungen je AED in 24 Stunden, über alle Konten. Fehlt der Wert oder ist er ungültig, gilt 5. */
+  OSM_PROD_AED_WRITE_LIMIT?: string;
+};
+
+/**
+ * Liest die Grenzen aus den Worker-Variablen (Wunsch des Projektinhabers vom 28.11.2026: im Cloudflare-Dashboard
+ * einstellbar, ohne Deploy).
+ *
+ * Regeln, damit eine Fehleingabe nie mehr erlaubt als gedacht:
+ *  - Nur eine ganze Zahl aus Ziffern zählt („20“). „20 “, „abc“, „1e3“, „-5“ oder „0“ sind ungültig.
+ *  - Ungültig oder leer heißt: Es gilt der feste Standard (20 bzw. 5), nicht „unbegrenzt“.
+ *  - Über dem Höchstwert (500 bzw. 50) gilt ebenfalls der Standard. Wer ganz stoppen will, nimmt den Schalter
+ *    `OSM_PROD_WRITES_ENABLED`, nicht eine Grenze von 0.
+ */
+export function productionWriteLimitsFrom(environment: ProductionWriteLimitEnvironment): ProductionWriteLimits {
+  return {
+    perAccountPerDay: parseLimit(
+      environment.OSM_PROD_DAILY_WRITE_LIMIT,
+      PRODUCTION_WRITE_LIMITS.perAccountPerDay,
+      PRODUCTION_WRITE_LIMIT_MAXIMUM.perAccountPerDay,
+    ),
+    perObjectPerWindow: parseLimit(
+      environment.OSM_PROD_AED_WRITE_LIMIT,
+      PRODUCTION_WRITE_LIMITS.perObjectPerWindow,
+      PRODUCTION_WRITE_LIMIT_MAXIMUM.perObjectPerWindow,
+    ),
+    perObjectWindowMs: PRODUCTION_WRITE_LIMITS.perObjectWindowMs,
+  };
+}
+
+function parseLimit(raw: string | undefined, fallback: number, maximum: number): number {
+  if (typeof raw !== "string" || !/^[1-9]\d{0,3}$/u.test(raw)) return fallback;
+  const value = Number(raw);
+  return value <= maximum ? value : fallback;
+}
+
 export type ProductionReservation =
   | { kind: "reserved"; operation: OSMDevelopmentWriteOperation; created: boolean }
   | { kind: "limited"; reason: "daily_limit" | "object_recently_changed" };

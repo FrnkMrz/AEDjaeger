@@ -9,6 +9,8 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
 import {
   PRODUCTION_OPERATION_LIFETIME_MS,
+  PRODUCTION_WRITE_LIMITS,
+  productionWriteLimitsFrom,
   reserveOSMDevelopmentWrite,
   reserveOSMProductionWrite,
 } from "../server/storage/osmDevelopmentWriteOperations";
@@ -220,5 +222,53 @@ describe("Grenzen für das echte OSM (Migration 0014)", () => {
       }),
     ).rejects.toThrow();
     expect(sqlite.prepare("SELECT COUNT(*) AS n FROM osm_development_write_operations").get()).toEqual({ n: 0 });
+  });
+
+  it("liest die Grenzen aus den Worker-Variablen und fällt bei Fehleingaben auf 20 und 5 zurück", () => {
+    expect(productionWriteLimitsFrom({})).toEqual(PRODUCTION_WRITE_LIMITS);
+    expect(
+      productionWriteLimitsFrom({ OSM_PROD_DAILY_WRITE_LIMIT: "50", OSM_PROD_AED_WRITE_LIMIT: "2" }),
+    ).toMatchObject({
+      perAccountPerDay: 50,
+      perObjectPerWindow: 2,
+    });
+    // Höchstwerte gelten noch, darüber kommt der Standard (ein Tippfehler darf nie fast unbegrenzt erlauben).
+    expect(
+      productionWriteLimitsFrom({ OSM_PROD_DAILY_WRITE_LIMIT: "500", OSM_PROD_AED_WRITE_LIMIT: "50" }),
+    ).toMatchObject({
+      perAccountPerDay: 500,
+      perObjectPerWindow: 50,
+    });
+    for (const bad of ["", "0", "-5", "abc", "20 ", " 20", "1e3", "2.5", "501", "05", "99999"]) {
+      expect(productionWriteLimitsFrom({ OSM_PROD_DAILY_WRITE_LIMIT: bad }).perAccountPerDay).toBe(20);
+    }
+    for (const bad of ["0", "51", "x"]) {
+      expect(productionWriteLimitsFrom({ OSM_PROD_AED_WRITE_LIMIT: bad }).perObjectPerWindow).toBe(5);
+    }
+  });
+
+  it("wendet eine eingestellte Tagesgrenze an", async () => {
+    const { d1 } = createDatabase();
+    const limits = productionWriteLimitsFrom({ OSM_PROD_DAILY_WRITE_LIMIT: "2" });
+    for (let index = 0; index < 2; index += 1) {
+      const result = await reserveOSMProductionWrite(
+        d1,
+        {
+          ownerHash: owner,
+          operationId: nextId(),
+          requestHash: hash,
+          targetId: `node/${300 + index}`,
+          now: now + index,
+        },
+        limits,
+      );
+      expect(result.kind).toBe("reserved");
+    }
+    const third = await reserveOSMProductionWrite(
+      d1,
+      { ownerHash: owner, operationId: nextId(), requestHash: hash, targetId: "node/399", now: now + 10 },
+      limits,
+    );
+    expect(third).toEqual({ kind: "limited", reason: "daily_limit" });
   });
 });

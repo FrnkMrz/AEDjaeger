@@ -134,11 +134,15 @@ test("a hit known only from the archive is never saved to the real OSM", async (
 });
 
 test("a limit says clearly that nothing was changed and offers no retry", async ({ page, context }) => {
-  const writes = await recordWrites(page, () => ({ status: 429, json: { error: "daily_limit" } }));
+  // Der Server meldet die im Cloudflare-Dashboard eingestellten Grenzen; die App zeigt genau diese Zahlen.
+  const writes = await recordWrites(page, () => ({
+    status: 429,
+    json: { error: "daily_limit", limits: { per_account_per_day: 12, per_aed_per_day: 3 } },
+  }));
   await openProductionPreview(page, context);
   await page.getByRole("button", { name: "In OpenStreetMap speichern" }).click();
   await expect(page.locator(".capture-content").getByRole("status")).toContainText(
-    "Nichts wurde geändert: Erlaubt sind 20 Änderungen pro Tag",
+    "Grenze erreicht: 12 Änderungen pro Konto und Tag, 3 je AED in 24 Stunden",
   );
   await expect(page.locator('[data-action="retry-development-write"]')).toHaveCount(0);
   expect(writes.production).toHaveLength(1);

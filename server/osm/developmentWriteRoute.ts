@@ -9,6 +9,8 @@ import {
   migrateLegacyOSMDevelopmentWriteOwner,
   reserveOSMDevelopmentWrite,
   releaseUnchangedOSMProductionWrite,
+  productionWriteLimitsFrom,
+  type ProductionWriteLimitEnvironment,
   reserveOSMProductionWrite,
   updateOSMDevelopmentWrite,
   type OSMDevelopmentWriteOperation,
@@ -49,7 +51,7 @@ export type DevelopmentWriteEnvironment = {
   OSM_PROD_WRITES_ENABLED?: string;
   /** Echtes OSM (Etappe Q6): nur bei "true" darf die Produktionsroute bestehende Detailwerte ERSETZEN. Standard: aus. */
   OSM_PROD_DETAIL_CORRECTIONS_ENABLED?: string;
-};
+} & ProductionWriteLimitEnvironment;
 
 type Dependencies = {
   fetch?: typeof fetch;
@@ -221,14 +223,28 @@ async function handleCheckDate(
   try {
     if (production) {
       // Echtes OSM: Reservierung samt Tageslimit und Objektsperre in einem Schritt. Greift ein Limit, geht nichts an OSM.
-      const reservation = await reserveOSMProductionWrite(environment.DB, {
-        ownerHash,
-        operationId: input.operation_id,
-        requestHash,
-        targetId: input.target,
-        now,
-      });
-      if (reservation.kind === "limited") return jsonResponse({ error: reservation.reason }, 429);
+      const limits = productionWriteLimitsFrom(environment);
+      const reservation = await reserveOSMProductionWrite(
+        environment.DB,
+        {
+          ownerHash,
+          operationId: input.operation_id,
+          requestHash,
+          targetId: input.target,
+          now,
+        },
+        limits,
+      );
+      // Die Antwort nennt die geltenden Grenzen, damit die App die eingestellten Zahlen zeigt und nicht feste.
+      if (reservation.kind === "limited") {
+        return jsonResponse(
+          {
+            error: reservation.reason,
+            limits: { per_account_per_day: limits.perAccountPerDay, per_aed_per_day: limits.perObjectPerWindow },
+          },
+          429,
+        );
+      }
       reserved = { operation: reservation.operation, created: reservation.created };
     } else {
       reserved = await reserveOSMDevelopmentWrite(environment.DB, ownerHash, input.operation_id, requestHash, now);

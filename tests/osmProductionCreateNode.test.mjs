@@ -198,7 +198,10 @@ describe("echtes OSM: neuen AED eintragen (Etappe Q5)", () => {
       now: () => now + 1_000,
     });
     expect(response.status).toBe(429);
-    expect(await response.json()).toEqual({ error: "daily_limit" });
+    expect(await response.json()).toEqual({
+      error: "daily_limit",
+      limits: { per_account_per_day: 20, per_aed_per_day: 5 },
+    });
     expect(blocked.calls).toEqual([]);
   });
 

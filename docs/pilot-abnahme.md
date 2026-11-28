@@ -220,7 +220,8 @@ Voraussetzungen (Projektinhaber):
 | G1 | Auf `https://aedjaeger.de` mit OpenStreetMap anmelden, ohne Schalter | Bei einem Treffer kein Knopf „In OpenStreetMap speichern“, Hinweis „Nur eine Vorschau“ | `[ ]` |
 | G2 | Schalter an, Foto eines echten, eingetragenen AED, Suche | Treffer bis 10 m; in der Vorschau der Hinweis „öffentlich in OpenStreetMap“ mit dem Kommentar | `[ ]` |
 | G3 | „In OpenStreetMap speichern“ | „In OpenStreetMap gespeichert.“; auf openstreetmap.org am AED nur `check_date` geändert, Changeset mit `source=survey`, `locale` und dem Kommentar | `[ ]` |
-| G4 | Denselben AED innerhalb von 24 h noch einmal bestätigen | Geht (bis zu 5 Änderungen je AED in 24 h); erst die sechste meldet „Nichts wurde geändert: Erlaubt sind …“ ohne Changeset | `[ ]` |
+| G4 | Denselben AED innerhalb von 24 h noch einmal bestätigen | Geht (bis zu 5 Änderungen je AED in 24 h); erst die sechste meldet „Nichts wurde geändert. Grenze erreicht: …“ mit den eingestellten Zahlen, ohne Changeset | `[ ]` |
+| G4a | Im Worker `OSM_PROD_AED_WRITE_LIMIT=1` setzen, denselben AED zweimal bestätigen; danach den Wert wieder löschen | Die zweite Bestätigung meldet „… 1 je AED in 24 Stunden“ ohne Changeset; die Änderung wirkt ohne Deploy | `[ ]` |
 | G5 | Flugmodus während des Speicherns | „Ergebnis unklar“; nach „Status erneut prüfen“ kein zweites Changeset | `[ ]` |
 | G6 | Treffer nur aus dem Archiv (OSM-API nicht erreichbar) | Kein Speichern-Knopf | `[ ]` |
 | G7 | Bei einem bekannten AED „Fehlende Angaben ergänzen“ (oder in der Liste „Angaben ansehen und ergänzen“), eine fehlende Angabe wählen | Vorhandene Werte gesperrt; Vorschau zeigt nur die neuen Tags und den Kommentar „… fehlende Angaben ergänzt …“ | `[ ]` |

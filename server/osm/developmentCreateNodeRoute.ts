@@ -11,6 +11,8 @@ import {
   migrateLegacyOSMDevelopmentWriteOwner,
   recordOSMDevelopmentChangeset,
   reserveOSMDevelopmentWrite,
+  productionWriteLimitsFrom,
+  type ProductionWriteLimitEnvironment,
   reserveOSMProductionWrite,
   touchStartedOSMDevelopmentWrite,
   updateOSMDevelopmentWrite,
@@ -49,7 +51,7 @@ type Environment = {
   /** Echtes OSM (Etappe Q5): Neuanlagen brauchen BEIDE Schalter. Standard: aus. */
   OSM_PROD_WRITES_ENABLED?: string;
   OSM_PROD_NEW_AEDS_ENABLED?: string;
-};
+} & ProductionWriteLimitEnvironment;
 type Dependencies = {
   fetch?: typeof fetch;
   now?: () => number;
@@ -173,14 +175,28 @@ async function handleCreateNode(
   try {
     if (production) {
       // Echtes OSM: Reservierung samt Tageslimit in einem Schritt. Greift das Limit, geht nichts an OSM.
-      const reservation = await reserveOSMProductionWrite(environment.DB, {
-        ownerHash,
-        operationId: input.operation_id,
-        requestHash,
-        targetId: null,
-        now,
-      });
-      if (reservation.kind === "limited") return jsonResponse({ error: reservation.reason }, 429);
+      const limits = productionWriteLimitsFrom(environment);
+      const reservation = await reserveOSMProductionWrite(
+        environment.DB,
+        {
+          ownerHash,
+          operationId: input.operation_id,
+          requestHash,
+          targetId: null,
+          now,
+        },
+        limits,
+      );
+      // Die Antwort nennt die geltenden Grenzen, damit die App die eingestellten Zahlen zeigt und nicht feste.
+      if (reservation.kind === "limited") {
+        return jsonResponse(
+          {
+            error: reservation.reason,
+            limits: { per_account_per_day: limits.perAccountPerDay, per_aed_per_day: limits.perObjectPerWindow },
+          },
+          429,
+        );
+      }
       reserved = { operation: reservation.operation, created: reservation.created };
     } else {
       reserved = await reserveOSMDevelopmentWrite(environment.DB, ownerHash, input.operation_id, requestHash, now);
