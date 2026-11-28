@@ -4,7 +4,7 @@ Stand: **27.11.2026**. AEDjaeger läuft unter `https://aedjaeger.de` und **schre
 
 **Offen, nach Wichtigkeit:**
 
-1. **Impressum und Datenschutzerklärung:** Die App ist öffentlich erreichbar, schreibt im Namen angemeldeter Konten ins echte OSM und schickt auf ausdrücklichen Wunsch Fotos an OpenAI. Eine Anbieterkennzeichnung und eine Datenschutzerklärung fehlen. Rechtliche Prüfung und Text liegen beim Projektinhaber; die App kann sie danach im Info-Dialog verlinken.
+1. **Impressum und Datenschutzerklärung:** Seit dem 28.11.2026 als `/impressum` und `/datenschutz` (Deutsch und Englisch) im Info-Dialog verlinkt, Anbieterangaben wie bei OpenFireMap. Die Texte beschreiben den Datenfluss laut Code; eine rechtliche Prüfung durch eine Fachperson steht aus. Bei jeder Änderung am Datenfluss (neuer Dienst, neue Speicherung, andere Fristen) muss `public/datenschutz.html` mitgehen.
 2. **Pre-release-Haken bei `v0.3.0`:** fällt, wenn Android-Test, Screenreader-Durchlauf und Impressum/Datenschutz erledigt sind (Entscheidung des Projektinhabers).
 3. **Randfälle am echten OSM auf dem Handy:** G4, G5, G6 und G11 der [Pilot-Abnahme](pilot-abnahme.md) sind nur automatisch getestet.
 4. **Lizenz** des Codes.

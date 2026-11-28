@@ -100,11 +100,11 @@ function request(
   });
 }
 
-function metadata(dataUntil = new Date(now - 60 * 60_000).toISOString()) {
+function metadata(dataUntil = new Date(now - 60 * 60_000).toISOString(), extractStatus = "cached_head_ok") {
   const extracts = Object.fromEntries(
     ["germany", "austria", "switzerland", "luxembourg", "liechtenstein"].map((country) => [
       country,
-      { status: "cached_head_ok", osm_data_timestamp: dataUntil },
+      { status: extractStatus, osm_data_timestamp: dataUntil },
     ]),
   );
   return {
@@ -121,13 +121,14 @@ function metadata(dataUntil = new Date(now - 60 * 60_000).toISOString()) {
 function fetchArchive(
   options: {
     dataUntil?: string;
+    extractStatus?: string;
     ignoreRange?: boolean;
     mapStatus?: number;
     liveStatus?: number;
     liveBody?: string;
   } = {},
 ) {
-  const currentMetadata = metadata(options.dataUntil);
+  const currentMetadata = metadata(options.dataUntil, options.extractStatus);
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     expect(init?.redirect).toBe("manual");
@@ -433,6 +434,28 @@ describe("PMTiles AED candidate search", () => {
         OSM_OAUTH_ENCRYPTION_KEY: "test-encryption-key",
       },
       { fetch: fetchArchive(), now: () => now },
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "coverage_unavailable" });
+  });
+
+  it("accepts the pipeline status local_source for fresh extracts (pipeline change of 28.11.2026)", async () => {
+    const fetcher = fetchArchive({ extractStatus: "local_source" });
+    const response = await handleStaticCandidateSearch(
+      request(),
+      { DB: database() },
+      { fetch: fetcher, now: () => now },
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: "complete", candidates: [{ id: "node/123" }] });
+  });
+
+  it("fails closed for an unknown extract status, even with fresh data", async () => {
+    const fetcher = fetchArchive({ extractStatus: "download_failed" });
+    const response = await handleStaticCandidateSearch(
+      request(),
+      { DB: database() },
+      { fetch: fetcher, now: () => now },
     );
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: "coverage_unavailable" });

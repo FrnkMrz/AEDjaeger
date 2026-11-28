@@ -771,11 +771,13 @@ footer {
   font-size: 0.8125rem;
   line-height: 1.55;
 }
-.icon-credits a {
+.icon-credits a,
+.legal-links a {
   color: #27523d;
   text-underline-offset: 3px;
 }
-.icon-credits a:focus-visible {
+.icon-credits a:focus-visible,
+.legal-links a:focus-visible {
   outline: 2px solid #176b4b;
   outline-offset: 2px;
 }

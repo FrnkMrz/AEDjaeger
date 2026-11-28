@@ -127,6 +127,15 @@ describe("Metadaten-Prüfung", () => {
     expect(() => validateMetadata(value, NOW)).toThrow("„austria“");
   });
 
+  it("akzeptiert den Pipeline-Status local_source und lehnt unbekannte Statuswerte ab", () => {
+    const local = metadata() as { extracts: Record<string, { status: string }> };
+    for (const extract of Object.values(local.extracts)) extract.status = "local_source";
+    expect(() => validateMetadata(local, NOW)).not.toThrow();
+    const unknown = metadata() as { extracts: Record<string, { status: string }> };
+    unknown.extracts.germany = { ...unknown.extracts.germany, status: "download_failed" };
+    expect(() => validateMetadata(unknown, NOW)).toThrow("„germany“");
+  });
+
   it("lehnt Zeitstempel in der Zukunft, fremde Regionen und unvollständige Felder ab", () => {
     expect(() => validateMetadata(metadata({ generated_at: "2026-11-11T12:00:00Z" }), NOW)).toThrow("Zeitstempel");
     expect(() => validateMetadata(metadata({ region: "world" }), NOW)).toThrow("Format");
@@ -275,7 +284,8 @@ describe("readLimited (Größenbegrenzung beim Lesen)", () => {
 describe("Konstanten des Live-Checks stimmen mit der Worker-Route überein", () => {
   /** Liest den Ausdruck rechts von `const NAME =` (bis zum Semikolon) aus einem Quelltext. */
   function constantExpression(source: string, name: string): string {
-    const match = source.match(new RegExp(`^const ${name} = (.+?);\\s*$`, "m"));
+    // [\s\S] statt ".": Die Formatierung darf eine lange Konstante auf mehrere Zeilen verteilen.
+    const match = source.match(new RegExp(`^const ${name} = ([\\s\\S]+?);\\s*$`, "m"));
     if (!match) throw new Error(`Konstante ${name} nicht gefunden`);
     // Leerzeichen vereinheitlichen, damit Formatierungsunterschiede nicht stören.
     return match[1].replace(/\s+/g, " ").trim();

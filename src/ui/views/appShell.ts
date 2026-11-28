@@ -54,6 +54,11 @@ export function renderAppShell(context: AppShellContext): string {
     buildVersion,
     escapeHtml,
   } = context;
+  // Impressum und Datenschutzerklärung gibt es auf Deutsch und Englisch (Entscheidung vom 28.11.2026).
+  // Wer die App nicht auf Deutsch nutzt, springt direkt zur englischen Fassung auf derselben Seite.
+  const legalAnchor = language === "de" ? "" : "#en";
+  // Die Seiten öffnen sich in einem neuen Tab: Foto, Suche und Formular leben nur im Speicher dieser Seite.
+  // Ein Wechsel im selben Tab würde einen laufenden Vorgang verwerfen.
 
   return `
     <div class="page-shell">
@@ -79,6 +84,7 @@ export function renderAppShell(context: AppShellContext): string {
           <div class="info-dialog-header"><div><p class="eyebrow">${t("appName")}</p><h2 id="info-title">${t("aboutTitle")}</h2></div><form method="dialog"><button class="dialog-close" aria-label="${t("closeInfo")}">×</button></form></div>
           <p class="info-intro" id="info-intro">${t("aboutIntro")}</p>
           <section class="info-section"><h3>${t("infoHowTitle")}</h3><p>${t("infoHowBody")}</p><h3>${t("infoLimitsTitle")}</h3><p>${t("infoLimitsBody")}</p></section>
+          <section class="info-section legal-links"><h3>${t("legalTitle")}</h3><p><a href="/impressum${legalAnchor}" target="_blank" rel="noopener">${t("legalImprint")}</a> · <a href="/datenschutz${legalAnchor}" target="_blank" rel="noopener">${t("legalPrivacy")}</a></p></section>
           <section class="info-section icon-credits"><h3>${t("iconCreditsTitle")}</h3><p>${t("iconCreditsBody")} <a href="https://github.com/mapbox/maki/blob/main/icons/defibrillator.svg" target="_blank" rel="noopener noreferrer">${t("iconCreditsSource")}</a> · <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener noreferrer">${t("iconCreditsLicense")}</a>.</p></section>
           ${authenticated ? `<section class="info-section account-section"><h3>${developmentSession ? t("accountDevSignedIn") : t("accountSignedIn")}</h3><p>${developmentSession ? t("accountDevNotice") : t("accountIdentityOnly")}</p><button class="account-button" id="osm-sign-out" type="button">${t("accountSignOut")}</button></section>` : ""}
           <label class="sound-toggle"><input type="checkbox" id="success-sound-toggle" ${successSoundEnabled ? "checked" : ""} /><span>${tv("soundToggle")}</span></label>
