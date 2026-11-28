@@ -46,7 +46,8 @@ import {
 } from "./contracts/aedDetails";
 import { CandidateSearchError, requestNearbyCandidates, type SearchLocation } from "./osm/candidateSearch";
 import { ExistingNodeError, requestExistingNode } from "./osm/existingNode";
-import { sendDevelopmentWrite } from "./net/developmentWrite";
+import { developmentWritePath, sendDevelopmentWrite } from "./net/developmentWrite";
+import { isChangesetLocale } from "./contracts/changesetComment";
 import { createPhotoSessionState } from "./state/photoSession";
 import { dispatchUiAction } from "./ui/actions/actionRouter";
 import { handleCandidateAction } from "./ui/actions/candidateActions";
@@ -110,6 +111,19 @@ const developmentWriteStatusKeys: Record<DevelopmentWriteStatus, FlowMessageKey>
   uncertain: "developmentUncertain",
   conflict: "developmentConflict",
   failed: "developmentFailed",
+  // Limits gibt es nur am echten OSM; der Testserver meldet diesen Zustand nie.
+  limited: "developmentFailed",
+};
+/** Dieselben Zustände am echten OSM (Etappe Q3), ohne das Präfix „Testserver:“. */
+const productionWriteStatusKeys: Record<DevelopmentWriteStatus, FlowMessageKey> = {
+  sending: "productionSending",
+  complete: "productionComplete",
+  unchanged: "productionUnchanged",
+  notFound: "productionNotFound",
+  uncertain: "productionUncertain",
+  conflict: "productionConflict",
+  failed: "productionFailed",
+  limited: "productionLimited",
 };
 const minimumMapSearchZoom = 15;
 const PENDING_DEVELOPMENT_WRITE_KEY_PREFIX = "aedjaeger-pending-osm-development-write:";
@@ -154,6 +168,21 @@ let detailMoreOpen = false;
 let detailExistingTags: Readonly<Record<string, string>> | undefined;
 // Betreiber-Schalter für Korrekturen (Etappe P5): Der Server meldet ihn im Sitzungsstatus. Ohne ihn bleibt es beim Ergänzen.
 let developmentCorrectionsAvailable = false;
+// Echtes OSM (Etappe Q3): nur true, wenn der Server es für diese Sitzung ausdrücklich freigibt.
+let productionWriteAvailable = false;
+let productionWriteOwnerHash: string | undefined;
+// Echtes OSM (Etappe Q5): Neuanlagen freigegeben (beide Schalter am Server).
+let productionNewAedsAvailable = false;
+
+/** Gehört ein Vorgang zum echten OSM? Nur dann gelten dessen Kontokennung, Route und Texte. */
+function isProductionWrite(request: DevelopmentWriteRequest): boolean {
+  return request.environment === "production";
+}
+
+/** Die Kontokennung, mit der ein Vorgang nach einem Netzabbruch sicher fortgesetzt wird (je Umgebung verschieden). */
+function ownerHashFor(request: DevelopmentWriteRequest): string | undefined {
+  return isProductionWrite(request) ? productionWriteOwnerHash : developmentWriteOwnerHash;
+}
 // Korrekturmodus des Formulars: Vorhandene Werte sind vorbelegt und änderbar. Ohne ihn sind sie gesperrt (nur Ergänzen).
 let detailCorrectMode = false;
 // Im Korrekturmodus: Schlüssel, deren Wert sich im Formular nicht darstellen lässt (zum Beispiel access=permissive). Sie bleiben gesperrt.
@@ -275,7 +304,11 @@ function parseDevelopmentWriteRequest(raw: string, legacyCheck = false): Develop
       /^node\/[1-9]\d{0,15}$/u.test(value.target) &&
       (value.expectedVersion === undefined ||
         (Number.isSafeInteger(value.expectedVersion) && (value.expectedVersion as number) > 0)) &&
-      (value.expectedCheckDate === null || isCalendarDate(value.expectedCheckDate))
+      (value.expectedCheckDate === null || isCalendarDate(value.expectedCheckDate)) &&
+      (value.environment === undefined || value.environment === "production") &&
+      (value.locale === undefined || isChangesetLocale(value.locale)) &&
+      // Echtes OSM: Prüfdatum, Ergänzungen und Korrekturen (Q3, Q4, Q6) mit denselben Prüfungen wie beim Testserver.
+      true
     ) {
       if (value.details !== undefined) {
         const checkedDetails = validateDetailTags(value.details);
@@ -322,8 +355,13 @@ function parseDevelopmentWriteRequest(raw: string, legacyCheck = false): Develop
       }
       const checkedDetails = validateDetailTags(rawDetails);
       if (!checkedDetails.ok) return undefined;
+      // Ziel und Sprache prüfen: nur "production" oder nichts, nur eine der sechs App-Sprachen.
+      if (value.environment !== undefined && value.environment !== "production") return undefined;
+      if (value.locale !== undefined && !isChangesetLocale(value.locale)) return undefined;
       return {
         kind: "create-node",
+        ...(value.environment === "production" ? { environment: "production" as const } : {}),
+        ...(isChangesetLocale(value.locale) ? { locale: value.locale } : {}),
         operationId: value.operationId,
         candidateLabel: value.candidateLabel,
         latitude: value.latitude,
@@ -346,7 +384,7 @@ function pendingDevelopmentWriteKey(operationId: string): string {
 function persistPendingDevelopmentWrite(
   request: DevelopmentWriteRequest,
   updateRuntimeState = true,
-  ownerHash = developmentWriteOwnerHash,
+  ownerHash = ownerHashFor(request),
 ): void {
   const savedAt = Date.now();
   const stored: StoredDevelopmentWrite = {
@@ -400,6 +438,7 @@ function accountViewContext() {
     photoSelectionPending: photoSession.selectionPending,
     activePhotoDraft: hasActivePhotoDraft(state),
     pendingDevelopmentWrite: Boolean(pendingDevelopmentWrite),
+    pendingProductionWrite: pendingDevelopmentWrite ? isProductionWrite(pendingDevelopmentWrite) : false,
     illustrationMarkup: defibrillatorMark(defibrillatorPath),
   };
 }
@@ -740,6 +779,9 @@ function statusContent(): string {
     developmentWriteAvailable,
     developmentWriteOwnerHash,
     developmentCorrectionsAvailable,
+    productionWriteAvailable: productionWriteAvailable && Boolean(productionWriteOwnerHash),
+    productionNewAedsAvailable: productionNewAedsAvailable && Boolean(productionWriteOwnerHash),
+    productionWriteStatusKeys,
     newAedPositionOverride,
     searchLocationSource: photoSession.searchLocationSource,
     language,
@@ -907,11 +949,19 @@ async function refreshAccountState(focusSelector?: string, afterLogout = false):
     developmentSession = status.developmentSession;
     developmentWriteAvailable = status.developmentWriteAvailable;
     developmentWriteOwnerHash = status.developmentWriteOwnerHash;
-    developmentCorrectionsAvailable = status.developmentCorrectionsAvailable;
+    // „Korrekturen in dieser Sitzung erlaubt“: am Testserver gilt dessen Schalter, am echten OSM der eigene (Etappe Q6).
+    // Der Schalter der einen Umgebung wirkt nie auf die andere.
+    developmentCorrectionsAvailable = status.developmentSession
+      ? status.developmentCorrectionsAvailable
+      : status.productionCorrectionsAvailable;
     photoCheckAvailable = status.photoCheckAvailable;
+    productionWriteAvailable = status.productionWriteAvailable && !status.developmentSession;
+    productionWriteOwnerHash = status.productionWriteOwnerHash;
+    productionNewAedsAvailable = status.productionNewAedsAvailable && !status.developmentSession;
     if (
       pendingDevelopmentWrite &&
       !pendingDevelopmentWriteOwnerHash &&
+      !isProductionWrite(pendingDevelopmentWrite) &&
       developmentSession &&
       developmentWriteOwnerHash
     ) {
@@ -941,8 +991,10 @@ async function refreshAccountState(focusSelector?: string, afterLogout = false):
   // Rendering the whole app here enforces the gate after sign-in, expiry, and logout.
   render();
   if (pendingDevelopmentWrite && accountState === "signed-out") {
-    // The restored request needs the test-server session to reconcile safely; point directly at that login.
-    app.querySelector<HTMLElement>("#osm-dev-sign-in")?.focus();
+    // Der offene Vorgang braucht die passende Anmeldung: echtes OSM oder Testserver.
+    app
+      .querySelector<HTMLElement>(isProductionWrite(pendingDevelopmentWrite) ? "#osm-sign-in" : "#osm-dev-sign-in")
+      ?.focus();
   } else if (focusSelector === "next-action") {
     const nextActionSelector =
       accountState === "connection-error"
@@ -982,14 +1034,10 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
   const isCheckDate = requestBody.kind === "check-date";
   // Das Speicher-Fenster öffnet sich sofort beim Tippen und zeigt, was passiert (siehe src/ui/saveDialog.ts).
   // Es zeigt nur an; welche Zustände der Vorgang durchläuft, entscheidet weiter allein der Code unten.
-  const saveDialog = openSaveDialog(
-    tv,
-    isCheckDate ? "/api/osm/development/check-date" : "/api/osm/development/create-node",
-    () => focusCurrentState(),
-  );
+  const saveDialog = openSaveDialog(tv, developmentWritePath(requestBody), () => focusCurrentState());
   let responsePayload: unknown;
   try {
-    const { ok, status, payload } = await sendDevelopmentWrite(requestBody, developmentWriteOwnerHash);
+    const { ok, status, payload } = await sendDevelopmentWrite(requestBody, ownerHashFor(requestBody));
     responsePayload = payload;
     // Die Schritte des Servers (Änderungssatz angelegt, hochgeladen, geschlossen) ins Fenster schreiben.
     saveDialog.addServerLines(buildSaveLogLines(parseOSMApiLog(payload)));
@@ -1010,6 +1058,14 @@ async function submitDevelopmentWrite(requestBody: DevelopmentWriteRequest): Pro
       clearPendingDevelopmentCheck(requestBody.operationId);
       // Nur bei einem vom Server bestätigten, echten Schreibvorgang erklingt der Ton. Er ändert nichts am Ablauf.
       if (!unchanged) successSound.play();
+    } else if (
+      status === 429 &&
+      isRecord(payload) &&
+      (payload.error === "daily_limit" || payload.error === "object_recently_changed")
+    ) {
+      // Echtes OSM: Ein Limit hat gegriffen, BEVOR etwas an OSM ging. Eindeutig: nichts geändert, kein Wiederholen-Knopf.
+      setDevelopmentWriteStatus(requestBody.operationId, "limited");
+      clearPendingDevelopmentCheck(requestBody.operationId);
     } else if (status === 409) {
       setDevelopmentWriteStatus(requestBody.operationId, "conflict");
       clearPendingDevelopmentCheck(requestBody.operationId);
@@ -1068,8 +1124,16 @@ function finishSaveDialog(saveDialog: SaveDialog, requestBody: DevelopmentWriteR
     return;
   }
   // Bei Erfolg passt die Meldung zur Art des Vorgangs: neuer AED, Prüfdatum, Prüfdatum mit Ergänzungen oder Korrekturen.
-  const completeKey: FlowMessageKey =
-    requestBody.kind === "create-node"
+  const statusKeys = isProductionWrite(requestBody) ? productionWriteStatusKeys : developmentWriteStatusKeys;
+  const completeKey: FlowMessageKey = isProductionWrite(requestBody)
+    ? requestBody.kind === "create-node"
+      ? "productionCreated"
+      : requestBody.expectedBefore && requestBody.confirmedCorrections === true
+        ? "productionChangesComplete"
+        : requestBody.details && Object.keys(requestBody.details).length > 0
+          ? "productionDetailsComplete"
+          : "productionComplete"
+    : requestBody.kind === "create-node"
       ? "developmentCreated"
       : requestBody.expectedBefore && requestBody.confirmedCorrections === true
         ? "developmentChangesComplete"
@@ -1087,7 +1151,7 @@ function finishSaveDialog(saveDialog: SaveDialog, requestBody: DevelopmentWriteR
   const ids = readSavedIds(payload, requestBody.kind === "check-date" ? requestBody.target : undefined);
   saveDialog.finish({
     outcome,
-    message: tv(writeStatus === "complete" ? completeKey : developmentWriteStatusKeys[writeStatus]),
+    message: tv(writeStatus === "complete" ? completeKey : statusKeys[writeStatus]),
     nodeId: ids.nodeId,
     changesetId: ids.changesetId,
   });
@@ -1095,13 +1159,18 @@ function finishSaveDialog(saveDialog: SaveDialog, requestBody: DevelopmentWriteR
 
 function setDevelopmentWriteStatus(
   operationId: string,
-  writeStatus: "uncertain" | "sending" | "complete" | "unchanged" | "notFound" | "conflict" | "failed",
+  writeStatus: "uncertain" | "sending" | "complete" | "unchanged" | "notFound" | "conflict" | "failed" | "limited",
 ): void {
   if (state.kind === "new-aed-preview" && state.operationId === operationId) {
     // Eine Neuanlage kennt kein "schon aktuell"; der Server meldet es dort nie. Sicherheitshalber gilt es als erstellt.
     state = {
       ...state,
-      writeStatus: writeStatus === "unchanged" ? "complete" : writeStatus === "notFound" ? "failed" : writeStatus,
+      writeStatus:
+        writeStatus === "unchanged"
+          ? "complete"
+          : writeStatus === "notFound" || writeStatus === "limited"
+            ? "failed"
+            : writeStatus,
     };
   } else if (state.kind === "osm-preview" && state.operationId === operationId) {
     state = { ...state, writeStatus };
@@ -1123,10 +1192,9 @@ function isDevelopmentWriteResponse(
 }
 
 function isRecoveryOwnerMismatch(): boolean {
+  const currentOwnerHash = pendingDevelopmentWrite ? ownerHashFor(pendingDevelopmentWrite) : developmentWriteOwnerHash;
   return Boolean(
-    pendingDevelopmentWriteOwnerHash &&
-      developmentWriteOwnerHash &&
-      pendingDevelopmentWriteOwnerHash !== developmentWriteOwnerHash,
+    pendingDevelopmentWriteOwnerHash && currentOwnerHash && pendingDevelopmentWriteOwnerHash !== currentOwnerHash,
   );
 }
 
@@ -1311,6 +1379,7 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
         source,
         observedOn: photoSession.observedOn,
         developmentWriteEnabled: developmentSession && developmentWriteAvailable && Boolean(developmentWriteOwnerHash),
+        productionDetailsEnabled: !developmentSession && productionWriteAvailable && Boolean(productionWriteOwnerHash),
         setState: (nextState) => {
           state = nextState;
         },
@@ -1333,6 +1402,18 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
         developmentSession,
         developmentWriteAvailable,
         developmentWriteOwnerHash,
+        productionWriteAvailable: productionWriteAvailable && accountState === "signed-in" && !developmentSession,
+        productionWriteOwnerHash,
+        productionNewAedsAvailable: productionNewAedsAvailable && accountState === "signed-in" && !developmentSession,
+        productionCorrectionsAvailable:
+          developmentCorrectionsAvailable &&
+          productionWriteAvailable &&
+          accountState === "signed-in" &&
+          !developmentSession,
+        // Für eine Neuanlage am echten OSM muss der Standort echt sein (Foto-GPS oder Handy), kein Kartenpunkt.
+        realLocationAvailable:
+          photoSession.searchLocationSource !== undefined && photoSession.searchLocationSource !== "map",
+        locale: language,
         accountSignedIn: accountState === "signed-in",
         pendingDevelopmentWrite,
         ...(crypto.randomUUID ? { createOperationId: () => crypto.randomUUID() } : {}),
@@ -1351,7 +1432,10 @@ async function handleAction(action: string | undefined, source?: HTMLElement): P
         isRecoveryOwnerMismatch,
         openAccount: openAccountFromLamp,
         focusRecoveryLogin: () => {
-          const target = app.querySelector<HTMLElement>("#osm-dev-sign-in, #osm-session-retry, #login-title");
+          // Ein Vorgang am echten OSM braucht die Anmeldung bei OpenStreetMap, einer am Testserver die Testanmeldung.
+          const login =
+            pendingDevelopmentWrite && isProductionWrite(pendingDevelopmentWrite) ? "#osm-sign-in" : "#osm-dev-sign-in";
+          const target = app.querySelector<HTMLElement>(`${login}, #osm-session-retry, #login-title`);
           // Defer until the click's default focus handling has finished.
           window.requestAnimationFrame(() => target?.focus());
         },
@@ -1473,7 +1557,18 @@ function getPhoneLocation(): Promise<SearchLocation> {
  */
 async function loadExistingAedNode(candidateId: string): Promise<void> {
   try {
-    const node = await requestExistingNode(candidateId);
+    // Echtes OSM oder Testserver: Die Sitzung bestimmt die Route; der Server prüft das zusätzlich.
+    const node = await requestExistingNode(candidateId, fetch, developmentSession ? "development" : "production");
+    // Echtes OSM: Die Zuordnung (bis 10 m) beruht auf Position und Version aus der frischen Suche. Hat sich die Version
+    // seitdem geändert, kann jemand den AED verschoben haben; dann gilt der Treffer als veraltet, und die Person sucht
+    // neu. Die neue Version wird nie ungeprüft übernommen.
+    const searched =
+      state.kind === "existing-aed-details"
+        ? state.returnState.search.candidates.find((item) => item.id === candidateId)
+        : undefined;
+    if (!developmentSession && searched?.version !== node.version) {
+      throw new ExistingNodeError("node_unavailable");
+    }
     if (state.kind !== "existing-aed-details" || state.candidateId !== candidateId || state.load.status !== "loading")
       return;
     detailExistingTags = node.tags;

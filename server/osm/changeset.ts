@@ -1,16 +1,36 @@
 import { APP_VERSION } from "../version";
 import { isRecord, readLimitedText } from "../http/requestGuards";
-import { requestOSMDevelopmentApi } from "./developmentApi";
+import { requestOSMApi, type OSMApiEnvironment } from "./developmentApi";
 import { escapeXml } from "./xmlText";
 
 const MAX_CHANGESET_STATUS_BYTES = 8_192;
 
-/** Open a changeset with the app version and a truthful, escaped public comment. */
-export async function createChangeset(token: string, comment: string, fetcher: typeof fetch): Promise<string> {
-  const createdBy = escapeXml(`AEDjaeger ${APP_VERSION}`);
-  const body = `<osm><changeset><tag k="created_by" v="${createdBy}"/><tag k="comment" v="${escapeXml(comment)}"/></changeset></osm>`;
-  const response = await requestOSMDevelopmentApi(
-    "development",
+/**
+ * Öffnet ein Changeset mit App-Version und einem wahrheitsgemäßen, maskierten Kommentar.
+ *
+ * Beim echten OSM (Entscheidung vom 26.11.2026, Vorbild Hydrantenjäger) kommen dazu:
+ *  - `source=survey`: Die Angabe beruht auf einer Prüfung vor Ort. Sie steht nur am Changeset, nie am AED-Objekt.
+ *  - `locale`: die Sprache der Person, damit andere Mapper wissen, in welcher Sprache sie nachfragen können.
+ * Weitere Tags (Standort, Foto, Konto) gibt es bewusst nicht.
+ */
+export async function createChangeset(
+  token: string,
+  comment: string,
+  fetcher: typeof fetch,
+  options: { environment?: OSMApiEnvironment; locale?: string } = {},
+): Promise<string> {
+  const environment = options.environment ?? "development";
+  const tags: Array<[string, string]> = [
+    ["created_by", `AEDjaeger ${APP_VERSION}`],
+    ["comment", comment],
+  ];
+  if (environment === "production") {
+    tags.push(["source", "survey"]);
+    if (options.locale && /^[a-z]{2}$/u.test(options.locale)) tags.push(["locale", options.locale]);
+  }
+  const body = `<osm><changeset>${tags.map(([key, value]) => `<tag k="${escapeXml(key)}" v="${escapeXml(value)}"/>`).join("")}</changeset></osm>`;
+  const response = await requestOSMApi(
+    environment,
     "/api/0.6/changeset/create",
     token,
     { method: "PUT", body },
@@ -23,11 +43,16 @@ export async function createChangeset(token: string, comment: string, fetcher: t
 }
 
 /** Close a changeset; a conflict counts as closed only after a matching status read confirms it. */
-export async function closeChangeset(token: string, changesetId: string, fetcher: typeof fetch): Promise<boolean> {
+export async function closeChangeset(
+  token: string,
+  changesetId: string,
+  fetcher: typeof fetch,
+  environment: OSMApiEnvironment = "development",
+): Promise<boolean> {
   if (!/^[1-9]\d{0,15}$/u.test(changesetId)) return false;
   try {
-    const response = await requestOSMDevelopmentApi(
-      "development",
+    const response = await requestOSMApi(
+      environment,
       `/api/0.6/changeset/${changesetId}/close`,
       token,
       { method: "PUT" },
@@ -35,8 +60,8 @@ export async function closeChangeset(token: string, changesetId: string, fetcher
     );
     if (response.ok) return true;
     if (response.status !== 409) return false;
-    const status = await requestOSMDevelopmentApi(
-      "development",
+    const status = await requestOSMApi(
+      environment,
       `/api/0.6/changeset/${changesetId}`,
       token,
       { method: "GET" },

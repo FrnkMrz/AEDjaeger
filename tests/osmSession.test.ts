@@ -23,6 +23,9 @@ describe("OSM session status", () => {
       developmentCorrectionsAvailable: false,
       // Nicht gesendet = Fotoprüfung aus.
       photoCheckAvailable: false,
+      productionWriteAvailable: false,
+      productionNewAedsAvailable: false,
+      productionCorrectionsAvailable: false,
     });
   });
 

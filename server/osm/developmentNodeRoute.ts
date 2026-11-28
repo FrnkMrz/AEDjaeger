@@ -6,7 +6,12 @@ import { DETAIL_KEYS } from "../../src/contracts/aedDetails";
 import { isCrossOrigin, jsonResponse, readOSMSessionCookie } from "../http/requestGuards";
 import { TargetNotFoundError, VersionConflictError, readDevelopmentNode } from "./developmentWriteRoute";
 
-type Environment = { DB?: D1Database; OSM_DEV_WRITES_ENABLED?: string; OSM_OAUTH_ENCRYPTION_KEY?: string };
+type Environment = {
+  DB?: D1Database;
+  OSM_DEV_WRITES_ENABLED?: string;
+  OSM_PROD_WRITES_ENABLED?: string;
+  OSM_OAUTH_ENCRYPTION_KEY?: string;
+};
 type Dependencies = { fetch?: typeof fetch; now?: () => number; crypto?: Crypto };
 
 /**
@@ -31,11 +36,36 @@ export async function handleDevelopmentNodeRead(
   environment: Environment,
   dependencies: Dependencies = {},
 ): Promise<Response> {
+  return readNode(request, environment, dependencies, "development");
+}
+
+/**
+ * Dasselbe fürs echte OSM (Etappe Q4): liest einen AED frisch von `api.openstreetmap.org`, bevor die Person fehlende
+ * Angaben ergänzt. Nur mit dem Schalter `OSM_PROD_WRITES_ENABLED` und nur in einer Sitzung am echten OSM.
+ */
+export async function handleProductionNodeRead(
+  request: Request,
+  environment: Environment,
+  dependencies: Dependencies = {},
+): Promise<Response> {
+  return readNode(request, environment, dependencies, "production");
+}
+
+async function readNode(
+  request: Request,
+  environment: Environment,
+  dependencies: Dependencies,
+  osmEnvironment: "development" | "production",
+): Promise<Response> {
+  const production = osmEnvironment === "production";
   if (request.method !== "GET") return jsonResponse({ error: "method_not_allowed" }, 405, { Allow: "GET" });
   const url = new URL(request.url);
   if (isCrossOrigin(request, url.origin)) return jsonResponse({ error: "invalid_origin" }, 403);
-  if (environment.OSM_DEV_WRITES_ENABLED !== "true" || !environment.DB || !environment.OSM_OAUTH_ENCRYPTION_KEY) {
-    return jsonResponse({ error: "development_write_unavailable" }, 503);
+  const enabled = production
+    ? environment.OSM_PROD_WRITES_ENABLED === "true"
+    : environment.OSM_DEV_WRITES_ENABLED === "true";
+  if (!enabled || !environment.DB || !environment.OSM_OAUTH_ENCRYPTION_KEY) {
+    return jsonResponse({ error: production ? "production_write_unavailable" : "development_write_unavailable" }, 503);
   }
   const sessionToken = readOSMSessionCookie(request.headers.get("Cookie"));
   if (!sessionToken) return jsonResponse({ error: "authentication_required" }, 401);
@@ -46,7 +76,9 @@ export async function handleDevelopmentNodeRead(
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
-  if (session?.environment !== "development") return jsonResponse({ error: "development_session_required" }, 403);
+  // Die Sitzung muss zur Route passen: Ein Testserver-Token geht nie an das echte OSM und umgekehrt.
+  if (session?.environment !== osmEnvironment)
+    return jsonResponse({ error: production ? "production_session_required" : "development_session_required" }, 403);
 
   const id = url.searchParams.get("id");
   if (id === null || !/^node\/[1-9]\d{0,15}$/u.test(id)) return jsonResponse({ error: "invalid_request" }, 400);
@@ -55,14 +87,18 @@ export async function handleDevelopmentNodeRead(
   try {
     const key = await importOAuthEncryptionKey(environment.OSM_OAUTH_ENCRYPTION_KEY);
     const storedToken = await findOSMOAuthToken(environment.DB, sessionToken, now, key, dependencies.crypto);
-    if (!storedToken) return jsonResponse({ error: "development_token_unavailable" }, 401);
+    if (!storedToken)
+      return jsonResponse(
+        { error: production ? "production_token_unavailable" : "development_token_unavailable" },
+        401,
+      );
     token = storedToken;
   } catch {
-    return jsonResponse({ error: "development_write_unavailable" }, 503);
+    return jsonResponse({ error: production ? "production_write_unavailable" : "development_write_unavailable" }, 503);
   }
 
   try {
-    const node = await readDevelopmentNode(id, token, dependencies.fetch ?? fetch);
+    const node = await readDevelopmentNode(id, token, dependencies.fetch ?? fetch, osmEnvironment);
     const tags: Record<string, string> = {};
     for (const key of VISIBLE_KEYS) {
       if (Object.hasOwn(node.tags, key)) tags[key] = node.tags[key];

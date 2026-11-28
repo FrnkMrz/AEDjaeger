@@ -206,6 +206,31 @@ Voraussetzung: Der Betreiber hat die Fotoprüfung im Cloudflare-Dashboard einger
 
 Hinweise: F1 bis F7 prüfen Verhalten, F8 die Trefferqualität. Zeigt F8 viele falsch gesperrte AED-Fotos, ist die Sperre „kein AED“ zu streng und wird mit dem Projektinhaber neu bewertet. Bei jedem Fehler Uhrzeit und genaue Meldung notieren, keinen Schlüssel teilen.
 
+## G. Echtes OSM: bestätigen, ergänzen, neu eintragen und korrigieren (Etappen Q3 bis Q6)
+
+**Stand 27.11.2026:** Migration `0014` ist angewendet, alle vier Produktions-Schalter sind gesetzt. Der Projektinhaber meldet für Q3, Q4, Q5 und Q6 jeweils „klappt“ im Hauptablauf (Bestätigen, Ergänzen, Neu eintragen, Korrigieren). Die einzelnen Zeilen sind nicht einzeln abgehakt; besonders die Randfälle G4 (sechste Änderung), G5 (Flugmodus), G6 (OSM-API nicht erreichbar) und G11 (Kartenpunkt statt Standort) sind auf dem Handy nicht belegt, nur durch automatische Tests.
+
+Voraussetzungen (Projektinhaber):
+
+1. Migration `0014` auf der Produktions-D1 anwenden, **bevor** das Deploy nach dem Merge durchlaufen kann (die Deploy-Prüfung stoppt bei offenen Migrationen). Ohne Kommandozeile: Anleitung „Migration im Cloudflare-Dashboard“ in [Betrieb](betrieb.md#migration-im-cloudflare-dashboard-ohne-kommandozeile).
+2. Im Worker die Variable `OSM_PROD_WRITES_ENABLED=true` setzen. Zum Abschalten den Wert löschen oder auf etwas anderes setzen; das wirkt ohne Deploy.
+
+| Nr | Schritt | Erwartetes Ergebnis | Ergebnis |
+| --- | --- | --- | --- |
+| G1 | Auf `https://aedjaeger.de` mit OpenStreetMap anmelden, ohne Schalter | Bei einem Treffer kein Knopf „In OpenStreetMap speichern“, Hinweis „Nur eine Vorschau“ | `[ ]` |
+| G2 | Schalter an, Foto eines echten, eingetragenen AED, Suche | Treffer bis 10 m; in der Vorschau der Hinweis „öffentlich in OpenStreetMap“ mit dem Kommentar | `[ ]` |
+| G3 | „In OpenStreetMap speichern“ | „In OpenStreetMap gespeichert.“; auf openstreetmap.org am AED nur `check_date` geändert, Changeset mit `source=survey`, `locale` und dem Kommentar | `[ ]` |
+| G4 | Denselben AED innerhalb von 24 h noch einmal bestätigen | Geht (bis zu 5 Änderungen je AED in 24 h); erst die sechste meldet „Nichts wurde geändert: Erlaubt sind …“ ohne Changeset | `[ ]` |
+| G5 | Flugmodus während des Speicherns | „Ergebnis unklar“; nach „Status erneut prüfen“ kein zweites Changeset | `[ ]` |
+| G6 | Treffer nur aus dem Archiv (OSM-API nicht erreichbar) | Kein Speichern-Knopf | `[ ]` |
+| G7 | Bei einem bekannten AED „Fehlende Angaben ergänzen“ (oder in der Liste „Angaben ansehen und ergänzen“), eine fehlende Angabe wählen | Vorhandene Werte gesperrt; Vorschau zeigt nur die neuen Tags und den Kommentar „… fehlende Angaben ergänzt …“ | `[ ]` |
+| G8 | Speichern | „Prüfdatum und neue Angaben in OpenStreetMap gespeichert.“; auf openstreetmap.org nur die neuen Tags und `check_date` dazu, nichts ersetzt oder gelöscht | `[ ]` |
+| G9 | Schalter `OSM_PROD_NEW_AEDS_ENABLED=true` setzen; an einer Stelle ohne eingetragenen AED fotografieren (Handy-Standort oder Foto-GPS), „Hier fehlt ein AED – neu eintragen“ | Vorschau mit dem Kommentar „AED vor Ort neu eingetragen …“; „In OpenStreetMap eintragen“ erst nach dem zweiten Haken | `[ ]` |
+| G10 | Eintragen | „Neuer AED in OpenStreetMap eingetragen.“; auf openstreetmap.org ein neuer Knoten mit `emergency=defibrillator`, `check_date` und den gewählten Angaben; Changeset mit `source=survey` | `[ ]` |
+| G11 | Standort selbst auf der Karte setzen statt Handy-Standort | Kein Knopf „In OpenStreetMap eintragen“, Hinweis auf den nötigen echten Standort | `[ ]` |
+| G12 | Schalter `OSM_PROD_DETAIL_CORRECTIONS_ENABLED=true` setzen; bei einem bekannten AED „Angaben ergänzen oder korrigieren“, einen vorhandenen Wert ändern | Formular mit den OSM-Werten vorbelegt; Vorschau zeigt `alt → neu` und den Kommentar „… ergänzt und korrigiert …“; Speichern erst nach dem Haken „Der alte Wert stimmt nicht“ | `[ ]` |
+| G13 | Speichern | „Prüfdatum und Änderungen in OpenStreetMap gespeichert.“; auf openstreetmap.org nur der geänderte Wert neu, alle anderen Tags unverändert, nichts gelöscht | `[ ]` |
+
 ## Was diese Abnahme nicht abdeckt
 
 - Die Trefferqualität der Fotoprüfung (wie oft sie echte AED-Fotos fälschlich sperrt oder fremde Fotos durchlässt) ist nicht belegt. Abschnitt F verlangt dazu eine Stichprobe mit echten Fotos.

@@ -7,7 +7,7 @@ import {
   validateOSMAuthorizationCallback,
 } from "./auth/osmOAuth";
 import {
-  exchangeOSMCodeForIdentity,
+  exchangeOSMProductionCodeForAccess,
   exchangeOSMDevelopmentCodeForAccess,
   OSMOAuthDiagnosticError,
 } from "./auth/osmOidc";
@@ -19,23 +19,33 @@ import { deleteOSMSession, findOSMSession, rotateOSMSession, OSM_SESSION_LIFETIM
 import { findOSMOAuthToken, storeOSMOAuthToken } from "./storage/osmOAuthTokens";
 import { hashOSMDevelopmentWriteOwner } from "./storage/osmDevelopmentWriteOperations";
 import { handleStaticCandidateSearch } from "./osm/staticCandidateSearchRoute";
-import { handleDevelopmentCheckDate } from "./osm/developmentWriteRoute";
-import { handleDevelopmentCreateNode } from "./osm/developmentCreateNodeRoute";
+import { handleDevelopmentCheckDate, handleProductionCheckDate } from "./osm/developmentWriteRoute";
+import { handleDevelopmentCreateNode, handleProductionCreateNode } from "./osm/developmentCreateNodeRoute";
 import { withOSMApiLog } from "./osm/osmApiLog";
-import { handleDevelopmentNodeRead } from "./osm/developmentNodeRoute";
+import { handleDevelopmentNodeRead, handleProductionNodeRead } from "./osm/developmentNodeRoute";
 import { handleVisionAnalysis, isPhotoCheckAvailable } from "./vision/analyzeRoute";
 
 type StaticAssets = { fetch(request: Request): Promise<Response> };
 type WorkerEnvironment = {
   ASSETS: StaticAssets;
   DB?: D1Database;
+  // Anmeldung am echten OSM (Etappe Q2): Schalter, Client-ID und Weiterleitung sind Variablen, das Secret ist ein
+  // Worker-Secret. Fehlt eins davon, gibt es keine Produktions-Anmeldung.
+  OSM_PROD_LOGIN_ENABLED?: string;
   OSM_CLIENT_ID?: string;
+  OSM_CLIENT_SECRET?: string;
   OSM_REDIRECT_URI?: string;
   OSM_DEV_LOGIN_ENABLED?: string;
   OSM_DEV_CLIENT_ID?: string;
   OSM_DEV_CLIENT_SECRET?: string;
   OSM_DEV_REDIRECT_URI?: string;
   OSM_DEV_WRITES_ENABLED?: string;
+  // Schreiben ins echte OSM (Etappe Q3). Standard: aus. Nur der Projektinhaber setzt ihn.
+  OSM_PROD_WRITES_ENABLED?: string;
+  // Neuanlagen im echten OSM (Etappe Q5). Standard: aus. Wirkt nur zusammen mit OSM_PROD_WRITES_ENABLED.
+  OSM_PROD_NEW_AEDS_ENABLED?: string;
+  // Korrekturen bestehender Werte im echten OSM (Etappe Q6). Standard: aus. Wirkt nur zusammen mit OSM_PROD_WRITES_ENABLED.
+  OSM_PROD_DETAIL_CORRECTIONS_ENABLED?: string;
   // Betreiber-Schalter für Korrekturen bestehender Detailwerte (Etappe P5). Standard: aus.
   OSM_DETAIL_CORRECTIONS_ENABLED?: string;
   OSM_OAUTH_ENCRYPTION_KEY?: string;
@@ -52,7 +62,9 @@ type OSMAuthConfiguration = {
   clientId: string;
   redirectUri: string;
   encryptionKey: string;
-} & ({ provider: "production" } | { provider: "development"; clientSecret: string });
+  clientSecret: string;
+  provider: OSMEnvironment;
+};
 
 const AUTH_COOKIE = "__Host-aedjaeger_osm_auth";
 const LEGACY_AUTH_COOKIE = "aedjaeger_osm_auth";
@@ -97,10 +109,17 @@ const worker = {
     // Die App zeigt es im Speicher-Fenster an.
     if (pathname === "/api/osm/development/check-date")
       return withOSMApiLog(handleDevelopmentCheckDate)(request, environment);
+    // Echtes OSM (Etappe Q3): „noch vorhanden“ bestätigen. Standardmäßig AUS; nur mit OSM_PROD_WRITES_ENABLED=true.
+    if (pathname === "/api/osm/check-date") return withOSMApiLog(handleProductionCheckDate)(request, environment);
     if (pathname === "/api/osm/development/create-node")
       return withOSMApiLog(handleDevelopmentCreateNode)(request, environment);
+    // Echtes OSM (Etappe Q5): neuen AED eintragen. Standardmäßig AUS; braucht OSM_PROD_WRITES_ENABLED UND
+    // OSM_PROD_NEW_AEDS_ENABLED.
+    if (pathname === "/api/osm/create-node") return withOSMApiLog(handleProductionCreateNode)(request, environment);
     // Frisches Lesen eines bestehenden AED (nur lesend) für das Ergänzen von Angaben.
     if (pathname === "/api/osm/development/node") return handleDevelopmentNodeRead(request, environment);
+    // Echtes OSM (Etappe Q4): AED frisch lesen, bevor fehlende Angaben ergänzt werden. Nur lesend, nur mit Schalter.
+    if (pathname === "/api/osm/node") return handleProductionNodeRead(request, environment);
     // Fotoprüfung: Die Route ist standardmäßig AUS. Sie arbeitet nur, wenn der Betreiber
     // AI_ANALYSIS_ENABLED, OPENAI_API_KEY, die Zulassungsliste und die Kostenlimits gesetzt hat
     // (siehe server/vision/analyzeRoute.ts). Ohne diese Werte antwortet sie mit 503 und es
@@ -192,16 +211,17 @@ async function finishOSMLogin(
       clientId: configuration.clientId,
       redirectUri: configuration.redirectUri,
     };
+    const exchangeWithSecret = { ...exchangeInput, clientSecret: configuration.clientSecret };
     const exchanged =
       configuration.provider === "development"
         ? {
             environment: "development" as const,
-            identity: await exchangeOSMDevelopmentCodeForAccess({
-              ...exchangeInput,
-              clientSecret: configuration.clientSecret,
-            }),
+            identity: await exchangeOSMDevelopmentCodeForAccess(exchangeWithSecret),
           }
-        : { environment: "production" as const, identity: await exchangeOSMCodeForIdentity(exchangeInput) };
+        : {
+            environment: "production" as const,
+            identity: await exchangeOSMProductionCodeForAccess(exchangeWithSecret),
+          };
     stage = "rotate_session";
     const sessionToken = createOAuthSecret();
     // Die alte Sitzung wird widerrufen, bevor der neue Sitzungstoken ausgegeben wird.
@@ -292,6 +312,17 @@ async function getSession(request: Request, environment: WorkerEnvironment): Pro
       session?.environment === "development" && environment.OSM_OAUTH_ENCRYPTION_KEY
         ? await hashOSMDevelopmentWriteOwner(session, environment.OSM_OAUTH_ENCRYPTION_KEY)
         : undefined;
+    // Echtes OSM (Etappe Q3): Schreiben nur mit Schalter, mit funktionierender Produktions-Anmeldung und nur in einer
+    // Sitzung am echten OSM. Fehlt das Feld, gilt für die App „aus“.
+    const productionWriteAvailable =
+      session?.environment === "production" &&
+      environment.OSM_PROD_WRITES_ENABLED === "true" &&
+      loginAvailable &&
+      Boolean(environment.OSM_OAUTH_ENCRYPTION_KEY);
+    const productionWriteOwnerHash =
+      productionWriteAvailable && session && environment.OSM_OAUTH_ENCRYPTION_KEY
+        ? await hashOSMDevelopmentWriteOwner(session, environment.OSM_OAUTH_ENCRYPTION_KEY)
+        : undefined;
     return jsonResponse(
       {
         authenticated: session !== null,
@@ -301,6 +332,14 @@ async function getSession(request: Request, environment: WorkerEnvironment): Pro
         developmentWriteAvailable,
         ...(developmentWriteOwnerHash ? { developmentWriteOwnerHash } : {}),
         ...(correctionsAvailable ? { developmentCorrectionsAvailable: true } : {}),
+        ...(productionWriteAvailable ? { productionWriteAvailable: true } : {}),
+        ...(productionWriteAvailable && environment.OSM_PROD_NEW_AEDS_ENABLED === "true"
+          ? { productionNewAedsAvailable: true }
+          : {}),
+        ...(productionWriteAvailable && environment.OSM_PROD_DETAIL_CORRECTIONS_ENABLED === "true"
+          ? { productionCorrectionsAvailable: true }
+          : {}),
+        ...(productionWriteOwnerHash ? { productionWriteOwnerHash } : {}),
         ...(photoCheckAvailable ? { photoCheckAvailable: true } : {}),
       },
       200,
@@ -352,13 +391,10 @@ export async function revokeOSMToken(
   if (!configuration) return;
   const body = new URLSearchParams({ token, token_type_hint: "access_token" });
   const headers = new Headers({ "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" });
-  if (configuration.provider === "development") {
-    const formEncode = (value: string): string => new URLSearchParams({ value }).toString().slice("value=".length);
-    const credentials = btoa(`${formEncode(configuration.clientId)}:${formEncode(configuration.clientSecret)}`);
-    headers.set("Authorization", `Basic ${credentials}`);
-  } else {
-    body.set("client_id", configuration.clientId);
-  }
+  // Beide Anwendungen sind vertraulich: Auch der Widerruf meldet sich mit client_secret_basic an.
+  const formEncode = (value: string): string => new URLSearchParams({ value }).toString().slice("value=".length);
+  const credentials = btoa(`${formEncode(configuration.clientId)}:${formEncode(configuration.clientSecret)}`);
+  headers.set("Authorization", `Basic ${credentials}`);
   try {
     await fetchWithoutRedirects(
       getOSMProviderEndpoints(osmEnvironment).revocation,
@@ -382,11 +418,13 @@ function getAuthConfiguration(
 ): OSMAuthConfiguration | null {
   const development = osmEnvironment === "development";
   if (development && environment.OSM_DEV_LOGIN_ENABLED !== "true") return null;
+  // Echtes OSM nur mit ausdrücklichem Schalter (Standard aus). So lässt sich die Anmeldung ohne Deploy abschalten.
+  if (!development && environment.OSM_PROD_LOGIN_ENABLED !== "true") return null;
   const clientId = development ? environment.OSM_DEV_CLIENT_ID : environment.OSM_CLIENT_ID;
   const redirectValue = development ? environment.OSM_DEV_REDIRECT_URI : environment.OSM_REDIRECT_URI;
   if (!clientId || !redirectValue || !environment.OSM_OAUTH_ENCRYPTION_KEY) return null;
-  const clientSecret = development ? environment.OSM_DEV_CLIENT_SECRET : undefined;
-  if (development && !clientSecret) return null;
+  const clientSecret = development ? environment.OSM_DEV_CLIENT_SECRET : environment.OSM_CLIENT_SECRET;
+  if (!clientSecret) return null;
   if (clientId.length > 256 || clientId.trim().length === 0) return null;
   try {
     const redirectUri = new URL(redirectValue);
@@ -402,16 +440,13 @@ function getAuthConfiguration(
       redirectUri.hash
     )
       return null;
-    const common = {
+    return {
       clientId,
+      clientSecret,
       redirectUri: redirectUri.toString(),
       encryptionKey: environment.OSM_OAUTH_ENCRYPTION_KEY,
+      provider: osmEnvironment,
     };
-    if (development) {
-      if (!clientSecret) return null;
-      return { ...common, provider: "development", clientSecret };
-    }
-    return { ...common, provider: "production" };
   } catch {
     return null;
   }

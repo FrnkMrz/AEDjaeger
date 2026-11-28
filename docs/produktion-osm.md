@@ -1,7 +1,7 @@
 # Entwurf: sicherer Produktions-Schreibweg für OpenStreetMap
 
-Stand: **15.11.2026**  
-Status: **Entwurf zur Produkt- und Betriebsentscheidung; nicht implementiert und keine Freigabe für produktive OSM-Schreibvorgänge.**
+Stand: **26.11.2026**  
+Status: **Entschieden und freigegeben am 26.11.2026 (Abschnitt 13); die Umsetzung läuft in den Etappen Q1 bis Q6 (Abschnitt 15). Bis eine Etappe gemergt und ihr Schalter vom Projektinhaber gesetzt ist, bleiben produktive Schreibvorgänge technisch aus.**
 
 Dieses Dokument beschreibt, welche Voraussetzungen erfüllt sein müssen, bevor AEDjaeger Änderungen an der öffentlichen OpenStreetMap-API anbieten darf. Es knüpft an die vorhandenen Regeln für den Testserver an und macht sie für einen möglichen Produktionsbetrieb konkret. Bis eine gesonderte Freigabe vorliegt, bleiben Produktionsschreibzugriffe technisch unmöglich. Die aktive Pilotadresse ist weiterhin `workers.dev`.
 
@@ -19,11 +19,11 @@ Der Entwurf umfasst:
 - Überwachung, Störungsbehandlung, Korrektur/Rücknahme und öffentliche Ankündigung;
 - schrittweise Umbenennung von `development*`-Bezeichnungen in neutrale Namen.
 
-Es autorisiert ausdrücklich **nicht**: Code für Produktionsschreibzugriffe, Aktivierung von Secrets oder Schaltern, echte OSM-Schreibtests, reale Änderungen, kostenpflichtige Dienste, bezahlte Tarife, Domains oder einen öffentlichen Start. Für jeden dieser Schritte ist eine eigene Entscheidung nötig. Produktions-OSM darf in gewöhnlichen Tests, CI, Vorschauen und Agentenläufen nie geändert werden.
+Seit dem 26.11.2026 ist der Code für Produktionsschreibzugriffe freigegeben (Abschnitt 13). Weiterhin **nicht** autorisiert sind: das Setzen von Secrets oder Schaltern durch einen Agenten, echte OSM-Schreibtests in Tests, CI oder Agentenläufen, kostenpflichtige Dienste, bezahlte Tarife und weitere Domains. Die Schalter setzt ausschließlich der Projektinhaber. Produktions-OSM darf in gewöhnlichen Tests, CI, Vorschauen und Agentenläufen nie geändert werden.
 
 ### Aktueller Stand
 
-- Die Anmeldung kennt Produktionsidentität, fordert dort aber nur `openid`; das Produktions-Token wird nicht für API-Schreibzugriff abgelegt.
+- Seit Etappe Q2 (27.11.2026) fordert die Anmeldung am echten OSM genau `openid write_api` an, meldet sich als vertrauliche Anwendung mit Secret an (client_secret_basic plus PKCE) und legt das Token verschlüsselt (AES-GCM mit `OSM_OAUTH_ENCRYPTION_KEY`) an die Sitzung gebunden im Worker ab. Fehlt `write_api` oder kommen weitere Rechte dazu, scheitert die Anmeldung. Seit Etappe Q3 gibt es die Schreibroute `POST /api/osm/check-date` für das Prüfdatum (siehe Abschnitt 15).
 - Schreibvorschau und Schreibrouten sind an die Entwicklungsumgebung gebunden. Der feste Host lautet `master.apis.dev.openstreetmap.org`.
 - `OSM_DEV_WRITES_ENABLED` schaltet die vorhandenen Entwicklungs-Schreibwege standardmäßig aus. Korrekturen bestehender Werte hängen zusätzlich von `OSM_DETAIL_CORRECTIONS_ENABLED` ab, ebenfalls standardmäßig aus.
 - Die Umgebungssuche nutzt das AED-Layer im OpenFireMap-PMTiles-Archiv. Für mögliche Neuanlagen gibt es eine gezielte Nachsuche auf dem OSM-Entwicklungsserver. Ein leeres Archiv-Ergebnis allein ist kein Beweis, dass es in der Umgebung keinen AED gibt.
@@ -216,20 +216,22 @@ Die Migration erfolgt schrittweise: erst Typen/Konstanten ohne Verhaltensänderu
 
 Zu jedem Tor gehört ein PR mit deutscher Beschreibung, genaue Schalterliste und Rückweg. PRs und CI erhalten niemals Produktions-Tokens. Ein Deployment mit standardmäßig ausgeschalteten Flags ist keine Freigabe, die Schalter später ohne gesonderte Entscheidung einzuschalten.
 
-## 13. Offene Entscheidungen vor Implementierung
+## 13. Entscheidungen des Projektinhabers (26.11.2026)
 
-1. Welche Länder/Regionen und welche Nutzergruppe umfasst der mögliche Pilot?
-2. Ist `source=survey` auf Objekt-Tags erwünscht oder soll die Information allein im Changeset-Kommentar stehen?
-3. Welcher Changeset-Kommentar ist mit der OSM-Gemeinschaft abgestimmt?
-4. Welcher API-Endpunkt kann eine vollständige, ausreichend aktuelle AED-Umkreissuche belegen? Wenn keiner: Soll Neuanlage in Produktion zunächst deaktiviert bleiben?
-5. Sind die Startlimits (5 insgesamt, davon 2 Neuanlagen/Tag, 1 Änderung je Objekt/24 h) angemessen?
-6. Wie lange müssen abgeschlossene und unklare Vorgänge aufbewahrt werden, und wer darf die Betreiberübersicht lesen?
-7. Soll Produktionskorrektur vorhandener Werte im ersten Pilot vollständig ausgeschlossen bleiben?
-8. Welche Community-Kanäle und Ansprechpartner nutzt der Projektinhaber für die Vorankündigung?
-9. Ist eine separate Production-OAuth-Anwendung für Redirects und Zugangskontrolle verfügbar und eingerichtet?
-10. Welcher Freigabezeitpunkt gilt nach Community-Feedback, manueller Abnahme und erfolgreichem Testserver-Schreibtest?
+Die zehn offenen Fragen sind beantwortet. Wo die Antwort vom Vorschlag abweicht, steht der Hinweis auf das verbleibende Risiko dabei.
 
-Bis diese Fragen entschieden und die Abnahmetore dokumentiert sind, bleiben alle Produktionsschreibschalter aus und Neuanlagen auf den Testserver beschränkt.
+| Nr | Frage | Entscheidung | Folge und Risiko |
+| --- | --- | --- | --- |
+| 1 | Region und Nutzergruppe | **Weltweit, alle angemeldeten OSM-Konten, aber nur dort, wo die Person ist:** Ein neuer AED liegt höchstens 100 m vom Standort (Foto-GPS oder Handy) entfernt. | Das PMTiles-Archiv deckt nur DACH ab; außerhalb ist die frische OSM-API-Abfrage die einzige Quelle (Abschnitt 6). Ein Fehler trifft sofort fremde Daten; Schutz durch Schalter und Limit. `OSM_PROD_ALLOWED_SUBJECTS` entfällt. |
+| 2 | `source=survey` | **Nur am Changeset**, nicht am Objekt. | Keine zusätzlichen Objekt-Tags. |
+| 3 | Changeset-Kommentar | **Zweisprachig, Deutsch und Englisch**, vor dem Speichern sichtbar. | Wortlaut (Q3): „AED vor Ort als vorhanden bestätigt / AED confirmed present on site (AEDjaeger)“, festgelegt in `src/contracts/changesetComment.ts` und vor dem Speichern angezeigt. |
+| 4 | Neuanlage in Produktion | **Eingeschaltet** (eigener Schalter `OSM_PROD_NEW_AEDS_ENABLED`). | Wie beim Hydrantenjäger: PMTiles nur zum schnellen Anzeigen, vor dem Vorschlag und erneut vor dem Upload eine frische OSM-API-Abfrage. Ein Fehler sperrt die Neuanlage. |
+| 5 | Limits | **20 Schreibvorgänge pro Konto und UTC-Tag** zum Testen; später eventuell weniger. Zusätzlich höchstens 5 Änderungen je Objekt in 24 Stunden (am 27.11.2026 von 1 auf 5 erhöht, damit sich ein eigener Fehler sofort korrigieren lässt). | Kein eigenes Teil-Limit für Neuanlagen. |
+| 6 | Aufbewahrung und Übersicht | **90 Tage**, Betreiberübersicht nur für den Projektinhaber. | Bereinigung über den vorhandenen Aufräumjob. |
+| 7 | Korrekturen in Produktion | **Einbauen**, hinter `OSM_PROD_DETAIL_CORRECTIONS_ENABLED` (Standard aus). | Gleiche Schutzregeln wie auf dem Testserver (Vorwert-Prüfung, zweite Bestätigung). |
+| 8 | Community-Ankündigung | **Entfällt**, wie beim bereits veröffentlichten Hydrantenjäger. | Das Changeset macht die Herkunft klar: `created_by=AEDjaeger`, `locale`, `source=survey` und ein Kommentar. Verbleibendes Risiko: Rückfragen anderer Mapper kommen über die Changeset-Kommentare. |
+| 9 | Production-OAuth-Anwendung | **Ja, wird eingerichtet.** | Nur der Projektinhaber kann sie mit seinem Konto auf openstreetmap.org anlegen. Anleitung in Abschnitt 15, Etappe Q2. |
+| 10 | Freigabezeitpunkt | **Freigegeben am 26.11.2026.** | Die Schalter setzt der Projektinhaber je Etappe selbst, nachdem sie gemergt und geprüft ist. |
 
 ## 14. Referenzen im Repository und externe Grundlagen
 
@@ -241,3 +243,21 @@ Bis diese Fragen entschieden und die Abnahmetore dokumentiert sind, bleiben alle
 - Gesamt-Review vom 13.11.2026 (P9/P10) – lokale Arbeitsgrundlage, nicht Bestandteil des veröffentlichten Repositories.
 - [OSM OAuth](https://wiki.openstreetmap.org/wiki/OAuth) – OAuth-Hosts und Scopes.
 - [OSM API v0.6](https://wiki.openstreetmap.org/wiki/Api06) – Bounding-Box-Abfrage, Capabilities, Changesets und Fehlerbehandlung.
+
+## 15. Bauplan (Etappen Q1 bis Q6)
+
+Jede Etappe ist ein eigener PR gegen `main`. Kein Test, keine CI und kein Agentenlauf ruft die echte OSM-API schreibend auf; lesende Aufrufe laufen in Tests nur gegen Mocks.
+
+| Etappe | Inhalt | Schalter |
+| --- | --- | --- |
+| **Q1** Frische Umkreissuche | Nach dem Vorbild des Hydrantenjägers: PMTiles liefert in DACH weiter die schnelle erste Anzeige. Danach fragt der Worker `GET /api/0.6/map` für einen Ausschnitt von etwa 100 m um den Standort am Produktionshost `api.openstreetmap.org` ab: weltweit, minutenaktuell. Erst dieses frische Ergebnis entscheidet über Treffer, Hinweise und Neuanlage. Prüft Status, Grenzen, Fehlerzeilen und Größe; ein Fehler ist nie ein leeres Ergebnis. Rein lesend. **Gemergt am 26.11.2026 (PR #134), live.** | keiner (nur lesend) |
+| **Q2** Produktions-Anmeldung mit Schreibrecht | OAuth mit `openid write_api`, eigene Production-OAuth-Anwendung (am 26.11.2026 vom Projektinhaber registriert, **vertraulich**: der Worker braucht dafür ein neues Secret `OSM_CLIENT_SECRET`, wie heute schon `OSM_DEV_CLIENT_SECRET` beim Testserver), Token verschlüsselt in D1 (eigenes Secret), feste Host-Zuordnung je Umgebung. Anleitung für den Projektinhaber zum Anlegen der OAuth-Anwendung. **Gemergt am 27.11.2026 (PR #135), live.** Das Token wird mit dem vorhandenen Schlüssel `OSM_OAUTH_ENCRYPTION_KEY` verschlüsselt; ein eigener Schlüssel nur für Produktion bleibt eine mögliche spätere Härtung. | `OSM_PROD_LOGIN_ENABLED` |
+| **Q3** Schnellweg in Produktion | „Noch vorhanden“ schreibt `check_date` in das echte OSM. Changeset mit `created_by=AEDjaeger`, `source=survey` und zweisprachigem Kommentar. Limit 20 pro Tag und 5 je Objekt in 24 h, atomar in D1. Wiederaufnahme unklarer Uploads wie auf dem Testserver. **Gemergt am 27.11.2026 (PR #136), live:** dieselbe Route wie beim Testserver mit Regeln je Umgebung (`server/osm/developmentWriteRoute.ts`), fester Host `api.openstreetmap.org`, Speichern nur für frisch gelesene Treffer (`source: "live"`), keine Details. Limits in einer SQL-Anweisung (`reserveOSMProductionWrite`), neue additive Migration `0014`; Vorgänge 90 Tage. | `OSM_PROD_WRITES_ENABLED` |
+| **Q4** Ergänzen in Produktion | Detailweg (nur fehlende Tags) für bestehende AEDs. **Gemergt am 27.11.2026 (PR #137), live:** Leseroute `GET /api/osm/node` (frischer Stand und Version fürs Formular), Schreiben über dieselbe Route wie Q3 mit `details`; jeder Schlüssel muss am Objekt noch fehlen, sonst 409; Korrekturen am echten OSM mit 403 `corrections_disabled`. Kommentar „AED vor Ort geprüft, fehlende Angaben ergänzt / AED checked on site, missing details added (AEDjaeger)“. | `OSM_PROD_WRITES_ENABLED` |
+| **Q5** Neuanlage in Produktion | Neuanlage mit erneuter OSM-API-Abfrage unmittelbar vor dem Upload. Der Kartenpunkt darf höchstens 100 m vom Standort (Foto-GPS oder Handy) entfernt liegen. **Gemergt am 27.11.2026 (PR #138), live:** Route `POST /api/osm/create-node` (dieselbe Logik wie beim Testserver), Schalter `OSM_PROD_WRITES_ENABLED` **und** `OSM_PROD_NEW_AEDS_ENABLED`, frische Kartenabfrage am echten OSM unmittelbar vor dem Anlegen, Tageslimit des Kontos, Kommentar „AED vor Ort neu eingetragen / New AED mapped on site (AEDjaeger)“. Die 100-m-Grenze ergibt sich aus zwei Regeln: Der Kartenpunkt darf sich nur innerhalb des abgesuchten Gebiets bewegen (Genauigkeit plus 50 m, höchstens 100 m um den Standort), und am echten OSM muss der Standort aus Foto-GPS oder vom Handy stammen; ein selbst gesetzter Kartenpunkt reicht nicht. Der Server kennt den Standort der Person nicht und prüft deshalb vor allem die Doppelten frisch. | `OSM_PROD_NEW_AEDS_ENABLED` |
+| **Q6** Korrekturen in Produktion | Ersetzen vorhandener Werte mit Vorwert-Prüfung und zweiter Bestätigung. **Gemergt am 27.11.2026 (PR #139), live:** dieselbe Route wie Q3/Q4 mit `expected_before` und `confirmed_corrections`; nur mit `OSM_PROD_DETAIL_CORRECTIONS_ENABLED` (der Testserver-Schalter wirkt nie auf das echte OSM); der Server bricht ab, wenn ein alter Wert nicht mehr genau so dasteht. Kommentar „AED vor Ort geprüft, Angaben ergänzt und korrigiert / AED checked on site, details added and corrected (AEDjaeger)“. | `OSM_PROD_DETAIL_CORRECTIONS_ENABLED` |
+
+**Stand 27.11.2026:** Alle sechs Etappen sind gemergt und deployt. Der Projektinhaber hat alle Schalter gesetzt (`OSM_PROD_LOGIN_ENABLED`, `OSM_PROD_WRITES_ENABLED`, `OSM_PROD_NEW_AEDS_ENABLED`, `OSM_PROD_DETAIL_CORRECTIONS_ENABLED`) und jede Etappe auf `aedjaeger.de` im Hauptablauf erfolgreich getestet. Einzelne Randfälle der [Pilot-Abnahme](pilot-abnahme.md#g-echtes-osm-bestätigen-ergänzen-neu-eintragen-und-korrigieren-etappen-q3-bis-q6) sind nicht einzeln protokolliert.
+
+Die Umbenennung der `development*`-Namen (Abschnitt 11) bleibt ein eigener, späterer Schritt und gehört nicht in dieselben PRs.
+

@@ -11,6 +11,17 @@ export type OSMSessionStatus = {
   developmentCorrectionsAvailable: boolean;
   /** true nur, wenn die Fotoprüfung für dieses Konto aktiv ist (Betreiber-Konfiguration). */
   photoCheckAvailable: boolean;
+  /**
+   * Etappe Q3: true nur bei einer Anmeldung am echten OSM UND eingeschaltetem Schalter OSM_PROD_WRITES_ENABLED.
+   * Ein fehlendes oder fremdes Feld heißt „aus“.
+   */
+  productionWriteAvailable: boolean;
+  /** Kennung zum Fortsetzen von Vorgängen am echten OSM nach einem Netzabbruch (wie beim Testserver). */
+  productionWriteOwnerHash?: string;
+  /** Etappe Q5: Neuanlagen am echten OSM sind freigegeben (beide Schalter). Ein fehlendes Feld heißt „aus“. */
+  productionNewAedsAvailable: boolean;
+  /** Etappe Q6: Korrekturen bestehender Werte am echten OSM freigegeben. Ein fehlendes Feld heißt „aus“. */
+  productionCorrectionsAvailable: boolean;
 };
 
 /** Fail closed when the Worker is unreachable or returns an unexpected response. */
@@ -33,6 +44,11 @@ export async function loadOSMSession(fetcher: typeof fetch = fetch): Promise<OSM
     developmentWriteAvailable: payload.developmentWriteAvailable === true,
     developmentCorrectionsAvailable: payload.developmentCorrectionsAvailable === true,
     photoCheckAvailable: payload.photoCheckAvailable === true,
+    productionWriteAvailable: payload.productionWriteAvailable === true,
+    productionNewAedsAvailable:
+      payload.productionWriteAvailable === true && payload.productionNewAedsAvailable === true,
+    productionCorrectionsAvailable:
+      payload.productionWriteAvailable === true && payload.productionCorrectionsAvailable === true,
   };
 }
 
@@ -60,6 +76,12 @@ function isSessionStatus(value: unknown): value is OSMSessionStatus {
         /^[a-f0-9]{64}$/u.test(status.developmentWriteOwnerHash))) &&
     (status.developmentCorrectionsAvailable === undefined ||
       typeof status.developmentCorrectionsAvailable === "boolean") &&
-    (status.photoCheckAvailable === undefined || typeof status.photoCheckAvailable === "boolean")
+    (status.photoCheckAvailable === undefined || typeof status.photoCheckAvailable === "boolean") &&
+    (status.productionWriteAvailable === undefined || typeof status.productionWriteAvailable === "boolean") &&
+    (status.productionNewAedsAvailable === undefined || typeof status.productionNewAedsAvailable === "boolean") &&
+    (status.productionCorrectionsAvailable === undefined ||
+      typeof status.productionCorrectionsAvailable === "boolean") &&
+    (status.productionWriteOwnerHash === undefined ||
+      (typeof status.productionWriteOwnerHash === "string" && /^[a-f0-9]{64}$/u.test(status.productionWriteOwnerHash)))
   );
 }

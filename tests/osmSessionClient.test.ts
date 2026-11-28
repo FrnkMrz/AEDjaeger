@@ -24,11 +24,35 @@ describe("OSM session client", () => {
       developmentWriteAvailable: false,
       developmentCorrectionsAvailable: false,
       photoCheckAvailable: false,
+      productionWriteAvailable: false,
+      productionNewAedsAvailable: false,
+      productionCorrectionsAvailable: false,
     });
     expect(fetcher).toHaveBeenCalledWith("/api/auth/session", {
       credentials: "same-origin",
       headers: { Accept: "application/json" },
     });
+  });
+
+  it("reads the production write flag only when it is exactly true and rejects a malformed owner hash", async () => {
+    const base = {
+      authenticated: true,
+      loginAvailable: true,
+      developmentLoginAvailable: false,
+      developmentSession: false,
+      developmentWriteAvailable: false,
+    };
+    const load = (extra: Record<string, unknown>) =>
+      loadOSMSession(vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ ...base, ...extra }))));
+    await expect(
+      load({ productionWriteAvailable: true, productionWriteOwnerHash: "a".repeat(64) }),
+    ).resolves.toMatchObject({
+      productionWriteAvailable: true,
+      productionWriteOwnerHash: "a".repeat(64),
+    });
+    await expect(load({})).resolves.toMatchObject({ productionWriteAvailable: false });
+    await expect(load({ productionWriteAvailable: "true" })).rejects.toThrow();
+    await expect(load({ productionWriteAvailable: true, productionWriteOwnerHash: "not-a-hash" })).rejects.toThrow();
   });
 
   it("reads the photo check flag only when it is exactly true", async () => {

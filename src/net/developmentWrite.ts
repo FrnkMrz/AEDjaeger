@@ -18,14 +18,28 @@ export async function sendDevelopmentWrite(
   request: DevelopmentWriteRequest,
   recoveryIdentity: string | undefined,
 ): Promise<DevelopmentWriteHttpResult> {
-  const isCheckDate = request.kind === "check-date";
-  const response = await fetch(isCheckDate ? "/api/osm/development/check-date" : "/api/osm/development/create-node", {
+  return fetchWrite(developmentWritePath(request), request, recoveryIdentity);
+}
+
+/** Die Route je Ziel: Testserver wie bisher, echtes OSM für Prüfdatum, Ergänzen (Q3, Q4) und Neuanlage (Q5). */
+export function developmentWritePath(request: DevelopmentWriteRequest): string {
+  const production = request.environment === "production";
+  if (request.kind === "check-date") return production ? "/api/osm/check-date" : "/api/osm/development/check-date";
+  return production ? "/api/osm/create-node" : "/api/osm/development/create-node";
+}
+
+async function fetchWrite(
+  path: string,
+  request: DevelopmentWriteRequest,
+  recoveryIdentity: string | undefined,
+): Promise<DevelopmentWriteHttpResult> {
+  const response = await fetch(path, {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     cache: "no-store",
     body: JSON.stringify(
-      isCheckDate
+      request.kind === "check-date"
         ? {
             recovery_identity: recoveryIdentity,
             operation_id: request.operationId,
@@ -34,6 +48,8 @@ export async function sendDevelopmentWrite(
             expected_version: request.expectedVersion,
             expected_check_date: request.expectedCheckDate,
             observed_on: request.observedOn,
+            // Nur beim echten OSM: die Sprache für das Changeset (`locale`).
+            ...(request.environment === "production" && request.locale ? { locale: request.locale } : {}),
             // Ohne Detailangaben bleibt das bisherige Requestformat samt Abgleichswert unverändert.
             ...(request.details && Object.keys(request.details).length > 0 ? { details: request.details } : {}),
             // Korrekturen übertragen den vorher bestätigten Altwert für die serverseitige Konfliktprüfung.
@@ -51,6 +67,8 @@ export async function sendDevelopmentWrite(
             observed_on: request.observedOn,
             details: request.details,
             confirmed_different_candidate_ids: request.confirmedDifferentCandidateIds,
+            // Nur beim echten OSM: die Sprache für das Changeset (`locale`).
+            ...(request.environment === "production" && request.locale ? { locale: request.locale } : {}),
           },
     ),
   });

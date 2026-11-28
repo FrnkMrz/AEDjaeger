@@ -1,4 +1,5 @@
 import { levelLeftBehindByIndoorChange } from "../../contracts/aedDetails";
+import { PRODUCTION_CHANGESET_COMMENTS } from "../../contracts/changesetComment";
 import { formatCalendarDate } from "../../domain/localDate";
 import type { FlowState } from "../../domain/workflow";
 import { displayCandidateLabel } from "../markup";
@@ -18,6 +19,10 @@ export function renderPreviewState(context: PreviewContext): string {
     developmentWriteOwnerHash,
     developmentCorrectionsAvailable,
     developmentWriteStatusKeys,
+    productionWriteAvailable,
+    productionWriteStatusKeys,
+    productionNewAedsAvailable,
+    searchLocationSource,
     isRecoveryOwnerMismatch,
     detailEverythingPresent,
     detailFormMarkup,
@@ -43,21 +48,31 @@ export function renderPreviewState(context: PreviewContext): string {
               .map(([key, value]) => `<li><code>${escapeHtml(key)}=${escapeHtml(value)}</code></li>`)
               .join("")}</ul>${cautionMarkup}`
           : `<p>${tv(state.result.reason === "position-not-confirmed" ? "newPositionRequired" : state.result.reason === "search-found-candidate" ? "newPreviewFoundCandidate" : "newPreviewSearchInvalid")}</p>`;
-      const canCreate =
+      const developmentCanCreate =
         developmentSession &&
         developmentWriteAvailable &&
         Boolean(developmentWriteOwnerHash) &&
         state.result.kind === "ready";
+      // Echtes OSM (Etappe Q5): nur mit Schalter und nur mit echtem Standort (Foto-GPS oder Handy). Ein selbst gesetzter
+      // Kartenpunkt reicht nicht, weil ein neuer AED nur dort eingetragen werden darf, wo die Person ist.
+      const realLocation = searchLocationSource !== undefined && searchLocationSource !== "map";
+      const productionTarget = !developmentSession && productionNewAedsAvailable;
+      const productionCanCreate = productionTarget && realLocation && state.result.kind === "ready";
+      const canCreate = developmentCanCreate || productionCanCreate;
+      const createStatusKeys = productionTarget ? productionWriteStatusKeys : developmentWriteStatusKeys;
       const statusCopy =
         state.writeStatus === "complete"
-          ? tv("developmentCreated")
+          ? tv(productionTarget ? "productionCreated" : "developmentCreated")
           : state.writeStatus
-            ? tv(developmentWriteStatusKeys[state.writeStatus])
+            ? tv(createStatusKeys[state.writeStatus])
             : "";
+      // Ein unklarer Vorgang lässt sich nur dort fortsetzen, wo er begann: am echten OSM oder am Testserver.
+      const createWritesHere = productionTarget
+        ? productionNewAedsAvailable
+        : developmentSession && developmentWriteAvailable;
       const blockedRecovery =
-        state.writeStatus === "uncertain" &&
-        (isRecoveryOwnerMismatch() || !developmentSession || !developmentWriteAvailable)
-          ? `<p class="simulation-note" role="status">${tv(isRecoveryOwnerMismatch() ? "recoveryWrongAccount" : !developmentSession ? "recoveryNeedSignIn" : "recoveryWritesDisabled")}</p>`
+        state.writeStatus === "uncertain" && (isRecoveryOwnerMismatch() || !createWritesHere)
+          ? `<p class="simulation-note" role="status">${tv(isRecoveryOwnerMismatch() ? "recoveryWrongAccount" : productionTarget || developmentSession ? "recoveryWritesDisabled" : "recoveryNeedSignIn")}</p>`
           : "";
       const writeStatus = state.writeStatus
         ? `<p role="status" class="simulation-note ${state.writeStatus === "complete" ? "save-status-success" : ""}">${statusCopy}</p>${blockedRecovery}`
@@ -66,16 +81,18 @@ export function renderPreviewState(context: PreviewContext): string {
       // Speichern-Knopf gesperrt. Der Klick-Handler prüft den Haken zusätzlich noch einmal.
       const writeAction =
         canCreate && !state.writeStatus
-          ? `<div class="position-confirmation"><label for="new-aed-absence-confirmed"><input id="new-aed-absence-confirmed" type="checkbox" /><span>${tv("newAbsenceConfirm")}</span></label></div><button class="button button-primary" data-action="create-development-node" disabled>${tv("developmentCreateAction")}</button>`
+          ? `${productionCanCreate ? `<p class="simulation-note">${escapeHtml(tv("productionWriteNotice", { comment: PRODUCTION_CHANGESET_COMMENTS.create }))}</p>` : ""}<div class="position-confirmation"><label for="new-aed-absence-confirmed"><input id="new-aed-absence-confirmed" type="checkbox" /><span>${tv("newAbsenceConfirm")}</span></label></div><button class="button button-primary" data-action="create-development-node" disabled>${tv(productionCanCreate ? "productionCreateAction" : "developmentCreateAction")}</button>`
           : state.writeStatus === "uncertain" && state.operationId && !isRecoveryOwnerMismatch()
-            ? `<button class="button button-secondary" data-action="retry-development-write">${developmentSession && developmentWriteAvailable ? tv("developmentRetry") : tv("recoveryContinue")}</button>`
+            ? `<button class="button button-secondary" data-action="retry-development-write">${createWritesHere ? tv(productionTarget ? "productionRetry" : "developmentRetry") : tv("recoveryContinue")}</button>`
             : "";
       // Der Hinweis „nur eine Vorschau“ steht nur, wenn es nichts zu speichern gibt. Mit Speichern-Knopf sagt dessen
       // Beschriftung („Testserver: AED eintragen“) schon, wohin die Änderung geht.
       // Der Hinweis „nur eine Vorschau“ gilt nur, wenn gar nichts gespeichert werden kann und kein Vorgang läuft. Nach einem
       // Speichern (oder währenddessen) wäre er falsch; dann sagt die Statusmeldung, was passiert ist.
       const noWriteNotice =
-        !canCreate && !state.writeStatus ? `<p class="simulation-note">${tv("previewNoWrite")}</p>` : "";
+        !canCreate && !state.writeStatus
+          ? `<p class="simulation-note">${tv(productionTarget && !realLocation && state.result.kind === "ready" ? "productionNeedsDeviceLocation" : "previewNoWrite")}</p>`
+          : "";
       // „Zurück“ bleibt hier immer: Es führt zur Positionsbestätigung bzw. zur Suche, nicht nur zu Treffern.
       // Kommt die Vorschau aus dem Detailformular, führt „Zurück“ dorthin (die Eingaben bleiben erhalten). Sonst zur Suche.
       const backButton = state.detailsPosition
@@ -98,13 +115,30 @@ export function renderPreviewState(context: PreviewContext): string {
       const candidate = state.returnState.search.candidates.find((item) => item.id === candidateId);
       // Ein AED aus dem Archiv des echten OSM gibt es auf dem Testserver nicht. Dafür gibt es dort keinen Speichern-Knopf.
       const archiveOnly = developmentSession && developmentWriteAvailable && candidate?.source === "archive";
-      const canWrite =
+      const developmentCanWrite =
         developmentSession &&
         developmentWriteAvailable &&
         Boolean(developmentWriteOwnerHash) &&
         candidate?.osmType === "node" &&
         result.kind === "ready" &&
         !archiveOnly;
+      // Echtes OSM (Etappe Q3): nur das Prüfdatum, nur für einen frisch von der OSM-API gelesenen Treffer ("live") und
+      // ohne Detailangaben. Ein Treffer nur aus dem Archiv ist bis zu 5 Tage alt; dafür gibt es keinen Speichern-Knopf.
+      const productionCanWrite =
+        !developmentSession &&
+        productionWriteAvailable &&
+        candidate?.osmType === "node" &&
+        candidate.source === "live" &&
+        // Die Version kommt aus der frischen Suche oder (nach dem Formular) aus dem frisch gelesenen Objekt.
+        (state.node !== undefined || candidate.version !== undefined) &&
+        result.kind === "ready" &&
+        // Ergänzen ja (Q4); bestehende Werte ersetzen nur mit dem Korrektur-Schalter dieser Sitzung (Q6).
+        ((state.corrections ?? []).length === 0 || developmentCorrectionsAvailable);
+      const canWrite = developmentCanWrite || productionCanWrite;
+      const statusKeys =
+        productionCanWrite || (!developmentSession && productionWriteAvailable)
+          ? productionWriteStatusKeys
+          : developmentWriteStatusKeys;
       // Nur das Wesentliche: das neue Prüfdatum. Der bisherige Wert steht nur da, wenn es einen gibt.
       const content =
         result.kind === "ready"
@@ -132,29 +166,33 @@ export function renderPreviewState(context: PreviewContext): string {
         levelLeft === null
           ? ""
           : `<p class="detail-hint">${escapeHtml(tv("detailLevelStays", { level: levelLeft }))}</p>`;
+      const productionTexts = statusKeys === productionWriteStatusKeys;
       const completeText =
         corrections.length > 0
-          ? tv("developmentChangesComplete")
+          ? tv(productionTexts ? "productionChangesComplete" : "developmentChangesComplete")
           : addedTags.length > 0
-            ? tv("developmentDetailsComplete")
-            : tv("developmentComplete");
+            ? tv(productionTexts ? "productionDetailsComplete" : "developmentDetailsComplete")
+            : tv(statusKeys.complete);
       const statusText =
-        state.writeStatus === "complete"
-          ? completeText
-          : state.writeStatus
-            ? tv(developmentWriteStatusKeys[state.writeStatus])
-            : "";
+        state.writeStatus === "complete" ? completeText : state.writeStatus ? tv(statusKeys[state.writeStatus]) : "";
+      const writesHere =
+        statusKeys === productionWriteStatusKeys ? productionWriteAvailable : developmentWriteAvailable;
       const blockedRecovery =
-        state.writeStatus === "uncertain" &&
-        (isRecoveryOwnerMismatch() || !developmentSession || !developmentWriteAvailable)
-          ? `<p class="simulation-note" role="status">${tv(isRecoveryOwnerMismatch() ? "recoveryWrongAccount" : !developmentSession ? "recoveryNeedSignIn" : "recoveryWritesDisabled")}</p>`
+        state.writeStatus === "uncertain" && (isRecoveryOwnerMismatch() || !writesHere)
+          ? `<p class="simulation-note" role="status">${tv(isRecoveryOwnerMismatch() ? "recoveryWrongAccount" : statusKeys === productionWriteStatusKeys || developmentSession ? "recoveryWritesDisabled" : "recoveryNeedSignIn")}</p>`
           : "";
       const writeStatus = state.writeStatus
         ? `<p role="status" class="simulation-note ${state.writeStatus === "complete" ? "save-status-success" : ""}">${statusText}</p>${blockedRecovery}`
         : "";
+      // Echtes OSM: Vor dem Speichern steht offen da, dass die Änderung öffentlich wird, mit genau dem Kommentar, den der
+      // Server danach an OSM schickt (gemeinsame Datei src/contracts/changesetComment.ts).
+      const productionNotice =
+        productionCanWrite && !state.writeStatus
+          ? `<p class="simulation-note">${escapeHtml(tv("productionWriteNotice", { comment: corrections.length > 0 ? PRODUCTION_CHANGESET_COMMENTS.corrections : addedTags.length > 0 ? PRODUCTION_CHANGESET_COMMENTS.details : PRODUCTION_CHANGESET_COMMENTS.checkDate }))}</p>`
+          : "";
       // Der zweite Weg neben dem Ein-Tipp-Speichern: fehlende Angaben ergänzen. Nur beim einfachen Prüfdatum-Vorschlag.
       const addDetailsButton =
-        canWrite && !state.writeStatus && !state.node
+        (developmentCanWrite || productionCanWrite) && !state.writeStatus && !state.node
           ? `<button class="button button-secondary" data-action="open-existing-details">${tv(developmentCorrectionsAvailable ? "detailsCorrectAction" : "detailsAddAction")}</button>`
           : "";
       // Zweite Bestätigung bei Korrekturen: Ohne den Haken „alter Wert stimmt nicht“ bleibt der Speichern-Knopf gesperrt.
@@ -163,8 +201,9 @@ export function renderPreviewState(context: PreviewContext): string {
         canWrite && !state.writeStatus && corrections.length > 0
           ? `<div class="position-confirmation"><label for="correction-confirmed"><input id="correction-confirmed" type="checkbox" /><span>${tv("detailsCorrectionConfirm")}</span></label></div>`
           : "";
-      const saveLabel =
-        corrections.length > 0
+      const saveLabel = productionCanWrite
+        ? tv("productionWriteAction")
+        : corrections.length > 0
           ? tv("developmentChangesAction")
           : addedTags.length > 0
             ? tv("developmentDetailsAction")
@@ -173,7 +212,7 @@ export function renderPreviewState(context: PreviewContext): string {
         canWrite && !state.writeStatus
           ? `${correctionConfirmation}<button class="button button-primary" data-action="save-development-check"${corrections.length > 0 ? " disabled" : ""}>${saveLabel}</button>`
           : state.writeStatus === "uncertain" && state.operationId && !isRecoveryOwnerMismatch()
-            ? `<button class="button button-secondary" data-action="retry-development-write">${developmentSession && developmentWriteAvailable ? tv("developmentRetry") : tv("recoveryContinue")}</button>`
+            ? `<button class="button button-secondary" data-action="retry-development-write">${writesHere ? tv(statusKeys === productionWriteStatusKeys ? "productionRetry" : "developmentRetry") : tv("recoveryContinue")}</button>`
             : "";
       // Nur wenn nichts gespeichert werden kann und kein Vorgang läuft; sonst wäre „nur eine Vorschau“ nach einem Speichern falsch.
       // Bei einem neueren Datum in OSM sagt die Meldung selbst, dass nichts geändert wird; „nur eine Vorschau“ wäre doppelt.
@@ -206,7 +245,7 @@ export function renderPreviewState(context: PreviewContext): string {
       // Nach dem bestätigten Speichern: Überschrift „Prüfung gespeichert“ statt „Änderungsvorschau“, Erfolgsmeldung oben.
       return successful
         ? `${photoMarkup}<div class="result-message"><span class="status-icon status-good" aria-hidden="true">✓</span><div><h2>${tv("checkSavedTitle")}</h2>${writeStatus}${label}${content}${changedList}${addedList}${levelLeftNote}</div></div>${writeAction}${addDetailsButton}${navigation}`
-        : `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("previewTitle")}</h2>${label}${content}${changedList}${addedList}${levelLeftNote}${noWriteNotice}${writeStatus}</div></div>${writeAction}${addDetailsButton}${navigation}`;
+        : `${photoMarkup}<div class="result-message"><span class="status-icon status-warn" aria-hidden="true">!</span><div><h2>${tv("previewTitle")}</h2>${label}${content}${changedList}${addedList}${levelLeftNote}${productionNotice}${noWriteNotice}${writeStatus}</div></div>${writeAction}${addDetailsButton}${navigation}`;
     }
     case "existing-aed-details": {
       const label = escapeHtml(displayCandidateLabel(state.candidateLabel, tv("unnamedAed")));

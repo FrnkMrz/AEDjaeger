@@ -42,6 +42,26 @@ npx wrangler d1 migrations apply aedjaeger-pilot --remote
 
 Danach lässt sich der geprüfte Deploy erneut über den regulären CI-Ablauf anstoßen. Zugangsdaten werden von Wrangler aus seiner sicheren lokalen Anmeldung bezogen; sie gehören nicht in Befehlszeilen oder Dokumentation. Für CI genügt für die Migrationsabfrage `D1 Read`; dort wird keine Migration ausgeführt.
 
+### Migration im Cloudflare-Dashboard (ohne Kommandozeile)
+
+Wer kein Wrangler auf dem eigenen Rechner hat, wendet eine Migration im Dashboard an. Beispiel `0014`:
+
+1. dash.cloudflare.com → **Storage & Databases → D1 SQL Database** → `aedjaeger-pilot` → Reiter **Console**.
+2. Den folgenden Block vollständig einfügen und **Execute** klicken. Die letzte Zeile trägt die Migration in die Liste `d1_migrations` ein; ohne sie stoppt die Deploy-Prüfung weiter.
+
+```sql
+ALTER TABLE osm_development_write_operations ADD COLUMN osm_environment TEXT CHECK (osm_environment IS NULL OR osm_environment = 'production');
+ALTER TABLE osm_development_write_operations ADD COLUMN target_id TEXT;
+CREATE INDEX osm_development_write_operations_by_owner_time ON osm_development_write_operations (owner_hash, created_at);
+CREATE INDEX osm_development_write_operations_by_target_time ON osm_development_write_operations (osm_environment, target_id, created_at);
+INSERT INTO d1_migrations (name) VALUES ('0014_osm_production_write_limits.sql');
+```
+
+3. Prüfen: `SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 3;` zeigt `0014_osm_production_write_limits.sql` oben.
+4. In GitHub den letzten, gestoppten CI-Lauf auf `main` mit **Re-run failed jobs** neu starten; dann läuft das Deploy durch.
+
+Meldet die Konsole „duplicate column“, war die Migration schon angewendet: dann nur die letzte Zeile (`INSERT INTO d1_migrations …`) ausführen, falls sie in der Liste fehlt. Den Block nie zweimal komplett ausführen.
+
 ## Prüfung und Bereitstellung
 
 Pull Requests laufen durch den `validate`-Job: Unit-Tests, Build, Worker-Prüfung, HTTP-Grenztests und Chromium-/WebKit-E2E. Erst nach erfolgreichem Check und Merge auf `main` startet der Deploy-Job. Ein manueller Workflow-Lauf benötigt `deploy_to_workers=true` und verwendet ebenfalls das Environment `production`.

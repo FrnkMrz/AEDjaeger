@@ -11,12 +11,13 @@ import {
   migrateLegacyOSMDevelopmentWriteOwner,
   recordOSMDevelopmentChangeset,
   reserveOSMDevelopmentWrite,
+  reserveOSMProductionWrite,
   touchStartedOSMDevelopmentWrite,
   updateOSMDevelopmentWrite,
   type OSMDevelopmentWriteOperation,
 } from "../storage/osmDevelopmentWriteOperations";
 import type { D1Database } from "../storage/d1";
-import { requestOSMDevelopmentApi } from "./developmentApi";
+import { requestOSMApi, type OSMApiEnvironment } from "./developmentApi";
 import { escapeXml, withoutXmlDeclaration } from "./xmlText";
 import { createChangeset, closeChangeset } from "./changeset";
 import { distanceMeters } from "../../src/domain/candidateMatch";
@@ -32,6 +33,7 @@ import {
 import { NEARBY_RADIUS_METERS } from "../../src/domain/matchPolicy";
 import { isAcceptableObservationDate } from "./observationDate";
 import { validateDetailTags, type DetailTags } from "../../src/contracts/aedDetails";
+import { isChangesetLocale, PRODUCTION_CHANGESET_COMMENTS } from "../../src/contracts/changesetComment";
 
 // Genug Platz für alle Detailtags auch mit Mehrbyte-Zeichen (Japanisch: 3 Byte je Zeichen). Die Längengrenzen aus
 // src/contracts/aedDetails.ts halten die Anfrage trotzdem klein.
@@ -40,8 +42,26 @@ const MAX_MAP_BYTES = 512 * 1_024;
 const MAX_RESPONSE_BYTES = 1_024;
 // Die Statusantwort eines Änderungssatzes (JSON oder XML) kann mit Tags und Ausdehnung länger als 1 KiB sein.
 
-type Environment = { DB?: D1Database; OSM_DEV_WRITES_ENABLED?: string; OSM_OAUTH_ENCRYPTION_KEY?: string };
-type Dependencies = { fetch?: typeof fetch; now?: () => number; crypto?: Crypto };
+type Environment = {
+  DB?: D1Database;
+  OSM_DEV_WRITES_ENABLED?: string;
+  OSM_OAUTH_ENCRYPTION_KEY?: string;
+  /** Echtes OSM (Etappe Q5): Neuanlagen brauchen BEIDE Schalter. Standard: aus. */
+  OSM_PROD_WRITES_ENABLED?: string;
+  OSM_PROD_NEW_AEDS_ENABLED?: string;
+};
+type Dependencies = {
+  fetch?: typeof fetch;
+  now?: () => number;
+  crypto?: Crypto;
+  /** Intern: Ziel-Umgebung. Setzt nur der Server selbst (aus der Route), nie der Browser. Standard: Testserver. */
+  osmEnvironment?: OSMApiEnvironment;
+};
+
+/** Die OSM-Umgebung dieses Aufrufs; ohne Angabe immer der Testserver. */
+function osmEnvironmentOf(dependencies: Dependencies): OSMApiEnvironment {
+  return dependencies.osmEnvironment ?? "development";
+}
 type CreateRequest = {
   recovery_identity: string;
   operation_id: string;
@@ -55,6 +75,8 @@ type CreateRequest = {
    */
   details: DetailTags;
   confirmed_different_candidate_ids: string[];
+  /** Sprache der App (de, en, pl, ja, fr, es). Geht beim echten OSM als `locale` an das Changeset. */
+  locale?: string;
 };
 /** Creates one confirmed AED node, using only the fixed OSM development API. */
 export async function handleDevelopmentCreateNode(
@@ -62,11 +84,41 @@ export async function handleDevelopmentCreateNode(
   environment: Environment,
   dependencies: Dependencies = {},
 ): Promise<Response> {
+  return handleCreateNode(request, environment, { ...dependencies, osmEnvironment: "development" });
+}
+
+/**
+ * Trägt einen neuen AED im ECHTEN OSM ein (Etappe Q5, Entscheidung vom 26.11.2026).
+ *
+ * Dieselbe, auf dem Testserver erprobte Logik wie oben: Vorgangs-ID, erneute frische Kartenabfrage unmittelbar vor dem
+ * Anlegen (Schutz vor Doppelten), Wiederaufnahme nach Netzabbruch ohne zweites Anlegen. Zusätzlich gilt hier:
+ *  - zwei Schalter: `OSM_PROD_WRITES_ENABLED` und `OSM_PROD_NEW_AEDS_ENABLED` (beide Standard aus),
+ *  - eine Sitzung am echten OSM (ein Testserver-Token geht nie an das echte OSM),
+ *  - das Tageslimit je Konto (20); eine Grenze je Objekt gibt es für ein noch nicht vorhandenes Objekt nicht,
+ *  - Changeset mit `source=survey`, `locale` und dem zweisprachigen Kommentar, den die App vorher zeigt.
+ */
+export async function handleProductionCreateNode(
+  request: Request,
+  environment: Environment,
+  dependencies: Dependencies = {},
+): Promise<Response> {
+  return handleCreateNode(request, environment, { ...dependencies, osmEnvironment: "production" });
+}
+
+async function handleCreateNode(
+  request: Request,
+  environment: Environment,
+  dependencies: Dependencies,
+): Promise<Response> {
+  const production = osmEnvironmentOf(dependencies) === "production";
   if (request.method !== "POST") return jsonResponse({ error: "method_not_allowed" }, 405, { Allow: "POST" });
   const origin = new URL(request.url).origin;
   if (isCrossOrigin(request, origin)) return jsonResponse({ error: "invalid_origin" }, 403);
-  if (environment.OSM_DEV_WRITES_ENABLED !== "true" || !environment.DB || !environment.OSM_OAUTH_ENCRYPTION_KEY) {
-    return jsonResponse({ error: "development_write_unavailable" }, 503);
+  const enabled = production
+    ? environment.OSM_PROD_WRITES_ENABLED === "true" && environment.OSM_PROD_NEW_AEDS_ENABLED === "true"
+    : environment.OSM_DEV_WRITES_ENABLED === "true";
+  if (!enabled || !environment.DB || !environment.OSM_OAUTH_ENCRYPTION_KEY) {
+    return jsonResponse({ error: production ? "production_write_unavailable" : "development_write_unavailable" }, 503);
   }
   if (request.headers.get("Content-Type")?.split(";", 1)[0]?.trim().toLowerCase() !== "application/json") {
     return jsonResponse({ error: "unsupported_media_type" }, 415);
@@ -80,7 +132,9 @@ export async function handleDevelopmentCreateNode(
   } catch {
     return jsonResponse({ error: "session_unavailable" }, 503);
   }
-  if (session?.environment !== "development") return jsonResponse({ error: "development_session_required" }, 403);
+  // Die Sitzung muss zur Route passen: Ein Testserver-Token geht nie an das echte OSM und umgekehrt.
+  if (session?.environment !== osmEnvironmentOf(dependencies))
+    return jsonResponse({ error: production ? "production_session_required" : "development_session_required" }, 403);
 
   let input: CreateRequest;
   try {
@@ -98,7 +152,11 @@ export async function handleDevelopmentCreateNode(
   try {
     const key = await importOAuthEncryptionKey(environment.OSM_OAUTH_ENCRYPTION_KEY);
     const storedToken = await findOSMOAuthToken(environment.DB, sessionToken, now, key, dependencies.crypto);
-    if (!storedToken) return jsonResponse({ error: "development_token_unavailable" }, 401);
+    if (!storedToken)
+      return jsonResponse(
+        { error: production ? "production_token_unavailable" : "development_token_unavailable" },
+        401,
+      );
     token = storedToken;
     ownerHash = await hashOSMDevelopmentWriteOwner(session, environment.OSM_OAUTH_ENCRYPTION_KEY, dependencies.crypto);
     if (input.recovery_identity && input.recovery_identity !== ownerHash)
@@ -113,7 +171,20 @@ export async function handleDevelopmentCreateNode(
 
   let reserved: Awaited<ReturnType<typeof reserveOSMDevelopmentWrite>>;
   try {
-    reserved = await reserveOSMDevelopmentWrite(environment.DB, ownerHash, input.operation_id, requestHash, now);
+    if (production) {
+      // Echtes OSM: Reservierung samt Tageslimit in einem Schritt. Greift das Limit, geht nichts an OSM.
+      const reservation = await reserveOSMProductionWrite(environment.DB, {
+        ownerHash,
+        operationId: input.operation_id,
+        requestHash,
+        targetId: null,
+        now,
+      });
+      if (reservation.kind === "limited") return jsonResponse({ error: reservation.reason }, 429);
+      reserved = { operation: reservation.operation, created: reservation.created };
+    } else {
+      reserved = await reserveOSMDevelopmentWrite(environment.DB, ownerHash, input.operation_id, requestHash, now);
+    }
   } catch {
     return jsonResponse({ error: "write_status_unavailable" }, 503);
   }
@@ -137,6 +208,18 @@ export async function handleDevelopmentCreateNode(
         (dependencies.now ?? Date.now)(),
       );
       if (!claimed) return jsonResponse({ status: "pending" }, 202);
+      // Wiederaufnahme vor dem Upload (z. B. nach einem Datenbankfehler direkt nach dem Öffnen des Changesets): Seit der
+      // ersten Prüfung kann jemand einen AED in der Nähe eingetragen haben. Deshalb hier erneut frisch prüfen, bevor
+      // hochgeladen wird. Der Upload-Anspruch (claim) bleibt bestehen und verhindert parallele Wiederholungen.
+      const resumeCheck = await recheckBeforeResumedUpload(
+        environment.DB,
+        ownerHash,
+        input,
+        operation,
+        token,
+        dependencies,
+      );
+      if (resumeCheck) return resumeCheck;
       return uploadCreatedNode(environment.DB, ownerHash, input, operation, token, dependencies);
     }
     if (operation.state === "started") {
@@ -154,7 +237,7 @@ export async function handleDevelopmentCreateNode(
 
   let possibleDuplicate: boolean;
   try {
-    possibleDuplicate = await findNearbyAed(input, token, dependencies.fetch ?? fetch);
+    possibleDuplicate = await findNearbyAed(input, token, dependencies.fetch ?? fetch, osmEnvironmentOf(dependencies));
   } catch {
     await safelyFinishStarted(
       environment.DB,
@@ -183,7 +266,12 @@ export async function handleDevelopmentCreateNode(
 
   let changesetId: string;
   try {
-    changesetId = await createChangeset(token, "AEDjaeger: AED mapped on site", dependencies.fetch ?? fetch);
+    changesetId = await createChangeset(
+      token,
+      production ? PRODUCTION_CHANGESET_COMMENTS.create : "AEDjaeger: AED mapped on site",
+      dependencies.fetch ?? fetch,
+      { environment: osmEnvironmentOf(dependencies), locale: input.locale },
+    );
   } catch {
     // No node upload has started yet, so an empty changeset cannot create a duplicate AED.
     await safelyFinishStarted(
@@ -210,7 +298,7 @@ export async function handleDevelopmentCreateNode(
     return jsonResponse({ error: "write_status_unavailable" }, 503);
   }
   if (!changesetRecorded) {
-    await closeChangeset(token, changesetId, dependencies.fetch ?? fetch);
+    await closeChangeset(token, changesetId, dependencies.fetch ?? fetch, osmEnvironmentOf(dependencies));
     return jsonResponse({ error: "write_failed" }, 422);
   }
   const claimed = await safelyClaimUpload(
@@ -230,7 +318,12 @@ export async function handleDevelopmentCreateNode(
   );
 }
 
-async function findNearbyAed(input: CreateRequest, token: string, fetcher: typeof fetch): Promise<boolean> {
+async function findNearbyAed(
+  input: CreateRequest,
+  token: string,
+  fetcher: typeof fetch,
+  environment: OSMApiEnvironment,
+): Promise<boolean> {
   // The browser's earlier versioned AED-index result is useful for the UI but is not trusted
   // to authorize a create. Re-read one small authoritative OSM API box here.
   // Dieselbe Reichweite wie die Suche in der App (siehe src/domain/matchPolicy.ts): Der Kasten ist etwas größer als
@@ -238,8 +331,8 @@ async function findNearbyAed(input: CreateRequest, token: string, fetcher: typeo
   // soll das Anlegen nicht blockieren.
   const latitudePadding = (NEARBY_RADIUS_METERS * 1.2) / 111_320;
   const longitudePadding = Math.min(0.01, latitudePadding / Math.max(0.1, Math.cos((input.latitude * Math.PI) / 180)));
-  const response = await requestOSMDevelopmentApi(
-    "development",
+  const response = await requestOSMApi(
+    environment,
     "/api/0.6/map.json",
     token,
     {
@@ -305,8 +398,8 @@ async function uploadCreatedNode(
   const xml = buildCreateNodeChange(input, createdNodeTags(input), operation.changeset_id);
   let response: Response;
   try {
-    response = await requestOSMDevelopmentApi(
-      "development",
+    response = await requestOSMApi(
+      osmEnvironmentOf(dependencies),
       `/api/0.6/changeset/${operation.changeset_id}/upload`,
       token,
       { method: "POST", body: xml },
@@ -330,7 +423,7 @@ async function uploadCreatedNode(
       changesetId: operation.changeset_id,
       now: (dependencies.now ?? Date.now)(),
     });
-    await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch);
+    await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch, osmEnvironmentOf(dependencies));
     return jsonResponse({ error: "version_conflict" }, 409);
   }
   if (!response.ok) {
@@ -341,7 +434,8 @@ async function uploadCreatedNode(
       changesetId: operation.changeset_id,
       now: (dependencies.now ?? Date.now)(),
     });
-    if (response.status < 500) await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch);
+    if (response.status < 500)
+      await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch, osmEnvironmentOf(dependencies));
     return response.status >= 500
       ? jsonResponse({ status: "uncertain" }, 202)
       : jsonResponse({ error: "write_failed" }, 502);
@@ -394,11 +488,18 @@ async function reconcileUncertainCreate(
     // Closing the changeset is a barrier: OSM will reject any upload that has
     // not committed yet. We can then inspect a stable snapshot without risking
     // that a late request creates a node after we retire this operation.
-    if (!(await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch))) {
+    if (
+      !(await closeChangeset(
+        token,
+        operation.changeset_id,
+        dependencies.fetch ?? fetch,
+        osmEnvironmentOf(dependencies),
+      ))
+    ) {
       return jsonResponse({ status: "uncertain" }, 202);
     }
-    const response = await requestOSMDevelopmentApi(
-      "development",
+    const response = await requestOSMApi(
+      osmEnvironmentOf(dependencies),
       `/api/0.6/changeset/${operation.changeset_id}/download`,
       token,
       { method: "GET" },
@@ -451,7 +552,9 @@ async function finishChangeset(
 ): Promise<Response> {
   if (!operation.changeset_id || !operation.result_node_id || !operation.result_version)
     return jsonResponse({ status: "uncertain" }, 202);
-  if (!(await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch)))
+  if (
+    !(await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch, osmEnvironmentOf(dependencies)))
+  )
     return jsonResponse(
       { status: "uploaded", node_id: operation.result_node_id, version: operation.result_version, close_pending: true },
       202,
@@ -592,7 +695,8 @@ function parseRequest(bytes: Uint8Array, now: number): CreateRequest {
         !optionalKeys.includes(key) &&
         key !== "details" &&
         key !== "location_description" &&
-        key !== "recovery_identity",
+        key !== "recovery_identity" &&
+        key !== "locale",
     ) ||
     (value.recovery_identity !== undefined &&
       (typeof value.recovery_identity !== "string" || !/^[a-f0-9]{64}$/u.test(value.recovery_identity))) ||
@@ -609,6 +713,7 @@ function parseRequest(bytes: Uint8Array, now: number): CreateRequest {
     value.longitude < -180 ||
     value.longitude > 180 ||
     !isAcceptableObservationDate(value.observed_on, now) ||
+    (value.locale !== undefined && !isChangesetLocale(value.locale)) ||
     (value.confirmed_different_candidate_ids !== undefined &&
       (!Array.isArray(value.confirmed_different_candidate_ids) ||
         value.confirmed_different_candidate_ids.length > 100 ||
@@ -637,6 +742,7 @@ function parseRequest(bytes: Uint8Array, now: number): CreateRequest {
     longitude: value.longitude,
     observed_on: value.observed_on,
     details: checkedDetails.tags,
+    ...(isChangesetLocale(value.locale) ? { locale: value.locale } : {}),
     confirmed_different_candidate_ids: (value.confirmed_different_candidate_ids ?? []) as string[],
   } as CreateRequest;
 }
@@ -666,11 +772,12 @@ function serializeCreateRequestForHash(input: CreateRequest): string {
   const withExtras = onlyLocation
     ? { ...base, location_description: input.details["defibrillator:location"] ?? null }
     : { ...base, details: input.details };
-  return JSON.stringify(
+  const withCandidates =
     input.confirmed_different_candidate_ids.length > 0
       ? { ...withExtras, confirmed_different_candidate_ids: input.confirmed_different_candidate_ids }
-      : withExtras,
-  );
+      : withExtras;
+  // Die Sprache gehört zum Vorgang (sie landet im Changeset). Ohne Angabe bleibt der Hash wie bisher.
+  return JSON.stringify(input.locale ? { ...withCandidates, locale: input.locale } : withCandidates);
 }
 
 function isStringRecord(value: unknown): value is Record<string, string> {
@@ -683,6 +790,47 @@ function isStringRecord(value: unknown): value is Record<string, string> {
   );
 }
 /** Entfernung zweier Punkte in Metern (Haversine-Formel, Erdradius 6.371 km). */
+/**
+ * Frische Prüfung auf Doppelte vor einem fortgesetzten Upload. Gibt eine fertige Antwort zurück, wenn NICHT
+ * hochgeladen werden darf (AED in der Nähe gefunden oder Prüfung nicht möglich), sonst `null`.
+ * Da noch nichts hochgeladen wurde, ist ein Abbruch hier sicher: Das leere Changeset wird geschlossen.
+ */
+async function recheckBeforeResumedUpload(
+  database: D1Database,
+  ownerHash: string,
+  input: CreateRequest,
+  operation: OSMDevelopmentWriteOperation,
+  token: string,
+  dependencies: Dependencies,
+): Promise<Response | null> {
+  let possibleDuplicate: boolean;
+  try {
+    possibleDuplicate = await findNearbyAed(input, token, dependencies.fetch ?? fetch, osmEnvironmentOf(dependencies));
+  } catch {
+    await safelyUpdate(database, {
+      ownerHash,
+      operationId: input.operation_id,
+      state: "failed",
+      changesetId: operation.changeset_id ?? undefined,
+      now: (dependencies.now ?? Date.now)(),
+    });
+    if (operation.changeset_id)
+      await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch, osmEnvironmentOf(dependencies));
+    return jsonResponse({ error: "write_failed" }, 422);
+  }
+  if (!possibleDuplicate) return null;
+  await safelyUpdate(database, {
+    ownerHash,
+    operationId: input.operation_id,
+    state: "conflict",
+    changesetId: operation.changeset_id ?? undefined,
+    now: (dependencies.now ?? Date.now)(),
+  });
+  if (operation.changeset_id)
+    await closeChangeset(token, operation.changeset_id, dependencies.fetch ?? fetch, osmEnvironmentOf(dependencies));
+  return jsonResponse({ error: "nearby_aed_found" }, 409);
+}
+
 async function safelyClaimUpload(
   database: D1Database,
   ownerHash: string,

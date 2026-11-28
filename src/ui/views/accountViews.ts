@@ -22,6 +22,8 @@ export type AccountViewContext = {
   photoSelectionPending: boolean;
   activePhotoDraft: boolean;
   pendingDevelopmentWrite: boolean;
+  /** Der offene Vorgang gehört zum echten OSM: dann führt die Wiederaufnahme zur Anmeldung bei OpenStreetMap. */
+  pendingProductionWrite: boolean;
   illustrationMarkup: string;
 };
 
@@ -42,7 +44,7 @@ export function loginEntry(context: AccountViewContext): string {
   let status = "";
   let actions = "";
   const pendingRecovery = context.pendingDevelopmentWrite
-    ? `<div class="login-status-wrap"><p class="login-status" role="status">${context.tv("recoveryNeedSignIn")}</p><button class="button button-secondary" data-action="continue-recovery">${context.tv("recoveryContinue")}</button></div>`
+    ? `<div class="login-status-wrap"><p class="login-status" role="status">${context.tv(context.pendingProductionWrite ? "recoveryNeedProductionSignIn" : "recoveryNeedSignIn")}</p><button class="button button-secondary" data-action="continue-recovery">${context.tv("recoveryContinue")}</button></div>`
     : "";
 
   if (context.accountState === "checking") {
