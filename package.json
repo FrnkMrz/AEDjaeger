@@ -22,7 +22,7 @@
     "preview": "vite preview"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.14.0",
+    "@axe-core/playwright": "^4.14.1",
     "@biomejs/biome": "2.6.8",
     "@playwright/test": "1.65.1",
     "typescript": "^7.0.2",
