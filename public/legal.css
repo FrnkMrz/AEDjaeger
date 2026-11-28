@@ -36,6 +36,11 @@ body {
 }
 
 main {
+  /* Lange deutsche Wörter („Datenschutzerklärung“) und Cookie-Namen dürfen auf schmalen Handys nicht über den
+     Rand ragen: Silbentrennung nach Sprache der Seite (lang="de" bzw. "en"), sonst Umbruch an beliebiger Stelle. */
+  overflow-wrap: break-word;
+  hyphens: auto;
+  -webkit-hyphens: auto;
   max-width: 46rem;
   margin: 0 auto;
   padding: 1.5rem 1rem 3rem;
@@ -97,4 +102,9 @@ a {
 
 address {
   font-style: normal;
+}
+
+h1,
+code {
+  overflow-wrap: anywhere;
 }
