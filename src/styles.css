@@ -271,14 +271,9 @@ h1 {
 }
 .button:focus-visible,
 .info-link:focus-visible,
-.dialog-close:focus-visible,
 select:focus-visible,
 summary:focus-visible,
 .brand:focus-visible {
-  outline: 3px solid #176b4b;
-  outline-offset: 2px;
-}
-.camera-label:focus-within {
   outline: 3px solid #176b4b;
   outline-offset: 2px;
 }
@@ -305,6 +300,12 @@ summary:focus-visible,
 }
 .camera-label {
   overflow: hidden;
+}
+/* Fokus-Rahmen steht nach der Grundregel, damit die Reihenfolge der Spezifität aufsteigt
+   (Biome-Regel noDescendingSpecificity). Am Aussehen ändert die Position nichts. */
+.camera-label:focus-within {
+  outline: 3px solid #176b4b;
+  outline-offset: 2px;
 }
 .camera-label input {
   position: absolute;
@@ -428,9 +429,6 @@ summary:focus-visible,
 .capture-content > .button {
   width: 100%;
   margin: 0 auto 8px;
-}
-.capture-content > .button:last-child {
-  margin-bottom: 8px;
 }
 .simulation-note {
   margin: 0 auto 20px;
@@ -745,6 +743,11 @@ footer {
   font-size: 1.625rem;
   line-height: 1;
   cursor: pointer;
+}
+/* Eigene Fokus-Regel nach der Grundregel (aufsteigende Spezifität, Biome noDescendingSpecificity). */
+.dialog-close:focus-visible {
+  outline: 3px solid #176b4b;
+  outline-offset: 2px;
 }
 .info-intro {
   margin: 18px 0;
@@ -1239,8 +1242,7 @@ label.detail-hint {
   background: transparent;
 }
 .chip-input:focus-visible + .chip,
-button.chip:focus-visible,
-.step-button:focus-visible {
+button.chip:focus-visible {
   outline: 3px solid #176b4b;
   outline-offset: 2px;
 }
@@ -1283,6 +1285,11 @@ button.chip:focus-visible,
   font-size: 1.5rem;
   font-weight: 700;
   cursor: pointer;
+}
+/* Eigene Fokus-Regel nach der Grundregel (aufsteigende Spezifität, Biome noDescendingSpecificity). */
+.step-button:focus-visible {
+  outline: 3px solid #176b4b;
+  outline-offset: 2px;
 }
 .step-value {
   min-width: 56px;

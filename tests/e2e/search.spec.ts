@@ -293,7 +293,9 @@ test("a new AED preview requires confirmed GPS position and a complete empty sea
     .first()
     .getAttribute("src");
   expect(zoomAfterPinch).not.toBeNull();
-  expect(Number(new URL(requireValue(zoomAfterPinch, "The new-entry map tile source")).pathname.split("/")[1])).toBeLessThan(19);
+  expect(
+    Number(new URL(requireValue(zoomAfterPinch, "The new-entry map tile source")).pathname.split("/")[1]),
+  ).toBeLessThan(19);
   await expect(page.locator("#new-aed-position-confirmed")).toBeChecked();
 
   await page.locator("#new-aed-position-map").evaluate((element) => {
