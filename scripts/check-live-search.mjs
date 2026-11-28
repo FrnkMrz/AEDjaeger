@@ -37,7 +37,17 @@ const MAX_SOURCE_AGE_HOURS = 5 * 24;
 const MAX_TILE_BYTES = 1 * 1_024 * 1_024;
 const MAX_METADATA_BYTES = 256 * 1_024;
 const REQUIRED_EXTRACTS = ["germany", "austria", "switzerland", "luxembourg", "liechtenstein"];
-const EXTRACT_STATUSES = new Set(["fresh_download", "downloaded_dated", "cached_head_ok", "downloaded"]);
+// Statuswerte der OpenFireMap-Pipeline, unter denen ein Länderextrakt als vorhanden gilt. Die Frische prüft nicht der
+// Status, sondern `osm_data_timestamp` (höchstens 5 Tage alt). "local_source" (seit dem Pipeline-Lauf vom
+// 28.11.2026): Die Pipeline liest die Länderdatei aus ihrem eigenen Speicher statt sie neu herunterzuladen. Ein
+// unbekannter Status gilt weiter als Ausfall, damit eine neue Fehlerart nie als gültiger Datenstand durchgeht.
+const EXTRACT_STATUSES = new Set([
+  "fresh_download",
+  "downloaded_dated",
+  "cached_head_ok",
+  "downloaded",
+  "local_source",
+]);
 // Die Route akzeptiert Suchbereiche nur innerhalb dieses Rechtecks (DACH).
 const COVERAGE_BOUNDS = { minLat: 45, maxLat: 56, minLon: 5, maxLon: 18 };
 // ---------------------------------------------------------------------------------

@@ -11,6 +11,7 @@ Alle relevanten Änderungen an AEDjaeger werden hier nachvollziehbar festgehalte
 
 ### Fixed
 
+- AED-Archiv wieder nutzbar: Die OpenFireMap-Pipeline meldet ihre Länderextrakte seit dem 28.11.2026 mit dem Status `local_source`. Suche und Live-Check kannten ihn nicht und hielten das ganze Archiv für veraltet (Testserver-Sitzungen ohne Archiv-Treffer, täglicher Live-Check rot). Der Status gilt jetzt als gültig; die Frische prüft weiter der Zeitstempel (höchstens 5 Tage), unbekannte Statuswerte gelten weiter als Ausfall.
 - Info-Dialog: Der Abschnitt „Grenzen des Piloten“ sagte noch, Änderungen gingen nur an den OSM-Testserver. Er nennt jetzt das Speichern im echten OpenStreetMap (sechs Sprachen).
 
 ## [0.3.0] - 2026-11-28
